@@ -284,9 +284,27 @@ func (a *AdminAPI) withMiddleware(handler http.Handler) http.Handler {
 	return securityHandler
 }
 
+// skipTracingPaths contains paths that should not create traces.
+// These are typically health checks and metrics endpoints.
+var skipTracingPaths = map[string]bool{
+	"/metrics":  true,
+	"/health":   true,
+	"/healthz":  true,
+	"/ready":    true,
+	"/readyz":   true,
+	"/livez":    true,
+	"/_/health": true,
+}
+
 // tracingMiddleware wraps a handler with distributed tracing support.
 func (a *AdminAPI) tracingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip tracing for health/metrics endpoints to avoid noise
+		if skipTracingPaths[r.URL.Path] {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Extract trace context from incoming request headers
 		ctx := tracing.Extract(r.Context(), r.Header)
 
@@ -374,6 +392,7 @@ func (a *AdminAPI) Start() error {
 	// Start the token cleanup background goroutine
 	go a.startTokenCleanup(a.ctx)
 
+	a.log.Info("starting admin API", "port", a.port)
 	go func() {
 		if err := a.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			a.log.Error("admin API error", "error", err)

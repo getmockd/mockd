@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/metrics"
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/requestlog"
 )
@@ -82,7 +84,7 @@ func (h *Handler) Metadata() protocol.Metadata {
 		ID:                   id,
 		Name:                 name,
 		Protocol:             protocol.ProtocolGraphQL,
-		Version:              "1.0.0",
+		Version:              "0.2.0",
 		TransportType:        protocol.TransportHTTP1,
 		ConnectionModel:      protocol.ConnectionModelStateless,
 		CommunicationPattern: protocol.PatternRequestResponse,
@@ -143,6 +145,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Only allow GET and POST methods
 	if r.Method != http.MethodPost && r.Method != http.MethodGet {
 		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		h.recordMetrics(r.URL.Path, "unknown", http.StatusMethodNotAllowed, time.Since(startTime))
 		return
 	}
 
@@ -163,6 +166,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		h.logRequest(r, startTime, rawBody, nil, req, http.StatusBadRequest, err.Error())
+		h.recordMetrics(r.URL.Path, h.getOperationType(req), http.StatusBadRequest, time.Since(startTime))
 		return
 	}
 
@@ -174,6 +178,39 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Log the request
 	h.logRequest(r, startTime, rawBody, resp, req, http.StatusOK, respBody)
+
+	// Record metrics
+	h.recordMetrics(r.URL.Path, h.getOperationType(req), http.StatusOK, time.Since(startTime))
+}
+
+// recordMetrics records GraphQL request metrics.
+func (h *Handler) recordMetrics(path, opType string, status int, duration time.Duration) {
+	if metrics.RequestsTotal != nil {
+		statusStr := strconv.Itoa(status)
+		if vec, err := metrics.RequestsTotal.WithLabels("graphql", path, statusStr); err == nil {
+			vec.Inc()
+		}
+	}
+	if metrics.RequestDuration != nil {
+		if vec, err := metrics.RequestDuration.WithLabels("graphql", path); err == nil {
+			vec.Observe(duration.Seconds())
+		}
+	}
+}
+
+// getOperationType extracts the operation type from a GraphQL request.
+func (h *Handler) getOperationType(req *GraphQLRequest) string {
+	if req == nil || req.Query == "" {
+		return "unknown"
+	}
+	query := strings.TrimSpace(req.Query)
+	if strings.HasPrefix(query, "mutation") {
+		return "mutation"
+	}
+	if strings.HasPrefix(query, "subscription") {
+		return "subscription"
+	}
+	return "query"
 }
 
 // parseGetRequest parses a GraphQL request from GET query parameters.

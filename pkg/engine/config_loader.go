@@ -38,7 +38,7 @@ func (cl *ConfigLoader) SetLogger(log *slog.Logger) {
 
 // LoadFromStore loads all configurations from the persistent store into the engine.
 // This should be called after setting the store and before starting the server.
-// It loads mocks from the unified mock store.
+// It loads mocks from the unified mock store and starts all protocol handlers.
 func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store.Store) error {
 	if persistentStore == nil {
 		return nil // No store configured, nothing to load
@@ -50,48 +50,16 @@ func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store
 		return fmt.Errorf("failed to load mocks: %w", err)
 	}
 
-	// Register mocks by type using mockManager
+	// Register all enabled mocks using the unified registerHandler which handles
+	// all protocol types (HTTP, WebSocket, GraphQL, gRPC, MQTT, SOAP, OAuth, SSE).
+	// HTTP mocks are also matched via store lookup, but registerHandler is a no-op for them.
 	for _, m := range mocks {
 		if !m.Enabled {
 			continue
 		}
-		switch m.Type {
-		case mock.MockTypeHTTP:
-			// HTTP mocks are handled automatically via PersistentMockStore adapter
-			// They're matched in the request handler via store.List()
-		case mock.MockTypeWebSocket:
-			if m.WebSocket != nil {
-				if err := cl.server.mockManager.registerWebSocketMock(m); err != nil {
-					cl.log.Warn("failed to load WebSocket mock", "name", m.Name, "error", err)
-				}
-			}
-		case mock.MockTypeGraphQL:
-			if m.GraphQL != nil {
-				if err := cl.server.mockManager.registerGraphQLMock(m); err != nil {
-					cl.log.Warn("failed to load GraphQL mock", "name", m.Name, "error", err)
-				}
-			}
-		case mock.MockTypeGRPC:
-			// gRPC servers are port-based and require explicit startup via API
-		case mock.MockTypeSOAP:
-			if m.SOAP != nil {
-				if err := cl.server.mockManager.registerSOAPMock(m); err != nil {
-					cl.log.Warn("failed to load SOAP mock", "name", m.Name, "error", err)
-				}
-			}
-		case mock.MockTypeMQTT:
-			if m.MQTT != nil {
-				if err := cl.server.mockManager.registerMQTTMock(m); err != nil {
-					cl.log.Warn("failed to load MQTT mock", "name", m.Name, "error", err)
-				}
-			}
-		case mock.MockTypeOAuth:
-			if m.OAuth != nil {
-				if err := cl.server.mockManager.registerOAuthMock(m); err != nil {
-					cl.log.Warn("failed to load OAuth mock", "name", m.Name, "error", err)
-				}
-			}
-		}
+		// registerHandler logs warnings for failures but doesn't return errors
+		// to allow loading to continue for other mocks
+		cl.server.mockManager.registerHandler(m)
 	}
 
 	return nil

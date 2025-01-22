@@ -106,7 +106,7 @@ Run 'mockd get --help' for more options`)
 	mockID := fs.Arg(0)
 
 	// Create admin client and get mock
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 	mock, err := client.GetMock(mockID)
 	if err != nil {
 		if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 404 {

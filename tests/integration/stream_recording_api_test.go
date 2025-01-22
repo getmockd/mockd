@@ -37,17 +37,19 @@ func setupStreamRecordingAPITest(t *testing.T) (*admin.AdminAPI, *recording.File
 
 	managementPort := getFreePort()
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     getFreePort(),
-		AdminPort:    adminPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       getFreePort(),
+		AdminPort:      adminPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
+	adminDataDir := t.TempDir() // Use temp dir for admin API test isolation
 	adminAPI := admin.NewAdminAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
+		admin.WithDataDir(adminDataDir),
 	)
 
 	// Set the recording store on the manager
@@ -64,6 +66,7 @@ func setupStreamRecordingAPITest(t *testing.T) (*admin.AdminAPI, *recording.File
 	cleanup := func() {
 		adminAPI.Stop()
 		srv.Stop()
+		time.Sleep(10 * time.Millisecond) // Allow file handles to release
 		os.RemoveAll(tmpDir)
 	}
 

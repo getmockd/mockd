@@ -8,9 +8,10 @@ import (
 
 // registerRoutes sets up all API routes.
 func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
-	// Health check, status, and metrics
+	// Health check, status, metrics, and ports
 	mux.HandleFunc("GET /health", a.handleHealth)
 	mux.HandleFunc("GET /status", a.handleGetStatus)
+	mux.HandleFunc("GET /ports", a.handleListPorts)
 	mux.Handle("GET /metrics", a.metricsRegistry.Handler())
 
 	// Workspace management
@@ -51,8 +52,7 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 
 	// Request logging
 	mux.HandleFunc("GET /requests", a.handleListRequests)
-	// FEAT-001: Request streaming endpoint disabled until SSE/WebSocket engine support is implemented
-	// mux.HandleFunc("GET /requests/stream", a.handleStreamRequests)
+	mux.HandleFunc("GET /requests/stream", a.handleStreamRequests)
 	mux.HandleFunc("GET /requests/{id}", a.handleGetRequest)
 	mux.HandleFunc("DELETE /requests", a.handleClearRequests)
 

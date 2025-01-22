@@ -141,7 +141,7 @@ func validateConfigFile(path string) error {
 
 // checkMockdRunning checks if mockd admin API is responding.
 func checkMockdRunning(adminPort int) bool {
-	client := NewAdminClient(
+	client := NewAdminClientWithAuth(
 		fmt.Sprintf("http://localhost:%d", adminPort),
 		WithTimeout(2*time.Second),
 	)

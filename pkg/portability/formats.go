@@ -171,11 +171,26 @@ func detectFormatFromYAML(data []byte) Format {
 		return FormatOpenAPI
 	}
 
-	// Check for Mockd native format
+	// Check for Mockd native format - multiple indicators
+	// 1. Explicit kind: MockCollection
 	if strings.Contains(content, "kind:") && strings.Contains(content, "MockCollection") {
 		return FormatMockd
 	}
+	// 2. Has version: and mocks: fields
 	if strings.Contains(content, "version:") && strings.Contains(content, "mocks:") {
+		return FormatMockd
+	}
+	// 3. Has mocks: array with http: or type: http entries (even without version header)
+	if strings.Contains(content, "mocks:") {
+		if strings.Contains(content, "http:") || strings.Contains(content, "type: http") ||
+			strings.Contains(content, "websocket:") || strings.Contains(content, "type: websocket") ||
+			strings.Contains(content, "graphql:") || strings.Contains(content, "type: graphql") ||
+			strings.Contains(content, "grpc:") || strings.Contains(content, "type: grpc") {
+			return FormatMockd
+		}
+	}
+	// 4. Single mock definition with http.matcher
+	if strings.Contains(content, "matcher:") && strings.Contains(content, "path:") {
 		return FormatMockd
 	}
 

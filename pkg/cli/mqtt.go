@@ -400,7 +400,7 @@ Examples:
 	}
 
 	// Get MQTT status from admin API
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 	status, err := client.GetMQTTStatus()
 	if err != nil {
 		return fmt.Errorf("failed to get MQTT status: %s", FormatConnectionError(err))

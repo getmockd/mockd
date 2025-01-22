@@ -51,6 +51,54 @@ Check server health.
 
 ---
 
+### Ports
+
+#### GET /ports
+
+List all ports in use by mockd, grouped by component.
+
+**Response:**
+
+```json
+{
+  "ports": [
+    {
+      "port": 4290,
+      "protocol": "HTTP",
+      "component": "Admin API",
+      "status": "running"
+    },
+    {
+      "port": 4280,
+      "protocol": "HTTP",
+      "component": "Mock Engine",
+      "status": "running"
+    },
+    {
+      "port": 1883,
+      "protocol": "MQTT",
+      "component": "MQTT Broker",
+      "status": "running"
+    },
+    {
+      "port": 50051,
+      "protocol": "gRPC",
+      "component": "gRPC Server",
+      "status": "running"
+    }
+  ]
+}
+```
+
+The response includes ports for:
+- Admin API (HTTP)
+- Mock Engine (HTTP/HTTPS)
+- Protocol handlers (gRPC, MQTT, WebSocket, SSE, GraphQL, SOAP)
+
+**Note:** Ports with TLS enabled will include `"tls": true` in the response.
+
+---
+
 ### Mock Management
 
 #### GET /mocks
@@ -108,7 +156,29 @@ Add a new mock at runtime.
 }
 ```
 
-**Response:** Returns the created mock with generated ID.
+**Response:** Returns the created mock with generated ID (HTTP 201).
+
+**Port Sharing for gRPC and MQTT:**
+
+When creating a gRPC or MQTT mock on a port that's already in use by another mock of the **same protocol** in the **same workspace**, the new services/topics are **merged** into the existing mock instead of creating a new one. This mirrors real-world behavior where a single gRPC server serves multiple services and a single MQTT broker handles multiple topics.
+
+**Merge Response (HTTP 200):**
+
+```json
+{
+  "action": "merged",
+  "message": "Merged into existing gRPC server on port 50051",
+  "targetMockId": "grpc_abc123",
+  "addedServices": ["myapp.HealthService/Check"],
+  "totalServices": ["myapp.UserService/GetUser", "myapp.HealthService/Check"],
+  "mock": { ... }
+}
+```
+
+**Conflict cases (HTTP 409):**
+- Different protocols on the same port (e.g., gRPC on an MQTT port)
+- Service/method already exists (gRPC) or topic already exists (MQTT)
+- Different workspaces trying to use the same port
 
 #### PUT /mocks/{id}
 

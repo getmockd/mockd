@@ -1,16 +1,44 @@
 package metrics
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // Default metrics for the mock server.
 // These are initialized by calling Init().
+//
+// # Label Conventions
+//
+// All metric labels use lowercase values for consistency:
+//
+// ## method label values
+//   - HTTP: GET, POST, PUT, DELETE, PATCH, etc. (uppercase HTTP methods)
+//   - graphql: GraphQL operations
+//   - grpc: gRPC calls
+//   - soap: SOAP operations
+//   - mqtt: MQTT messages
+//   - sse: Server-Sent Events
+//   - websocket: WebSocket messages
+//
+// ## status label values
+//   - HTTP/GraphQL/SOAP: numeric codes (200, 400, 500, etc.)
+//   - gRPC: lowercase gRPC codes (ok, cancelled, unknown, invalid_argument, etc.)
+//   - MQTT: ok
+//   - SSE: event
+//   - WebSocket: inbound, outbound
+//
+// ## protocol label values (for ActiveConnections)
+//   - websocket, sse, grpc (all lowercase)
 var (
 	// RequestsTotal counts the total number of mock requests.
 	// Labels: method, path, status
+	// See label conventions above for allowed values.
 	RequestsTotal *Counter
 
 	// RequestDuration tracks the duration of mock requests in seconds.
 	// Labels: method, path
+	// See label conventions above for allowed method values.
 	RequestDuration *Histogram
 
 	// MocksTotal is a gauge of the total number of mocks configured.
@@ -18,11 +46,12 @@ var (
 	MocksTotal *Gauge
 
 	// MocksEnabled is a gauge of the number of enabled mocks.
-	// Labels: type
+	// Labels: type (same values as MocksTotal)
 	MocksEnabled *Gauge
 
 	// ActiveConnections tracks the number of active connections.
-	// Labels: protocol (http, websocket, sse, grpc, mqtt)
+	// Labels: protocol (websocket, sse, grpc - all lowercase)
+	// Note: Only tracks stateful connections. HTTP is stateless.
 	ActiveConnections *Gauge
 
 	// AdminRequestsTotal counts the total number of admin API requests.
@@ -54,6 +83,17 @@ var (
 
 	// UptimeSeconds is a gauge of the server uptime in seconds.
 	UptimeSeconds *Gauge
+
+	// PortInfo is a gauge that exposes information about ports in use.
+	// Labels: port, protocol, component
+	// Value is 1 if the port is running, 0 otherwise.
+	PortInfo *Gauge
+
+	// RuntimeCollectorInstance is the Go runtime metrics collector.
+	RuntimeCollectorInstance *RuntimeCollector
+
+	// runtimeCollectorStop stops the runtime collector goroutine.
+	runtimeCollectorStop func()
 
 	// defaultRegistry is the global metrics registry.
 	defaultRegistry *Registry
@@ -154,6 +194,18 @@ func Init() *Registry {
 			"mockd_uptime_seconds",
 			"Server uptime in seconds",
 		)
+
+		// Port info metric
+		PortInfo = defaultRegistry.NewGauge(
+			"mockd_port_info",
+			"Information about ports in use by mockd (1=running, 0=stopped)",
+			"port", "protocol", "component",
+		)
+
+		// Initialize Go runtime metrics collector (passing UptimeSeconds for it to update)
+		RuntimeCollectorInstance = NewRuntimeCollector(defaultRegistry, UptimeSeconds)
+		// Start collecting runtime metrics every 10 seconds
+		runtimeCollectorStop = RuntimeCollectorInstance.StartCollector(10 * time.Second)
 	})
 
 	return defaultRegistry
@@ -168,6 +220,12 @@ func DefaultRegistry() *Registry {
 // Reset resets all default metrics. Useful for testing.
 // This also resets the initOnce, allowing Init() to be called again.
 func Reset() {
+	// Stop runtime collector if running
+	if runtimeCollectorStop != nil {
+		runtimeCollectorStop()
+		runtimeCollectorStop = nil
+	}
+
 	initOnce = sync.Once{}
 	defaultRegistry = nil
 	RequestsTotal = nil
@@ -183,4 +241,6 @@ func Reset() {
 	MatchMissesTotal = nil
 	ErrorsTotal = nil
 	UptimeSeconds = nil
+	PortInfo = nil
+	RuntimeCollectorInstance = nil
 }

@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/cli/internal/flags"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/gorilla/websocket"
 )
 
@@ -581,7 +581,7 @@ Examples:
 	}
 
 	// Get WebSocket mocks from admin API
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 	mocks, err := client.ListMocksByType("websocket")
 	if err != nil {
 		return fmt.Errorf("failed to get WebSocket status: %s", FormatConnectionError(err))

@@ -1,0 +1,195 @@
+# Prometheus Alerting Rules for mockd
+# These rules define alerts for common operational issues.
+#
+# Alert Severity Levels:
+#   - critical: Requires immediate attention (pages on-call)
+#   - warning: Should be investigated soon
+#   - info: Informational, may indicate a developing issue
+
+groups:
+  - name: mockd-availability
+    rules:
+      # Service down alert
+      - alert: MockdDown
+        expr: up{job="mockd"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mockd is down"
+          description: "mockd instance {{ $labels.instance }} has been down for more than 1 minute."
+          runbook_url: "https://github.com/getmockd/mockd/blob/main/docs/runbooks/mockd-down.md"
+
+      # No traffic alert (might indicate routing issues)
+      - alert: MockdNoTraffic
+        expr: |
+          sum(rate(mockd_requests_total[5m])) == 0
+          and sum(mockd_requests_total) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mockd is receiving no traffic"
+          description: "mockd has not received any requests in the last 10 minutes, but has received traffic previously."
+
+  - name: mockd-errors
+    rules:
+      # High error rate (5xx responses)
+      - alert: MockdHighServerErrorRate
+        expr: |
+          (
+            sum(rate(mockd_requests_total{status=~"5.."}[5m]))
+            / sum(rate(mockd_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High server error rate in mockd"
+          description: "Server error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # Critical error rate
+      - alert: MockdCriticalErrorRate
+        expr: |
+          (
+            sum(rate(mockd_requests_total{status=~"5.."}[5m]))
+            / sum(rate(mockd_requests_total[5m]))
+          ) > 0.20
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical server error rate in mockd"
+          description: "Server error rate is {{ $value | humanizePercentage }} (threshold: 20%)"
+
+      # High client error rate (might indicate API misuse or misconfiguration)
+      - alert: MockdHighClientErrorRate
+        expr: |
+          (
+            sum(rate(mockd_requests_total{status=~"4.."}[5m]))
+            / sum(rate(mockd_requests_total[5m]))
+          ) > 0.30
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "High client error rate in mockd"
+          description: "Client error rate is {{ $value | humanizePercentage }} (threshold: 30%)"
+
+      # Internal errors increasing
+      - alert: MockdErrorsIncreasing
+        expr: |
+          rate(mockd_errors_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Internal errors increasing in mockd"
+          description: "Error rate: {{ $value | humanize }}/s for error type {{ $labels.type }}"
+
+  - name: mockd-latency
+    rules:
+      # High p95 latency
+      - alert: MockdHighLatencyP95
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(mockd_request_duration_seconds_bucket[5m])) by (le)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p95 latency in mockd"
+          description: "p95 latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+
+      # Critical p99 latency
+      - alert: MockdHighLatencyP99
+        expr: |
+          histogram_quantile(0.99, 
+            sum(rate(mockd_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical p99 latency in mockd"
+          description: "p99 latency is {{ $value | humanizeDuration }} (threshold: 2s)"
+
+      # Latency spike detection
+      - alert: MockdLatencySpike
+        expr: |
+          (
+            histogram_quantile(0.95, sum(rate(mockd_request_duration_seconds_bucket[5m])) by (le))
+            / 
+            histogram_quantile(0.95, sum(rate(mockd_request_duration_seconds_bucket[1h])) by (le))
+          ) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latency spike detected in mockd"
+          description: "p95 latency has increased 3x compared to the last hour average"
+
+  - name: mockd-mocks
+    rules:
+      # High mock miss rate (unconfigured endpoints being hit)
+      - alert: MockdHighMissRate
+        expr: |
+          rate(mockd_match_misses_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "Many requests hitting unconfigured endpoints"
+          description: "Mock miss rate: {{ $value | humanize }}/s. This may indicate missing mock configurations or unexpected traffic."
+
+      # Mock miss ratio too high
+      - alert: MockdHighMissRatio
+        expr: |
+          (
+            sum(rate(mockd_match_misses_total[5m]))
+            / (sum(rate(mockd_match_hits_total[5m])) + sum(rate(mockd_match_misses_total[5m])))
+          ) > 0.20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High mock miss ratio"
+          description: "{{ $value | humanizePercentage }} of requests are not matching any mock (threshold: 20%)"
+
+      # No mocks configured
+      - alert: MockdNoMocksConfigured
+        expr: |
+          mockd_mocks_total == 0
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "No mocks configured in mockd"
+          description: "mockd is running but has no mocks configured"
+
+  - name: mockd-connections
+    rules:
+      # High active connections (WebSocket/SSE)
+      - alert: MockdHighActiveConnections
+        expr: |
+          sum(mockd_active_connections) > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of active connections"
+          description: "{{ $value }} active WebSocket/SSE connections (threshold: 1000)"
+
+  - name: mockd-admin
+    rules:
+      # Admin API errors
+      - alert: MockdAdminAPIErrors
+        expr: |
+          sum(rate(mockd_admin_requests_total{status=~"5.."}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Admin API experiencing errors"
+          description: "Admin API error rate: {{ $value | humanize }}/s"

@@ -71,19 +71,10 @@ GraphQL flags:
       --graphql-schema Path to GraphQL schema file
       --graphql-path   GraphQL endpoint path (default: /graphql)
 
-gRPC flags:
-      --grpc-port       gRPC server port (0 = disabled)
-      --grpc-proto      Path to .proto file
-      --grpc-reflection Enable gRPC reflection (default: true)
-
 OAuth flags:
       --oauth-enabled   Enable OAuth provider
       --oauth-issuer    OAuth issuer URL
       --oauth-port      OAuth server port
-
-MQTT flags:
-      --mqtt-port       MQTT broker port (0 = disabled)
-      --mqtt-auth       Enable MQTT authentication
 
 Chaos flags:
       --chaos-enabled   Enable chaos injection
@@ -140,11 +131,6 @@ Examples:
 		return fmt.Errorf("--watch requires --load to be specified")
 	}
 
-	// Validate gRPC flags
-	if err := ValidateGRPCFlags(&sf); err != nil {
-		return err
-	}
-
 	// Check for port conflicts
 	if err := ports.Check(sf.Port); err != nil {
 		return formatPortError(sf.Port, err)
@@ -188,13 +174,6 @@ Examples:
 			defer persistentStore.Close()
 		}
 	}
-
-	// Start MQTT broker if configured
-	mqttBroker, err := StartMQTTBroker(&sf)
-	if err != nil {
-		return err
-	}
-	_ = mqttBroker // Used for cleanup if needed
 
 	// Load config file if specified
 	if sf.ConfigFile != "" {

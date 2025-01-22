@@ -2,22 +2,24 @@
 
 This document outlines the planned development roadmap for mockd. It is a living document and community input is welcome via [GitHub Discussions](https://github.com/getmockd/mockd/discussions).
 
-## v1.0.0 (Current Release)
+## v0.2.0 (Current Release)
 
-The initial release includes a comprehensive feature set for multi-protocol API mocking:
+Pre-release version with core features and ongoing refinements:
 
 - **Protocol Support**: HTTP, WebSocket, gRPC, MQTT, SSE, GraphQL, SOAP
 - **CLI Interface**: Full command-line interface for all operations
 - **Admin API**: RESTful API for programmatic mock management
-- **Proxy Recording**: Record real API traffic and replay as mocks
+- **Proxy Recording**: Record real HTTP/HTTPS traffic and replay as mocks
 - **Stateful Mocking**: Maintain state across requests for realistic scenarios
 - **Chaos Engineering**: Fault injection, latency simulation, and error responses
 - **OpenTelemetry Tracing**: Distributed tracing integration for observability
 - **MCP Server**: Model Context Protocol server for AI agent integration
+- **Port Merging**: Automatic merging of gRPC services/MQTT topics on same port
+- **Port Management**: `mockd ports` command for visibility into port usage
 
-## v1.1.0 (Planned)
+## v1.0.0 (Planned)
 
-Focus on API improvements and protocol enhancements:
+Stable release with production-ready features:
 
 - **API Versioning**: Add `/v1/` prefix to Admin API endpoints
 - **Pagination**: Implement pagination for list endpoints

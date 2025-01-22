@@ -350,6 +350,17 @@ func (a *AdminAPI) handleAddEngineWorkspace(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Check for port conflicts with mocks in other workspaces on this engine
+	conflicts := a.checkWorkspaceEnginePortConflicts(r.Context(), id, req.WorkspaceID)
+	if len(conflicts) > 0 {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error":     "port_conflict",
+			"message":   "Workspace has mocks with ports that conflict with existing workspaces on this engine",
+			"conflicts": conflicts,
+		})
+		return
+	}
+
 	// Get workspace name from store if not provided
 	workspaceName := req.WorkspaceName
 	if workspaceName == "" {

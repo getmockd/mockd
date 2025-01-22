@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/metrics"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/google/uuid"
 	mqtt "github.com/mochi-mqtt/server/v2"
@@ -161,8 +162,14 @@ func (h *MessageHook) Provides(b byte) bool {
 
 // OnPublish handles incoming publish messages
 func (h *MessageHook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Packet, error) {
+	startTime := time.Now()
 	topic := pk.TopicName
 	payload := pk.Payload
+
+	// Record metrics (deferred to capture duration)
+	defer func() {
+		recordMQTTMetrics("PUBLISH", topic, time.Since(startTime))
+	}()
 
 	// Record message if recording is enabled
 	h.broker.mu.RLock()
@@ -268,7 +275,16 @@ func (h *MessageHook) createPublishLogEntry(cl *mqtt.Client, pk packets.Packet) 
 
 // OnSubscribed handles client subscriptions
 func (h *MessageHook) OnSubscribed(cl *mqtt.Client, pk packets.Packet, reasonCodes []byte) {
+	startTime := time.Now()
 	clientID := cl.ID
+
+	// Record metrics for each subscription (deferred to capture duration)
+	defer func() {
+		duration := time.Since(startTime)
+		for _, sub := range pk.Filters {
+			recordMQTTMetrics("SUBSCRIBE", sub.Filter, duration)
+		}
+	}()
 
 	// Record subscription if recording is enabled
 	h.broker.mu.RLock()
@@ -367,5 +383,19 @@ func (h *MessageHook) OnUnsubscribed(cl *mqtt.Client, pk packets.Packet) {
 		delete(h.broker.clientSubscriptions, clientID)
 	} else {
 		h.broker.clientSubscriptions[clientID] = newSubs
+	}
+}
+
+// recordMQTTMetrics records MQTT message metrics.
+func recordMQTTMetrics(method, topic string, duration time.Duration) {
+	if metrics.RequestsTotal != nil {
+		if vec, err := metrics.RequestsTotal.WithLabels("mqtt", topic, "ok"); err == nil {
+			vec.Inc()
+		}
+	}
+	if metrics.RequestDuration != nil {
+		if vec, err := metrics.RequestDuration.WithLabels("mqtt", topic); err == nil {
+			vec.Observe(duration.Seconds())
+		}
 	}
 }

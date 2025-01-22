@@ -283,7 +283,7 @@ Run 'mockd templates list' to see available templates`)
 	}
 
 	// Import to running server
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 	result, err := client.ImportConfig(collection, false)
 	if err != nil {
 		// Check if server is not running

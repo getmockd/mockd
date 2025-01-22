@@ -54,7 +54,7 @@ type Handler struct {
 func NewHandler(store storage.MockStore) *Handler {
 	return &Handler{
 		store:           store,
-		log:             logging.Nop(), // Default to no-op logger
+		log:             logging.Nop(),          // Default to no-op logger
 		sseHandler:      sse.NewSSEHandler(100), // 100 max SSE connections
 		chunkedHandler:  sse.NewChunkedHandler(),
 		wsManager:       websocket.NewConnectionManager(),
@@ -188,6 +188,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if matchResult != nil {
 		match := matchResult.Mock
 		matchedID = match.ID
+
+		h.log.Debug("request matched",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"mock_id", matchedID,
+			"score", matchResult.Score,
+		)
 
 		// Record mock hit for metrics
 		RecordMatchHit(matchedID)

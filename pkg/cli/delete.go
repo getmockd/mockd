@@ -48,7 +48,7 @@ Run 'mockd delete --help' for more options`)
 	mockID := fs.Arg(0)
 
 	// Create admin client and delete mock
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 	if err := client.DeleteMock(mockID); err != nil {
 		if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 404 {
 			return fmt.Errorf("%s", FormatNotFoundError("mock", mockID))

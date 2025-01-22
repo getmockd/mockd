@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/ai"
 	"github.com/getmockd/mockd/pkg/ai/generator"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/portability"
 )
@@ -343,7 +343,7 @@ Run 'mockd enhance --help' for more options`)
 	gen := generator.New(aiProvider)
 
 	// Get existing mocks from server
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 	mocks, err := client.ListMocks()
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))

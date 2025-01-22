@@ -7,26 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.1.0] - 2026-01-18
+## [0.2.0] - 2026-01-21
 
 ### Added
 
-- kubectl-style context management for switching between mockd deployments
-- Workspace CLI commands for organizing mocks into logical groups
-- `mockd context` commands: `add`, `list`, `use`, `remove`, `show`
-- `mockd workspace` commands: `create`, `list`, `use`, `delete`, `clear`
-- Environment variable overrides: `MOCKD_CONTEXT`, `MOCKD_WORKSPACE`
-- Auth token support per-context for cloud/enterprise deployments
-- TLS insecure option per-context for self-signed certificates
+- gRPC/MQTT port merging: automatically merge services/topics when creating mocks on the same port
+- Port conflict detection with actionable error messages
+- `mockd ports` command to list all ports in use
+- CLI merge output shows added and total services/topics
+- Metrics path normalization for UUIDs, MongoDB ObjectIDs, and numeric IDs
+- Shared test helpers for port allocation stability
 
-### Security
+### Changed
 
-- Config file permissions restricted to `0600` (owner read/write only)
-- Config directory permissions restricted to `0700`
-- Auth tokens masked in JSON output (shows `hasToken: true` instead of actual token)
-- URLs with embedded credentials (`user:pass@host`) are rejected
+- Version reset to 0.2.0 to reflect pre-release status
+- Improved CLI help text for gRPC and MQTT flags (documents merge behavior)
 
-## [1.0.0] - 2026-01-17
+### Fixed
+
+- CLI handling of merge responses (HTTP 200 vs 201)
+- Bulk create and update handlers properly detect merge targets as conflicts
+- Integration test port allocation stability
+
+## [0.1.0] - 2026-01-17
 
 ### Added
 
@@ -45,12 +48,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Import/export support for OpenAPI, Postman, WireMock, HAR, and cURL formats
 - Docker container support
 - Helm chart for Kubernetes deployment
+- kubectl-style context management for switching between mockd deployments
+- Workspace CLI commands for organizing mocks into logical groups
+
+### Security
+
+- Config file permissions restricted to `0600` (owner read/write only)
+- Config directory permissions restricted to `0700`
+- Auth tokens masked in JSON output
 
 ### Notes
 
-- Initial public release
+- Initial public release (pre-1.0)
 - Licensed under Apache 2.0
 
-[Unreleased]: https://github.com/getmockd/mockd/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/getmockd/mockd/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/getmockd/mockd/releases/tag/v1.0.0
+[Unreleased]: https://github.com/getmockd/mockd/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/getmockd/mockd/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/getmockd/mockd/releases/tag/v0.1.0

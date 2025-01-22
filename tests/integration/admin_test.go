@@ -26,12 +26,15 @@ func setupAdminTest(t *testing.T) (*engine.Server, *admin.AdminAPI, int, int, fu
 	adminPort := getFreePort()
 	managementPort := getFreePort()
 
+	// Use a temp directory for test isolation
+	tempDir := t.TempDir()
+
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		AdminPort:    adminPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		AdminPort:      adminPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -39,6 +42,7 @@ func setupAdminTest(t *testing.T) (*engine.Server, *admin.AdminAPI, int, int, fu
 	adminAPI := admin.NewAdminAPI(adminPort,
 		admin.WithLocalEngine(engineURL),
 		admin.WithAPIKeyDisabled(), // Disable API key auth for tests
+		admin.WithDataDir(tempDir), // Use temp dir for test isolation
 	)
 
 	err := srv.Start()
@@ -52,6 +56,8 @@ func setupAdminTest(t *testing.T) (*engine.Server, *admin.AdminAPI, int, int, fu
 	cleanup := func() {
 		adminAPI.Stop()
 		srv.Stop()
+		// Small delay to ensure file handles are released before TempDir cleanup
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	return srv, adminAPI, httpPort, adminPort, cleanup
@@ -147,27 +153,38 @@ func TestAdminAPIListMocks(t *testing.T) {
 
 // T056: PUT /mocks/{id} updates mock
 func TestAdminAPIUpdateMock(t *testing.T) {
-	srv, _, httpPort, adminPort, cleanup := setupAdminTest(t)
+	_, _, httpPort, adminPort, cleanup := setupAdminTest(t)
 	defer cleanup()
 
-	// Create engine client
-	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
-
-	// Create initial mock
-	_, err := client.CreateMock(context.Background(), &config.MockConfiguration{
-		ID:      "update-test",
-		Name:    "Original",
-		Enabled: true,
-		Type:    mock.MockTypeHTTP,
-		HTTP: &mock.HTTPSpec{
-			Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/update-test"},
-			Response: &mock.HTTPResponse{StatusCode: 200, Body: "original"},
+	// Create initial mock via Admin API (so it's in the store)
+	createData := map[string]interface{}{
+		"id":      "update-test",
+		"name":    "Original",
+		"type":    "http",
+		"enabled": true,
+		"http": map[string]interface{}{
+			"matcher": map[string]interface{}{
+				"method": "GET",
+				"path":   "/update-test",
+			},
+			"response": map[string]interface{}{
+				"statusCode": 200,
+				"body":       "original",
+			},
 		},
-	})
+	}
+	createBody, _ := json.Marshal(createData)
+	resp, err := http.Post(
+		fmt.Sprintf("http://localhost:%d/mocks", adminPort),
+		"application/json",
+		bytes.NewReader(createBody),
+	)
 	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	// Verify original response
-	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/update-test", httpPort))
+	resp, err = http.Get(fmt.Sprintf("http://localhost:%d/update-test", httpPort))
 	require.NoError(t, err)
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
@@ -176,13 +193,16 @@ func TestAdminAPIUpdateMock(t *testing.T) {
 	// Update via admin API
 	updateData := map[string]interface{}{
 		"name": "Updated",
-		"matcher": map[string]interface{}{
-			"method": "GET",
-			"path":   "/update-test",
-		},
-		"response": map[string]interface{}{
-			"statusCode": 200,
-			"body":       "updated",
+		"type": "http",
+		"http": map[string]interface{}{
+			"matcher": map[string]interface{}{
+				"method": "GET",
+				"path":   "/update-test",
+			},
+			"response": map[string]interface{}{
+				"statusCode": 200,
+				"body":       "updated",
+			},
 		},
 		"enabled": true,
 	}
@@ -212,26 +232,37 @@ func TestAdminAPIUpdateMock(t *testing.T) {
 
 // T057: DELETE /mocks/{id} removes mock
 func TestAdminAPIDeleteMock(t *testing.T) {
-	srv, _, httpPort, adminPort, cleanup := setupAdminTest(t)
+	_, _, httpPort, adminPort, cleanup := setupAdminTest(t)
 	defer cleanup()
 
-	// Create engine client
-	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
-
-	// Create mock
-	_, err := client.CreateMock(context.Background(), &config.MockConfiguration{
-		ID:      "delete-test",
-		Enabled: true,
-		Type:    mock.MockTypeHTTP,
-		HTTP: &mock.HTTPSpec{
-			Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/delete-test"},
-			Response: &mock.HTTPResponse{StatusCode: 200, Body: "exists"},
+	// Create mock via Admin API (so it's in the store)
+	createData := map[string]interface{}{
+		"id":      "delete-test",
+		"type":    "http",
+		"enabled": true,
+		"http": map[string]interface{}{
+			"matcher": map[string]interface{}{
+				"method": "GET",
+				"path":   "/delete-test",
+			},
+			"response": map[string]interface{}{
+				"statusCode": 200,
+				"body":       "exists",
+			},
 		},
-	})
+	}
+	createBody, _ := json.Marshal(createData)
+	resp, err := http.Post(
+		fmt.Sprintf("http://localhost:%d/mocks", adminPort),
+		"application/json",
+		bytes.NewReader(createBody),
+	)
 	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	// Verify mock exists
-	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/delete-test", httpPort))
+	resp, err = http.Get(fmt.Sprintf("http://localhost:%d/delete-test", httpPort))
 	require.NoError(t, err)
 	resp.Body.Close()
 	assert.Equal(t, 200, resp.StatusCode)

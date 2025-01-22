@@ -9,9 +9,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/tunnel"
@@ -283,7 +283,7 @@ Flags:
 	}
 
 	// Check if server is running
-	client := NewAdminClient(*adminAddr)
+	client := NewAdminClientWithAuth(*adminAddr)
 	if err := client.Health(); err != nil {
 		return fmt.Errorf("mockd server not running (admin API not reachable)")
 	}
@@ -314,7 +314,7 @@ Flags:
 	}
 
 	// Check if server is running
-	client := NewAdminClient(*adminAddr)
+	client := NewAdminClientWithAuth(*adminAddr)
 	if err := client.Health(); err != nil {
 		return fmt.Errorf("mockd server not running (admin API not reachable)")
 	}

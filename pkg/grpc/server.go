@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/logging"
+	"github.com/getmockd/mockd/pkg/metrics"
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/util"
@@ -453,6 +454,14 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 	startTime := time.Now()
 	fullPath := fmt.Sprintf("/%s/%s", serviceName, methodName)
 
+	// Track active stream connection
+	if metrics.ActiveConnections != nil {
+		if vec, err := metrics.ActiveConnections.WithLabels("grpc"); err == nil {
+			vec.Inc()
+			defer vec.Dec()
+		}
+	}
+
 	// Read single request from client
 	inputDesc := method.GetInputDescriptor()
 	if inputDesc == nil {
@@ -558,6 +567,14 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 	startTime := time.Now()
 	fullPath := fmt.Sprintf("/%s/%s", serviceName, methodName)
 
+	// Track active stream connection
+	if metrics.ActiveConnections != nil {
+		if vec, err := metrics.ActiveConnections.WithLabels("grpc"); err == nil {
+			vec.Inc()
+			defer vec.Dec()
+		}
+	}
+
 	inputDesc := method.GetInputDescriptor()
 	if inputDesc == nil {
 		err := status.Error(codes.Internal, "cannot get input descriptor")
@@ -651,6 +668,14 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *MethodDescriptor, serviceName, methodName string, md metadata.MD) error {
 	startTime := time.Now()
 	fullPath := fmt.Sprintf("/%s/%s", serviceName, methodName)
+
+	// Track active stream connection
+	if metrics.ActiveConnections != nil {
+		if vec, err := metrics.ActiveConnections.WithLabels("grpc"); err == nil {
+			vec.Inc()
+			defer vec.Dec()
+		}
+	}
 
 	inputDesc := method.GetInputDescriptor()
 	if inputDesc == nil {
@@ -1363,7 +1388,7 @@ func (s *Server) Metadata() protocol.Metadata {
 		ID:                   s.ID(),
 		Name:                 s.config.Name,
 		Protocol:             protocol.ProtocolGRPC,
-		Version:              "1.0.0",
+		Version:              "0.2.0",
 		TransportType:        protocol.TransportHTTP2,
 		ConnectionModel:      protocol.ConnectionModelStandalone,
 		CommunicationPattern: protocol.PatternRequestResponse,
@@ -1507,8 +1532,13 @@ func streamTypeToString(st GRPCStreamType) string {
 	return string(st)
 }
 
-// logGRPCCall logs a gRPC call with all available information.
+// logGRPCCall logs a gRPC call with all available information and records metrics.
 func (s *Server) logGRPCCall(startTime time.Time, fullPath, serviceName, methodName string, streamType GRPCStreamType, md metadata.MD, req interface{}, resp interface{}, grpcErr error) {
+	duration := time.Since(startTime)
+
+	// Record metrics
+	s.recordGRPCMetrics(fullPath, grpcErr, duration)
+
 	// Check if logging is enabled
 	s.requestLoggerMu.RLock()
 	logger := s.requestLogger
@@ -1582,6 +1612,29 @@ func (s *Server) logGRPCCall(startTime time.Time, fullPath, serviceName, methodN
 	}
 
 	logger.Log(entry)
+}
+
+// recordGRPCMetrics records gRPC request metrics.
+func (s *Server) recordGRPCMetrics(fullPath string, grpcErr error, duration time.Duration) {
+	statusCode := "ok"
+	if grpcErr != nil {
+		if st, ok := status.FromError(grpcErr); ok {
+			statusCode = strings.ToLower(st.Code().String())
+		} else {
+			statusCode = "unknown"
+		}
+	}
+
+	if metrics.RequestsTotal != nil {
+		if vec, err := metrics.RequestsTotal.WithLabels("grpc", fullPath, statusCode); err == nil {
+			vec.Inc()
+		}
+	}
+	if metrics.RequestDuration != nil {
+		if vec, err := metrics.RequestDuration.WithLabels("grpc", fullPath); err == nil {
+			vec.Observe(duration.Seconds())
+		}
+	}
 }
 
 // Interface compliance checks.

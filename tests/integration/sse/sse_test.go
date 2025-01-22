@@ -504,3 +504,130 @@ func TestSSENDJSONResponse(t *testing.T) {
 		}
 	}
 }
+
+// ============================================================================
+// Full Server Integration Test (with middleware chain)
+// ============================================================================
+// This test uses the full server startup (srv.Start()) instead of
+// httptest.NewServer(srv.Handler()) to ensure the middleware chain
+// is properly tested, including metrics middleware that needs http.Flusher.
+
+func TestSSE_FullServer_WithMiddleware(t *testing.T) {
+	// This test ensures SSE works through the full middleware chain.
+	// SSE requires http.Flusher which metricsResponseWriter must support.
+
+	port := getFreePort()
+	mgmtPort := getFreePort()
+	cfg := config.DefaultServerConfiguration()
+	cfg.HTTPPort = port
+	cfg.HTTPSPort = 0
+	cfg.ManagementPort = mgmtPort
+
+	server := engine.NewServer(cfg)
+
+	// Start the FULL server (with middleware chain)
+	if err := server.Start(); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer server.Stop()
+
+	// Wait for server to be ready
+	time.Sleep(100 * time.Millisecond)
+
+	// Create engine client to add mock via API
+	client := engineclient.New(fmt.Sprintf("http://localhost:%d", mgmtPort))
+	ctx := context.Background()
+
+	if err := waitForEngineHealth(ctx, client, 5*time.Second); err != nil {
+		t.Fatalf("engine not healthy: %v", err)
+	}
+
+	// Add SSE mock via management API
+	fixedDelay := 100
+	sseMock := &config.MockConfiguration{
+		ID:      "sse_middleware_test",
+		Type:    mock.MockTypeHTTP,
+		Name:    "SSE Middleware Test",
+		Enabled: true,
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{
+				Method: "GET",
+				Path:   "/events/test",
+			},
+			SSE: &mock.SSEConfig{
+				Events: []mock.SSEEventDef{
+					{Type: "connected", Data: map[string]interface{}{"status": "ok"}, ID: "0"},
+					{Type: "message", Data: map[string]interface{}{"text": "hello"}, ID: "1"},
+					{Type: "message", Data: map[string]interface{}{"text": "world"}, ID: "2"},
+				},
+				Timing: mock.SSETimingConfig{
+					FixedDelay: &fixedDelay,
+				},
+				Lifecycle: mock.SSELifecycleConfig{
+					MaxEvents: 3,
+				},
+			},
+		},
+	}
+
+	if _, err := client.CreateMock(ctx, sseMock); err != nil {
+		t.Fatalf("failed to add SSE mock: %v", err)
+	}
+
+	// Make SSE request - this goes through the FULL middleware chain
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	url := fmt.Sprintf("http://localhost:%d/events/test", port)
+	req, _ := http.NewRequestWithContext(reqCtx, "GET", url, nil)
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("SSE request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Verify response headers
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "text/event-stream") {
+		t.Errorf("expected Content-Type text/event-stream, got %q", contentType)
+	}
+
+	// Read and verify events
+	scanner := bufio.NewScanner(resp.Body)
+	var events []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event:") {
+			events = append(events, strings.TrimPrefix(line, "event:"))
+		}
+	}
+
+	if len(events) < 2 {
+		t.Errorf("expected at least 2 events, got %d: %v", len(events), events)
+	}
+
+	// Verify we got the expected event types
+	hasConnected := false
+	hasMessage := false
+	for _, e := range events {
+		if e == "connected" {
+			hasConnected = true
+		}
+		if e == "message" {
+			hasMessage = true
+		}
+	}
+
+	if !hasConnected {
+		t.Error("missing 'connected' event")
+	}
+	if !hasMessage {
+		t.Error("missing 'message' event")
+	}
+}

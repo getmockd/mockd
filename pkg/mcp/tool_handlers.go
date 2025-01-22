@@ -259,20 +259,23 @@ func handleCreateEndpoint(args map[string]interface{}, session *MCPSession, serv
 	}
 
 	// Add via HTTP client
-	created, err := server.adminClient.CreateMock(m)
+	createResult, err := server.adminClient.CreateMock(m)
 	if err != nil {
 		return ToolResultError("failed to create mock: " + err.Error()), nil
 	}
-	m = created // Update with server-assigned ID
 
 	// Notify resource change
 	server.NotifyResourceListChanged()
 
 	result := map[string]interface{}{
-		"created": true,
-		"id":      m.ID,
+		"created": createResult.Action == "created",
+		"merged":  createResult.Action == "merged",
+		"id":      createResult.Mock.ID,
 		"path":    path,
 		"method":  method,
+	}
+	if createResult.IsMerge() {
+		result["message"] = createResult.Message
 	}
 	return ToolResultJSON(result)
 }

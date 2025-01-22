@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/cli/internal/flags"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
 )
@@ -49,6 +49,15 @@ func RunAdd(args []string) error {
 	priority := fs.Int("priority", 0, "Mock priority (higher = matched first)")
 	delay := fs.Int("delay", 0, "Response delay in milliseconds")
 
+	// SSE flags (for HTTP mocks with SSE streaming)
+	sse := fs.Bool("sse", false, "Enable Server-Sent Events streaming")
+	var sseEvents flags.StringSlice
+	fs.Var(&sseEvents, "sse-event", "SSE event (type:data or just data), repeatable")
+	sseDelay := fs.Int("sse-delay", 100, "Delay between SSE events in milliseconds")
+	sseTemplate := fs.String("sse-template", "", "SSE template: openai, notification")
+	sseRepeat := fs.Int("sse-repeat", 1, "Number of times to repeat SSE events (0 = infinite)")
+	sseKeepalive := fs.Int("sse-keepalive", 0, "SSE keepalive interval in milliseconds (0 = disabled)")
+
 	// WebSocket flags
 	message := fs.String("message", "", "Default response message (JSON) for WebSocket")
 	echo := fs.Bool("echo", false, "Enable echo mode for WebSocket")
@@ -61,11 +70,17 @@ func RunAdd(args []string) error {
 	// gRPC flags
 	service := fs.String("service", "", "gRPC service name (e.g., greeter.Greeter)")
 	rpcMethod := fs.String("rpc-method", "", "gRPC method name")
+	grpcPort := fs.Int("grpc-port", 50051, "gRPC server port")
+	var protoFiles flags.StringSlice
+	fs.Var(&protoFiles, "proto", "Path to .proto file (required for gRPC, repeatable)")
+	var protoPaths flags.StringSlice
+	fs.Var(&protoPaths, "proto-path", "Import path for proto dependencies (repeatable)")
 
 	// MQTT flags
 	topic := fs.String("topic", "", "MQTT topic pattern")
 	payload := fs.String("payload", "", "MQTT response payload")
 	qos := fs.Int("qos", 0, "MQTT QoS level (0, 1, 2)")
+	mqttPort := fs.Int("mqtt-port", 1883, "MQTT broker port")
 
 	// SOAP flags
 	soapAction := fs.String("soap-action", "", "SOAPAction header value")
@@ -93,6 +108,16 @@ HTTP Flags (--type http):
       --priority      Mock priority (higher = matched first)
       --delay         Response delay in milliseconds
 
+SSE Flags (Server-Sent Events, use with --type http):
+      --sse           Enable SSE streaming response
+      --sse-event     SSE event (type:data), repeatable. Examples:
+                        --sse-event 'message:hello'
+                        --sse-event 'update:{"count":1}'
+      --sse-delay     Delay between events in ms (default: 100)
+      --sse-template  Use built-in template: openai-chat, notification-stream
+      --sse-repeat    Repeat events N times (0 = infinite, default: 1)
+      --sse-keepalive Keepalive interval in ms (0 = disabled)
+
 WebSocket Flags (--type websocket):
       --path          WebSocket path (required)
       --message       Default response message (JSON)
@@ -103,16 +128,27 @@ GraphQL Flags (--type graphql):
       --operation     Operation name (required)
       --op-type       Operation type: query or mutation (default: query)
       --response      JSON response data
+  NOTE: For full GraphQL with schema validation, use YAML config file.
 
 gRPC Flags (--type grpc):
-      --service       Service name, e.g., greeter.Greeter (required)
+      --proto         Path to .proto file (required, repeatable for multiple files)
+      --proto-path    Import path for proto dependencies (repeatable)
+      --service       Service name, e.g., myapp.UserService (required)
       --rpc-method    RPC method name (required)
       --response      JSON response data
+      --grpc-port     gRPC server port (default: 50051)
+                      If a gRPC mock already exists on this port, the new
+                      service/method is merged into it automatically.
+                      For multiple services, use YAML config with services array.
 
 MQTT Flags (--type mqtt):
       --topic         Topic pattern (required)
       --payload       Response payload
       --qos           QoS level: 0, 1, or 2 (default: 0)
+      --mqtt-port     MQTT broker port (default: 1883)
+                      If an MQTT mock already exists on this port, the new
+                      topic is merged into it automatically.
+                      For multiple topics, use YAML config with topics array.
 
 SOAP Flags (--type soap):
       --path          SOAP endpoint path (default: /soap)
@@ -129,6 +165,20 @@ Examples:
     -b '{"id": "new-id", "created": true}' \
     -H "Content-Type:application/json"
 
+  # SSE endpoint with custom events
+  mockd add --path /events --sse \
+    --sse-event 'connected:{"status":"ok"}' \
+    --sse-event 'update:{"count":1}' \
+    --sse-event 'update:{"count":2}' \
+    --sse-delay 500
+
+  # SSE with OpenAI-style streaming (for LLM mock)
+  mockd add --path /v1/chat/completions --sse --sse-template openai-chat
+
+  # Infinite SSE stream (heartbeat style)
+  mockd add --path /stream --sse \
+    --sse-event 'ping:{}' --sse-delay 1000 --sse-repeat 0
+
   # WebSocket mock with echo mode
   mockd add --type websocket --path /ws/chat --echo
 
@@ -144,9 +194,20 @@ Examples:
   mockd add --type graphql --operation createUser --op-type mutation \
     --response '{"data": {"createUser": {"id": "new-id"}}}'
 
-  # gRPC mock
-  mockd add --type grpc --service greeter.Greeter --rpc-method SayHello \
-    --response '{"message": "Hello, World!"}'
+  # gRPC mock (proto file required)
+  mockd add --type grpc \
+    --proto ./service.proto \
+    --service myapp.UserService \
+    --rpc-method GetUser \
+    --response '{"id": "1", "name": "Alice"}'
+
+  # gRPC with import paths for proto dependencies
+  mockd add --type grpc \
+    --proto ./api/v1/service.proto \
+    --proto-path ./api \
+    --service myapp.v1.UserService \
+    --rpc-method GetUser \
+    --response '{"id": "1", "name": "Alice"}'
 
   # MQTT mock
   mockd add --type mqtt --topic sensors/temperature --payload '{"temp": 72.5}' --qos 1
@@ -185,15 +246,16 @@ Examples:
 
 	switch mockTypeEnum {
 	case mock.MockTypeHTTP:
-		m, err = buildHTTPMock(*name, *path, *method, *status, *body, *bodyFile, *priority, *delay, headers, matchHeaders, matchQueries)
+		m, err = buildHTTPMock(*name, *path, *method, *status, *body, *bodyFile, *priority, *delay, headers, matchHeaders, matchQueries,
+			*sse, sseEvents, *sseDelay, *sseTemplate, *sseRepeat, *sseKeepalive)
 	case mock.MockTypeWebSocket:
 		m, err = buildWebSocketMock(*name, *path, *message, *echo)
 	case mock.MockTypeGraphQL:
 		m, err = buildGraphQLMock(*name, *path, *operation, *opType, *response)
 	case mock.MockTypeGRPC:
-		m, err = buildGRPCMock(*name, *service, *rpcMethod, *response)
+		m, err = buildGRPCMock(*name, *service, *rpcMethod, *response, *grpcPort, protoFiles, protoPaths)
 	case mock.MockTypeMQTT:
-		m, err = buildMQTTMock(*name, *topic, *payload, *qos)
+		m, err = buildMQTTMock(*name, *topic, *payload, *qos, *mqttPort)
 	case mock.MockTypeSOAP:
 		m, err = buildSOAPMock(*name, *path, *operation, *soapAction, *response)
 	}
@@ -203,18 +265,21 @@ Examples:
 	}
 
 	// Create admin client and add mock
-	client := NewAdminClient(*adminURL)
-	created, err := client.CreateMock(m)
+	client := NewAdminClientWithAuth(*adminURL)
+	result, err := client.CreateMock(m)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
 
-	// Output result based on mock type
-	return outputResult(created, mockTypeEnum, *jsonOutput)
+	// Output result based on mock type and action (created vs merged)
+	return outputResult(result, mockTypeEnum, *jsonOutput)
 }
 
 // buildHTTPMock creates an HTTP mock configuration.
-func buildHTTPMock(name, path, method string, status int, body, bodyFile string, priority, delay int, headers, matchHeaders, matchQueries flags.StringSlice) (*config.MockConfiguration, error) {
+func buildHTTPMock(name, path, method string, status int, body, bodyFile string, priority, delay int,
+	headers, matchHeaders, matchQueries flags.StringSlice,
+	sse bool, sseEvents flags.StringSlice, sseDelay int, sseTemplate string, sseRepeat, sseKeepalive int) (*config.MockConfiguration, error) {
+
 	if path == "" {
 		return nil, fmt.Errorf(`--path is required for HTTP mocks
 
@@ -273,12 +338,26 @@ Run 'mockd add --help' for more options`)
 				Method: strings.ToUpper(method),
 				Path:   path,
 			},
-			Response: &mock.HTTPResponse{
-				StatusCode: status,
-				Body:       responseBody,
-				DelayMs:    delay,
-			},
 		},
+	}
+
+	// Build SSE config if enabled
+	if sse || len(sseEvents) > 0 || sseTemplate != "" {
+		sseConfig, err := buildSSEConfig(sseEvents, sseDelay, sseTemplate, sseRepeat, sseKeepalive)
+		if err != nil {
+			return nil, err
+		}
+		m.HTTP.SSE = sseConfig
+	} else {
+		// Only set Response for non-SSE mocks
+		m.HTTP.Response = &mock.HTTPResponse{
+			StatusCode: status,
+			Body:       responseBody,
+			DelayMs:    delay,
+		}
+		if len(responseHeaders) > 0 {
+			m.HTTP.Response.Headers = responseHeaders
+		}
 	}
 
 	if len(matchHeadersMap) > 0 {
@@ -287,11 +366,95 @@ Run 'mockd add --help' for more options`)
 	if len(matchQueryMap) > 0 {
 		m.HTTP.Matcher.QueryParams = matchQueryMap
 	}
-	if len(responseHeaders) > 0 {
-		m.HTTP.Response.Headers = responseHeaders
-	}
 
 	return m, nil
+}
+
+// buildSSEConfig creates an SSE configuration from CLI flags.
+func buildSSEConfig(events flags.StringSlice, delayMs int, template string, repeat, keepaliveMs int) (*mock.SSEConfig, error) {
+	cfg := &mock.SSEConfig{
+		Timing: mock.SSETimingConfig{
+			FixedDelay: &delayMs,
+		},
+		Lifecycle: mock.SSELifecycleConfig{
+			Termination: mock.SSETerminationConfig{
+				Type: "complete",
+			},
+		},
+	}
+
+	// Set keepalive if specified
+	if keepaliveMs > 0 {
+		cfg.Lifecycle.KeepaliveInterval = keepaliveMs
+	}
+
+	// Handle template-based generation
+	if template != "" {
+		cfg.Template = template
+		return cfg, nil
+	}
+
+	// Parse events from CLI
+	if len(events) == 0 {
+		// Default to a simple "connected" event
+		cfg.Events = []mock.SSEEventDef{
+			{Type: "message", Data: map[string]interface{}{"status": "connected"}},
+		}
+		return cfg, nil
+	}
+
+	parsedEvents := make([]mock.SSEEventDef, 0, len(events))
+	for _, e := range events {
+		eventType, data, hasType := parse.KeyValue(e, ':')
+		if !hasType {
+			// No type specified, use "message" as default
+			parsedEvents = append(parsedEvents, mock.SSEEventDef{
+				Type: "message",
+				Data: e,
+			})
+		} else {
+			// Try to parse data as JSON
+			var jsonData interface{}
+			if err := json.Unmarshal([]byte(data), &jsonData); err != nil {
+				// Not JSON, use as string
+				parsedEvents = append(parsedEvents, mock.SSEEventDef{
+					Type: eventType,
+					Data: data,
+				})
+			} else {
+				parsedEvents = append(parsedEvents, mock.SSEEventDef{
+					Type: eventType,
+					Data: jsonData,
+				})
+			}
+		}
+	}
+	cfg.Events = parsedEvents
+
+	// Handle repeat (infinite streaming)
+	if repeat == 0 {
+		// Infinite repeat - use generator with template
+		cfg.Generator = &mock.SSEEventGenerator{
+			Type: "template",
+			Template: &mock.SSETemplateGenerator{
+				Events: parsedEvents,
+				Repeat: 0, // 0 means infinite in template generator
+			},
+		}
+		cfg.Events = nil // Clear events since we're using generator
+	} else if repeat > 1 {
+		// Repeat N times using generator
+		cfg.Generator = &mock.SSEEventGenerator{
+			Type: "template",
+			Template: &mock.SSETemplateGenerator{
+				Events: parsedEvents,
+				Repeat: repeat,
+			},
+		}
+		cfg.Events = nil
+	}
+
+	return cfg, nil
 }
 
 // buildWebSocketMock creates a WebSocket mock configuration.
@@ -355,12 +518,16 @@ Run 'mockd add --help' for more options`)
 	opTypeCapitalized := strings.ToUpper(opType[:1]) + opType[1:]
 	resolverKey := fmt.Sprintf("%s.%s", opTypeCapitalized, operation)
 
+	// Auto-generate a minimal schema for CLI-created GraphQL mocks
+	schema := generateMinimalGraphQLSchema(operation, opType, response)
+
 	m := &config.MockConfiguration{
 		Name:    name,
 		Type:    mock.MockTypeGraphQL,
 		Enabled: true,
 		GraphQL: &mock.GraphQLSpec{
 			Path:      path,
+			Schema:    schema,
 			Resolvers: make(map[string]mock.ResolverConfig),
 		},
 	}
@@ -381,12 +548,63 @@ Run 'mockd add --help' for more options`)
 	return m, nil
 }
 
+// generateMinimalGraphQLSchema creates a minimal schema for CLI-created GraphQL mocks.
+func generateMinimalGraphQLSchema(operation, opType, response string) string {
+	// Generate a simple schema that supports the operation
+	// The response type is JSON (dynamic), so we use a scalar
+	var sb strings.Builder
+
+	sb.WriteString("scalar JSON\n\n")
+
+	if opType == "query" {
+		sb.WriteString("type Query {\n")
+		sb.WriteString(fmt.Sprintf("  %s: JSON\n", operation))
+		sb.WriteString("}\n")
+	} else {
+		sb.WriteString("type Query {\n")
+		sb.WriteString("  _empty: String\n") // GraphQL requires at least one Query field
+		sb.WriteString("}\n\n")
+		sb.WriteString("type Mutation {\n")
+		sb.WriteString(fmt.Sprintf("  %s: JSON\n", operation))
+		sb.WriteString("}\n")
+	}
+
+	return sb.String()
+}
+
 // buildGRPCMock creates a gRPC mock configuration.
-func buildGRPCMock(name, service, rpcMethod, response string) (*config.MockConfiguration, error) {
+func buildGRPCMock(name, service, rpcMethod, response string, port int, protoFiles, protoPaths flags.StringSlice) (*config.MockConfiguration, error) {
+	// Proto file is required for gRPC mocks
+	if len(protoFiles) == 0 {
+		return nil, fmt.Errorf(`--proto is required for gRPC mocks
+
+gRPC mocks require a .proto file to define the service schema.
+
+Usage: mockd add --type grpc --proto ./service.proto --service myapp.UserService --rpc-method GetUser [flags]
+
+Examples:
+  # Basic gRPC mock
+  mockd add --type grpc \
+    --proto ./service.proto \
+    --service myapp.UserService \
+    --rpc-method GetUser \
+    --response '{"id": "1", "name": "Alice"}'
+
+  # With import paths for proto dependencies
+  mockd add --type grpc \
+    --proto ./api/v1/service.proto \
+    --proto-path ./api \
+    --service myapp.v1.UserService \
+    --rpc-method GetUser \
+    --response '{"id": "1"}'
+
+Run 'mockd add --help' for more options`)
+	}
+
 	if service == "" {
 		return nil, fmt.Errorf(`--service is required for gRPC mocks
 
-Usage: mockd add --type grpc --service greeter.Greeter --rpc-method SayHello [flags]
+Usage: mockd add --type grpc --proto ./service.proto --service myapp.UserService --rpc-method GetUser [flags]
 
 Run 'mockd add --help' for more options`)
 	}
@@ -394,9 +612,16 @@ Run 'mockd add --help' for more options`)
 	if rpcMethod == "" {
 		return nil, fmt.Errorf(`--rpc-method is required for gRPC mocks
 
-Usage: mockd add --type grpc --service greeter.Greeter --rpc-method SayHello [flags]
+Usage: mockd add --type grpc --proto ./service.proto --service myapp.UserService --rpc-method GetUser [flags]
 
 Run 'mockd add --help' for more options`)
+	}
+
+	// Verify proto files exist
+	for _, protoFile := range protoFiles {
+		if _, err := os.Stat(protoFile); os.IsNotExist(err) {
+			return nil, fmt.Errorf("proto file not found: %s", protoFile)
+		}
 	}
 
 	m := &config.MockConfiguration{
@@ -404,8 +629,22 @@ Run 'mockd add --help' for more options`)
 		Type:    mock.MockTypeGRPC,
 		Enabled: true,
 		GRPC: &mock.GRPCSpec{
-			Services: make(map[string]mock.ServiceConfig),
+			Port:       port,
+			Reflection: true, // Enable reflection for grpcurl/grpcui support
+			Services:   make(map[string]mock.ServiceConfig),
 		},
+	}
+
+	// Set proto file(s)
+	if len(protoFiles) == 1 {
+		m.GRPC.ProtoFile = protoFiles[0]
+	} else {
+		m.GRPC.ProtoFiles = protoFiles
+	}
+
+	// Set import paths if provided
+	if len(protoPaths) > 0 {
+		m.GRPC.ImportPaths = protoPaths
 	}
 
 	methodConfig := mock.MethodConfig{}
@@ -429,7 +668,7 @@ Run 'mockd add --help' for more options`)
 }
 
 // buildMQTTMock creates an MQTT mock configuration.
-func buildMQTTMock(name, topic, payload string, qos int) (*config.MockConfiguration, error) {
+func buildMQTTMock(name, topic, payload string, qos, port int) (*config.MockConfiguration, error) {
 	if topic == "" {
 		return nil, fmt.Errorf(`--topic is required for MQTT mocks
 
@@ -448,6 +687,7 @@ Run 'mockd add --help' for more options`)
 		Type:    mock.MockTypeMQTT,
 		Enabled: true,
 		MQTT: &mock.MQTTSpec{
+			Port: port,
 			Topics: []mock.TopicConfig{
 				{
 					Topic: topic,
@@ -507,12 +747,51 @@ Run 'mockd add --help' for more options`)
 	return m, nil
 }
 
-// outputResult formats and prints the created mock result.
-func outputResult(created *config.MockConfiguration, mockType mock.MockType, jsonOutput bool) error {
+// outputResult formats and prints the created or merged mock result.
+func outputResult(result *CreateMockResult, mockType mock.MockType, jsonOutput bool) error {
 	if jsonOutput {
-		return outputJSONResult(created, mockType)
+		return outputJSONResult(result, mockType)
 	}
 
+	created := result.Mock
+
+	// Handle merge case
+	if result.IsMerge() {
+		fmt.Printf("Merged into mock: %s\n", created.ID)
+		fmt.Printf("  Type: %s\n", created.Type)
+
+		switch mockType {
+		case mock.MockTypeGRPC:
+			if len(result.AddedServices) > 0 {
+				fmt.Printf("  Added:\n")
+				for _, svc := range result.AddedServices {
+					fmt.Printf("    - %s\n", svc)
+				}
+			}
+			if len(result.TotalServices) > 0 {
+				fmt.Printf("  Total services:\n")
+				for _, svc := range result.TotalServices {
+					fmt.Printf("    - %s\n", svc)
+				}
+			}
+		case mock.MockTypeMQTT:
+			if len(result.AddedTopics) > 0 {
+				fmt.Printf("  Added:\n")
+				for _, topic := range result.AddedTopics {
+					fmt.Printf("    - %s\n", topic)
+				}
+			}
+			if len(result.TotalTopics) > 0 {
+				fmt.Printf("  Total topics:\n")
+				for _, topic := range result.TotalTopics {
+					fmt.Printf("    - %s\n", topic)
+				}
+			}
+		}
+		return nil
+	}
+
+	// Standard create case
 	fmt.Printf("Created mock: %s\n", created.ID)
 	fmt.Printf("  Type: %s\n", created.Type)
 
@@ -570,11 +849,48 @@ func outputResult(created *config.MockConfiguration, mockType mock.MockType, jso
 	return nil
 }
 
-// outputJSONResult outputs the created mock in JSON format.
-func outputJSONResult(created *config.MockConfiguration, mockType mock.MockType) error {
+// outputJSONResult outputs the created or merged mock in JSON format.
+func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 
+	created := result.Mock
+
+	// For merge results, include merge-specific information
+	if result.IsMerge() {
+		switch mockType {
+		case mock.MockTypeGRPC:
+			return enc.Encode(struct {
+				ID            string   `json:"id"`
+				Type          string   `json:"type"`
+				Action        string   `json:"action"`
+				AddedServices []string `json:"addedServices,omitempty"`
+				TotalServices []string `json:"totalServices,omitempty"`
+			}{
+				ID:            created.ID,
+				Type:          string(created.Type),
+				Action:        result.Action,
+				AddedServices: result.AddedServices,
+				TotalServices: result.TotalServices,
+			})
+		case mock.MockTypeMQTT:
+			return enc.Encode(struct {
+				ID          string   `json:"id"`
+				Type        string   `json:"type"`
+				Action      string   `json:"action"`
+				AddedTopics []string `json:"addedTopics,omitempty"`
+				TotalTopics []string `json:"totalTopics,omitempty"`
+			}{
+				ID:          created.ID,
+				Type:        string(created.Type),
+				Action:      result.Action,
+				AddedTopics: result.AddedTopics,
+				TotalTopics: result.TotalTopics,
+			})
+		}
+	}
+
+	// Standard create output
 	switch mockType {
 	case mock.MockTypeHTTP:
 		createdMethod := ""
@@ -590,12 +906,14 @@ func outputJSONResult(created *config.MockConfiguration, mockType mock.MockType)
 		return enc.Encode(struct {
 			ID         string `json:"id"`
 			Type       string `json:"type"`
+			Action     string `json:"action"`
 			Method     string `json:"method"`
 			Path       string `json:"path"`
 			StatusCode int    `json:"statusCode"`
 		}{
 			ID:         created.ID,
 			Type:       string(created.Type),
+			Action:     result.Action,
 			Method:     createdMethod,
 			Path:       createdPath,
 			StatusCode: createdStatus,
@@ -611,15 +929,17 @@ func outputJSONResult(created *config.MockConfiguration, mockType mock.MockType)
 			}
 		}
 		return enc.Encode(struct {
-			ID   string `json:"id"`
-			Type string `json:"type"`
-			Path string `json:"path"`
-			Echo bool   `json:"echo"`
+			ID     string `json:"id"`
+			Type   string `json:"type"`
+			Action string `json:"action"`
+			Path   string `json:"path"`
+			Echo   bool   `json:"echo"`
 		}{
-			ID:   created.ID,
-			Type: string(created.Type),
-			Path: wsPath,
-			Echo: echoEnabled,
+			ID:     created.ID,
+			Type:   string(created.Type),
+			Action: result.Action,
+			Path:   wsPath,
+			Echo:   echoEnabled,
 		})
 
 	case mock.MockTypeGraphQL:
@@ -634,11 +954,13 @@ func outputJSONResult(created *config.MockConfiguration, mockType mock.MockType)
 		return enc.Encode(struct {
 			ID         string   `json:"id"`
 			Type       string   `json:"type"`
+			Action     string   `json:"action"`
 			Path       string   `json:"path"`
 			Operations []string `json:"operations"`
 		}{
 			ID:         created.ID,
 			Type:       string(created.Type),
+			Action:     result.Action,
 			Path:       gqlPath,
 			Operations: operations,
 		})
@@ -657,11 +979,13 @@ func outputJSONResult(created *config.MockConfiguration, mockType mock.MockType)
 		return enc.Encode(struct {
 			ID       string   `json:"id"`
 			Type     string   `json:"type"`
+			Action   string   `json:"action"`
 			Services []string `json:"services"`
 			Methods  []string `json:"methods"`
 		}{
 			ID:       created.ID,
 			Type:     string(created.Type),
+			Action:   result.Action,
 			Services: services,
 			Methods:  methods,
 		})
@@ -674,15 +998,17 @@ func outputJSONResult(created *config.MockConfiguration, mockType mock.MockType)
 			mqttQoS = created.MQTT.Topics[0].QoS
 		}
 		return enc.Encode(struct {
-			ID    string `json:"id"`
-			Type  string `json:"type"`
-			Topic string `json:"topic"`
-			QoS   int    `json:"qos"`
+			ID     string `json:"id"`
+			Type   string `json:"type"`
+			Action string `json:"action"`
+			Topic  string `json:"topic"`
+			QoS    int    `json:"qos"`
 		}{
-			ID:    created.ID,
-			Type:  string(created.Type),
-			Topic: mqttTopic,
-			QoS:   mqttQoS,
+			ID:     created.ID,
+			Type:   string(created.Type),
+			Action: result.Action,
+			Topic:  mqttTopic,
+			QoS:    mqttQoS,
 		})
 
 	case mock.MockTypeSOAP:
@@ -701,12 +1027,14 @@ func outputJSONResult(created *config.MockConfiguration, mockType mock.MockType)
 		return enc.Encode(struct {
 			ID          string   `json:"id"`
 			Type        string   `json:"type"`
+			Action      string   `json:"action"`
 			Path        string   `json:"path"`
 			Operations  []string `json:"operations"`
 			SOAPActions []string `json:"soapActions,omitempty"`
 		}{
 			ID:          created.ID,
 			Type:        string(created.Type),
+			Action:      result.Action,
 			Path:        soapPath,
 			Operations:  operations,
 			SOAPActions: soapActions,

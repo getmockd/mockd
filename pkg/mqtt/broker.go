@@ -414,7 +414,7 @@ func (b *Broker) Metadata() protocol.Metadata {
 		ID:                   b.ID(),
 		Name:                 b.config.Name,
 		Protocol:             protocol.ProtocolMQTT,
-		Version:              "1.0.0",
+		Version:              "0.2.0",
 		TransportType:        protocol.TransportTCP,
 		ConnectionModel:      protocol.ConnectionModelStandalone,
 		CommunicationPattern: protocol.PatternPubSub,

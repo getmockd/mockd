@@ -94,7 +94,7 @@ func (b *testServerBundle) Stop() {
 func createStatefulServer(t *testing.T, resources ...*statefulResourceConfig) (*engine.Server, int, int) {
 	t.Helper()
 	bundle := createStatefulServerWithAdmin(t, resources...)
-	t.Cleanup(func() { bundle.AdminAPI.Stop() })
+	// Note: cleanup is already registered in createStatefulServerWithAdmin
 	return bundle.Server, bundle.HTTPPort, bundle.AdminPort
 }
 
@@ -109,11 +109,11 @@ func createStatefulServerWithAdmin(t *testing.T, resources ...*statefulResourceC
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		AdminPort:    adminPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		AdminPort:      adminPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -143,12 +143,19 @@ func createStatefulServerWithAdmin(t *testing.T, resources ...*statefulResourceC
 
 	// Create and start admin API
 	// The engine client connects lazily, so it's OK that the server isn't started yet
+	tempDir := t.TempDir() // Use temp dir for test isolation
 	adminAPI := admin.NewAdminAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
+		admin.WithDataDir(tempDir),
 	)
 	err := adminAPI.Start()
 	require.NoError(t, err, "failed to start admin API")
+
+	t.Cleanup(func() {
+		adminAPI.Stop()
+		time.Sleep(10 * time.Millisecond) // Allow file handles to release
+	})
 
 	return &testServerBundle{
 		Server:    srv,

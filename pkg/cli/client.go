@@ -7,10 +7,21 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/requestlog"
+)
+
+const (
+	// APIKeyHeader is the HTTP header for API key authentication.
+	APIKeyHeader = "X-API-Key"
+
+	// DefaultKeyFileName is the default file name for storing the API key.
+	DefaultKeyFileName = "admin-api-key"
 )
 
 // AdminClient provides methods for communicating with the mockd admin API.
@@ -21,8 +32,9 @@ type AdminClient interface {
 	ListMocksByType(mockType string) ([]*config.MockConfiguration, error)
 	// GetMock returns a specific mock by ID.
 	GetMock(id string) (*config.MockConfiguration, error)
-	// CreateMock creates a new mock and returns it with generated ID.
-	CreateMock(mock *config.MockConfiguration) (*config.MockConfiguration, error)
+	// CreateMock creates a new mock or merges into existing one.
+	// Returns a CreateMockResult with the mock and action taken.
+	CreateMock(mock *config.MockConfiguration) (*CreateMockResult, error)
 	// UpdateMock updates an existing mock by ID.
 	UpdateMock(id string, mock *config.MockConfiguration) (*config.MockConfiguration, error)
 	// DeleteMock deletes a mock by ID.
@@ -45,6 +57,8 @@ type AdminClient interface {
 	GetMQTTStatus() (map[string]interface{}, error)
 	// GetStats returns server statistics.
 	GetStats() (*StatsResult, error)
+	// GetPorts returns all ports in use by mockd.
+	GetPorts() ([]PortInfo, error)
 }
 
 // LogFilter specifies filtering criteria for request logs.
@@ -71,6 +85,24 @@ type ImportResult struct {
 	Total    int
 }
 
+// CreateMockResult contains the result of a create mock operation.
+// This can be either a new creation or a merge into an existing mock.
+type CreateMockResult struct {
+	Mock          *config.MockConfiguration
+	Action        string   // "created" or "merged"
+	Message       string   // Human-readable message
+	TargetMockID  string   // For merge: ID of the mock merged into
+	AddedServices []string // For gRPC merge: services/methods added
+	AddedTopics   []string // For MQTT merge: topics added
+	TotalServices []string // For gRPC merge: all services after merge
+	TotalTopics   []string // For MQTT merge: all topics after merge
+}
+
+// IsMerge returns true if this result was a merge operation.
+func (r *CreateMockResult) IsMerge() bool {
+	return r.Action == "merged"
+}
+
 // StatsResult contains server statistics.
 type StatsResult struct {
 	Uptime        int   `json:"uptime"`
@@ -93,6 +125,7 @@ func (e *APIError) Error() string {
 type adminClient struct {
 	baseURL    string
 	httpClient *http.Client
+	apiKey     string
 }
 
 // ClientOption configures an admin client.
@@ -103,6 +136,45 @@ func WithTimeout(timeout time.Duration) ClientOption {
 	return func(c *adminClient) {
 		c.httpClient.Timeout = timeout
 	}
+}
+
+// WithAPIKey sets the API key for authentication.
+func WithAPIKey(key string) ClientOption {
+	return func(c *adminClient) {
+		c.apiKey = key
+	}
+}
+
+// LoadAPIKeyFromFile loads the API key from the default file location.
+// Returns the key and nil error if successful, empty string and nil if file doesn't exist,
+// or empty string and error if there was a read error.
+func LoadAPIKeyFromFile() (string, error) {
+	path := GetAPIKeyFilePath()
+	return LoadAPIKeyFromPath(path)
+}
+
+// LoadAPIKeyFromPath loads the API key from a specific file path.
+func LoadAPIKeyFromPath(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil // File doesn't exist, not an error
+		}
+		return "", fmt.Errorf("failed to read API key file: %w", err)
+	}
+	key := strings.TrimSpace(string(data))
+	return key, nil
+}
+
+// GetAPIKeyFilePath returns the default path for the API key file.
+// This matches the path used by the Admin API server.
+func GetAPIKeyFilePath() string {
+	dataDir := os.Getenv("XDG_DATA_HOME")
+	if dataDir == "" {
+		home, _ := os.UserHomeDir()
+		dataDir = filepath.Join(home, ".local", "share")
+	}
+	return filepath.Join(dataDir, "mockd", DefaultKeyFileName)
 }
 
 // NewAdminClient creates a new admin API client.
@@ -118,6 +190,18 @@ func NewAdminClient(baseURL string, opts ...ClientOption) AdminClient {
 		opt(c)
 	}
 	return c
+}
+
+// NewAdminClientWithAuth creates a new admin API client that automatically
+// loads the API key from the default file location.
+// This is the recommended way to create a client for CLI commands.
+func NewAdminClientWithAuth(baseURL string, opts ...ClientOption) AdminClient {
+	// Load API key from file (ignore errors - key may not exist if auth is disabled)
+	apiKey, _ := LoadAPIKeyFromFile()
+	if apiKey != "" {
+		opts = append([]ClientOption{WithAPIKey(apiKey)}, opts...)
+	}
+	return NewAdminClient(baseURL, opts...)
 }
 
 // ListMocks returns all configured mocks.
@@ -184,8 +268,8 @@ func (c *adminClient) GetMock(id string) (*config.MockConfiguration, error) {
 	return &mock, nil
 }
 
-// CreateMock creates a new mock and returns it with generated ID.
-func (c *adminClient) CreateMock(mock *config.MockConfiguration) (*config.MockConfiguration, error) {
+// CreateMock creates a new mock or merges into an existing one.
+func (c *adminClient) CreateMock(mock *config.MockConfiguration) (*CreateMockResult, error) {
 	body, err := json.Marshal(mock)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode mock: %w", err)
@@ -197,15 +281,57 @@ func (c *adminClient) CreateMock(mock *config.MockConfiguration) (*config.MockCo
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
+	// Accept both 200 (merged) and 201 (created)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, c.parseError(resp)
 	}
 
-	var created config.MockConfiguration
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+	// Read response body for parsing
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// First, try to detect if this is a merge response by looking for "action" field
+	var mergeResponse struct {
+		Action        string                    `json:"action"`
+		Message       string                    `json:"message"`
+		TargetMockID  string                    `json:"targetMockId"`
+		AddedServices []string                  `json:"addedServices"`
+		AddedTopics   []string                  `json:"addedTopics"`
+		TotalServices []string                  `json:"totalServices"`
+		TotalTopics   []string                  `json:"totalTopics"`
+		Mock          *config.MockConfiguration `json:"mock"`
+	}
+
+	if err := json.Unmarshal(respBody, &mergeResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
-	return &created, nil
+
+	// If we have an action and mock field, this is a merge response
+	if mergeResponse.Action != "" && mergeResponse.Mock != nil {
+		return &CreateMockResult{
+			Mock:          mergeResponse.Mock,
+			Action:        mergeResponse.Action,
+			Message:       mergeResponse.Message,
+			TargetMockID:  mergeResponse.TargetMockID,
+			AddedServices: mergeResponse.AddedServices,
+			AddedTopics:   mergeResponse.AddedTopics,
+			TotalServices: mergeResponse.TotalServices,
+			TotalTopics:   mergeResponse.TotalTopics,
+		}, nil
+	}
+
+	// Otherwise, this is a standard create response - the body IS the mock
+	var created config.MockConfiguration
+	if err := json.Unmarshal(respBody, &created); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &CreateMockResult{
+		Mock:   &created,
+		Action: "created",
+	}, nil
 }
 
 // UpdateMock updates an existing mock by ID.
@@ -490,6 +616,27 @@ func (c *adminClient) GetStats() (*StatsResult, error) {
 	return &result, nil
 }
 
+// GetPorts returns all ports in use by mockd.
+func (c *adminClient) GetPorts() ([]PortInfo, error) {
+	resp, err := c.get("/ports")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result struct {
+		Ports []PortInfo `json:"ports"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result.Ports, nil
+}
+
 // get performs an HTTP GET request.
 func (c *adminClient) get(path string) (*http.Response, error) {
 	return c.doRequest(http.MethodGet, path, nil)
@@ -528,6 +675,11 @@ func (c *adminClient) doRequest(method, path string, body []byte) (*http.Respons
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
+
+	// Add API key header if configured
+	if c.apiKey != "" {
+		req.Header.Set(APIKeyHeader, c.apiKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

@@ -24,11 +24,11 @@ import (
 
 // persistenceTestBundle groups server and client for persistence tests
 type persistenceTestBundle struct {
-	Server      *engine.Server
-	Client      *engineclient.Client
-	AdminAPI    *admin.AdminAPI
-	HTTPPort    int
-	AdminPort   int
+	Server         *engine.Server
+	Client         *engineclient.Client
+	AdminAPI       *admin.AdminAPI
+	HTTPPort       int
+	AdminPort      int
 	ManagementPort int
 }
 
@@ -38,20 +38,22 @@ func setupPersistenceServer(t *testing.T) *persistenceTestBundle {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		AdminPort:    adminPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		AdminPort:      adminPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
 	err := srv.Start()
 	require.NoError(t, err)
 
+	tempDir := t.TempDir() // Use temp dir for test isolation
 	adminAPI := admin.NewAdminAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
+		admin.WithDataDir(tempDir),
 	)
 	err = adminAPI.Start()
 	require.NoError(t, err)
@@ -59,6 +61,7 @@ func setupPersistenceServer(t *testing.T) *persistenceTestBundle {
 	t.Cleanup(func() {
 		adminAPI.Stop()
 		srv.Stop()
+		time.Sleep(10 * time.Millisecond) // Allow file handles to release
 	})
 
 	time.Sleep(50 * time.Millisecond)
@@ -66,11 +69,11 @@ func setupPersistenceServer(t *testing.T) *persistenceTestBundle {
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 
 	return &persistenceTestBundle{
-		Server:      srv,
-		Client:      client,
-		AdminAPI:    adminAPI,
-		HTTPPort:    httpPort,
-		AdminPort:   adminPort,
+		Server:         srv,
+		Client:         client,
+		AdminAPI:       adminAPI,
+		HTTPPort:       httpPort,
+		AdminPort:      adminPort,
 		ManagementPort: managementPort,
 	}
 }
@@ -157,10 +160,10 @@ func TestPersistenceRestartWithConfigFile(t *testing.T) {
 	managementPort1 := getFreePort()
 
 	cfg1 := &config.ServerConfiguration{
-		HTTPPort:     httpPort1,
-		ManagementPort:  managementPort1,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort1,
+		ManagementPort: managementPort1,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv1 := engine.NewServer(cfg1)
@@ -208,10 +211,10 @@ func TestPersistenceRestartWithConfigFile(t *testing.T) {
 	managementPort2 := getFreePort()
 
 	cfg2 := &config.ServerConfiguration{
-		HTTPPort:     httpPort2,
-		ManagementPort:  managementPort2,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort2,
+		ManagementPort: managementPort2,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv2 := engine.NewServer(cfg2)
@@ -443,10 +446,10 @@ func TestNewServerWithMocksFromFile(t *testing.T) {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServerWithMocks(cfg, mocks)
