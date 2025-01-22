@@ -69,7 +69,7 @@ Examples:
 		mocks = collection.Mocks
 	} else {
 		// Query running server via admin API
-		client := NewAdminClient(*adminURL)
+		client := NewAdminClientWithAuth(*adminURL)
 		var err error
 		mocks, err = client.ListMocks()
 		if err != nil {

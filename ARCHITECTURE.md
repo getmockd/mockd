@@ -279,6 +279,49 @@ The audit system (`pkg/audit/`) supports custom writers:
          endpoint: https://siem.example.com
    ```
 
+## Observability
+
+### Metrics (Prometheus)
+
+The `pkg/metrics` package exposes Prometheus metrics at `/metrics` on the admin port:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `mockd_requests_total` | Counter | Total requests by method, path, status |
+| `mockd_request_duration_seconds` | Histogram | Request latency distribution |
+| `mockd_match_hits_total` | Counter | Mock match hits by mock_id |
+| `mockd_match_misses_total` | Counter | Requests that didn't match any mock |
+
+### Tracing (OpenTelemetry)
+
+The `pkg/tracing` package provides OTLP-compatible distributed tracing:
+
+```bash
+# Enable tracing via CLI
+mockd serve --otlp-endpoint http://localhost:4318/v1/traces
+
+# With sampling (10% of traces)
+mockd serve --otlp-endpoint http://localhost:4318/v1/traces --trace-sampler 0.1
+```
+
+Traces include HTTP attributes (`http.method`, `http.url`, `http.status_code`, etc.) and integrate with any OTLP-compatible backend (Jaeger, Tempo, Honeycomb, etc.).
+
+### Structured Logging
+
+JSON-formatted structured logs with component tags:
+
+```bash
+mockd serve --log-level debug --log-format json
+```
+
+Log output includes `component` (engine, admin) and `subcomponent` (handler) fields for filtering.
+
+### Observability Stack
+
+See `observability/` for Docker Compose configurations:
+- `docker-compose.observability.yml` - Full stack (mockd + Prometheus + Jaeger + Grafana)
+- `docker-compose.observability-local.yml` - Observability only (for local mockd development)
+
 ## Testing Strategy
 
 ### Unit Tests
@@ -352,7 +395,7 @@ Test data in `tests/fixtures/`:
 |---------|------|---------|
 | Mock Server | 4280 | Serves mock responses |
 | Admin API | 4290 | Management interface |
-| HTTPS | 4281 | TLS mock server |
+| Engine Control | 4281 | Internal engine communication (not user-facing) |
 
 ### Data Directories (XDG)
 

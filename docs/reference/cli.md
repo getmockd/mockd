@@ -96,14 +96,6 @@ mockd serve [flags]
 | `--graphql-schema` | Path to GraphQL schema file | |
 | `--graphql-path` | GraphQL endpoint path | `/graphql` |
 
-**gRPC Flags:**
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--grpc-port` | gRPC server port (0 = disabled) | `0` |
-| `--grpc-proto` | Path to .proto file | |
-| `--grpc-reflection` | Enable gRPC reflection | `true` |
-
 **OAuth Flags:**
 
 | Flag | Description |
@@ -111,13 +103,6 @@ mockd serve [flags]
 | `--oauth-enabled` | Enable OAuth provider |
 | `--oauth-issuer` | OAuth issuer URL |
 | `--oauth-port` | OAuth server port |
-
-**MQTT Flags:**
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--mqtt-port` | MQTT broker port (0 = disabled) | `0` |
-| `--mqtt-auth` | Enable MQTT authentication | |
 
 **Chaos Flags:**
 
@@ -140,6 +125,20 @@ mockd serve [flags]
 |------|-------|-------------|---------|
 | `--detach` | `-d` | Run server in background (daemon mode) | |
 | `--pid-file` | | Path to PID file | `~/.mockd/mockd.pid` |
+
+**Logging Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--log-level` | Log level (debug, info, warn, error) | `info` |
+| `--log-format` | Log format (text, json) | `text` |
+
+**Tracing Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--otlp-endpoint` | OTLP HTTP endpoint for distributed tracing (e.g., http://localhost:4318/v1/traces) | |
+| `--trace-sampler` | Trace sampling ratio (0.0-1.0) | `1.0` |
 
 **Examples:**
 
@@ -166,7 +165,13 @@ mockd serve --mtls-enabled --mtls-ca ca.crt --tls-cert server.crt --tls-key serv
 mockd serve --audit-enabled --audit-file audit.log --audit-level debug
 
 # Start in daemon/background mode
-mockd serve -d
+  mockd serve -d
+
+  # Start with distributed tracing (send traces to Jaeger)
+  mockd serve --otlp-endpoint http://localhost:4318/v1/traces
+
+  # Start with JSON structured logging
+  mockd serve --log-level debug --log-format json
 ```
 
 ---
@@ -291,6 +296,50 @@ mockd status --pid-file /tmp/mockd.pid
 
 ---
 
+### mockd ports
+
+Show all ports in use by the running mockd server.
+
+```bash
+mockd ports [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--pid-file` | | Path to PID file | `~/.mockd/mockd.pid` |
+| `--admin-port` | `-a` | Admin API port to query | `4290` |
+| `--json` | | Output in JSON format | |
+
+**Output:**
+
+The command displays a table of all ports with their protocol, component, and status:
+
+```
+PORT    PROTOCOL   COMPONENT       STATUS
+------- ---------- --------------- --------
+1883    MQTT       MQTT Broker     running
+4280    HTTP       Mock Engine     running
+4290    HTTP       Admin API       running
+50051   gRPC       gRPC Server     running
+```
+
+**Examples:**
+
+```bash
+# Show all ports
+mockd ports
+
+# Output as JSON
+mockd ports --json
+
+# Query a different admin port
+mockd ports --admin-port 8090
+```
+
+---
+
 ### mockd init
 
 Create a starter mockd configuration file.
@@ -384,6 +433,17 @@ mockd add [flags]
 | `--priority` | | Mock priority (higher = matched first) | |
 | `--delay` | | Response delay in milliseconds | |
 
+**SSE Flags (HTTP with streaming):**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--sse` | Enable SSE streaming response | |
+| `--sse-event` | SSE event (type:data), repeatable | |
+| `--sse-delay` | Delay between events in milliseconds | `100` |
+| `--sse-template` | Built-in template: openai-chat, notification-stream | |
+| `--sse-repeat` | Repeat events N times (0 = infinite) | `1` |
+| `--sse-keepalive` | Keepalive interval in milliseconds (0 = disabled) | `0` |
+
 **WebSocket Flags (`--type websocket`):**
 
 | Flag | Description | Default |
@@ -403,11 +463,14 @@ mockd add [flags]
 
 **gRPC Flags (`--type grpc`):**
 
-| Flag | Description |
-|------|-------------|
-| `--service` | Service name, e.g., greeter.Greeter (required) |
-| `--rpc-method` | RPC method name (required) |
-| `--response` | JSON response data |
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--proto` | Path to .proto file (required, repeatable) | |
+| `--proto-path` | Import path for proto dependencies (repeatable) | |
+| `--service` | Service name, e.g., myapp.UserService (required) | |
+| `--rpc-method` | RPC method name (required) | |
+| `--response` | JSON response data | |
+| `--grpc-port` | gRPC server port | `50051` |
 
 **MQTT Flags (`--type mqtt`):**
 
@@ -416,6 +479,7 @@ mockd add [flags]
 | `--topic` | Topic pattern | Required |
 | `--payload` | Response payload | |
 | `--qos` | QoS level: 0, 1, or 2 | `0` |
+| `--mqtt-port` | MQTT broker port (required) | |
 
 **SOAP Flags (`--type soap`):**
 
@@ -462,6 +526,20 @@ mockd add --type mqtt --topic sensors/temperature --payload '{"temp": 72.5}' --q
 # SOAP mock
 mockd add --type soap --operation GetWeather --soap-action "http://example.com/GetWeather" \
   --response '<GetWeatherResponse><Temperature>72</Temperature></GetWeatherResponse>'
+
+# SSE streaming mock with custom events
+mockd add --path /events --sse \
+  --sse-event 'connected:{"status":"ok"}' \
+  --sse-event 'update:{"count":1}' \
+  --sse-event 'update:{"count":2}' \
+  --sse-delay 500
+
+# SSE with OpenAI-compatible streaming template
+mockd add -m POST --path /v1/chat/completions --sse --sse-template openai-chat
+
+# SSE with infinite keepalive ping
+mockd add --path /stream --sse \
+  --sse-event 'ping:{}' --sse-delay 1000 --sse-repeat 0
 ```
 
 ---

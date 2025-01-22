@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
+	"github.com/getmockd/mockd/pkg/metrics"
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/util"
@@ -422,6 +423,9 @@ func (h *Handler) writeFaultWithRecording(w http.ResponseWriter, fault *SOAPFaul
 	duration := time.Since(startTime)
 	responseStr := string(faultXML)
 
+	// Record metrics
+	h.recordMetrics(endpoint, http.StatusInternalServerError, duration)
+
 	// Record the fault response
 	h.recordRequest(SOAPRecordingData{
 		Endpoint:        endpoint,
@@ -536,6 +540,9 @@ func (h *Handler) writeResponseWithRecording(w http.ResponseWriter, body []byte,
 
 	duration := time.Since(startTime)
 	responseStr := response.String()
+
+	// Record metrics
+	h.recordMetrics(endpoint, http.StatusOK, duration)
 
 	// Record the successful response
 	h.recordRequest(SOAPRecordingData{
@@ -720,7 +727,7 @@ func (h *Handler) Metadata() protocol.Metadata {
 		ID:                   h.ID(),
 		Name:                 h.config.Name,
 		Protocol:             protocol.ProtocolSOAP,
-		Version:              "1.0.0",
+		Version:              "0.2.0",
 		TransportType:        protocol.TransportHTTP1,
 		ConnectionModel:      protocol.ConnectionModelStateless,
 		CommunicationPattern: protocol.PatternRequestResponse,
@@ -758,4 +765,19 @@ func (h *Handler) Pattern() string {
 		return "/soap"
 	}
 	return h.config.Path
+}
+
+// recordMetrics records SOAP request metrics.
+func (h *Handler) recordMetrics(path string, status int, duration time.Duration) {
+	statusStr := strconv.Itoa(status)
+	if metrics.RequestsTotal != nil {
+		if vec, err := metrics.RequestsTotal.WithLabels("soap", path, statusStr); err == nil {
+			vec.Inc()
+		}
+	}
+	if metrics.RequestDuration != nil {
+		if vec, err := metrics.RequestDuration.WithLabels("soap", path); err == nil {
+			vec.Observe(duration.Seconds())
+		}
+	}
 }

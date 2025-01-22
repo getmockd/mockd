@@ -440,6 +440,11 @@ func (pm *ProtocolManager) StartGRPCServer(cfg *grpc.GRPCConfig) (*grpc.Server, 
 		return nil, fmt.Errorf("failed to start gRPC server on port %d: %w", cfg.Port, err)
 	}
 
+	// Register with protocol registry for unified handler management
+	if err := pm.registry.Register(server); err != nil {
+		pm.log.Warn("failed to register gRPC server with protocol registry", "port", cfg.Port, "error", err)
+	}
+
 	pm.grpcServers = append(pm.grpcServers, server)
 	return server, nil
 }
@@ -453,6 +458,10 @@ func (pm *ProtocolManager) StopGRPCServer(id string) error {
 		if srv != nil && srv.ID() == id {
 			if err := srv.Stop(context.Background(), 5*time.Second); err != nil {
 				return fmt.Errorf("failed to stop gRPC server %s: %w", id, err)
+			}
+			// Unregister from protocol registry
+			if err := pm.registry.Unregister(id); err != nil {
+				pm.log.Warn("failed to unregister gRPC server from protocol registry", "id", id, "error", err)
 			}
 			// Remove from slice
 			pm.grpcServers = append(pm.grpcServers[:i], pm.grpcServers[i+1:]...)
@@ -489,6 +498,7 @@ func (pm *ProtocolManager) MQTTPorts() []int {
 }
 
 // StartMQTTBroker dynamically starts an MQTT broker with the given configuration.
+// Each mock gets its own broker on its specified port.
 // Returns the broker instance or an error if the broker could not be started.
 func (pm *ProtocolManager) StartMQTTBroker(cfg *mqtt.MQTTConfig) (*mqtt.Broker, error) {
 	if cfg == nil {
@@ -510,10 +520,10 @@ func (pm *ProtocolManager) StartMQTTBroker(cfg *mqtt.MQTTConfig) (*mqtt.Broker, 
 		}
 	}
 
-	// Check for port conflicts
+	// Check for port conflicts - one port = one mock
 	for _, broker := range pm.mqttBrokers {
 		if broker != nil && broker.IsRunning() && broker.Config().Port == cfg.Port {
-			return nil, fmt.Errorf("port %d is already in use by broker %s", cfg.Port, broker.ID())
+			return nil, fmt.Errorf("port %d is already in use by MQTT broker %s", cfg.Port, broker.ID())
 		}
 	}
 
@@ -533,6 +543,11 @@ func (pm *ProtocolManager) StartMQTTBroker(cfg *mqtt.MQTTConfig) (*mqtt.Broker, 
 		return nil, fmt.Errorf("failed to start MQTT broker on port %d: %w", cfg.Port, err)
 	}
 
+	// Register with protocol registry for unified handler management
+	if err := pm.registry.Register(broker); err != nil {
+		pm.log.Warn("failed to register MQTT broker with protocol registry", "port", cfg.Port, "error", err)
+	}
+
 	pm.mqttBrokers = append(pm.mqttBrokers, broker)
 	return broker, nil
 }
@@ -546,6 +561,10 @@ func (pm *ProtocolManager) StopMQTTBroker(id string) error {
 		if broker != nil && broker.ID() == id {
 			if err := broker.Stop(context.Background(), 5*time.Second); err != nil {
 				return fmt.Errorf("failed to stop MQTT broker %s: %w", id, err)
+			}
+			// Unregister from protocol registry
+			if err := pm.registry.Unregister(id); err != nil {
+				pm.log.Warn("failed to unregister MQTT broker from protocol registry", "id", id, "error", err)
 			}
 			// Remove from slice
 			pm.mqttBrokers = append(pm.mqttBrokers[:i], pm.mqttBrokers[i+1:]...)

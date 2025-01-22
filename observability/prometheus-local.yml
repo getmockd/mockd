@@ -1,0 +1,21 @@
+# Prometheus configuration for local mockd (running on host)
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+# Alerting rules
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  # Scrape mockd metrics from Admin API on host machine
+  - job_name: 'mockd'
+    static_configs:
+      - targets: ['host.docker.internal:4290']
+    metrics_path: /metrics
+    # Note: Metrics endpoint doesn't require auth
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

@@ -77,7 +77,7 @@ Supported export formats: mockd, openapi`, *format)
 	}
 
 	// Create admin client and export config
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 	collection, err := client.ExportConfig(*name)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))

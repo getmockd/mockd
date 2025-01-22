@@ -53,9 +53,11 @@ func testServer(t *testing.T) (*mcp.Server, *engine.Server, func()) {
 
 	// Create admin API with engine client
 	adminPort := getFreePort()
+	tempDir := t.TempDir() // Use temp dir for test isolation
 	adminAPI := admin.NewAdminAPI(adminPort,
 		admin.WithLocalEngine(engineURL),
 		admin.WithAPIKeyDisabled(),
+		admin.WithDataDir(tempDir),
 	)
 
 	// Start admin API
@@ -79,6 +81,8 @@ func testServer(t *testing.T) (*mcp.Server, *engine.Server, func()) {
 	cleanup := func() {
 		adminAPI.Stop()
 		eng.Stop()
+		// Small delay to ensure file handles are released before TempDir cleanup
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	return mcpServer, eng, cleanup

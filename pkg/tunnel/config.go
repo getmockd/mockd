@@ -7,11 +7,11 @@ import (
 
 // Default configuration values.
 const (
-	DefaultRelayURL        = "wss://relay.mockd.io/tunnel"
-	DefaultReconnectDelay  = 1 * time.Second
+	DefaultRelayURL          = "wss://relay.mockd.io/tunnel"
+	DefaultReconnectDelay    = 1 * time.Second
 	DefaultMaxReconnectDelay = 30 * time.Second
-	DefaultPingInterval    = 30 * time.Second
-	DefaultRequestTimeout  = 30 * time.Second
+	DefaultPingInterval      = 30 * time.Second
+	DefaultRequestTimeout    = 30 * time.Second
 )
 
 // AuthConfig holds authentication configuration for incoming tunnel requests.
@@ -89,7 +89,7 @@ func DefaultConfig() *Config {
 		PingInterval:      DefaultPingInterval,
 		RequestTimeout:    DefaultRequestTimeout,
 		AutoReconnect:     true,
-		ClientVersion:     "1.0.0",
+		ClientVersion:     "0.2.0",
 	}
 }
 

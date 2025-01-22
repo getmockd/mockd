@@ -171,22 +171,6 @@ func TestRunServe_TokenFromEnv(t *testing.T) {
 	})
 }
 
-func TestRunServe_GRPCValidation(t *testing.T) {
-	t.Run("grpc port without proto", func(t *testing.T) {
-		err := RunServe([]string{
-			"--grpc-port", "50051",
-			"--port", "0", // Use port 0
-		})
-		if err == nil {
-			t.Error("expected error when --grpc-port without --grpc-proto")
-		}
-		if err != nil && err.Error() != "--grpc-proto is required when --grpc-port is specified" {
-			// The error might be about port validation, which is also acceptable
-			// as it means we got past the flag parsing
-		}
-	})
-}
-
 func TestRunServe_ConfigFile(t *testing.T) {
 	t.Run("nonexistent config file", func(t *testing.T) {
 		err := RunServe([]string{

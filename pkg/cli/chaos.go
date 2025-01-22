@@ -141,7 +141,7 @@ Examples:
 	}
 
 	// Send request to admin API
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 	if err := client.SetChaosConfig(chaosConfig); err != nil {
 		return fmt.Errorf("failed to enable chaos: %s", FormatConnectionError(err))
 	}
@@ -184,7 +184,7 @@ Examples:
 	}
 
 	// Send request to admin API
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 	chaosConfig := map[string]interface{}{
 		"enabled": false,
 	}
@@ -224,7 +224,7 @@ Examples:
 	}
 
 	// Get chaos config from admin API
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 	config, err := client.GetChaosConfig()
 	if err != nil {
 		return fmt.Errorf("failed to get chaos status: %s", FormatConnectionError(err))

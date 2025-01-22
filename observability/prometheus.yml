@@ -1,0 +1,18 @@
+# Prometheus configuration for mockd
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Scrape mockd metrics from Admin API
+  - job_name: 'mockd'
+    static_configs:
+      - targets: ['mockd:4290']
+    metrics_path: /metrics
+    # Note: In production, you may need to add API key auth
+    # bearer_token: 'your-api-key'
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

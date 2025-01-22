@@ -110,7 +110,7 @@ func (a *AdminAPI) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		ActiveMocks:  activeMocks,
 		RequestCount: engineStatus.RequestCount,
 		TLSEnabled:   false,
-		Version:      "1.0.0",
+		Version:      "0.2.0",
 	})
 }
 
@@ -518,8 +518,69 @@ func (a *AdminAPI) handleClearRequests(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleStreamRequests handles GET /requests/stream - SSE endpoint for streaming new requests.
-// FEAT-001: This feature requires WebSocket/SSE support from the engine - planned for future release.
-// The route registration is commented out in routes.go until this is implemented.
-// func (a *AdminAPI) handleStreamRequests(w http.ResponseWriter, r *http.Request) {
-// 	writeError(w, http.StatusNotImplemented, "not_implemented", "Request streaming requires direct engine access - coming soon")
-// }
+func (a *AdminAPI) handleStreamRequests(w http.ResponseWriter, r *http.Request) {
+	if a.localEngine == nil {
+		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
+		return
+	}
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Get the flusher
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "sse_error", "Streaming not supported")
+		return
+	}
+
+	// Send initial connection message
+	fmt.Fprintf(w, "event: connected\ndata: {\"message\": \"Connected to request stream\"}\n\n")
+	flusher.Flush()
+
+	// Poll for request log updates
+	ctx := r.Context()
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	lastID := ""
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Get latest requests from engine
+			filter := &engineclient.RequestFilter{Limit: 10}
+			result, err := a.localEngine.ListRequests(ctx, filter)
+			if err != nil {
+				continue
+			}
+
+			// Send new entries (result.Requests is newest first)
+			for i := len(result.Requests) - 1; i >= 0; i-- {
+				entry := result.Requests[i]
+				if entry.ID == lastID {
+					break
+				}
+				if lastID == "" && i < len(result.Requests)-1 {
+					// First iteration, only send most recent
+					continue
+				}
+
+				data, _ := json.Marshal(entry)
+				fmt.Fprintf(w, "event: request\ndata: %s\n\n", data)
+				flusher.Flush()
+
+				if i == 0 {
+					lastID = entry.ID
+				}
+			}
+			if len(result.Requests) > 0 && lastID == "" {
+				lastID = result.Requests[0].ID
+			}
+		}
+	}
+}

@@ -34,11 +34,13 @@
 //
 // Protocol flags (available in start and serve):
 //   - --graphql-schema, --graphql-path: Configure GraphQL mocking
-//   - --grpc-port, --grpc-proto, --grpc-reflection: Configure gRPC mocking
 //   - --oauth-enabled, --oauth-issuer, --oauth-port: Configure OAuth provider
-//   - --mqtt-port, --mqtt-auth: Configure MQTT broker
 //   - --chaos-enabled, --chaos-latency, --chaos-error-rate: Configure chaos injection
 //   - --validate-spec, --validate-fail: Configure OpenAPI request validation
+//
+// Note: MQTT and gRPC are now configured through mock definitions, not server flags.
+// Use 'mockd add --type mqtt --mqtt-port 1883' or 'mockd add --type grpc --grpc-port 50051'
+// to add mocks that start the broker/server on the specified port.
 //
 // Import formats:
 //   - mockd: Native YAML/JSON format
@@ -57,9 +59,10 @@
 //	mockd start --port 4280 --config mocks.json
 //	mockd start --load ./mocks/ --watch
 //	mockd start --graphql-schema schema.graphql --graphql-path /graphql
-//	mockd start --grpc-port 50051 --grpc-proto api.proto
 //	mockd start --chaos-enabled --chaos-latency "10ms-100ms"
 //	mockd add --path /api/users --status 200 --body '[]'
+//	mockd add --type grpc --proto api.proto --service myapp.Greeter --rpc-method SayHello --grpc-port 50051
+//	mockd add --type mqtt --topic sensors/temp --payload '{"temp":72}' --mqtt-port 1883
 //	mockd list
 //	mockd import openapi.yaml
 //	mockd export --format openapi > api.yaml

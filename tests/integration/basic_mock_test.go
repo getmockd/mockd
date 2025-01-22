@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -18,14 +17,9 @@ import (
 	"github.com/getmockd/mockd/pkg/mock"
 )
 
-// getFreePort gets a free port for testing
+// getFreePort gets a free port for testing - wrapper around shared helper
 func getFreePort() int {
-	listener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		panic(err)
-	}
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port
+	return GetFreePortSafe()
 }
 
 // T035: Create mock, send request, verify response
@@ -34,11 +28,11 @@ func TestBasicMockCreationAndResponse(t *testing.T) {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		ManagementPort:  managementPort,
-		LogRequests:  true,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		ManagementPort: managementPort,
+		LogRequests:    true,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -98,10 +92,10 @@ func TestUpdateMockAndVerifyNewResponse(t *testing.T) {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -177,10 +171,10 @@ func TestDeleteMockReturns404(t *testing.T) {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -239,10 +233,10 @@ func TestServerRestartInMemoryPersistence(t *testing.T) {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -307,10 +301,10 @@ func TestMultipleMocksWithPriority(t *testing.T) {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -381,10 +375,10 @@ func TestWildcardPathMatching(t *testing.T) {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)

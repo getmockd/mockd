@@ -85,7 +85,7 @@ Examples:
 
 	// Handle clear command
 	if *clear {
-		client := NewAdminClient(*adminURL)
+		client := NewAdminClientWithAuth(*adminURL)
 		count, err := client.ClearLogs()
 		if err != nil {
 			return fmt.Errorf("%s", FormatConnectionError(err))
@@ -99,7 +99,7 @@ Examples:
 		return streamLogs(*adminURL, *jsonOutput, *verbose)
 	}
 
-	client := NewAdminClient(*adminURL)
+	client := NewAdminClientWithAuth(*adminURL)
 
 	// Build filter
 	filter := &LogFilter{
@@ -192,6 +192,9 @@ func streamLogs(adminURL string, jsonOutput, verbose bool) error {
 		cancel()
 	}()
 
+	// Load API key for authentication
+	apiKey, _ := LoadAPIKeyFromFile()
+
 	// Create HTTP request for SSE endpoint
 	streamURL := adminURL + "/requests/stream"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, streamURL, nil)
@@ -199,6 +202,9 @@ func streamLogs(adminURL string, jsonOutput, verbose bool) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Accept", "text/event-stream")
+	if apiKey != "" {
+		req.Header.Set(APIKeyHeader, apiKey)
+	}
 
 	// Make the request
 	client := &http.Client{}

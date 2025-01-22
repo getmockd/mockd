@@ -46,10 +46,7 @@ func TestRegisterServerFlags_CustomValues(t *testing.T) {
 		"--mtls-ca", "/path/to/ca",
 		"--audit-enabled",
 		"--graphql-schema", "/path/to/schema.graphql",
-		"--grpc-port", "50051",
-		"--grpc-proto", "/path/to/service.proto",
 		"--oauth-enabled",
-		"--mqtt-port", "1883",
 		"--chaos-enabled",
 		"--chaos-latency", "10ms-100ms",
 		"--chaos-error-rate", "0.1",
@@ -78,14 +75,8 @@ func TestRegisterServerFlags_CustomValues(t *testing.T) {
 	if !sf.AuditEnabled {
 		t.Error("Expected audit enabled")
 	}
-	if sf.GRPCPort != 50051 {
-		t.Errorf("Expected gRPC port 50051, got %d", sf.GRPCPort)
-	}
 	if !sf.OAuthEnabled {
 		t.Error("Expected OAuth enabled")
-	}
-	if sf.MQTTPort != 1883 {
-		t.Errorf("Expected MQTT port 1883, got %d", sf.MQTTPort)
 	}
 	if !sf.ChaosEnabled {
 		t.Error("Expected chaos enabled")
@@ -261,33 +252,6 @@ func TestParseLatencyRange(t *testing.T) {
 		if max != tt.expectMax {
 			t.Errorf("For %q, expected max %q, got %q", tt.input, tt.expectMax, max)
 		}
-	}
-}
-
-func TestValidateGRPCFlags(t *testing.T) {
-	// Valid: no gRPC
-	sf := &ServerFlags{
-		GRPCPort: 0,
-	}
-	if err := ValidateGRPCFlags(sf); err != nil {
-		t.Errorf("Expected no error for disabled gRPC, got %v", err)
-	}
-
-	// Valid: gRPC with proto
-	sf = &ServerFlags{
-		GRPCPort:  50051,
-		GRPCProto: "/path/to/service.proto",
-	}
-	if err := ValidateGRPCFlags(sf); err != nil {
-		t.Errorf("Expected no error for valid gRPC config, got %v", err)
-	}
-
-	// Invalid: gRPC without proto
-	sf = &ServerFlags{
-		GRPCPort: 50051,
-	}
-	if err := ValidateGRPCFlags(sf); err == nil {
-		t.Error("Expected error for gRPC without proto")
 	}
 }
 

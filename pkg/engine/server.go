@@ -282,6 +282,7 @@ func (s *Server) Start() error {
 			WriteTimeout: time.Duration(s.cfg.WriteTimeout) * time.Second,
 		}
 
+		s.log.Info("starting HTTP server", "port", s.cfg.HTTPPort)
 		go func() {
 			if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				s.log.Error("HTTP server error", "error", err)
@@ -322,6 +323,7 @@ func (s *Server) Start() error {
 
 	s.running = true
 	s.startTime = time.Now()
+	s.log.Info("engine started", "http_port", s.cfg.HTTPPort, "https_port", s.cfg.HTTPSPort)
 	return nil
 }
 
@@ -514,13 +516,17 @@ func (s *Server) Logger() RequestLogger {
 	return s.requestLogger
 }
 
-// SetLogger sets the operational logger for the server.
+// SetLogger sets the operational logger for the server and its handler.
 // This logger is used for server-level events (startup, errors, warnings).
 func (s *Server) SetLogger(log *slog.Logger) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if log != nil {
 		s.log = log
+		// Propagate to handler with "handler" sub-component
+		if s.handler != nil {
+			s.handler.SetOperationalLogger(log.With("subcomponent", "handler"))
+		}
 	} else {
 		s.log = logging.Nop()
 	}

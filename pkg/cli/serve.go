@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -12,21 +13,22 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/internal/runtime"
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/audit"
 	"github.com/getmockd/mockd/pkg/chaos"
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/graphql"
-	"github.com/getmockd/mockd/pkg/grpc"
+	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/mqtt"
 	"github.com/getmockd/mockd/pkg/oauth"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/store/file"
+	"github.com/getmockd/mockd/pkg/tracing"
 	"github.com/getmockd/mockd/pkg/validation"
 )
 
@@ -76,19 +78,10 @@ type serveFlags struct {
 	graphqlSchema string
 	graphqlPath   string
 
-	// gRPC flags
-	grpcPort       int
-	grpcProto      string
-	grpcReflection bool
-
 	// OAuth flags
 	oauthEnabled bool
 	oauthIssuer  string
 	oauthPort    int
-
-	// MQTT flags
-	mqttPort int
-	mqttAuth bool
 
 	// Chaos flags
 	chaosEnabled   bool
@@ -106,6 +99,15 @@ type serveFlags struct {
 	// Daemon/detach flags
 	detach  bool
 	pidFile string
+
+	// Logging flags
+	logLevel     string
+	logFormat    string
+	lokiEndpoint string
+
+	// Tracing flags
+	otlpEndpoint string
+	traceSampler float64
 }
 
 // serveContext holds all runtime state for the serve command.
@@ -118,6 +120,8 @@ type serveContext struct {
 	mqttBroker    *mqtt.Broker
 	chaosInjector *chaos.Injector
 	store         *file.FileStore
+	log           *slog.Logger
+	tracer        *tracing.Tracer
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
@@ -162,8 +166,39 @@ func RunServe(args []string) error {
 	}
 	defer cancel()
 
+	// Initialize structured logger
+	sctx.log = logging.New(logging.Config{
+		Level:  logging.ParseLevel(flags.logLevel),
+		Format: logging.ParseFormat(flags.logFormat),
+	})
+
+	// Add Loki handler if endpoint is configured
+	if flags.lokiEndpoint != "" {
+		lokiHandler := logging.NewLokiHandler(flags.lokiEndpoint,
+			logging.WithLokiLabels(map[string]string{
+				"service": "mockd",
+				"port":    fmt.Sprintf("%d", flags.port),
+			}),
+			logging.WithLokiLevel(logging.ParseLevel(flags.logLevel)),
+		)
+		// Create a multi-handler that writes to both stdout and Loki
+		sctx.log = slog.New(logging.NewMultiHandler(sctx.log.Handler(), lokiHandler))
+		sctx.log.Info("log aggregation enabled", "endpoint", flags.lokiEndpoint)
+	}
+
+	// Initialize distributed tracer if OTLP endpoint is configured
+	if flags.otlpEndpoint != "" {
+		sctx.tracer = initializeTracer(flags.otlpEndpoint, flags.traceSampler)
+		sctx.log.Info("distributed tracing enabled", "endpoint", flags.otlpEndpoint, "sampler", flags.traceSampler)
+	}
+
 	// Create and configure the mock server
-	sctx.server = engine.NewServer(serverCfg)
+	var engineOpts []engine.ServerOption
+	if sctx.tracer != nil {
+		engineOpts = append(engineOpts, engine.WithTracer(sctx.tracer))
+	}
+	sctx.server = engine.NewServer(serverCfg, engineOpts...)
+	sctx.server.SetLogger(sctx.log.With("component", "engine"))
 
 	// Initialize persistent store if needed
 	if err := initializePersistentStore(sctx); err != nil {
@@ -241,19 +276,10 @@ func parseServeFlags(args []string) (*serveFlags, error) {
 	fs.StringVar(&f.graphqlSchema, "graphql-schema", "", "Path to GraphQL schema file")
 	fs.StringVar(&f.graphqlPath, "graphql-path", "/graphql", "GraphQL endpoint path")
 
-	// gRPC flags
-	fs.IntVar(&f.grpcPort, "grpc-port", 0, "gRPC server port (0 = disabled)")
-	fs.StringVar(&f.grpcProto, "grpc-proto", "", "Path to .proto file")
-	fs.BoolVar(&f.grpcReflection, "grpc-reflection", true, "Enable gRPC reflection")
-
 	// OAuth flags
 	fs.BoolVar(&f.oauthEnabled, "oauth-enabled", false, "Enable OAuth provider")
 	fs.StringVar(&f.oauthIssuer, "oauth-issuer", "", "OAuth issuer URL")
 	fs.IntVar(&f.oauthPort, "oauth-port", 0, "OAuth server port")
-
-	// MQTT flags
-	fs.IntVar(&f.mqttPort, "mqtt-port", 0, "MQTT broker port (0 = disabled)")
-	fs.BoolVar(&f.mqttAuth, "mqtt-auth", false, "Enable MQTT authentication")
 
 	// Chaos flags
 	fs.BoolVar(&f.chaosEnabled, "chaos-enabled", false, "Enable chaos injection")
@@ -272,6 +298,15 @@ func parseServeFlags(args []string) (*serveFlags, error) {
 	fs.BoolVar(&f.detach, "detach", false, "Run server in background (daemon mode)")
 	fs.BoolVar(&f.detach, "d", false, "Run server in background (shorthand)")
 	fs.StringVar(&f.pidFile, "pid-file", DefaultPIDPath(), "Path to PID file")
+
+	// Logging flags
+	fs.StringVar(&f.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	fs.StringVar(&f.logFormat, "log-format", "text", "Log format (text, json)")
+	fs.StringVar(&f.lokiEndpoint, "loki-endpoint", "", "Loki endpoint for log aggregation (e.g., http://localhost:3100/loki/api/v1/push)")
+
+	// Tracing flags
+	fs.StringVar(&f.otlpEndpoint, "otlp-endpoint", "", "OTLP HTTP endpoint for distributed tracing (e.g., http://localhost:4318/v1/traces)")
+	fs.Float64Var(&f.traceSampler, "trace-sampler", 1.0, "Trace sampling ratio (0.0-1.0, default: 1.0 = all traces)")
 
 	fs.Usage = func() {
 		printServeUsage()
@@ -340,19 +375,10 @@ GraphQL flags:
       --graphql-schema Path to GraphQL schema file
       --graphql-path   GraphQL endpoint path (default: /graphql)
 
-gRPC flags:
-      --grpc-port       gRPC server port (0 = disabled)
-      --grpc-proto      Path to .proto file
-      --grpc-reflection Enable gRPC reflection (default: true)
-
 OAuth flags:
       --oauth-enabled   Enable OAuth provider
       --oauth-issuer    OAuth issuer URL
       --oauth-port      OAuth server port
-
-MQTT flags:
-      --mqtt-port       MQTT broker port (0 = disabled)
-      --mqtt-auth       Enable MQTT authentication
 
 Chaos flags:
       --chaos-enabled   Enable chaos injection
@@ -370,6 +396,15 @@ Storage flags:
 Daemon flags:
   -d, --detach      Run server in background (daemon mode)
       --pid-file    Path to PID file (default: ~/.mockd/mockd.pid)
+
+Logging flags:
+      --log-level     Log level (debug, info, warn, error) (default: info)
+      --log-format    Log format (text, json) (default: text)
+      --loki-endpoint Loki endpoint for log aggregation (e.g., http://localhost:3100/loki/api/v1/push)
+
+Tracing flags:
+      --otlp-endpoint OTLP HTTP endpoint for distributed tracing (e.g., http://localhost:4318/v1/traces)
+      --trace-sampler Trace sampling ratio 0.0-1.0 (default: 1.0 = all traces)
 
 Examples:
   # Start with defaults
@@ -396,6 +431,12 @@ Examples:
   # Start in daemon/background mode
   mockd serve -d
   mockd serve --detach --config mocks.yaml
+
+  # Start with distributed tracing (send traces to Jaeger via OTLP)
+  mockd serve --otlp-endpoint http://localhost:4318/v1/traces
+
+  # Start with JSON structured logging
+  mockd serve --log-level debug --log-format json
 `)
 }
 
@@ -419,10 +460,6 @@ func validateServeFlags(f *serveFlags) error {
 		if f.token == "" {
 			return fmt.Errorf("--token is required when using --pull (or set MOCKD_TOKEN)")
 		}
-	}
-
-	if f.grpcPort > 0 && f.grpcProto == "" {
-		return fmt.Errorf("--grpc-proto is required when --grpc-port is specified")
 	}
 
 	return nil
@@ -505,17 +542,6 @@ func buildServerConfiguration(f *serveFlags) (*config.ServerConfiguration, error
 		}}
 	}
 
-	// Configure gRPC if port specified
-	if f.grpcPort > 0 {
-		serverCfg.GRPC = []*grpc.GRPCConfig{{
-			ID:         "cli-grpc",
-			Port:       f.grpcPort,
-			ProtoFile:  f.grpcProto,
-			Reflection: f.grpcReflection,
-			Enabled:    true,
-		}}
-	}
-
 	// Configure OAuth if enabled
 	if f.oauthEnabled {
 		issuer := f.oauthIssuer
@@ -586,33 +612,10 @@ func initializePersistentStore(sctx *serveContext) error {
 	return nil
 }
 
-// configureProtocolHandlers sets up MQTT broker and chaos injection.
+// configureProtocolHandlers sets up chaos injection.
+// Note: MQTT/gRPC are now started dynamically when mocks are added via the admin API.
 func configureProtocolHandlers(sctx *serveContext) error {
 	f := sctx.flags
-
-	// Configure MQTT if port specified
-	if f.mqttPort > 0 {
-		mqttCfg := &mqtt.MQTTConfig{
-			ID:      "cli-mqtt",
-			Port:    f.mqttPort,
-			Enabled: true,
-		}
-		if f.mqttAuth {
-			mqttCfg.Auth = &mqtt.MQTTAuthConfig{
-				Enabled: true,
-			}
-		}
-
-		broker, err := mqtt.NewBroker(mqttCfg)
-		if err != nil {
-			return fmt.Errorf("failed to create MQTT broker: %w", err)
-		}
-		if err := broker.Start(sctx.ctx); err != nil {
-			return fmt.Errorf("failed to start MQTT broker: %w", err)
-		}
-		sctx.mqttBroker = broker
-		fmt.Printf("MQTT broker running on port %d\n", f.mqttPort)
-	}
 
 	// Configure chaos if enabled
 	if f.chaosEnabled {
@@ -756,8 +759,12 @@ func startServers(sctx *serveContext) error {
 	if f.dataDir != "" {
 		adminOpts = append(adminOpts, admin.WithDataDir(f.dataDir))
 	}
+	if sctx.tracer != nil {
+		adminOpts = append(adminOpts, admin.WithTracer(sctx.tracer))
+	}
 
 	sctx.adminAPI = admin.NewAdminAPI(f.adminPort, adminOpts...)
+	sctx.adminAPI.SetLogger(sctx.log.With("component", "admin"))
 	if err := sctx.adminAPI.Start(); err != nil {
 		sctx.server.Stop()
 		return fmt.Errorf("failed to start admin API: %w", err)
@@ -844,6 +851,13 @@ func runMainLoop(sctx *serveContext) error {
 	if sctx.mqttBroker != nil {
 		if err := sctx.mqttBroker.Stop(shutdownCtx, shutdownTimeout); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: MQTT broker shutdown error: %v\n", err)
+		}
+	}
+
+	// Shutdown tracer (flush remaining spans)
+	if sctx.tracer != nil {
+		if err := sctx.tracer.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: tracer shutdown error: %v\n", err)
 		}
 	}
 
@@ -992,4 +1006,24 @@ func writePIDFileForServe(pidFilePath string, version string, httpPort, httpsPor
 	}
 
 	return WritePIDFile(pidFilePath, pidInfo)
+}
+
+// initializeTracer creates a new tracer with OTLP exporter for distributed tracing.
+func initializeTracer(endpoint string, samplerRatio float64) *tracing.Tracer {
+	exporter := tracing.NewOTLPExporter(endpoint)
+
+	var sampler tracing.Sampler
+	if samplerRatio >= 1.0 {
+		sampler = tracing.AlwaysSample{}
+	} else if samplerRatio <= 0 {
+		sampler = tracing.NeverSample{}
+	} else {
+		sampler = tracing.NewRatioSampler(samplerRatio)
+	}
+
+	return tracing.NewTracer("mockd",
+		tracing.WithExporter(exporter),
+		tracing.WithSampler(sampler),
+		tracing.WithBatchSize(10), // Export spans in smaller batches for lower latency
+	)
 }

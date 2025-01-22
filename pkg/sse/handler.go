@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/metrics"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/recording"
@@ -787,6 +788,13 @@ func (h *SSEHandler) sendEvent(stream *SSEStream, event *SSEEventDef, eventIndex
 	// Update manager metrics
 	h.manager.recordEventSent(int64(len(formatted)))
 
+	// Record Prometheus metric
+	if metrics.RequestsTotal != nil {
+		if vec, err := metrics.RequestsTotal.WithLabels("sse", stream.Path, "event"); err == nil {
+			vec.Inc()
+		}
+	}
+
 	return nil
 }
 
@@ -896,7 +904,7 @@ func (h *SSEHandler) Metadata() protocol.Metadata {
 	return protocol.Metadata{
 		ID:                   h.id,
 		Protocol:             protocol.ProtocolSSE,
-		Version:              "1.0.0",
+		Version:              "0.2.0",
 		TransportType:        protocol.TransportHTTP1,
 		ConnectionModel:      protocol.ConnectionModelPersistent,
 		CommunicationPattern: protocol.PatternServerPush,

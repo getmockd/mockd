@@ -510,11 +510,14 @@ func (c *Client) ListHandlers(ctx context.Context) ([]*ProtocolHandler, error) {
 		return nil, c.parseError(resp)
 	}
 
-	var handlers []*ProtocolHandler
-	if err := json.NewDecoder(resp.Body).Decode(&handlers); err != nil {
+	var response struct {
+		Handlers []*ProtocolHandler `json:"handlers"`
+		Count    int                `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, fmt.Errorf("failed to decode handlers: %w", err)
 	}
-	return handlers, nil
+	return response.Handlers, nil
 }
 
 // GetHandler returns a specific protocol handler.

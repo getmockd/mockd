@@ -68,7 +68,7 @@ _mockd() {
     local cur prev words cword
     _init_completion || return
 
-    local commands="serve start stop status init new add list get delete import export logs config completion version help doctor proxy recordings convert generate enhance stream-recordings graphql chaos grpc mqtt soap templates tunnel websocket"
+    local commands="serve start stop status ports init new add list get delete import export logs config completion version help doctor proxy recordings convert generate enhance stream-recordings graphql chaos grpc mqtt soap templates tunnel websocket"
 
     if [[ ${cword} -eq 1 ]]; then
         COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
@@ -77,7 +77,7 @@ _mockd() {
 
     case ${words[1]} in
         serve)
-            COMPREPLY=($(compgen -W "--port -p --admin-port -a --config -c --https-port --read-timeout --write-timeout --max-log-entries --auto-cert --tls-cert --tls-key --tls-auto --mtls-enabled --mtls-client-auth --mtls-ca --mtls-allowed-cns --audit-enabled --audit-file --audit-level --register --control-plane --token --name --labels --pull --cache --graphql-schema --graphql-path --grpc-port --grpc-proto --grpc-reflection --oauth-enabled --oauth-issuer --oauth-port --mqtt-port --mqtt-auth --chaos-enabled --chaos-latency --chaos-error-rate --validate-spec --validate-fail --detach -d --pid-file --help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "--port -p --admin-port -a --config -c --https-port --read-timeout --write-timeout --max-log-entries --auto-cert --tls-cert --tls-key --tls-auto --mtls-enabled --mtls-client-auth --mtls-ca --mtls-allowed-cns --audit-enabled --audit-file --audit-level --register --control-plane --token --name --labels --pull --cache --graphql-schema --graphql-path --oauth-enabled --oauth-issuer --oauth-port --chaos-enabled --chaos-latency --chaos-error-rate --validate-spec --validate-fail --detach -d --pid-file --help" -- "${cur}"))
             ;;
         start)
             COMPREPLY=($(compgen -W "--port -p --admin-port -a --config -c --https-port --read-timeout --write-timeout --max-log-entries --auto-cert --help" -- "${cur}"))
@@ -91,6 +91,9 @@ _mockd() {
             ;;
         status)
             COMPREPLY=($(compgen -W "--pid-file --json --help" -- "${cur}"))
+            ;;
+        ports)
+            COMPREPLY=($(compgen -W "--pid-file --admin-port -a --json --help" -- "${cur}"))
             ;;
         init)
             COMPREPLY=($(compgen -W "--output -o --force --format --help" -- "${cur}"))
@@ -106,7 +109,7 @@ _mockd() {
             fi
             ;;
         add)
-            COMPREPLY=($(compgen -W "--type -t --method -m --path --status -s --body -b --body-file --header -H --match-header --match-query --name -n --priority --delay --admin-url --json --message --echo --operation --op-type --response --service --rpc-method --topic --payload --qos --soap-action --help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "--type -t --method -m --path --status -s --body -b --body-file --header -H --match-header --match-query --name -n --priority --delay --admin-url --json --message --echo --operation --op-type --response --service --rpc-method --proto --proto-path --grpc-port --topic --payload --qos --mqtt-port --soap-action --sse --sse-event --sse-delay --sse-template --sse-repeat --sse-keepalive --help" -- "${cur}"))
             ;;
         list)
             COMPREPLY=($(compgen -W "--config -c --type -t --admin-url --json --help" -- "${cur}"))
@@ -339,6 +342,7 @@ _mockd() {
         'start:Start the mock server (alias for serve)'
         'stop:Stop a running mockd server'
         'status:Show status of running mockd server'
+        'ports:Show all ports in use by mockd'
         'init:Create a starter config file'
         'new:Create mocks from templates'
         'add:Add a new mock endpoint'
@@ -404,14 +408,9 @@ _mockd() {
                 '--cache[Local cache directory]:dir:_files -/' \
                 '--graphql-schema[Path to GraphQL schema file]:file:_files' \
                 '--graphql-path[GraphQL endpoint path]:path:' \
-                '--grpc-port[gRPC server port]:port:' \
-                '--grpc-proto[Path to .proto file]:file:_files' \
-                '--grpc-reflection[Enable gRPC reflection]' \
                 '--oauth-enabled[Enable OAuth provider]' \
                 '--oauth-issuer[OAuth issuer URL]:url:' \
                 '--oauth-port[OAuth server port]:port:' \
-                '--mqtt-port[MQTT broker port]:port:' \
-                '--mqtt-auth[Enable MQTT authentication]' \
                 '--chaos-enabled[Enable chaos injection]' \
                 '--chaos-latency[Add random latency]:range:' \
                 '--chaos-error-rate[Error rate (0.0-1.0)]:rate:' \
@@ -441,6 +440,12 @@ _mockd() {
         status)
             _arguments \
                 '--pid-file[Path to PID file]:file:_files' \
+                '--json[Output in JSON format]'
+            ;;
+        ports)
+            _arguments \
+                '--pid-file[Path to PID file]:file:_files' \
+                '(-a --admin-port)'{-a,--admin-port}'[Admin API port]:port:' \
                 '--json[Output in JSON format]'
             ;;
         init)
@@ -477,7 +482,7 @@ _mockd() {
             ;;
         add)
             _arguments \
-                '(-t --type)'{-t,--type}'[Mock type]:type:(http websocket graphql grpc mqtt soap)' \
+                '(-t --type)'{-t,--type}'[Mock type]:type:(http websocket graphql grpc mqtt soap sse)' \
                 '(-m --method)'{-m,--method}'[HTTP method to match]:method:(GET POST PUT DELETE PATCH HEAD OPTIONS)' \
                 '--path[URL path to match]:path:' \
                 '(-s --status)'{-s,--status}'[Response status code]:code:' \
@@ -496,10 +501,20 @@ _mockd() {
                 '--response[Response data (JSON/XML)]:response:' \
                 '--service[gRPC service name]:service:' \
                 '--rpc-method[gRPC method name]:method:' \
+                '*--proto[Path to .proto file]:file:_files -g "*.proto"' \
+                '*--proto-path[Import path for proto dependencies]:path:_files -/' \
+                '--grpc-port[gRPC server port]:port:' \
                 '--topic[MQTT topic pattern]:topic:' \
                 '--payload[MQTT payload]:payload:' \
                 '--qos[MQTT QoS level]:qos:(0 1 2)' \
+                '--mqtt-port[MQTT broker port]:port:' \
                 '--soap-action[SOAPAction header]:action:' \
+                '--sse[Enable SSE streaming]' \
+                '*--sse-event[SSE event (type:data or just data)]:event:' \
+                '--sse-delay[Delay between events in ms]:ms:' \
+                '--sse-template[Template for generating events]:template:' \
+                '--sse-repeat[Number of times to repeat events]:count:' \
+                '--sse-keepalive[Keepalive interval in seconds]:seconds:' \
                 '--admin-url[Admin API base URL]:url:' \
                 '--json[Output in JSON format]'
             ;;
@@ -998,14 +1013,9 @@ complete -c mockd -n '__fish_seen_subcommand_from serve' -l pull -d 'Pull mocks 
 complete -c mockd -n '__fish_seen_subcommand_from serve' -l cache -d 'Local cache directory' -r -F
 complete -c mockd -n '__fish_seen_subcommand_from serve' -l graphql-schema -d 'Path to GraphQL schema file' -r -F
 complete -c mockd -n '__fish_seen_subcommand_from serve' -l graphql-path -d 'GraphQL endpoint path'
-complete -c mockd -n '__fish_seen_subcommand_from serve' -l grpc-port -d 'gRPC server port'
-complete -c mockd -n '__fish_seen_subcommand_from serve' -l grpc-proto -d 'Path to .proto file' -r -F
-complete -c mockd -n '__fish_seen_subcommand_from serve' -l grpc-reflection -d 'Enable gRPC reflection'
 complete -c mockd -n '__fish_seen_subcommand_from serve' -l oauth-enabled -d 'Enable OAuth provider'
 complete -c mockd -n '__fish_seen_subcommand_from serve' -l oauth-issuer -d 'OAuth issuer URL'
 complete -c mockd -n '__fish_seen_subcommand_from serve' -l oauth-port -d 'OAuth server port'
-complete -c mockd -n '__fish_seen_subcommand_from serve' -l mqtt-port -d 'MQTT broker port'
-complete -c mockd -n '__fish_seen_subcommand_from serve' -l mqtt-auth -d 'Enable MQTT authentication'
 complete -c mockd -n '__fish_seen_subcommand_from serve' -l chaos-enabled -d 'Enable chaos injection'
 complete -c mockd -n '__fish_seen_subcommand_from serve' -l chaos-latency -d 'Add random latency (e.g., 10ms-100ms)'
 complete -c mockd -n '__fish_seen_subcommand_from serve' -l chaos-error-rate -d 'Error rate (0.0-1.0)'

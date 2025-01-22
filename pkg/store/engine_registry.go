@@ -407,6 +407,60 @@ func (r *EngineRegistry) GetWorkspaceFromEngine(engineID, workspaceID string) (*
 	return &wsCopy, nil
 }
 
+// GetEnginesForWorkspace returns all engines that have the given workspace assigned.
+// Returns empty slice if workspace is not assigned to any engine.
+func (r *EngineRegistry) GetEnginesForWorkspace(workspaceID string) []*Engine {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var engines []*Engine
+	for _, engine := range r.engines {
+		for _, ws := range engine.Workspaces {
+			if ws.WorkspaceID == workspaceID {
+				// Return a copy
+				engineCopy := *engine
+				engineCopy.Workspaces = make([]EngineWorkspace, len(engine.Workspaces))
+				copy(engineCopy.Workspaces, engine.Workspaces)
+				engines = append(engines, &engineCopy)
+				break
+			}
+		}
+	}
+	return engines
+}
+
+// GetSiblingWorkspaceIDs returns all workspace IDs that share an engine with the given workspace.
+// This is useful for checking port conflicts across workspaces on the same engine.
+// Returns empty slice if workspace is not assigned to any engine.
+func (r *EngineRegistry) GetSiblingWorkspaceIDs(workspaceID string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	siblingSet := make(map[string]bool)
+	for _, engine := range r.engines {
+		// Check if this engine has the target workspace
+		hasWorkspace := false
+		for _, ws := range engine.Workspaces {
+			if ws.WorkspaceID == workspaceID {
+				hasWorkspace = true
+				break
+			}
+		}
+		// If yes, collect all workspace IDs from this engine
+		if hasWorkspace {
+			for _, ws := range engine.Workspaces {
+				siblingSet[ws.WorkspaceID] = true
+			}
+		}
+	}
+
+	siblings := make([]string, 0, len(siblingSet))
+	for wsID := range siblingSet {
+		siblings = append(siblings, wsID)
+	}
+	return siblings
+}
+
 // UpdateWorkspaceStatus updates the status of a workspace in an engine.
 func (r *EngineRegistry) UpdateWorkspaceStatus(engineID, workspaceID, status string) error {
 	r.mu.Lock()

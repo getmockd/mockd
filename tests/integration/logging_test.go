@@ -22,11 +22,11 @@ import (
 
 // loggingTestBundle groups server and client for logging tests
 type loggingTestBundle struct {
-	Server      *engine.Server
-	Client      *engineclient.Client
-	AdminAPI    *admin.AdminAPI
-	HTTPPort    int
-	AdminPort   int
+	Server         *engine.Server
+	Client         *engineclient.Client
+	AdminAPI       *admin.AdminAPI
+	HTTPPort       int
+	AdminPort      int
 	ManagementPort int
 }
 
@@ -36,21 +36,23 @@ func setupLoggingServer(t *testing.T) *loggingTestBundle {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:      httpPort,
-		AdminPort:     adminPort,
-		ManagementPort:   managementPort,
-		ReadTimeout:   30,
-		WriteTimeout:  30,
-		MaxLogEntries: 100,
+		HTTPPort:       httpPort,
+		AdminPort:      adminPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
+		MaxLogEntries:  100,
 	}
 
 	srv := engine.NewServer(cfg)
 	err := srv.Start()
 	require.NoError(t, err)
 
+	tempDir := t.TempDir() // Use temp dir for test isolation
 	adminAPI := admin.NewAdminAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
+		admin.WithDataDir(tempDir),
 	)
 	err = adminAPI.Start()
 	require.NoError(t, err)
@@ -58,6 +60,7 @@ func setupLoggingServer(t *testing.T) *loggingTestBundle {
 	t.Cleanup(func() {
 		adminAPI.Stop()
 		srv.Stop()
+		time.Sleep(10 * time.Millisecond) // Allow file handles to release
 	})
 
 	time.Sleep(50 * time.Millisecond)
@@ -65,11 +68,11 @@ func setupLoggingServer(t *testing.T) *loggingTestBundle {
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 
 	return &loggingTestBundle{
-		Server:      srv,
-		Client:      client,
-		AdminAPI:    adminAPI,
-		HTTPPort:    httpPort,
-		AdminPort:   adminPort,
+		Server:         srv,
+		Client:         client,
+		AdminAPI:       adminAPI,
+		HTTPPort:       httpPort,
+		AdminPort:      adminPort,
 		ManagementPort: managementPort,
 	}
 }

@@ -11,15 +11,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/audit"
 	"github.com/getmockd/mockd/pkg/chaos"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/graphql"
-	"github.com/getmockd/mockd/pkg/grpc"
-	"github.com/getmockd/mockd/pkg/mqtt"
 	"github.com/getmockd/mockd/pkg/oauth"
 	"github.com/getmockd/mockd/pkg/validation"
 )
@@ -62,19 +60,10 @@ type ServerFlags struct {
 	GraphQLSchema string
 	GraphQLPath   string
 
-	// gRPC flags
-	GRPCPort       int
-	GRPCProto      string
-	GRPCReflection bool
-
 	// OAuth flags
 	OAuthEnabled bool
 	OAuthIssuer  string
 	OAuthPort    int
-
-	// MQTT flags
-	MQTTPort int
-	MQTTAuth bool
 
 	// Chaos flags
 	ChaosEnabled   bool
@@ -135,19 +124,10 @@ func RegisterServerFlags(fs *flag.FlagSet, f *ServerFlags) {
 	fs.StringVar(&f.GraphQLSchema, "graphql-schema", "", "Path to GraphQL schema file")
 	fs.StringVar(&f.GraphQLPath, "graphql-path", "/graphql", "GraphQL endpoint path")
 
-	// gRPC flags
-	fs.IntVar(&f.GRPCPort, "grpc-port", 0, "gRPC server port (0 = disabled)")
-	fs.StringVar(&f.GRPCProto, "grpc-proto", "", "Path to .proto file")
-	fs.BoolVar(&f.GRPCReflection, "grpc-reflection", true, "Enable gRPC reflection")
-
 	// OAuth flags
 	fs.BoolVar(&f.OAuthEnabled, "oauth-enabled", false, "Enable OAuth provider")
 	fs.StringVar(&f.OAuthIssuer, "oauth-issuer", "", "OAuth issuer URL")
 	fs.IntVar(&f.OAuthPort, "oauth-port", 0, "OAuth server port")
-
-	// MQTT flags
-	fs.IntVar(&f.MQTTPort, "mqtt-port", 0, "MQTT broker port (0 = disabled)")
-	fs.BoolVar(&f.MQTTAuth, "mqtt-auth", false, "Enable MQTT authentication")
 
 	// Chaos flags
 	fs.BoolVar(&f.ChaosEnabled, "chaos-enabled", false, "Enable chaos injection")
@@ -195,11 +175,6 @@ func BuildServerConfig(f *ServerFlags) *config.ServerConfiguration {
 	// Configure GraphQL if schema specified
 	if f.GraphQLSchema != "" {
 		serverCfg.GraphQL = BuildGraphQLConfig(f)
-	}
-
-	// Configure gRPC if port specified
-	if f.GRPCPort > 0 {
-		serverCfg.GRPC = BuildGRPCConfig(f)
 	}
 
 	// Configure OAuth if enabled
@@ -264,17 +239,6 @@ func BuildGraphQLConfig(f *ServerFlags) []*graphql.GraphQLConfig {
 	}}
 }
 
-// BuildGRPCConfig creates gRPC configuration from flags.
-func BuildGRPCConfig(f *ServerFlags) []*grpc.GRPCConfig {
-	return []*grpc.GRPCConfig{{
-		ID:         "cli-grpc",
-		Port:       f.GRPCPort,
-		ProtoFile:  f.GRPCProto,
-		Reflection: f.GRPCReflection,
-		Enabled:    true,
-	}}
-}
-
 // BuildOAuthConfig creates OAuth configuration from flags.
 func BuildOAuthConfig(f *ServerFlags) []*oauth.OAuthConfig {
 	issuer := f.OAuthIssuer
@@ -328,43 +292,6 @@ func BuildChaosConfig(f *ServerFlags) *chaos.ChaosConfig {
 		}
 	}
 	return chaosCfg
-}
-
-// StartMQTTBroker creates and starts an MQTT broker if configured.
-// Returns the broker (nil if not configured) and any error.
-func StartMQTTBroker(f *ServerFlags) (*mqtt.Broker, error) {
-	if f.MQTTPort <= 0 {
-		return nil, nil
-	}
-
-	mqttCfg := &mqtt.MQTTConfig{
-		ID:      "cli-mqtt",
-		Port:    f.MQTTPort,
-		Enabled: true,
-	}
-	if f.MQTTAuth {
-		mqttCfg.Auth = &mqtt.MQTTAuthConfig{
-			Enabled: true,
-		}
-	}
-
-	broker, err := mqtt.NewBroker(mqttCfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create MQTT broker: %w", err)
-	}
-	if err := broker.Start(context.Background()); err != nil {
-		return nil, fmt.Errorf("failed to start MQTT broker: %w", err)
-	}
-	fmt.Printf("MQTT broker running on port %d\n", f.MQTTPort)
-	return broker, nil
-}
-
-// ValidateGRPCFlags checks if gRPC flags are valid.
-func ValidateGRPCFlags(f *ServerFlags) error {
-	if f.GRPCPort > 0 && f.GRPCProto == "" {
-		return fmt.Errorf("--grpc-proto is required when --grpc-port is specified")
-	}
-	return nil
 }
 
 // ParseLatencyRange parses a latency range string like "10ms-100ms" into min and max values.

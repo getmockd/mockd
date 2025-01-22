@@ -1,0 +1,58 @@
+# Promtail configuration for shipping mockd logs to Loki
+# This configuration works when running mockd locally
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Scrape mockd logs from file (when running with output to file)
+  - job_name: mockd_file
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: mockd
+          __path__: /var/log/mockd/*.log
+
+  # Scrape any Docker container logs (optional)
+  - job_name: containers
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: containers
+          __path__: /var/lib/docker/containers/*/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            time: time
+      - output:
+          source: output
+
+  # Scrape systemd journal logs for mockd (if running as systemd service)
+  - job_name: journal
+    journal:
+      max_age: 12h
+      labels:
+        job: systemd-journal
+    relabel_configs:
+      - source_labels: ['__journal__systemd_unit']
+        target_label: 'unit'
+      - source_labels: ['__journal__hostname']
+        target_label: 'hostname'
+    pipeline_stages:
+      # Only keep mockd-related logs
+      - match:
+          selector: '{job="systemd-journal"}'
+          stages:
+            - regex:
+                expression: '.*mockd.*'

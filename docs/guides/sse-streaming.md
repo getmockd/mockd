@@ -4,7 +4,48 @@ mockd supports Server-Sent Events (SSE) and HTTP chunked transfer encoding for s
 
 ## Quick Start
 
-### Basic SSE Mock
+### Using CLI
+
+Create SSE mocks directly from the command line:
+
+```bash
+# Basic SSE with custom events
+mockd add --path /events --sse \
+  --sse-event 'connected:{"status":"ok"}' \
+  --sse-event 'update:{"count":1}' \
+  --sse-event 'update:{"count":2}' \
+  --sse-delay 500
+
+# OpenAI-compatible streaming
+mockd add -m POST --path /v1/chat/completions --sse --sse-template openai-chat
+
+# Notification stream template
+mockd add --path /notifications --sse --sse-template notification-stream
+
+# Infinite keepalive stream
+mockd add --path /stream --sse \
+  --sse-event 'ping:{}' \
+  --sse-delay 1000 \
+  --sse-repeat 0
+
+# SSE with keepalive pings every 15 seconds
+mockd add --path /long-poll --sse \
+  --sse-event 'data:{"value":1}' \
+  --sse-keepalive 15000
+```
+
+**CLI SSE Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--sse` | Enable SSE streaming | |
+| `--sse-event` | Event (type:data), repeatable | |
+| `--sse-delay` | Delay between events (ms) | `100` |
+| `--sse-template` | Built-in template | |
+| `--sse-repeat` | Repeat count (0 = infinite) | `1` |
+| `--sse-keepalive` | Keepalive interval (ms) | `0` |
+
+### Using Configuration File
 
 ```json
 {

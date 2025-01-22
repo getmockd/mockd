@@ -9,11 +9,28 @@ import (
 	"github.com/getmockd/mockd/pkg/tracing"
 )
 
+// skipTracingPaths contains paths that should not create traces.
+// These are typically health checks, metrics endpoints, and other
+// infrastructure paths that would create noise in trace data.
+var skipTracingPaths = map[string]bool{
+	"/metrics":     true,
+	"/health":      true,
+	"/healthz":     true,
+	"/ready":       true,
+	"/readyz":      true,
+	"/livez":       true,
+	"/_/health":    true,
+	"/_/ready":     true,
+	"/__health":    true,
+	"/favicon.ico": true,
+}
+
 // TracingMiddleware wraps an HTTP handler with distributed tracing support.
 // It extracts trace context from incoming requests, creates a span for each request,
 // and records relevant HTTP attributes.
 //
 // If tracer is nil, the handler is returned unchanged (opt-in behavior).
+// Health check and metrics endpoints are excluded from tracing to reduce noise.
 func TracingMiddleware(tracer *tracing.Tracer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if tracer == nil {
@@ -21,6 +38,12 @@ func TracingMiddleware(tracer *tracing.Tracer) func(http.Handler) http.Handler {
 		}
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip tracing for health/metrics endpoints to avoid noise
+			if skipTracingPaths[r.URL.Path] {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			// Extract trace context from incoming request headers
 			ctx := tracing.Extract(r.Context(), r.Header)
 

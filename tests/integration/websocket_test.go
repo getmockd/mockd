@@ -700,3 +700,87 @@ func getWSManager(t *testing.T, ts *httptest.Server) *websocket.ConnectionManage
 
 	return engineHandler.WebSocketManager()
 }
+
+// ============================================================================
+// Full Server Integration Tests (with middleware chain)
+// ============================================================================
+// These tests use srv.Start() instead of httptest.NewServer(srv.Handler())
+// to ensure the full middleware chain is tested, including metrics middleware.
+
+func TestWS_FullServer_WithMiddleware(t *testing.T) {
+	// This test ensures WebSocket works through the full middleware chain.
+	// It specifically tests the http.Hijacker interface implementation in
+	// metricsResponseWriter which was previously missing and caused HTTP 501.
+
+	port := getFreePort()
+	require.Greater(t, port, 0, "failed to get free port")
+	cfg := config.DefaultServerConfiguration()
+	cfg.HTTPPort = port
+
+	srv := engine.NewServer(cfg)
+
+	// Import a WebSocket endpoint
+	echoMode := true
+	collection := &config.MockCollection{
+		Version: "1.0",
+		Name:    "ws-middleware-test",
+		WebSocketEndpoints: []*config.WebSocketEndpointConfig{
+			{Path: "/ws/echo", EchoMode: &echoMode},
+		},
+	}
+	err := srv.ImportConfig(collection, true)
+	require.NoError(t, err)
+
+	// Start the FULL server (with middleware chain)
+	err = srv.Start()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		srv.Stop()
+	})
+
+	// Wait for server to be ready
+	time.Sleep(100 * time.Millisecond)
+
+	// Connect via WebSocket - this goes through the FULL middleware chain
+	wsURL := "ws://localhost:" + itoa(port) + "/ws/echo"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, resp, err := ws.Dial(ctx, wsURL, nil)
+	if err != nil {
+		if resp != nil {
+			t.Fatalf("WebSocket connection failed with status %d: %v", resp.StatusCode, err)
+		}
+		t.Fatalf("WebSocket connection failed: %v", err)
+	}
+	defer conn.Close(ws.StatusNormalClosure, "test complete")
+
+	// Verify echo works
+	testMsg := "hello through middleware"
+	err = conn.Write(ctx, ws.MessageText, []byte(testMsg))
+	require.NoError(t, err)
+
+	msgType, data, err := conn.Read(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, ws.MessageText, msgType)
+	assert.Equal(t, testMsg, string(data))
+}
+
+// itoa converts int to string without importing strconv.
+func itoa(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	if i < 0 {
+		return "-" + itoa(-i)
+	}
+	digits := make([]byte, 0, 10)
+	for i > 0 {
+		digits = append(digits, byte('0'+i%10))
+		i /= 10
+	}
+	for left, right := 0, len(digits)-1; left < right; left, right = left+1, right-1 {
+		digits[left], digits[right] = digits[right], digits[left]
+	}
+	return string(digits)
+}

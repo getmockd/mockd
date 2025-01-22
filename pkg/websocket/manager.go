@@ -561,6 +561,13 @@ func (m *ConnectionManager) LogDisconnect(conn *Connection, closeCode CloseCode,
 
 // LogMessageReceived logs an inbound WebSocket message.
 func (m *ConnectionManager) LogMessageReceived(conn *Connection, msgType MessageType, data []byte, remoteAddr string) {
+	// Record message metric
+	if metrics.RequestsTotal != nil {
+		if vec, err := metrics.RequestsTotal.WithLabels("websocket", conn.EndpointPath(), "inbound"); err == nil {
+			vec.Inc()
+		}
+	}
+
 	m.mu.RLock()
 	logger := m.requestLogger
 	m.mu.RUnlock()
@@ -590,6 +597,13 @@ func (m *ConnectionManager) LogMessageReceived(conn *Connection, msgType Message
 
 // LogMessageSent logs an outbound WebSocket message.
 func (m *ConnectionManager) LogMessageSent(conn *Connection, msgType MessageType, data []byte, remoteAddr string) {
+	// Record message metric
+	if metrics.RequestsTotal != nil {
+		if vec, err := metrics.RequestsTotal.WithLabels("websocket", conn.EndpointPath(), "outbound"); err == nil {
+			vec.Inc()
+		}
+	}
+
 	m.mu.RLock()
 	logger := m.requestLogger
 	m.mu.RUnlock()
@@ -643,7 +657,7 @@ func (m *ConnectionManager) Metadata() protocol.Metadata {
 	return protocol.Metadata{
 		ID:                   m.id,
 		Protocol:             protocol.ProtocolWebSocket,
-		Version:              "1.0.0",
+		Version:              "0.2.0",
 		TransportType:        protocol.TransportWebSocket,
 		ConnectionModel:      protocol.ConnectionModelUpgrade,
 		CommunicationPattern: protocol.PatternBidirectional,

@@ -362,6 +362,11 @@ func (a *ControlAPIAdapter) ListProtocolHandlers() []*api.ProtocolHandler {
 			Version: meta.Version,
 		}
 
+		// Get port if the handler is a standalone server (MQTT, gRPC, etc.)
+		if ss, ok := h.(protocol.StandaloneServer); ok {
+			handler.Port = ss.Port()
+		}
+
 		// Get connection count if the handler supports it
 		if cm, ok := h.(protocol.ConnectionManager); ok {
 			handler.Connections = cm.ConnectionCount()

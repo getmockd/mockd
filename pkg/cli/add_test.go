@@ -164,6 +164,7 @@ func TestBuildHTTPMock(t *testing.T) {
 				tt.headers,
 				tt.matchHeaders,
 				tt.matchQueries,
+				false, nil, 100, "", 1, 0, // SSE defaults: disabled
 			)
 
 			if tt.expectError {
@@ -211,6 +212,7 @@ func TestBuildHTTPMock_BodyFile(t *testing.T) {
 		bodyFilePath, // body from file
 		0, 0,
 		nil, nil, nil,
+		false, nil, 100, "", 1, 0, // SSE defaults
 	)
 
 	if err != nil {
@@ -232,6 +234,7 @@ func TestBuildHTTPMock_BodyFileNotFound(t *testing.T) {
 		"/nonexistent/body.json",
 		0, 0,
 		nil, nil, nil,
+		false, nil, 100, "", 1, 0, // SSE defaults
 	)
 
 	if err == nil {
@@ -418,31 +421,52 @@ func TestBuildGraphQLMock(t *testing.T) {
 }
 
 func TestBuildGRPCMock(t *testing.T) {
+	// Create a temporary proto file for tests that need one
+	tmpDir := t.TempDir()
+	protoPath := filepath.Join(tmpDir, "test.proto")
+	if err := os.WriteFile(protoPath, []byte(`syntax = "proto3"; package test;`), 0644); err != nil {
+		t.Fatalf("failed to create temp proto file: %v", err)
+	}
+	dummyProto := flags.StringSlice{protoPath}
+	emptyProto := flags.StringSlice{}
+	emptyPaths := flags.StringSlice{}
+
 	tests := []struct {
 		name        string
 		mockName    string
 		service     string
 		rpcMethod   string
 		response    string
+		protoFiles  flags.StringSlice
 		expectError bool
 		validate    func(*testing.T, *mock.GRPCSpec)
 	}{
 		{
+			name:        "proto file required",
+			service:     "greeter.Greeter",
+			rpcMethod:   "SayHello",
+			protoFiles:  emptyProto,
+			expectError: true,
+		},
+		{
 			name:        "service required",
 			service:     "",
 			rpcMethod:   "SayHello",
+			protoFiles:  dummyProto,
 			expectError: true,
 		},
 		{
 			name:        "rpc method required",
 			service:     "greeter.Greeter",
 			rpcMethod:   "",
+			protoFiles:  dummyProto,
 			expectError: true,
 		},
 		{
-			name:      "basic grpc mock",
-			service:   "greeter.Greeter",
-			rpcMethod: "SayHello",
+			name:       "basic grpc mock",
+			service:    "greeter.Greeter",
+			rpcMethod:  "SayHello",
+			protoFiles: dummyProto,
 			validate: func(t *testing.T, spec *mock.GRPCSpec) {
 				if _, ok := spec.Services["greeter.Greeter"]; !ok {
 					t.Error("service greeter.Greeter should exist")
@@ -450,13 +474,18 @@ func TestBuildGRPCMock(t *testing.T) {
 				if _, ok := spec.Services["greeter.Greeter"].Methods["SayHello"]; !ok {
 					t.Error("method SayHello should exist")
 				}
+				// Single proto file is set in ProtoFile (singular), not ProtoFiles
+				if spec.ProtoFile == "" && len(spec.ProtoFiles) == 0 {
+					t.Error("proto file should be set")
+				}
 			},
 		},
 		{
-			name:      "with response",
-			service:   "greeter.Greeter",
-			rpcMethod: "SayHello",
-			response:  `{"message": "Hello!"}`,
+			name:       "with response",
+			service:    "greeter.Greeter",
+			rpcMethod:  "SayHello",
+			response:   `{"message": "Hello!"}`,
+			protoFiles: dummyProto,
 			validate: func(t *testing.T, spec *mock.GRPCSpec) {
 				methodConfig := spec.Services["greeter.Greeter"].Methods["SayHello"]
 				if methodConfig.Response == nil {
@@ -469,13 +498,14 @@ func TestBuildGRPCMock(t *testing.T) {
 			service:     "greeter.Greeter",
 			rpcMethod:   "SayHello",
 			response:    `{invalid}`,
+			protoFiles:  dummyProto,
 			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := buildGRPCMock(tt.mockName, tt.service, tt.rpcMethod, tt.response)
+			cfg, err := buildGRPCMock(tt.mockName, tt.service, tt.rpcMethod, tt.response, 50051, tt.protoFiles, emptyPaths)
 
 			if tt.expectError {
 				if err == nil {
@@ -565,7 +595,7 @@ func TestBuildMQTTMock(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := buildMQTTMock(tt.mockName, tt.topic, tt.payload, tt.qos)
+			cfg, err := buildMQTTMock(tt.mockName, tt.topic, tt.payload, tt.qos, 1883)
 
 			if tt.expectError {
 				if err == nil {
@@ -709,15 +739,20 @@ func TestOutputJSONResult(t *testing.T) {
 	// the JSON encoding doesn't panic
 
 	t.Run("http mock json output", func(t *testing.T) {
-		cfg, _ := buildHTTPMock("test", "/api/test", "GET", 200, "{}", "", 0, 0, nil, nil, nil)
+		cfg, _ := buildHTTPMock("test", "/api/test", "GET", 200, "{}", "", 0, 0, nil, nil, nil, false, nil, 100, "", 1, 0)
 		cfg.ID = "test-id"
+
+		createResult := &CreateMockResult{
+			Mock:   cfg,
+			Action: "created",
+		}
 
 		// Capture stdout
 		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		err := outputJSONResult(cfg, mock.MockTypeHTTP)
+		err := outputJSONResult(createResult, mock.MockTypeHTTP)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -731,16 +766,16 @@ func TestOutputJSONResult(t *testing.T) {
 		n, _ := r.Read(buf)
 		output := string(buf[:n])
 
-		var result map[string]interface{}
-		if err := json.Unmarshal([]byte(output), &result); err != nil {
+		var jsonResult map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &jsonResult); err != nil {
 			t.Fatalf("invalid JSON output: %v\nOutput: %s", err, output)
 		}
 
-		if result["id"] != "test-id" {
-			t.Errorf("id: got %v, want test-id", result["id"])
+		if jsonResult["id"] != "test-id" {
+			t.Errorf("id: got %v, want test-id", jsonResult["id"])
 		}
-		if result["type"] != "http" {
-			t.Errorf("type: got %v, want http", result["type"])
+		if jsonResult["type"] != "http" {
+			t.Errorf("type: got %v, want http", jsonResult["type"])
 		}
 	})
 }
