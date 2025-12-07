@@ -1,0 +1,178 @@
+{
+  "version": "1.0",
+  "name": "Advanced Matching Examples",
+  "mocks": [
+    {
+      "id": "get-users-v1",
+      "name": "Get Users API v1",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/users",
+        "headers": {
+          "X-API-Version": "v1"
+        }
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"version\": \"v1\", \"users\": [\"Alice\", \"Bob\"]}"
+      }
+    },
+    {
+      "id": "get-users-v2",
+      "name": "Get Users API v2 (with pagination)",
+      "priority": 10,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/users",
+        "headers": {
+          "X-API-Version": "v2"
+        }
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"version\": \"v2\", \"users\": [\"Alice\", \"Bob\"], \"pagination\": {\"page\": 1, \"total\": 2}}"
+      }
+    },
+    {
+      "id": "get-active-users",
+      "name": "Get Active Users Only",
+      "priority": 5,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/users",
+        "queryParams": {
+          "status": "active"
+        }
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"users\": [\"Alice\"], \"filter\": \"active\"}"
+      }
+    },
+    {
+      "id": "get-user-by-id",
+      "name": "Get User by ID (wildcard path)",
+      "priority": 15,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/users/*"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"id\": \"123\", \"name\": \"Alice\", \"email\": \"alice@example.com\"}"
+      }
+    },
+    {
+      "id": "create-user-with-email",
+      "name": "Create User (requires email in body)",
+      "priority": 10,
+      "enabled": true,
+      "matcher": {
+        "method": "POST",
+        "path": "/api/users",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "bodyContains": "email"
+      },
+      "response": {
+        "statusCode": 201,
+        "headers": {
+          "Content-Type": "application/json",
+          "Location": "/api/users/new-user-id"
+        },
+        "body": "{\"id\": \"new-user-id\", \"created\": true}"
+      }
+    },
+    {
+      "id": "create-user-validation-error",
+      "name": "Create User - Validation Error (no email)",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "POST",
+        "path": "/api/users"
+      },
+      "response": {
+        "statusCode": 400,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"error\": \"validation_failed\", \"message\": \"Email is required\"}"
+      }
+    },
+    {
+      "id": "slow-api",
+      "name": "Slow API (simulates network latency)",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/slow"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"message\": \"This response was delayed\"}",
+        "delayMs": 2000
+      }
+    },
+    {
+      "id": "auth-required",
+      "name": "Protected Endpoint (requires Authorization header)",
+      "priority": 20,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/protected",
+        "headers": {
+          "Authorization": "Bearer valid-token"
+        }
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"secret\": \"protected data\"}"
+      }
+    },
+    {
+      "id": "auth-error",
+      "name": "Protected Endpoint - Unauthorized",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/protected"
+      },
+      "response": {
+        "statusCode": 401,
+        "headers": {
+          "Content-Type": "application/json",
+          "WWW-Authenticate": "Bearer realm=\"api\""
+        },
+        "body": "{\"error\": \"unauthorized\", \"message\": \"Valid Bearer token required\"}"
+      }
+    }
+  ]
+}

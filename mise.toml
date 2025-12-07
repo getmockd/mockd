@@ -1,0 +1,5 @@
+# https://github.com/jdx/mise
+# main entrypoint and ecosystem scaffolding like asdf
+
+[tools]
+go = "1.25"

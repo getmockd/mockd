@@ -1,0 +1,23 @@
+[
+  {
+    "id": "test-prod-001",
+    "name": "Test Product Alpha",
+    "price": 19.99,
+    "category": "electronics",
+    "inStock": true
+  },
+  {
+    "id": "test-prod-002",
+    "name": "Test Product Beta",
+    "price": 39.99,
+    "category": "electronics",
+    "inStock": true
+  },
+  {
+    "id": "test-prod-003",
+    "name": "Test Product Gamma",
+    "price": 59.99,
+    "category": "premium",
+    "inStock": false
+  }
+]
