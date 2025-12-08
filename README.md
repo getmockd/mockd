@@ -193,6 +193,50 @@ Load mocks from a JSON file:
 }
 ```
 
+## Documentation
+
+The documentation site is built with MkDocs and deployed to GitHub Pages.
+
+### Local Development
+
+```bash
+# Install mise if not already installed
+# https://mise.jdx.dev/getting-started.html
+
+# Trust the mise config and install tools
+mise trust
+mise install
+
+# Install documentation dependencies
+mise run docs-install
+
+# Start local server with live reload
+mise run docs-serve
+
+# Build static site
+mise run docs-build
+```
+
+The site will be available at `http://localhost:8000`.
+
+### Documentation Structure
+
+```
+docs/
+├── index.md              # Homepage
+├── getting-started/      # Installation, quickstart, concepts
+├── guides/               # Feature guides
+├── reference/            # CLI, config, API reference
+└── examples/             # Usage examples
+```
+
+### Adding New Pages
+
+1. Create a new `.md` file in the appropriate directory
+2. Add the page to `nav:` in `mkdocs.yml`
+3. Update the `llmstxt` plugin sections if needed
+4. Run `mkdocs serve` to preview
+
 ## Requirements
 
 - Go 1.21+

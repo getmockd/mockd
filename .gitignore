@@ -56,3 +56,11 @@ build/
 # Temporary files
 *.tmp
 *.temp
+
+# MkDocs documentation build output
+site/
+
+# Python virtual environment (for docs tooling)
+.venv/
+__pycache__/
+*.py[cod]
