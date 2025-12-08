@@ -7,13 +7,13 @@ on:
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
-      - 'requirements-docs.txt'
+      - 'pyproject.toml'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
-      - 'requirements-docs.txt'
+      - 'pyproject.toml'
   workflow_dispatch:
 
 permissions:
@@ -32,20 +32,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup mise
+        uses: jdx/mise-action@v2
         with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: 'requirements-docs.txt'
+          install: true
 
-      - name: Install dependencies
-        run: pip install -r requirements-docs.txt
+      - name: Install documentation dependencies
+        run: mise run docs-install
 
       - name: Build documentation
-        run: mkdocs build --strict
-        env:
-          CI: true
+        run: mise run docs-build
 
       - name: Upload artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

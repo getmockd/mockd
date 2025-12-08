@@ -121,9 +121,7 @@ plugins:
           - examples/basic-mocks.md: Simple request/response mock examples
           - examples/crud-api.md: Full CRUD API simulation example
           - examples/integration-testing.md: Using mockd in integration tests
-      full_output: true
-  - linkcheck:
-      enabled: !ENV [CI, false]
+      full_output: llms-full.txt
 
 # Navigation structure
 nav:

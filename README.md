@@ -200,18 +200,21 @@ The documentation site is built with MkDocs and deployed to GitHub Pages.
 ### Local Development
 
 ```bash
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+# Install mise if not already installed
+# https://mise.jdx.dev/getting-started.html
 
-# Install dependencies
-pip install -r requirements-docs.txt
+# Trust the mise config and install tools
+mise trust
+mise install
+
+# Install documentation dependencies
+mise run docs-install
 
 # Start local server with live reload
-mkdocs serve
+mise run docs-serve
 
 # Build static site
-mkdocs build
+mise run docs-build
 ```
 
 The site will be available at `http://localhost:8000`.
