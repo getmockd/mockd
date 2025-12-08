@@ -1,33 +1,28 @@
 #:schema https://mise.jdx.dev/schema/mise.json
 # https://github.com/jdx/mise
 
-[env]
-_.python.venv = { path = ".venv", create = true }
-
 [tools]
 go = "1.25"
-python = "3.12"
-uv = "latest"
+
+# Documentation tasks (delegates to docs/ directory)
+# Python tooling is isolated in docs/mise.toml so Go users don't need Python
 
 [tasks.docs-install]
 description = "Install documentation dependencies"
-run = '''
-uv pip install \
-  "mkdocs>=1.6.0" \
-  "mkdocs-material>=9.5.0" \
-  "mkdocs-material-extensions>=1.3.0" \
-  "mkdocs-llmstxt>=0.2.0" \
-  "pymdown-extensions>=10.7.0"
-'''
+dir = "docs"
+run = "mise run install"
 
 [tasks.docs-serve]
 description = "Start documentation server with live reload"
-run = "uv run mkdocs serve --dev-addr 127.0.0.1:8000"
+dir = "docs"
+run = "mise run serve"
 
 [tasks.docs-build]
 description = "Build static documentation site"
-run = "uv run mkdocs build --strict"
+dir = "docs"
+run = "mise run build"
 
 [tasks.docs-clean]
 description = "Clean documentation build artifacts"
-run = "rm -rf site/ .venv/"
+dir = "docs"
+run = "mise run clean"
