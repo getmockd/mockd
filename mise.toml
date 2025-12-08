@@ -3,3 +3,7 @@
 
 [tools]
 go = "1.25"
+python = "3.12"
+
+[env]
+VIRTUAL_ENV = ".venv"

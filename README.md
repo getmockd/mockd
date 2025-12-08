@@ -193,6 +193,47 @@ Load mocks from a JSON file:
 }
 ```
 
+## Documentation
+
+The documentation site is built with MkDocs and deployed to GitHub Pages.
+
+### Local Development
+
+```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+
+# Install dependencies
+pip install -r requirements-docs.txt
+
+# Start local server with live reload
+mkdocs serve
+
+# Build static site
+mkdocs build
+```
+
+The site will be available at `http://localhost:8000`.
+
+### Documentation Structure
+
+```
+docs/
+├── index.md              # Homepage
+├── getting-started/      # Installation, quickstart, concepts
+├── guides/               # Feature guides
+├── reference/            # CLI, config, API reference
+└── examples/             # Usage examples
+```
+
+### Adding New Pages
+
+1. Create a new `.md` file in the appropriate directory
+2. Add the page to `nav:` in `mkdocs.yml`
+3. Update the `llmstxt` plugin sections if needed
+4. Run `mkdocs serve` to preview
+
 ## Requirements
 
 - Go 1.21+
