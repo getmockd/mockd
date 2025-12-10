@@ -9,6 +9,7 @@ import (
 
 	"github.com/getmockd/mockd/internal/storage"
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/sse"
 	"github.com/getmockd/mockd/pkg/stateful"
 )
 
@@ -17,15 +18,19 @@ const MaxStatefulBodySize = 1 << 20 // 1MB
 
 // Handler handles incoming HTTP requests and matches them against configured mocks.
 type Handler struct {
-	store         storage.MockStore
-	statefulStore *stateful.StateStore
-	logger        RequestLogger
+	store          storage.MockStore
+	statefulStore  *stateful.StateStore
+	logger         RequestLogger
+	sseHandler     *sse.SSEHandler
+	chunkedHandler *sse.ChunkedHandler
 }
 
 // NewHandler creates a new Handler.
 func NewHandler(store storage.MockStore) *Handler {
 	return &Handler{
-		store: store,
+		store:          store,
+		sseHandler:     sse.NewSSEHandler(100), // 100 max SSE connections
+		chunkedHandler: sse.NewChunkedHandler(),
 	}
 }
 
@@ -77,6 +82,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if match != nil {
 		matchedID = match.ID
+
+		// Check for SSE streaming response
+		if match.SSE != nil {
+			h.sseHandler.ServeHTTP(w, r, match)
+			statusCode = http.StatusOK
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+			return
+		}
+
+		// Check for chunked streaming response
+		if match.Chunked != nil {
+			h.chunkedHandler.ServeHTTP(w, r, match)
+			statusCode = http.StatusOK
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+			return
+		}
+
+		// Standard response
 		statusCode = match.Response.StatusCode
 		h.writeResponse(w, match.Response)
 	} else {
@@ -443,4 +466,14 @@ func (h *Handler) writeResponse(w http.ResponseWriter, resp *config.ResponseDefi
 	if resp.Body != "" {
 		_, _ = w.Write([]byte(resp.Body))
 	}
+}
+
+// SSEHandler returns the SSE handler for admin API access.
+func (h *Handler) SSEHandler() *sse.SSEHandler {
+	return h.sseHandler
+}
+
+// ChunkedHandler returns the chunked transfer handler.
+func (h *Handler) ChunkedHandler() *sse.ChunkedHandler {
+	return h.chunkedHandler
 }

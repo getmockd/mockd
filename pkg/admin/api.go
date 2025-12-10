@@ -94,6 +94,18 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /state/resources", a.handleListStateResources)
 	mux.HandleFunc("GET /state/resources/{name}", a.handleGetStateResource)
 	mux.HandleFunc("DELETE /state/resources/{name}", a.handleClearStateResource)
+
+	// SSE connection management
+	mux.HandleFunc("GET /sse/connections", a.handleListSSEConnections)
+	mux.HandleFunc("GET /sse/connections/{id}", a.handleGetSSEConnection)
+	mux.HandleFunc("DELETE /sse/connections/{id}", a.handleCloseSSEConnection)
+	mux.HandleFunc("GET /sse/stats", a.handleGetSSEStats)
+
+	// Mock-specific SSE endpoints
+	mux.HandleFunc("GET /mocks/{id}/sse/connections", a.handleListMockSSEConnections)
+	mux.HandleFunc("DELETE /mocks/{id}/sse/connections", a.handleCloseMockSSEConnections)
+	mux.HandleFunc("GET /mocks/{id}/sse/buffer", a.handleGetMockSSEBuffer)
+	mux.HandleFunc("DELETE /mocks/{id}/sse/buffer", a.handleClearMockSSEBuffer)
 }
 
 // handleConvertRecordings wraps the convert handler to pass the server.

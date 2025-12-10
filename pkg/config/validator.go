@@ -44,16 +44,129 @@ func (m *MockConfiguration) Validate() error {
 		return err
 	}
 
-	if m.Response == nil {
-		return &ValidationError{Field: "response", Message: "response is required"}
+	// Count how many response types are configured
+	responseTypeCount := 0
+	if m.Response != nil {
+		responseTypeCount++
+	}
+	if m.SSE != nil {
+		responseTypeCount++
+	}
+	if m.Chunked != nil {
+		responseTypeCount++
 	}
 
-	if err := m.Response.Validate(); err != nil {
-		return err
+	// Exactly one response type must be specified
+	if responseTypeCount == 0 {
+		return &ValidationError{Field: "response", Message: "one of response, sse, or chunked is required"}
+	}
+	if responseTypeCount > 1 {
+		return &ValidationError{Field: "response", Message: "only one of response, sse, or chunked may be specified"}
+	}
+
+	// Validate the response type that is present
+	if m.Response != nil {
+		if err := m.Response.Validate(); err != nil {
+			return err
+		}
+	}
+
+	if m.SSE != nil {
+		if err := m.SSE.Validate(); err != nil {
+			return err
+		}
+	}
+
+	if m.Chunked != nil {
+		if err := m.Chunked.Validate(); err != nil {
+			return err
+		}
 	}
 
 	if m.Priority < 0 {
 		return &ValidationError{Field: "priority", Message: "priority must be >= 0"}
+	}
+
+	return nil
+}
+
+// Validate checks if the SSEConfig is valid.
+func (s *SSEConfig) Validate() error {
+	// Either events, generator, or template must be specified
+	hasEvents := len(s.Events) > 0
+	hasGenerator := s.Generator != nil
+	hasTemplate := s.Template != ""
+
+	if !hasEvents && !hasGenerator && !hasTemplate {
+		return &ValidationError{Field: "sse", Message: "one of events, generator, or template is required"}
+	}
+
+	// Events and generator are mutually exclusive
+	if hasEvents && hasGenerator {
+		return &ValidationError{Field: "sse", Message: "events and generator are mutually exclusive"}
+	}
+
+	// Validate each event if present
+	for i, event := range s.Events {
+		if event.Data == nil {
+			return &ValidationError{Field: fmt.Sprintf("sse.events[%d].data", i), Message: "data is required"}
+		}
+	}
+
+	// Validate timing config
+	if s.Timing.RandomDelay != nil {
+		if s.Timing.RandomDelay.Min < 0 {
+			return &ValidationError{Field: "sse.timing.randomDelay.min", Message: "min must be >= 0"}
+		}
+		if s.Timing.RandomDelay.Max < s.Timing.RandomDelay.Min {
+			return &ValidationError{Field: "sse.timing.randomDelay.max", Message: "max must be >= min"}
+		}
+	}
+
+	// Validate lifecycle config
+	if s.Lifecycle.KeepaliveInterval != 0 && s.Lifecycle.KeepaliveInterval < 5 {
+		return &ValidationError{Field: "sse.lifecycle.keepaliveInterval", Message: "must be 0 (disabled) or >= 5 seconds"}
+	}
+
+	// Validate rate limit config
+	if s.RateLimit != nil {
+		if s.RateLimit.EventsPerSecond <= 0 {
+			return &ValidationError{Field: "sse.rateLimit.eventsPerSecond", Message: "must be > 0"}
+		}
+	}
+
+	// Validate resume config
+	if s.Resume.Enabled && s.Resume.BufferSize <= 0 {
+		return &ValidationError{Field: "sse.resume.bufferSize", Message: "must be > 0 when resume is enabled"}
+	}
+
+	return nil
+}
+
+// Validate checks if the ChunkedConfig is valid.
+func (c *ChunkedConfig) Validate() error {
+	// Either data, dataFile, or ndjsonItems must be specified
+	hasData := c.Data != ""
+	hasDataFile := c.DataFile != ""
+	hasNDJSON := len(c.NDJSONItems) > 0
+
+	if !hasData && !hasDataFile && !hasNDJSON {
+		return &ValidationError{Field: "chunked", Message: "one of data, dataFile, or ndjsonItems is required"}
+	}
+
+	// Data and dataFile are mutually exclusive
+	if hasData && hasDataFile {
+		return &ValidationError{Field: "chunked", Message: "data and dataFile are mutually exclusive"}
+	}
+
+	// Validate chunk size
+	if c.ChunkSize < 0 {
+		return &ValidationError{Field: "chunked.chunkSize", Message: "must be >= 0"}
+	}
+
+	// Validate chunk delay
+	if c.ChunkDelay < 0 {
+		return &ValidationError{Field: "chunked.chunkDelay", Message: "must be >= 0"}
 	}
 
 	return nil

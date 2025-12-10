@@ -424,3 +424,8 @@ func (s *Server) RegisterStatefulResource(cfg *config.StatefulResourceConfig) er
 		SeedData:    cfg.SeedData,
 	})
 }
+
+// Handler returns the request handler (for admin API use).
+func (s *Server) Handler() *Handler {
+	return s.handler
+}

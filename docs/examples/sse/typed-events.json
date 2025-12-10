@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "mocks": [
+    {
+      "id": "typed-events",
+      "name": "Typed SSE Events",
+      "description": "SSE with named event types for client-side filtering",
+      "matcher": {
+        "method": "GET",
+        "path": "/notifications"
+      },
+      "sse": {
+        "events": [
+          { "type": "message", "data": "Welcome to notifications!", "id": "1" },
+          { "type": "alert", "data": "{\"level\": \"warning\", \"message\": \"System update scheduled\"}", "id": "2" },
+          { "type": "update", "data": "{\"status\": \"online\", \"users\": 42}", "id": "3" },
+          { "type": "heartbeat", "data": "ping", "id": "4" }
+        ],
+        "timing": {
+          "fixedDelay": 500
+        },
+        "lifecycle": {
+          "keepaliveInterval": 30,
+          "maxEvents": 4
+        },
+        "resume": {
+          "enabled": true,
+          "bufferSize": 100
+        }
+      },
+      "enabled": true
+    }
+  ]
+}
