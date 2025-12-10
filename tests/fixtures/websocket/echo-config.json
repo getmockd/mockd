@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "name": "WebSocket Echo Test",
+  "mocks": [],
+  "websocketEndpoints": [
+    {
+      "path": "/ws/echo",
+      "echoMode": true,
+      "maxMessageSize": 65536
+    }
+  ]
+}

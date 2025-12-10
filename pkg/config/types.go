@@ -310,6 +310,104 @@ type MockCollection struct {
 	ServerConfig *ServerConfiguration `json:"serverConfig,omitempty"`
 	// StatefulResources defines stateful CRUD resources
 	StatefulResources []*StatefulResourceConfig `json:"statefulResources,omitempty"`
+	// WebSocketEndpoints defines WebSocket endpoints
+	WebSocketEndpoints []*WebSocketEndpointConfig `json:"websocketEndpoints,omitempty"`
+}
+
+// WebSocketEndpointConfig defines configuration for a WebSocket endpoint.
+type WebSocketEndpointConfig struct {
+	// Path is the URL path for WebSocket upgrade (e.g., "/ws/chat")
+	Path string `json:"path"`
+	// Subprotocols lists supported subprotocols for negotiation
+	Subprotocols []string `json:"subprotocols,omitempty"`
+	// RequireSubprotocol rejects connections without a matching subprotocol
+	RequireSubprotocol bool `json:"requireSubprotocol,omitempty"`
+	// Matchers contains message matching rules for conditional responses
+	Matchers []*WSMatcherConfig `json:"matchers,omitempty"`
+	// DefaultResponse is sent when no matcher matches
+	DefaultResponse *WSMessageResponse `json:"defaultResponse,omitempty"`
+	// Scenario defines a scripted message sequence
+	Scenario *WSScenarioConfig `json:"scenario,omitempty"`
+	// Heartbeat configures ping/pong keepalive
+	Heartbeat *WSHeartbeatConfig `json:"heartbeat,omitempty"`
+	// MaxMessageSize is the maximum message size in bytes (default: 65536)
+	MaxMessageSize int64 `json:"maxMessageSize,omitempty"`
+	// IdleTimeout closes connections after inactivity (e.g., "5m")
+	IdleTimeout string `json:"idleTimeout,omitempty"`
+	// MaxConnections limits concurrent connections (default: 0 = unlimited)
+	MaxConnections int `json:"maxConnections,omitempty"`
+	// EchoMode enables automatic echo of received messages
+	EchoMode *bool `json:"echoMode,omitempty"`
+}
+
+// WSMatcherConfig defines a WebSocket message matcher.
+type WSMatcherConfig struct {
+	// Match defines the matching criteria
+	Match *WSMatchCriteria `json:"match"`
+	// Response is the response to send when matched
+	Response *WSMessageResponse `json:"response,omitempty"`
+	// NoResponse if true, matches but doesn't respond
+	NoResponse bool `json:"noResponse,omitempty"`
+}
+
+// WSMatchCriteria defines how to match a WebSocket message.
+type WSMatchCriteria struct {
+	// Type is the match type: "exact", "regex", "json", "contains", "prefix", "suffix"
+	Type string `json:"type"`
+	// Value is the match value
+	Value string `json:"value,omitempty"`
+	// Path is the JSON path for json type (e.g., "$.action")
+	Path string `json:"path,omitempty"`
+	// MessageType restricts to specific message types: "text", "binary"
+	MessageType string `json:"messageType,omitempty"`
+}
+
+// WSMessageResponse defines a response to send for a matched message.
+type WSMessageResponse struct {
+	// Type is the message type: "text", "binary", "json"
+	Type string `json:"type"`
+	// Value is the response content
+	Value interface{} `json:"value"`
+	// Delay is the wait time before sending (e.g., "500ms")
+	Delay string `json:"delay,omitempty"`
+}
+
+// WSScenarioConfig defines a scripted WebSocket message sequence.
+type WSScenarioConfig struct {
+	// Name is the scenario name
+	Name string `json:"name"`
+	// Steps is the ordered list of scenario steps
+	Steps []*WSScenarioStepConfig `json:"steps"`
+	// Loop restarts the scenario on completion
+	Loop bool `json:"loop,omitempty"`
+	// ResetOnReconnect resets to step 0 on reconnect (default: true)
+	ResetOnReconnect *bool `json:"resetOnReconnect,omitempty"`
+}
+
+// WSScenarioStepConfig defines a single step in a WebSocket scenario.
+type WSScenarioStepConfig struct {
+	// Type is the step type: "send", "expect", "wait"
+	Type string `json:"type"`
+	// Message is the message to send (for "send" type)
+	Message *WSMessageResponse `json:"message,omitempty"`
+	// Match is the expected message pattern (for "expect" type)
+	Match *WSMatchCriteria `json:"match,omitempty"`
+	// Duration is the wait duration (for "wait" type, e.g., "1s")
+	Duration string `json:"duration,omitempty"`
+	// Timeout is the maximum wait for "expect" (default: "30s")
+	Timeout string `json:"timeout,omitempty"`
+	// Optional can be skipped if timeout reached
+	Optional bool `json:"optional,omitempty"`
+}
+
+// WSHeartbeatConfig configures WebSocket ping/pong keepalive.
+type WSHeartbeatConfig struct {
+	// Enabled enables heartbeat pings
+	Enabled bool `json:"enabled"`
+	// Interval is the time between pings (e.g., "30s")
+	Interval string `json:"interval,omitempty"`
+	// Timeout is the maximum wait for pong response (e.g., "10s")
+	Timeout string `json:"timeout,omitempty"`
 }
 
 // StatefulResourceConfig defines configuration for a stateful CRUD resource.

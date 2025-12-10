@@ -332,6 +332,15 @@ func (s *Server) LoadConfig(path string, replace bool) error {
 		}
 	}
 
+	// Load WebSocket endpoints
+	for _, ws := range collection.WebSocketEndpoints {
+		if ws != nil {
+			if err := s.RegisterWebSocketEndpoint(ws); err != nil {
+				return fmt.Errorf("failed to register WebSocket endpoint %s: %w", ws.Path, err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -428,4 +437,9 @@ func (s *Server) RegisterStatefulResource(cfg *config.StatefulResourceConfig) er
 // Handler returns the request handler (for admin API use).
 func (s *Server) Handler() *Handler {
 	return s.handler
+}
+
+// RegisterWebSocketEndpoint registers a WebSocket endpoint from config.
+func (s *Server) RegisterWebSocketEndpoint(cfg *config.WebSocketEndpointConfig) error {
+	return s.handler.RegisterWebSocketEndpoint(cfg)
 }

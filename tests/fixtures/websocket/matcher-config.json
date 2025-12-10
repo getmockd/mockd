@@ -1,0 +1,29 @@
+{
+  "version": "1.0",
+  "name": "WebSocket Matcher Test",
+  "mocks": [],
+  "websocketEndpoints": [
+    {
+      "path": "/ws/chat",
+      "matchers": [
+        {
+          "match": {"type": "exact", "value": "ping"},
+          "response": {"type": "text", "value": "pong"}
+        },
+        {
+          "match": {"type": "regex", "value": "^hello.*"},
+          "response": {"type": "text", "value": "hi there!"}
+        },
+        {
+          "match": {"type": "json", "path": "$.type", "value": "subscribe"},
+          "response": {"type": "json", "value": {"status": "subscribed"}}
+        },
+        {
+          "match": {"type": "contains", "value": "help"},
+          "response": {"type": "text", "value": "How can I assist you?"}
+        }
+      ],
+      "defaultResponse": {"type": "text", "value": "unknown command"}
+    }
+  ]
+}
