@@ -106,6 +106,24 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /mocks/{id}/sse/connections", a.handleCloseMockSSEConnections)
 	mux.HandleFunc("GET /mocks/{id}/sse/buffer", a.handleGetMockSSEBuffer)
 	mux.HandleFunc("DELETE /mocks/{id}/sse/buffer", a.handleClearMockSSEBuffer)
+
+	// WebSocket connection management
+	mux.HandleFunc("GET /admin/ws/connections", a.handleListWSConnections)
+	mux.HandleFunc("GET /admin/ws/connections/{id}", a.handleGetWSConnection)
+	mux.HandleFunc("DELETE /admin/ws/connections/{id}", a.handleDisconnectWS)
+	mux.HandleFunc("POST /admin/ws/connections/{id}/send", a.handleSendWSMessage)
+	mux.HandleFunc("POST /admin/ws/connections/{id}/groups", a.handleJoinWSGroup)
+	mux.HandleFunc("DELETE /admin/ws/connections/{id}/groups", a.handleLeaveWSGroup)
+
+	// WebSocket endpoint management
+	mux.HandleFunc("GET /admin/ws/endpoints", a.handleListWSEndpoints)
+	mux.HandleFunc("GET /admin/ws/endpoints/{path...}", a.handleGetWSEndpoint)
+
+	// WebSocket broadcast
+	mux.HandleFunc("POST /admin/ws/broadcast", a.handleWSBroadcast)
+
+	// WebSocket statistics
+	mux.HandleFunc("GET /admin/ws/stats", a.handleWSStats)
 }
 
 // handleConvertRecordings wraps the convert handler to pass the server.

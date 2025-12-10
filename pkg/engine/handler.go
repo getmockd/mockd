@@ -11,6 +11,7 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/sse"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/websocket"
 )
 
 // MaxStatefulBodySize is the maximum allowed request body size for stateful POST/PUT operations (1MB).
@@ -23,6 +24,7 @@ type Handler struct {
 	logger         RequestLogger
 	sseHandler     *sse.SSEHandler
 	chunkedHandler *sse.ChunkedHandler
+	wsManager      *websocket.ConnectionManager
 }
 
 // NewHandler creates a new Handler.
@@ -31,6 +33,7 @@ func NewHandler(store storage.MockStore) *Handler {
 		store:          store,
 		sseHandler:     sse.NewSSEHandler(100), // 100 max SSE connections
 		chunkedHandler: sse.NewChunkedHandler(),
+		wsManager:      websocket.NewConnectionManager(),
 	}
 }
 
@@ -47,6 +50,12 @@ func (h *Handler) SetStatefulStore(store *stateful.StateStore) {
 // ServeHTTP implements the http.Handler interface.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
+
+	// Check for WebSocket upgrade first
+	if websocket.IsWebSocketRequest(r) {
+		h.handleWebSocket(w, r)
+		return
+	}
 
 	// Capture request body for logging
 	var bodyBytes []byte
@@ -476,4 +485,35 @@ func (h *Handler) SSEHandler() *sse.SSEHandler {
 // ChunkedHandler returns the chunked transfer handler.
 func (h *Handler) ChunkedHandler() *sse.ChunkedHandler {
 	return h.chunkedHandler
+}
+
+// WebSocketManager returns the WebSocket connection manager.
+func (h *Handler) WebSocketManager() *websocket.ConnectionManager {
+	return h.wsManager
+}
+
+// handleWebSocket handles WebSocket upgrade requests.
+func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Find matching endpoint
+	endpoint := h.wsManager.GetEndpoint(r.URL.Path)
+	if endpoint == nil {
+		http.Error(w, `{"error": "websocket_endpoint_not_found", "path": "`+r.URL.Path+`"}`, http.StatusNotFound)
+		return
+	}
+
+	// Handle upgrade
+	if err := endpoint.HandleUpgrade(w, r); err != nil {
+		// Error already written to response by HandleUpgrade
+		return
+	}
+}
+
+// RegisterWebSocketEndpoint registers a WebSocket endpoint from config.
+func (h *Handler) RegisterWebSocketEndpoint(cfg *config.WebSocketEndpointConfig) error {
+	endpoint, err := websocket.EndpointFromConfig(cfg)
+	if err != nil {
+		return err
+	}
+	h.wsManager.RegisterEndpoint(endpoint)
+	return nil
 }
