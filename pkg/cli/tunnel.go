@@ -58,22 +58,25 @@ func runTunnelStart(args []string) error {
        mockd tunnel status
        mockd tunnel stop
 
-Expose local mocks via the cloud relay.
+Expose local mocks via the cloud relay. The tunnel creates a public URL that
+forwards requests to your local mock server.
 
 Flags:
   -p, --port        HTTP server port (default: 8080)
       --admin-port  Admin API port (default: 9090)
   -c, --config      Path to mock configuration file
-      --relay       Relay server URL
+      --relay       Relay server URL (default: wss://relay.mockd.io/ws)
       --token       Authentication token (or set MOCKD_TOKEN env var)
   -s, --subdomain   Requested subdomain (auto-assigned if empty)
       --domain      Custom domain (must be verified in cloud dashboard)
-      --auth-token  Require this token for incoming requests
-      --auth-basic  Require Basic Auth for incoming requests (user:pass)
+
+Authentication (optional - protect incoming requests):
+      --auth-token  Require this token in X-Auth-Token header
+      --auth-basic  Require HTTP Basic Auth (format: user:pass)
       --allow-ips   Allow only these IPs (comma-separated CIDR or IP)
 
 Subcommands:
-  status    Show current tunnel status
+  status    Show current tunnel status and metrics
   stop      Stop the running tunnel
 
 Examples:
@@ -86,8 +89,23 @@ Examples:
   # Start tunnel with config file
   mockd tunnel --config mocks.json --token YOUR_TOKEN
 
+  # Start tunnel with custom domain (must verify in cloud dashboard first)
+  mockd tunnel --token YOUR_TOKEN --domain mocks.acme.com
+
+  # Protect tunnel with token authentication
+  mockd tunnel --token YOUR_TOKEN --auth-token secret123
+
+  # Protect tunnel with HTTP Basic Auth
+  mockd tunnel --token YOUR_TOKEN --auth-basic admin:password
+
+  # Restrict tunnel access by IP
+  mockd tunnel --token YOUR_TOKEN --allow-ips "10.0.0.0/8,192.168.1.0/24"
+
   # Check tunnel status
   mockd tunnel status
+
+Environment Variables:
+  MOCKD_TOKEN       Authentication token (alternative to --token flag)
 `)
 	}
 
