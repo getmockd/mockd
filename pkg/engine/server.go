@@ -306,6 +306,23 @@ func (s *Server) LoadConfig(path string, replace bool) error {
 		return err
 	}
 
+	return s.loadCollection(collection, replace)
+}
+
+// LoadConfigFromBytes loads mock configurations from JSON bytes and adds them to the server.
+// If replace is true, existing mocks are cleared first.
+func (s *Server) LoadConfigFromBytes(data []byte, replace bool) error {
+	collection, err := config.ParseJSON(data)
+	if err != nil {
+		return err
+	}
+
+	return s.loadCollection(collection, replace)
+}
+
+// loadCollection is a helper that loads a collection into the server.
+func (s *Server) loadCollection(collection *config.MockCollection, replace bool) error {
+
 	if replace {
 		s.store.Clear()
 	}
