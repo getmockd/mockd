@@ -21,10 +21,13 @@ type Client struct {
 	subdomain string
 
 	// Metrics
-	requestsServed atomic.Int64
-	bytesIn        atomic.Int64
-	bytesOut       atomic.Int64
-	connectedAt    time.Time
+	requestsServed    atomic.Int64
+	bytesIn           atomic.Int64
+	bytesOut          atomic.Int64
+	totalLatencyNanos atomic.Int64
+	minLatencyNanos   atomic.Int64
+	maxLatencyNanos   atomic.Int64
+	connectedAt       time.Time
 
 	// State
 	connected  atomic.Bool
@@ -169,10 +172,22 @@ func (c *Client) Stats() *TunnelStats {
 	connectedAt := c.connectedAt
 	c.mu.RUnlock()
 
+	reqs := c.requestsServed.Load()
+	totalLatency := c.totalLatencyNanos.Load()
+
+	var avgLatency time.Duration
+	if reqs > 0 {
+		avgLatency = time.Duration(totalLatency / reqs)
+	}
+
 	return &TunnelStats{
-		RequestsServed: c.requestsServed.Load(),
+		RequestsServed: reqs,
 		BytesIn:        c.bytesIn.Load(),
 		BytesOut:       c.bytesOut.Load(),
+		TotalLatency:   time.Duration(totalLatency),
+		AvgLatency:     avgLatency,
+		MinLatency:     time.Duration(c.minLatencyNanos.Load()),
+		MaxLatency:     time.Duration(c.maxLatencyNanos.Load()),
 		ConnectedAt:    connectedAt,
 		Reconnects:     int(c.reconnects.Load()),
 		IsConnected:    c.connected.Load(),
@@ -184,6 +199,10 @@ type TunnelStats struct {
 	RequestsServed int64
 	BytesIn        int64
 	BytesOut       int64
+	TotalLatency   time.Duration
+	AvgLatency     time.Duration
+	MinLatency     time.Duration
+	MaxLatency     time.Duration
 	ConnectedAt    time.Time
 	Reconnects     int
 	IsConnected    bool
@@ -195,6 +214,21 @@ func (s *TunnelStats) Uptime() time.Duration {
 		return 0
 	}
 	return time.Since(s.ConnectedAt)
+}
+
+// AvgLatencyMs returns average latency in milliseconds.
+func (s *TunnelStats) AvgLatencyMs() float64 {
+	return float64(s.AvgLatency.Nanoseconds()) / 1e6
+}
+
+// MinLatencyMs returns minimum latency in milliseconds.
+func (s *TunnelStats) MinLatencyMs() float64 {
+	return float64(s.MinLatency.Nanoseconds()) / 1e6
+}
+
+// MaxLatencyMs returns maximum latency in milliseconds.
+func (s *TunnelStats) MaxLatencyMs() float64 {
+	return float64(s.MaxLatency.Nanoseconds()) / 1e6
 }
 
 // readPump reads messages from the WebSocket connection.
@@ -261,6 +295,8 @@ func (c *Client) handleMessage(ctx context.Context, msg *TunnelMessage) {
 
 // handleRequest handles an incoming HTTP request.
 func (c *Client) handleRequest(ctx context.Context, req *TunnelMessage) {
+	startTime := time.Now()
+
 	// Call request callback
 	if c.cfg.OnRequest != nil {
 		c.cfg.OnRequest(req.Method, req.Path)
@@ -280,6 +316,37 @@ func (c *Client) handleRequest(ctx context.Context, req *TunnelMessage) {
 	}
 
 	c.requestsServed.Add(1)
+
+	// Record latency
+	c.recordLatency(time.Since(startTime))
+}
+
+// recordLatency records a request latency measurement.
+func (c *Client) recordLatency(d time.Duration) {
+	nanos := d.Nanoseconds()
+	c.totalLatencyNanos.Add(nanos)
+
+	// Update min latency (using CAS loop)
+	for {
+		current := c.minLatencyNanos.Load()
+		if current != 0 && current <= nanos {
+			break
+		}
+		if c.minLatencyNanos.CompareAndSwap(current, nanos) {
+			break
+		}
+	}
+
+	// Update max latency (using CAS loop)
+	for {
+		current := c.maxLatencyNanos.Load()
+		if current >= nanos {
+			break
+		}
+		if c.maxLatencyNanos.CompareAndSwap(current, nanos) {
+			break
+		}
+	}
 }
 
 // sendPong sends a pong message.

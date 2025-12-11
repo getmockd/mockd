@@ -225,6 +225,9 @@ Examples:
 	fmt.Printf("  Bytes in: %d\n", stats.BytesIn)
 	fmt.Printf("  Bytes out: %d\n", stats.BytesOut)
 	fmt.Printf("  Uptime: %s\n", stats.Uptime())
+	if stats.RequestsServed > 0 {
+		fmt.Printf("  Avg latency: %.2f ms\n", stats.AvgLatencyMs())
+	}
 
 	// Stop admin API
 	if err := adminAPI.Stop(); err != nil {
