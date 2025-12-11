@@ -62,7 +62,7 @@ _mockd() {
     local cur prev words cword
     _init_completion || return
 
-    local commands="start add list get delete import export logs config completion version help"
+    local commands="start tunnel add list get delete import export logs config completion version help"
 
     if [[ ${cword} -eq 1 ]]; then
         COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
@@ -72,6 +72,9 @@ _mockd() {
     case ${words[1]} in
         start)
             COMPREPLY=($(compgen -W "--port -p --admin-port -a --config -c --https-port --read-timeout --write-timeout --max-log-entries --auto-cert --help" -- "${cur}"))
+            ;;
+        tunnel)
+            COMPREPLY=($(compgen -W "status stop --port -p --admin-port --config -c --relay --token --subdomain -s --domain --help" -- "${cur}"))
             ;;
         add)
             COMPREPLY=($(compgen -W "--method -m --path --status -s --body -b --body-file --header -H --match-header --match-query --name -n --priority --delay --admin-url --json --help" -- "${cur}"))
@@ -112,6 +115,7 @@ _mockd() {
     local -a commands
     commands=(
         'start:Start the mock server'
+        'tunnel:Expose local mocks via cloud relay'
         'add:Add a new mock endpoint'
         'list:List all configured mocks'
         'get:Get details of a specific mock'
@@ -141,6 +145,20 @@ _mockd() {
                 '--write-timeout[Write timeout in seconds]:seconds:' \
                 '--max-log-entries[Maximum request log entries]:count:' \
                 '--auto-cert[Auto-generate TLS certificate]'
+            ;;
+        tunnel)
+            if (( CURRENT == 3 )); then
+                _values 'subcommand' 'status[Show tunnel status]' 'stop[Stop the tunnel]'
+            else
+                _arguments \
+                    '(-p --port)'{-p,--port}'[HTTP server port]:port:' \
+                    '--admin-port[Admin API port]:port:' \
+                    '(-c --config)'{-c,--config}'[Path to mock configuration file]:file:_files' \
+                    '--relay[Relay server URL]:url:' \
+                    '--token[Authentication token]:token:' \
+                    '(-s --subdomain)'{-s,--subdomain}'[Requested subdomain]:subdomain:' \
+                    '--domain[Custom domain]:domain:'
+            fi
             ;;
         add)
             _arguments \
@@ -209,6 +227,7 @@ complete -c mockd -f
 
 # Commands
 complete -c mockd -n '__fish_use_subcommand' -a 'start' -d 'Start the mock server'
+complete -c mockd -n '__fish_use_subcommand' -a 'tunnel' -d 'Expose local mocks via cloud relay'
 complete -c mockd -n '__fish_use_subcommand' -a 'add' -d 'Add a new mock endpoint'
 complete -c mockd -n '__fish_use_subcommand' -a 'list' -d 'List all configured mocks'
 complete -c mockd -n '__fish_use_subcommand' -a 'get' -d 'Get details of a specific mock'
@@ -230,6 +249,17 @@ complete -c mockd -n '__fish_seen_subcommand_from start' -l read-timeout -d 'Rea
 complete -c mockd -n '__fish_seen_subcommand_from start' -l write-timeout -d 'Write timeout in seconds'
 complete -c mockd -n '__fish_seen_subcommand_from start' -l max-log-entries -d 'Maximum request log entries'
 complete -c mockd -n '__fish_seen_subcommand_from start' -l auto-cert -d 'Auto-generate TLS certificate'
+
+# tunnel options
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -a 'status' -d 'Show tunnel status'
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -a 'stop' -d 'Stop the tunnel'
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -s p -l port -d 'HTTP server port'
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -l admin-port -d 'Admin API port'
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -s c -l config -d 'Path to mock configuration file' -r -F
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -l relay -d 'Relay server URL'
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -l token -d 'Authentication token'
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -s s -l subdomain -d 'Requested subdomain'
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -l domain -d 'Custom domain'
 
 # add options
 complete -c mockd -n '__fish_seen_subcommand_from add' -s m -l method -d 'HTTP method to match' -a 'GET POST PUT DELETE PATCH HEAD OPTIONS'
