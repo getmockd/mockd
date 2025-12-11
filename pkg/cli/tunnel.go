@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/getmockd/mockd/internal/cliconfig"
@@ -47,6 +48,11 @@ func runTunnelStart(args []string) error {
 	fs.StringVar(subdomain, "s", "", "Requested subdomain (shorthand)")
 	domain := fs.String("domain", "", "Custom domain (must be verified)")
 
+	// Authentication for incoming requests (optional protection)
+	authToken := fs.String("auth-token", "", "Require this token for incoming requests")
+	authBasic := fs.String("auth-basic", "", "Require Basic Auth (format: user:pass)")
+	allowIPs := fs.String("allow-ips", "", "Allow only these IPs (comma-separated CIDR or IP)")
+
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd tunnel [flags]
        mockd tunnel status
@@ -62,6 +68,9 @@ Flags:
       --token       Authentication token (or set MOCKD_TOKEN env var)
   -s, --subdomain   Requested subdomain (auto-assigned if empty)
       --domain      Custom domain (must be verified in cloud dashboard)
+      --auth-token  Require this token for incoming requests
+      --auth-basic  Require Basic Auth for incoming requests (user:pass)
+      --allow-ips   Allow only these IPs (comma-separated CIDR or IP)
 
 Subcommands:
   status    Show current tunnel status
@@ -137,6 +146,26 @@ Examples:
 		WithToken(*token).
 		WithSubdomain(*subdomain).
 		WithCustomDomain(*domain)
+
+	// Configure request authentication if specified
+	if *authToken != "" {
+		tunnelCfg.WithTokenAuth(*authToken)
+		fmt.Println("Request authentication: token required")
+	} else if *authBasic != "" {
+		parts := strings.SplitN(*authBasic, ":", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid --auth-basic format, expected user:pass")
+		}
+		tunnelCfg.WithBasicAuth(parts[0], parts[1])
+		fmt.Println("Request authentication: Basic Auth required")
+	} else if *allowIPs != "" {
+		ips := strings.Split(*allowIPs, ",")
+		for i := range ips {
+			ips[i] = strings.TrimSpace(ips[i])
+		}
+		tunnelCfg.WithIPAuth(ips)
+		fmt.Printf("Request authentication: IP whitelist (%d entries)\n", len(ips))
+	}
 
 	tunnelCfg.OnConnect = func(publicURL string) {
 		fmt.Printf("\nTunnel connected!\n")

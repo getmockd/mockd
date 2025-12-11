@@ -14,6 +14,24 @@ const (
 	DefaultRequestTimeout  = 30 * time.Second
 )
 
+// AuthConfig holds authentication configuration for incoming tunnel requests.
+type AuthConfig struct {
+	// Type is the authentication type: none, token, basic, ip
+	Type string
+
+	// Token is the required token for token auth.
+	Token string
+
+	// Username is the username for basic auth.
+	Username string
+
+	// Password is the password for basic auth.
+	Password string
+
+	// AllowedIPs is a list of allowed IPs/CIDRs for IP auth.
+	AllowedIPs []string
+}
+
 // Config holds tunnel client configuration.
 type Config struct {
 	// RelayURL is the WebSocket URL of the relay server.
@@ -29,6 +47,10 @@ type Config struct {
 	// CustomDomain is an optional verified custom domain to use.
 	// If set, this takes precedence over Subdomain.
 	CustomDomain string
+
+	// Auth is the authentication configuration for incoming requests.
+	// If nil, no authentication is required.
+	Auth *AuthConfig
 
 	// ReconnectDelay is the initial delay before reconnecting after disconnect.
 	ReconnectDelay time.Duration
@@ -103,5 +125,39 @@ func (c *Config) WithCustomDomain(domain string) *Config {
 // WithRelayURL returns a copy of the config with the relay URL set.
 func (c *Config) WithRelayURL(url string) *Config {
 	c.RelayURL = url
+	return c
+}
+
+// WithAuth returns a copy of the config with authentication settings.
+func (c *Config) WithAuth(auth *AuthConfig) *Config {
+	c.Auth = auth
+	return c
+}
+
+// WithTokenAuth returns a copy of the config with token authentication.
+func (c *Config) WithTokenAuth(token string) *Config {
+	c.Auth = &AuthConfig{
+		Type:  "token",
+		Token: token,
+	}
+	return c
+}
+
+// WithBasicAuth returns a copy of the config with basic authentication.
+func (c *Config) WithBasicAuth(username, password string) *Config {
+	c.Auth = &AuthConfig{
+		Type:     "basic",
+		Username: username,
+		Password: password,
+	}
+	return c
+}
+
+// WithIPAuth returns a copy of the config with IP whitelist authentication.
+func (c *Config) WithIPAuth(allowedIPs []string) *Config {
+	c.Auth = &AuthConfig{
+		Type:       "ip",
+		AllowedIPs: allowedIPs,
+	}
 	return c
 }

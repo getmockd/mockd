@@ -74,7 +74,7 @@ _mockd() {
             COMPREPLY=($(compgen -W "--port -p --admin-port -a --config -c --https-port --read-timeout --write-timeout --max-log-entries --auto-cert --help" -- "${cur}"))
             ;;
         tunnel)
-            COMPREPLY=($(compgen -W "status stop --port -p --admin-port --config -c --relay --token --subdomain -s --domain --help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "status stop --port -p --admin-port --config -c --relay --token --subdomain -s --domain --auth-token --auth-basic --allow-ips --help" -- "${cur}"))
             ;;
         add)
             COMPREPLY=($(compgen -W "--method -m --path --status -s --body -b --body-file --header -H --match-header --match-query --name -n --priority --delay --admin-url --json --help" -- "${cur}"))
@@ -157,7 +157,10 @@ _mockd() {
                     '--relay[Relay server URL]:url:' \
                     '--token[Authentication token]:token:' \
                     '(-s --subdomain)'{-s,--subdomain}'[Requested subdomain]:subdomain:' \
-                    '--domain[Custom domain]:domain:'
+                    '--domain[Custom domain]:domain:' \
+                    '--auth-token[Require token for incoming requests]:token:' \
+                    '--auth-basic[Require Basic Auth (user:pass)]:credentials:' \
+                    '--allow-ips[Allow only these IPs (CIDR list)]:ips:'
             fi
             ;;
         add)
@@ -260,6 +263,9 @@ complete -c mockd -n '__fish_seen_subcommand_from tunnel' -l relay -d 'Relay ser
 complete -c mockd -n '__fish_seen_subcommand_from tunnel' -l token -d 'Authentication token'
 complete -c mockd -n '__fish_seen_subcommand_from tunnel' -s s -l subdomain -d 'Requested subdomain'
 complete -c mockd -n '__fish_seen_subcommand_from tunnel' -l domain -d 'Custom domain'
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -l auth-token -d 'Require token for incoming requests'
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -l auth-basic -d 'Require Basic Auth (user:pass)'
+complete -c mockd -n '__fish_seen_subcommand_from tunnel' -l allow-ips -d 'Allow only these IPs (CIDR list)'
 
 # add options
 complete -c mockd -n '__fish_seen_subcommand_from add' -s m -l method -d 'HTTP method to match' -a 'GET POST PUT DELETE PATCH HEAD OPTIONS'
