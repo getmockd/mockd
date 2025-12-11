@@ -7,6 +7,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Common errors for configuration loading/saving.
@@ -14,10 +17,12 @@ var (
 	ErrFileNotFound     = errors.New("configuration file not found")
 	ErrPermissionDenied = errors.New("permission denied")
 	ErrInvalidJSON      = errors.New("invalid JSON syntax")
+	ErrInvalidYAML      = errors.New("invalid YAML syntax")
 	ErrEmptyFile        = errors.New("configuration file is empty")
 )
 
-// LoadFromFile reads a MockCollection from a JSON file.
+// LoadFromFile reads a MockCollection from a JSON or YAML file.
+// The format is auto-detected based on file extension (.yaml, .yml for YAML, otherwise JSON).
 // Returns wrapped errors for common failure cases.
 func LoadFromFile(path string) (*MockCollection, error) {
 	// Check if file exists
@@ -56,7 +61,13 @@ func LoadFromFile(path string) (*MockCollection, error) {
 		return nil, fmt.Errorf("%w: %s", ErrEmptyFile, path)
 	}
 
-	// Validate JSON syntax first
+	// Detect format based on file extension
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".yaml" || ext == ".yml" {
+		return ParseYAML(data)
+	}
+
+	// Default to JSON
 	if !json.Valid(data) {
 		return nil, fmt.Errorf("%w in file: %s", ErrInvalidJSON, path)
 	}
@@ -64,15 +75,24 @@ func LoadFromFile(path string) (*MockCollection, error) {
 	return ParseJSON(data)
 }
 
-// SaveToFile writes a MockCollection to a JSON file using atomic rename.
+// SaveToFile writes a MockCollection to a file using atomic rename.
+// The format is determined by file extension (.yaml, .yml for YAML, otherwise JSON).
 // Creates parent directories if they don't exist.
 func SaveToFile(path string, collection *MockCollection) error {
 	if collection == nil {
 		return errors.New("collection cannot be nil")
 	}
 
-	// Convert to JSON
-	data, err := ToJSON(collection)
+	// Determine format based on extension
+	ext := strings.ToLower(filepath.Ext(path))
+	var data []byte
+	var err error
+
+	if ext == ".yaml" || ext == ".yml" {
+		data, err = ToYAML(collection)
+	} else {
+		data, err = ToJSON(collection)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to marshal collection: %w", err)
 	}
@@ -115,6 +135,22 @@ func ParseJSON(data []byte) (*MockCollection, error) {
 	return &collection, nil
 }
 
+// ParseYAML parses YAML bytes into a MockCollection with validation.
+func ParseYAML(data []byte) (*MockCollection, error) {
+	var collection MockCollection
+
+	if err := yaml.Unmarshal(data, &collection); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidYAML, err)
+	}
+
+	// Validate the collection
+	if err := collection.Validate(); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	return &collection, nil
+}
+
 // ToJSON marshals a MockCollection to formatted JSON bytes.
 func ToJSON(collection *MockCollection) ([]byte, error) {
 	if collection == nil {
@@ -128,6 +164,20 @@ func ToJSON(collection *MockCollection) ([]byte, error) {
 
 	// Add trailing newline for better file formatting
 	data = append(data, '\n')
+
+	return data, nil
+}
+
+// ToYAML marshals a MockCollection to YAML bytes.
+func ToYAML(collection *MockCollection) ([]byte, error) {
+	if collection == nil {
+		return nil, errors.New("collection cannot be nil")
+	}
+
+	data, err := yaml.Marshal(collection)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal to YAML: %w", err)
+	}
 
 	return data, nil
 }

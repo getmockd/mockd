@@ -28,6 +28,10 @@ func RunStart(args []string) error {
 	configFile := fs.String("config", "", "Path to mock configuration file")
 	fs.StringVar(configFile, "c", "", "Path to mock configuration file (shorthand)")
 
+	loadDir := fs.String("load", "", "Load mocks from directory")
+	watch := fs.Bool("watch", false, "Watch for file changes (with --load)")
+	validate := fs.Bool("validate", false, "Validate files before serving (with --load)")
+
 	httpsPort := fs.Int("https-port", cliconfig.DefaultHTTPSPort, "HTTPS server port (0 = disabled)")
 	readTimeout := fs.Int("read-timeout", cliconfig.DefaultReadTimeout, "Read timeout in seconds")
 	writeTimeout := fs.Int("write-timeout", cliconfig.DefaultWriteTimeout, "Write timeout in seconds")
@@ -43,6 +47,9 @@ Flags:
   -p, --port          HTTP server port (default: 8080)
   -a, --admin-port    Admin API port (default: 9090)
   -c, --config        Path to mock configuration file
+      --load          Load mocks from directory
+      --watch         Watch for file changes (with --load)
+      --validate      Validate files before serving (with --load)
       --https-port    HTTPS server port (0 = disabled)
       --read-timeout  Read timeout in seconds (default: 30)
       --write-timeout Write timeout in seconds (default: 30)
@@ -58,11 +65,25 @@ Examples:
 
   # Start with HTTPS enabled
   mockd start --https-port 8443
+
+  # Load mocks from directory
+  mockd start --load ./mocks/
+
+  # Load with hot reload
+  mockd start --load ./mocks/ --watch
+
+  # Validate mocks before serving
+  mockd start --load ./mocks/ --validate
 `)
 	}
 
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	// Validate --watch requires --load
+	if *watch && *loadDir == "" {
+		return fmt.Errorf("--watch requires --load to be specified")
 	}
 
 	// Check for port conflicts
@@ -100,9 +121,62 @@ Examples:
 		}
 	}
 
+	// Load mocks from directory if specified
+	var dirLoader *config.DirectoryLoader
+	if *loadDir != "" {
+		dirLoader = config.NewDirectoryLoader(*loadDir)
+
+		// Validate files if requested
+		if *validate {
+			errors, err := dirLoader.Validate()
+			if err != nil {
+				return fmt.Errorf("failed to validate directory: %w", err)
+			}
+			if len(errors) > 0 {
+				fmt.Fprintf(os.Stderr, "Validation errors:\n")
+				for _, e := range errors {
+					fmt.Fprintf(os.Stderr, "  • %s\n", e.Error())
+				}
+				return fmt.Errorf("validation failed with %d errors", len(errors))
+			}
+		}
+
+		// Load mocks
+		result, err := dirLoader.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load from directory: %w", err)
+		}
+
+		// Report any non-fatal errors
+		if len(result.Errors) > 0 {
+			fmt.Fprintf(os.Stderr, "Warnings while loading:\n")
+			for _, e := range result.Errors {
+				fmt.Fprintf(os.Stderr, "  • %s\n", e.Error())
+			}
+		}
+
+		// Add loaded mocks to server
+		for _, mock := range result.Collection.Mocks {
+			if err := server.AddMock(mock); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to add mock %s: %v\n", mock.ID, err)
+			}
+		}
+
+		fmt.Printf("Loaded %d mocks from %d files in %s\n", len(result.Collection.Mocks), result.FileCount, *loadDir)
+	}
+
 	// Start the mock server
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("failed to start mock server: %w", err)
+	}
+
+	// Start file watcher if requested
+	var watcher *config.Watcher
+	if *watch && dirLoader != nil {
+		watcher = config.NewWatcher(dirLoader)
+		eventCh := watcher.Start()
+		go handleWatchEvents(eventCh, dirLoader, server)
+		fmt.Println("Watching for file changes...")
 	}
 
 	// Create and start the admin API
@@ -170,4 +244,32 @@ func waitForShutdown(server *engine.Server, adminAPI *admin.AdminAPI) {
 	}
 
 	fmt.Println("Server stopped")
+}
+
+// handleWatchEvents processes file change events from the watcher.
+func handleWatchEvents(eventCh <-chan config.WatchEvent, loader *config.DirectoryLoader, server *engine.Server) {
+	for event := range eventCh {
+		if event.Error != nil {
+			fmt.Fprintf(os.Stderr, "Watch error: %v\n", event.Error)
+			continue
+		}
+
+		fmt.Printf("File changed: %s (%s)\n", event.Path, event.Type)
+
+		// Reload the changed file
+		collection, err := loader.ReloadFile(event.Path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to reload %s: %v\n", event.Path, err)
+			continue
+		}
+
+		// Update mocks in server
+		for _, mock := range collection.Mocks {
+			if err := server.AddMock(mock); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to update mock %s: %v\n", mock.ID, err)
+			}
+		}
+
+		fmt.Printf("Reloaded %d mocks from %s\n", len(collection.Mocks), event.Path)
+	}
 }
