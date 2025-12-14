@@ -21,6 +21,22 @@ func DefaultConvertOptions() ConvertOptions {
 	}
 }
 
+// skipResponseHeaders are headers that should not be copied from recordings
+// as they are dynamically generated or managed by the server.
+var skipResponseHeaders = map[string]bool{
+	"Date":              true,
+	"Content-Length":    true,
+	"Transfer-Encoding": true,
+	"Connection":        true,
+	"Keep-Alive":        true,
+	"Server":            true,
+	"X-Powered-By":      true,
+	"Age":               true,
+	"Expires":           true,
+	"Last-Modified":     true,
+	"ETag":              true,
+}
+
 // ToMock converts a recording to a mock configuration.
 func ToMock(r *Recording, opts ConvertOptions) *config.MockConfiguration {
 	matcher := &config.RequestMatcher{
@@ -46,11 +62,17 @@ func ToMock(r *Recording, opts ConvertOptions) *config.MockConfiguration {
 	if len(r.Response.Headers) > 0 {
 		headers := make(map[string]string)
 		for key, values := range r.Response.Headers {
+			// Skip headers that shouldn't be static in mocks
+			if skipResponseHeaders[key] {
+				continue
+			}
 			if len(values) > 0 {
 				headers[key] = values[0]
 			}
 		}
-		response.Headers = headers
+		if len(headers) > 0 {
+			response.Headers = headers
+		}
 	}
 
 	now := time.Now()

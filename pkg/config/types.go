@@ -8,52 +8,54 @@ import (
 // MockConfiguration represents a single mock endpoint definition with its matching criteria and response specification.
 type MockConfiguration struct {
 	// ID is a unique identifier for the mock (UUID v4)
-	ID string `json:"id"`
+	ID string `json:"id" yaml:"id"`
 	// Name is a human-readable name for the mock
-	Name string `json:"name,omitempty"`
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	// Description is a longer description of the mock
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 	// Priority determines matching order - higher priority mocks match first when multiple could match
-	Priority int `json:"priority,omitempty"`
+	Priority int `json:"priority,omitempty" yaml:"priority,omitempty"`
 	// Matcher defines criteria for matching incoming requests
-	Matcher *RequestMatcher `json:"matcher"`
+	Matcher *RequestMatcher `json:"matcher" yaml:"matcher"`
 	// Response defines the response to return when matched (mutually exclusive with SSE and Chunked)
-	Response *ResponseDefinition `json:"response,omitempty"`
+	Response *ResponseDefinition `json:"response,omitempty" yaml:"response,omitempty"`
 	// SSE defines Server-Sent Events streaming response configuration (mutually exclusive with Response and Chunked)
-	SSE *SSEConfig `json:"sse,omitempty"`
+	SSE *SSEConfig `json:"sse,omitempty" yaml:"sse,omitempty"`
 	// Chunked defines HTTP chunked transfer encoding response configuration (mutually exclusive with Response and SSE)
-	Chunked *ChunkedConfig `json:"chunked,omitempty"`
+	Chunked *ChunkedConfig `json:"chunked,omitempty" yaml:"chunked,omitempty"`
 	// Enabled indicates whether this mock is active
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled" yaml:"enabled"`
 	// CreatedAt is when the mock was created
-	CreatedAt time.Time `json:"createdAt"`
+	CreatedAt time.Time `json:"createdAt" yaml:"createdAt"`
 	// UpdatedAt is when the mock was last modified
-	UpdatedAt time.Time `json:"updatedAt"`
+	UpdatedAt time.Time `json:"updatedAt" yaml:"updatedAt"`
 }
 
 // SSEConfig defines the configuration for an SSE streaming endpoint
 type SSEConfig struct {
 	// Events defines the sequence of events to send
-	Events []SSEEventDef `json:"events,omitempty"`
+	Events []SSEEventDef `json:"events,omitempty" yaml:"events,omitempty"`
 
 	// Generator configures dynamic event generation (mutually exclusive with Events)
-	Generator *SSEEventGenerator `json:"generator,omitempty"`
+	Generator *SSEEventGenerator `json:"generator,omitempty" yaml:"generator,omitempty"`
 
 	// Timing controls delay between events
-	Timing SSETimingConfig `json:"timing"`
+	Timing SSETimingConfig `json:"timing" yaml:"timing"`
 
 	// Lifecycle controls connection behavior
-	Lifecycle SSELifecycleConfig `json:"lifecycle"`
+	Lifecycle SSELifecycleConfig `json:"lifecycle" yaml:"lifecycle"`
 
 	// RateLimit optionally throttles event delivery
-	RateLimit *SSERateLimitConfig `json:"rateLimit,omitempty"`
+	RateLimit *SSERateLimitConfig `json:"rateLimit,omitempty" yaml:"rateLimit,omitempty"`
 
 	// Resume enables Last-Event-ID resumption
-	Resume SSEResumeConfig `json:"resume"`
+	Resume SSEResumeConfig `json:"resume" yaml:"resume"`
 
 	// Template uses a built-in template (e.g., "openai-chat")
-	Template string `json:"template,omitempty"`
+	Template string `json:"template,omitempty" yaml:"template,omitempty"`
 
 	// TemplateParams provides parameters for the template
-	TemplateParams map[string]interface{} `json:"templateParams,omitempty"`
+	TemplateParams map[string]interface{} `json:"templateParams,omitempty" yaml:"templateParams,omitempty"`
 }
 
 // SSEEventDef defines a single event in the stream
@@ -213,35 +215,35 @@ type ChunkedConfig struct {
 // RequestMatcher defines criteria used to match incoming HTTP requests to mock configurations.
 type RequestMatcher struct {
 	// Method is the HTTP method to match (GET, POST, etc.) - exact match
-	Method string `json:"method,omitempty"`
+	Method string `json:"method,omitempty" yaml:"method,omitempty"`
 	// Path is the URL path to match - supports exact match or wildcards
-	Path string `json:"path,omitempty"`
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 	// PathPattern is a regex pattern for path matching (future feature)
-	PathPattern string `json:"pathPattern,omitempty"`
+	PathPattern string `json:"pathPattern,omitempty" yaml:"pathPattern,omitempty"`
 	// Headers are required headers - all must match
-	Headers map[string]string `json:"headers,omitempty"`
+	Headers map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
 	// QueryParams are required query parameters - all must match
-	QueryParams map[string]string `json:"queryParams,omitempty"`
+	QueryParams map[string]string `json:"queryParams,omitempty" yaml:"queryParams,omitempty"`
 	// BodyContains requires the body to contain this substring
-	BodyContains string `json:"bodyContains,omitempty"`
+	BodyContains string `json:"bodyContains,omitempty" yaml:"bodyContains,omitempty"`
 	// BodyEquals requires the body to exactly match this string
-	BodyEquals string `json:"bodyEquals,omitempty"`
+	BodyEquals string `json:"bodyEquals,omitempty" yaml:"bodyEquals,omitempty"`
 	// BodyPattern is a regex pattern for body matching (future feature)
-	BodyPattern string `json:"bodyPattern,omitempty"`
+	BodyPattern string `json:"bodyPattern,omitempty" yaml:"bodyPattern,omitempty"`
 }
 
 // ResponseDefinition specifies the HTTP response to return when a request matches a mock.
 type ResponseDefinition struct {
 	// StatusCode is the HTTP status code (100-599)
-	StatusCode int `json:"statusCode"`
+	StatusCode int `json:"statusCode" yaml:"statusCode"`
 	// Headers are response headers to set
-	Headers map[string]string `json:"headers,omitempty"`
+	Headers map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
 	// Body is the response body content
-	Body string `json:"body"`
+	Body string `json:"body" yaml:"body"`
 	// BodyFile is a path to file containing response body (future feature)
-	BodyFile string `json:"bodyFile,omitempty"`
+	BodyFile string `json:"bodyFile,omitempty" yaml:"bodyFile,omitempty"`
 	// DelayMs is an artificial delay before responding (milliseconds)
-	DelayMs int `json:"delayMs,omitempty"`
+	DelayMs int `json:"delayMs,omitempty" yaml:"delayMs,omitempty"`
 }
 
 // ServerConfiguration defines the mock server runtime settings and operational parameters.
@@ -301,113 +303,127 @@ type RequestLogEntry struct {
 // MockCollection is a container for a set of mock configurations, typically loaded from a single config file.
 type MockCollection struct {
 	// Version is the config format version (e.g., "1.0")
-	Version string `json:"version"`
-	// Name is the collection name/description
-	Name string `json:"name,omitempty"`
+	Version string `json:"version" yaml:"version"`
+	// Kind identifies the config type (e.g., "MockCollection")
+	Kind string `json:"kind,omitempty" yaml:"kind,omitempty"`
+	// Metadata contains collection metadata
+	Metadata *CollectionMetadata `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	// Name is the collection name/description (deprecated, use metadata.name)
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 	// Mocks is an array of mock definitions
-	Mocks []*MockConfiguration `json:"mocks"`
+	Mocks []*MockConfiguration `json:"mocks" yaml:"mocks"`
 	// ServerConfig contains server settings (if embedded)
-	ServerConfig *ServerConfiguration `json:"serverConfig,omitempty"`
+	ServerConfig *ServerConfiguration `json:"serverConfig,omitempty" yaml:"serverConfig,omitempty"`
 	// StatefulResources defines stateful CRUD resources
-	StatefulResources []*StatefulResourceConfig `json:"statefulResources,omitempty"`
+	StatefulResources []*StatefulResourceConfig `json:"statefulResources,omitempty" yaml:"statefulResources,omitempty"`
 	// WebSocketEndpoints defines WebSocket endpoints
-	WebSocketEndpoints []*WebSocketEndpointConfig `json:"websocketEndpoints,omitempty"`
+	WebSocketEndpoints []*WebSocketEndpointConfig `json:"websocketEndpoints,omitempty" yaml:"websocketEndpoints,omitempty"`
+}
+
+// CollectionMetadata contains metadata about a mock collection.
+type CollectionMetadata struct {
+	// Name is the human-readable name
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	// Description explains what this collection is for
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	// Tags are labels for categorization
+	Tags []string `json:"tags,omitempty" yaml:"tags,omitempty"`
 }
 
 // WebSocketEndpointConfig defines configuration for a WebSocket endpoint.
 type WebSocketEndpointConfig struct {
 	// Path is the URL path for WebSocket upgrade (e.g., "/ws/chat")
-	Path string `json:"path"`
+	Path string `json:"path" yaml:"path"`
 	// Subprotocols lists supported subprotocols for negotiation
-	Subprotocols []string `json:"subprotocols,omitempty"`
+	Subprotocols []string `json:"subprotocols,omitempty" yaml:"subprotocols,omitempty"`
 	// RequireSubprotocol rejects connections without a matching subprotocol
-	RequireSubprotocol bool `json:"requireSubprotocol,omitempty"`
+	RequireSubprotocol bool `json:"requireSubprotocol,omitempty" yaml:"requireSubprotocol,omitempty"`
 	// Matchers contains message matching rules for conditional responses
-	Matchers []*WSMatcherConfig `json:"matchers,omitempty"`
+	Matchers []*WSMatcherConfig `json:"matchers,omitempty" yaml:"matchers,omitempty"`
 	// DefaultResponse is sent when no matcher matches
-	DefaultResponse *WSMessageResponse `json:"defaultResponse,omitempty"`
+	DefaultResponse *WSMessageResponse `json:"defaultResponse,omitempty" yaml:"defaultResponse,omitempty"`
 	// Scenario defines a scripted message sequence
-	Scenario *WSScenarioConfig `json:"scenario,omitempty"`
+	Scenario *WSScenarioConfig `json:"scenario,omitempty" yaml:"scenario,omitempty"`
 	// Heartbeat configures ping/pong keepalive
-	Heartbeat *WSHeartbeatConfig `json:"heartbeat,omitempty"`
+	Heartbeat *WSHeartbeatConfig `json:"heartbeat,omitempty" yaml:"heartbeat,omitempty"`
 	// MaxMessageSize is the maximum message size in bytes (default: 65536)
-	MaxMessageSize int64 `json:"maxMessageSize,omitempty"`
+	MaxMessageSize int64 `json:"maxMessageSize,omitempty" yaml:"maxMessageSize,omitempty"`
 	// IdleTimeout closes connections after inactivity (e.g., "5m")
-	IdleTimeout string `json:"idleTimeout,omitempty"`
+	IdleTimeout string `json:"idleTimeout,omitempty" yaml:"idleTimeout,omitempty"`
 	// MaxConnections limits concurrent connections (default: 0 = unlimited)
-	MaxConnections int `json:"maxConnections,omitempty"`
+	MaxConnections int `json:"maxConnections,omitempty" yaml:"maxConnections,omitempty"`
 	// EchoMode enables automatic echo of received messages
-	EchoMode *bool `json:"echoMode,omitempty"`
+	EchoMode *bool `json:"echoMode,omitempty" yaml:"echoMode,omitempty"`
 }
 
 // WSMatcherConfig defines a WebSocket message matcher.
 type WSMatcherConfig struct {
 	// Match defines the matching criteria
-	Match *WSMatchCriteria `json:"match"`
+	Match *WSMatchCriteria `json:"match" yaml:"match"`
 	// Response is the response to send when matched
-	Response *WSMessageResponse `json:"response,omitempty"`
+	Response *WSMessageResponse `json:"response,omitempty" yaml:"response,omitempty"`
 	// NoResponse if true, matches but doesn't respond
-	NoResponse bool `json:"noResponse,omitempty"`
+	NoResponse bool `json:"noResponse,omitempty" yaml:"noResponse,omitempty"`
 }
 
 // WSMatchCriteria defines how to match a WebSocket message.
 type WSMatchCriteria struct {
 	// Type is the match type: "exact", "regex", "json", "contains", "prefix", "suffix"
-	Type string `json:"type"`
+	Type string `json:"type" yaml:"type"`
 	// Value is the match value
-	Value string `json:"value,omitempty"`
+	Value string `json:"value,omitempty" yaml:"value,omitempty"`
 	// Path is the JSON path for json type (e.g., "$.action")
-	Path string `json:"path,omitempty"`
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 	// MessageType restricts to specific message types: "text", "binary"
-	MessageType string `json:"messageType,omitempty"`
+	MessageType string `json:"messageType,omitempty" yaml:"messageType,omitempty"`
 }
 
 // WSMessageResponse defines a response to send for a matched message.
 type WSMessageResponse struct {
 	// Type is the message type: "text", "binary", "json"
-	Type string `json:"type"`
+	Type string `json:"type" yaml:"type"`
 	// Value is the response content
-	Value interface{} `json:"value"`
+	Value interface{} `json:"value" yaml:"value"`
 	// Delay is the wait time before sending (e.g., "500ms")
-	Delay string `json:"delay,omitempty"`
+	Delay string `json:"delay,omitempty" yaml:"delay,omitempty"`
 }
 
 // WSScenarioConfig defines a scripted WebSocket message sequence.
 type WSScenarioConfig struct {
 	// Name is the scenario name
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name"`
 	// Steps is the ordered list of scenario steps
-	Steps []*WSScenarioStepConfig `json:"steps"`
+	Steps []*WSScenarioStepConfig `json:"steps" yaml:"steps"`
 	// Loop restarts the scenario on completion
-	Loop bool `json:"loop,omitempty"`
+	Loop bool `json:"loop,omitempty" yaml:"loop,omitempty"`
 	// ResetOnReconnect resets to step 0 on reconnect (default: true)
-	ResetOnReconnect *bool `json:"resetOnReconnect,omitempty"`
+	ResetOnReconnect *bool `json:"resetOnReconnect,omitempty" yaml:"resetOnReconnect,omitempty"`
 }
 
 // WSScenarioStepConfig defines a single step in a WebSocket scenario.
 type WSScenarioStepConfig struct {
 	// Type is the step type: "send", "expect", "wait"
-	Type string `json:"type"`
+	Type string `json:"type" yaml:"type"`
 	// Message is the message to send (for "send" type)
-	Message *WSMessageResponse `json:"message,omitempty"`
+	Message *WSMessageResponse `json:"message,omitempty" yaml:"message,omitempty"`
 	// Match is the expected message pattern (for "expect" type)
-	Match *WSMatchCriteria `json:"match,omitempty"`
+	Match *WSMatchCriteria `json:"match,omitempty" yaml:"match,omitempty"`
 	// Duration is the wait duration (for "wait" type, e.g., "1s")
-	Duration string `json:"duration,omitempty"`
+	Duration string `json:"duration,omitempty" yaml:"duration,omitempty"`
 	// Timeout is the maximum wait for "expect" (default: "30s")
-	Timeout string `json:"timeout,omitempty"`
+	Timeout string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	// Optional can be skipped if timeout reached
-	Optional bool `json:"optional,omitempty"`
+	Optional bool `json:"optional,omitempty" yaml:"optional,omitempty"`
 }
 
 // WSHeartbeatConfig configures WebSocket ping/pong keepalive.
 type WSHeartbeatConfig struct {
 	// Enabled enables heartbeat pings
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled" yaml:"enabled"`
 	// Interval is the time between pings (e.g., "30s")
-	Interval string `json:"interval,omitempty"`
+	Interval string `json:"interval,omitempty" yaml:"interval,omitempty"`
 	// Timeout is the maximum wait for pong response (e.g., "10s")
-	Timeout string `json:"timeout,omitempty"`
+	Timeout string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // StatefulResourceConfig defines configuration for a stateful CRUD resource.

@@ -41,9 +41,9 @@ func MatchScore(matcher *config.RequestMatcher, r *http.Request, body []byte) in
 		score += pathScore
 	}
 
-	// Header matching
+	// Header matching (supports wildcards via MatchHeaderPattern)
 	for name, value := range matcher.Headers {
-		if !MatchHeader(name, value, r.Header) {
+		if !MatchHeaderPattern(name, value, r.Header) {
 			return 0 // All headers must match
 		}
 		score += 10
