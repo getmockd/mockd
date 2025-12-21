@@ -12,19 +12,21 @@ import (
 
 // AdminAPI exposes a REST API for managing mock configurations.
 type AdminAPI struct {
-	server       *engine.Server
-	proxyManager *ProxyManager
-	httpServer   *http.Server
-	port         int
-	startTime    time.Time
+	server                 *engine.Server
+	proxyManager           *ProxyManager
+	streamRecordingManager *StreamRecordingManager
+	httpServer             *http.Server
+	port                   int
+	startTime              time.Time
 }
 
 // NewAdminAPI creates a new AdminAPI.
 func NewAdminAPI(server *engine.Server, port int) *AdminAPI {
 	api := &AdminAPI{
-		server:       server,
-		proxyManager: NewProxyManager(),
-		port:         port,
+		server:                 server,
+		proxyManager:           NewProxyManager(),
+		streamRecordingManager: NewStreamRecordingManager(),
+		port:                   port,
 	}
 
 	mux := http.NewServeMux()
@@ -38,6 +40,16 @@ func NewAdminAPI(server *engine.Server, port int) *AdminAPI {
 	}
 
 	return api
+}
+
+// InitializeStreamRecordings initializes the stream recording manager with the given data directory.
+func (a *AdminAPI) InitializeStreamRecordings(dataDir string) error {
+	return a.streamRecordingManager.Initialize(dataDir)
+}
+
+// StreamRecordingManager returns the stream recording manager.
+func (a *AdminAPI) StreamRecordingManager() *StreamRecordingManager {
+	return a.streamRecordingManager
 }
 
 // registerRoutes sets up all API routes.
@@ -124,6 +136,25 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 
 	// WebSocket statistics
 	mux.HandleFunc("GET /admin/ws/stats", a.handleWSStats)
+
+	// Stream recording management (WebSocket/SSE)
+	mux.HandleFunc("GET /stream-recordings", a.streamRecordingManager.handleListStreamRecordings)
+	mux.HandleFunc("GET /stream-recordings/stats", a.streamRecordingManager.handleGetStreamRecordingStats)
+	mux.HandleFunc("GET /stream-recordings/sessions", a.streamRecordingManager.handleGetActiveSessions)
+	mux.HandleFunc("POST /stream-recordings/start", a.streamRecordingManager.handleStartRecording)
+	mux.HandleFunc("POST /stream-recordings/vacuum", a.streamRecordingManager.handleVacuum)
+	mux.HandleFunc("GET /stream-recordings/{id}", a.streamRecordingManager.handleGetStreamRecording)
+	mux.HandleFunc("DELETE /stream-recordings/{id}", a.streamRecordingManager.handleDeleteStreamRecording)
+	mux.HandleFunc("POST /stream-recordings/{id}/stop", a.streamRecordingManager.handleStopRecording)
+	mux.HandleFunc("POST /stream-recordings/{id}/export", a.streamRecordingManager.handleExportStreamRecording)
+	mux.HandleFunc("POST /stream-recordings/{id}/convert", a.streamRecordingManager.handleConvertStreamRecording)
+	mux.HandleFunc("POST /stream-recordings/{id}/replay", a.streamRecordingManager.handleStartReplay)
+
+	// Replay session management
+	mux.HandleFunc("GET /replay", a.streamRecordingManager.handleListReplaySessions)
+	mux.HandleFunc("GET /replay/{id}", a.streamRecordingManager.handleGetReplayStatus)
+	mux.HandleFunc("DELETE /replay/{id}", a.streamRecordingManager.handleStopReplay)
+	mux.HandleFunc("POST /replay/{id}/advance", a.streamRecordingManager.handleAdvanceReplay)
 }
 
 // handleConvertRecordings wraps the convert handler to pass the server.
