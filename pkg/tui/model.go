@@ -200,7 +200,8 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.currentView = mocksView
 		m.sidebar.SetActive(1)
 		m.updateStatusBarHints()
-		return m, nil
+		// Trigger data refresh when switching to view
+		return m, m.mocks.Init()
 
 	case key.Matches(msg, m.keys.Recordings):
 		m.currentView = recordingsView
