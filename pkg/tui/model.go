@@ -6,8 +6,10 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/getmockd/mockd/pkg/tui/client"
 	"github.com/getmockd/mockd/pkg/tui/components"
 	"github.com/getmockd/mockd/pkg/tui/styles"
+	"github.com/getmockd/mockd/pkg/tui/views"
 )
 
 // model is the root application model
@@ -28,8 +30,11 @@ type model struct {
 	statusBar components.StatusBarModel
 	help      components.HelpModel
 
-	// Views (placeholders for now)
-	// dashboard   dashboardModel
+	// Admin API client
+	adminClient *client.Client
+
+	// Views
+	dashboard views.DashboardModel
 	// mocks       mocksModel
 	// recordings  recordingsModel
 	// streams     streamsModel
@@ -47,6 +52,9 @@ type model struct {
 
 // newModel creates a new root model
 func newModel() model {
+	// Create admin client
+	adminClient := client.NewDefaultClient()
+
 	return model{
 		keys:        DefaultKeyMap(),
 		currentView: dashboardView,
@@ -56,6 +64,8 @@ func newModel() model {
 		sidebar:     components.NewSidebar(),
 		statusBar:   components.NewStatusBar(),
 		help:        components.NewHelp(),
+		adminClient: adminClient,
+		dashboard:   views.NewDashboard(adminClient),
 	}
 }
 
@@ -65,6 +75,7 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		tea.EnterAltScreen,
 		tickCmd(),
+		m.dashboard.Init(),
 	)
 }
 
@@ -84,6 +95,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.SetHeight(msg.Height - 4) // Account for header and statusbar
 		m.statusBar.SetWidth(msg.Width)
 		m.help.SetSize(msg.Width, msg.Height)
+
+		// Update view sizes
+		contentWidth := msg.Width - 16 // Sidebar width
+		contentHeight := msg.Height - 4
+		m.dashboard.SetSize(contentWidth, contentHeight)
+
+		// Initialize status bar hints
+		m.updateStatusBarHints()
 
 		return m, nil
 
@@ -107,6 +126,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Delegate to active view
+	var cmd tea.Cmd
+	switch m.currentView {
+	case dashboardView:
+		m.dashboard, cmd = m.dashboard.Update(msg)
+		return m, cmd
+	}
+
 	return m, nil
 }
 
@@ -124,36 +151,43 @@ func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Dashboard):
 		m.currentView = dashboardView
 		m.sidebar.SetActive(0)
+		m.updateStatusBarHints()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Mocks):
 		m.currentView = mocksView
 		m.sidebar.SetActive(1)
+		m.updateStatusBarHints()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Recordings):
 		m.currentView = recordingsView
 		m.sidebar.SetActive(2)
+		m.updateStatusBarHints()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Streams):
 		m.currentView = streamsView
 		m.sidebar.SetActive(3)
+		m.updateStatusBarHints()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Traffic):
 		m.currentView = trafficView
 		m.sidebar.SetActive(4)
+		m.updateStatusBarHints()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Connections):
 		m.currentView = connectionsView
 		m.sidebar.SetActive(5)
+		m.updateStatusBarHints()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Logs):
 		m.currentView = logsView
 		m.sidebar.SetActive(6)
+		m.updateStatusBarHints()
 		return m, nil
 	}
 
@@ -231,7 +265,7 @@ func (m model) renderMainLayout() string {
 func (m model) renderContent() string {
 	switch m.currentView {
 	case dashboardView:
-		return m.renderDashboard()
+		return m.dashboard.View()
 	case mocksView:
 		return "Mocks View\n\nManage mock endpoints here.\n\nPress 'n' to create a new mock."
 	case recordingsView:
@@ -249,40 +283,34 @@ func (m model) renderContent() string {
 	}
 }
 
-// renderDashboard renders the dashboard view
-func (m model) renderDashboard() string {
-	title := styles.TitleStyle.Render("Dashboard")
+// updateStatusBarHints updates the status bar hints based on the current view.
+func (m *model) updateStatusBarHints() {
+	baseHints := []components.KeyHint{
+		{Key: "?", Desc: "help"},
+		{Key: "q", Desc: "quit"},
+	}
 
-	status := lipgloss.NewStyle().
-		Foreground(styles.ColorSuccess).
-		Render("● Server Running")
-
-	info := `
-Server Status
-─────────────
-Mock Server: Running on :8080
-Admin API: :9090
-Proxy: Inactive
-
-Quick Stats
-───────────
-Mocks: 0 active, 0 disabled
-Recordings: 0
-Active Connections: 0
-
-Recent Activity
-───────────────
-No recent activity
-
-`
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		"",
-		status,
-		info,
-	)
+	switch m.currentView {
+	case dashboardView:
+		m.statusBar.SetHints(append([]components.KeyHint{
+			{Key: "s", Desc: "start/stop"},
+			{Key: "r", Desc: "record"},
+			{Key: "p", Desc: "proxy"},
+		}, baseHints...))
+	case mocksView:
+		m.statusBar.SetHints(append([]components.KeyHint{
+			{Key: "n", Desc: "new"},
+			{Key: "e", Desc: "edit"},
+			{Key: "d", Desc: "delete"},
+		}, baseHints...))
+	case trafficView:
+		m.statusBar.SetHints(append([]components.KeyHint{
+			{Key: "p", Desc: "pause"},
+			{Key: "c", Desc: "clear"},
+		}, baseHints...))
+	default:
+		m.statusBar.SetHints(baseHints)
+	}
 }
 
 // tickCmd returns a command that sends a tick message every second
