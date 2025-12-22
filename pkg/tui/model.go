@@ -100,28 +100,43 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Try global keys first, then fall through to view if not handled
-		if handled, cmd := m.handleGlobalKeys(msg); handled {
-			return m, cmd
-		}
-		// Key not handled globally, delegate to active view
+		// Let active view handle key first
 		var cmd tea.Cmd
+		var viewHandled bool
 		switch m.currentView {
 		case dashboardView:
 			m.dashboard, cmd = m.dashboard.Update(msg)
+			viewHandled = (cmd != nil)
 		case mocksView:
 			m.mocks, cmd = m.mocks.Update(msg)
+			viewHandled = (cmd != nil)
 		case recordingsView:
 			m.mockForm, cmd = m.mockForm.Update(msg)
+			viewHandled = (cmd != nil)
 		case streamsView:
 			m.streams, cmd = m.streams.Update(msg)
+			viewHandled = (cmd != nil)
 		case trafficView:
 			m.traffic, cmd = m.traffic.Update(msg)
+			viewHandled = (cmd != nil)
 		case connectionsView:
 			m.connections, cmd = m.connections.Update(msg)
+			viewHandled = (cmd != nil)
 		case logsView:
 			m.logs, cmd = m.logs.Update(msg)
+			viewHandled = (cmd != nil)
 		}
+
+		// If view handled the key, return
+		if viewHandled {
+			return m, cmd
+		}
+
+		// Otherwise, try global keys
+		if handled, globalCmd := m.handleGlobalKeys(msg); handled {
+			return m, globalCmd
+		}
+
 		return m, cmd
 
 	case tea.WindowSizeMsg:

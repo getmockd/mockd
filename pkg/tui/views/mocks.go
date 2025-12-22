@@ -270,8 +270,15 @@ func (m MocksModel) handleKey(msg tea.KeyMsg) (MocksModel, tea.Cmd) {
 	case ViewModeList:
 		return m.handleListKeys(msg)
 	case ViewModeForm:
-		// Form handles its own keys
-		return m, nil
+		// Delegate to form
+		var cmd tea.Cmd
+		m.mockForm, cmd = m.mockForm.Update(msg)
+		return m, cmd
+	case ViewModeConfirmDelete:
+		// Delegate to modal
+		var cmd tea.Cmd
+		m.modal, cmd = m.modal.Update(msg)
+		return m, cmd
 	}
 
 	return m, nil
