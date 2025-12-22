@@ -1,0 +1,72 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                               ╭────────────────────────────────────────────────────────────╮
+                                                                                                                               │                                                            │
+                                                                                                                               │  mockd TUI - Keyboard Shortcuts                            │
+                                                                                                                               │                                                            │
+                                                                                                                               │  Navigation                                                │
+                                                                                                                               │  ──────────                                                │
+                                                                                                                               │    1-7         Switch between views                        │
+                                                                                                                               │    ↑/k, ↓/j    Move up/down in lists                       │
+                                                                                                                               │    g, G        Go to top/bottom                            │
+                                                                                                                               │    PgUp/PgDn   Page up/down                                │
+                                                                                                                               │    Enter       Select item                                 │
+                                                                                                                               │    Esc         Go back/cancel                              │
+                                                                                                                               │                                                            │
+                                                                                                                               │  Global Actions                                            │
+                                                                                                                               │  ──────────────                                            │
+                                                                                                                               │    ?           Toggle this help                            │
+                                                                                                                               │    q, Ctrl+C   Quit                                        │
+                                                                                                                               │    Ctrl+R      Refresh data                                │
+                                                                                                                               │                                                            │
+                                                                                                                               │  View-Specific                                             │
+                                                                                                                               │  ─────────────                                             │
+                                                                                                                               │    n           New item (Mocks view)                       │
+                                                                                                                               │    e           Edit item                                   │
+                                                                                                                               │    d           Delete item                                 │
+                                                                                                                               │    /           Filter/search                               │
+                                                                                                                               │    p           Pause/resume (Traffic view)                 │
+                                                                                                                               │    r           Toggle recording                            │
+                                                                                                                               │                                                            │
+                                                                                                                               │  Press ? or Esc to close                                   │
+                                                                                                                               │                                                            │
+                                                                                                                               │                                                            │
+                                                                                                                               │                                                            │
+                                                                                                                               ╰────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
