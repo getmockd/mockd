@@ -205,9 +205,23 @@ func (m FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 			}
 			return m, nil
 
-		case "ctrl+s", "ctrl+enter":
-			// Submit form
+		case "ctrl+d", "ctrl+enter":
+			// Submit form (Ctrl+D instead of Ctrl+D which conflicts with terminal XOFF)
 			m.submitted = true
+			return m, nil
+
+		case "enter":
+			// Enter on last field submits
+			if m.focusIndex == len(m.fields)-1 {
+				m.submitted = true
+				return m, nil
+			}
+			// Otherwise move to next field
+			if len(m.fields) > 0 {
+				m.fields[m.focusIndex].Input.Blur()
+				m.focusIndex = (m.focusIndex + 1) % len(m.fields)
+				m.fields[m.focusIndex].Input.Focus()
+			}
 			return m, nil
 		}
 
@@ -283,7 +297,7 @@ func (m FormModel) View() string {
 		Foreground(styles.ColorMuted).
 		MarginTop(1)
 
-	help := "Tab: next field • Shift+Tab: previous field • Ctrl+S: submit • Esc: cancel"
+	help := "Tab: next field • Shift+Tab: previous field • Ctrl+D: submit • Esc: cancel"
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render(help))
 

@@ -270,19 +270,13 @@ func (m MocksModel) handleKey(msg tea.KeyMsg) (MocksModel, tea.Cmd) {
 		}
 	}
 
-	// Handle view-specific keys
-	switch m.viewMode {
-	case ViewModeList:
+	// Handle view-specific keys (only for list mode)
+	// Form and modal modes are handled via delegation in Update()
+	if m.viewMode == ViewModeList {
 		return m.handleListKeys(msg)
-	case ViewModeForm:
-		// Form keys are already handled in the main Update function
-		// to avoid double processing
-		return m, nil
-	case ViewModeConfirmDelete:
-		// Modal keys are already handled above
-		return m, nil
 	}
 
+	// For other modes, return early to let Update() delegation handle it
 	return m, nil
 }
 
