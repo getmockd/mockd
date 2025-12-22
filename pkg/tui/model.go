@@ -100,7 +100,29 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		return m.handleKeyPress(msg)
+		// Try global keys first, then fall through to view if not handled
+		if handled, cmd := m.handleGlobalKeys(msg); handled {
+			return m, cmd
+		}
+		// Key not handled globally, delegate to active view
+		var cmd tea.Cmd
+		switch m.currentView {
+		case dashboardView:
+			m.dashboard, cmd = m.dashboard.Update(msg)
+		case mocksView:
+			m.mocks, cmd = m.mocks.Update(msg)
+		case recordingsView:
+			m.mockForm, cmd = m.mockForm.Update(msg)
+		case streamsView:
+			m.streams, cmd = m.streams.Update(msg)
+		case trafficView:
+			m.traffic, cmd = m.traffic.Update(msg)
+		case connectionsView:
+			m.connections, cmd = m.connections.Update(msg)
+		case logsView:
+			m.logs, cmd = m.logs.Update(msg)
+		}
+		return m, cmd
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -179,64 +201,63 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleKeyPress processes keyboard input
-func (m model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// handleGlobalKeys processes global keyboard shortcuts, returns (handled bool, cmd)
+func (m *model) handleGlobalKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
 	// Global key handling
 	switch {
 	case key.Matches(msg, m.keys.Quit):
-		return m, tea.Quit
+		return true, tea.Quit
 
 	case key.Matches(msg, m.keys.Help):
 		m.help.Toggle()
-		return m, nil
+		return true, nil
 
 	case key.Matches(msg, m.keys.Dashboard):
 		m.currentView = dashboardView
 		m.sidebar.SetActive(0)
 		m.updateStatusBarHints()
-		return m, nil
+		return true, nil
 
 	case key.Matches(msg, m.keys.Mocks):
 		m.currentView = mocksView
 		m.sidebar.SetActive(1)
 		m.updateStatusBarHints()
 		// Trigger data refresh when switching to view
-		return m, m.mocks.Init()
+		return true, m.mocks.Init()
 
 	case key.Matches(msg, m.keys.Recordings):
 		m.currentView = recordingsView
 		m.sidebar.SetActive(2)
 		m.updateStatusBarHints()
-		return m, nil
+		return true, nil
 
 	case key.Matches(msg, m.keys.Streams):
 		m.currentView = streamsView
 		m.sidebar.SetActive(3)
 		m.updateStatusBarHints()
-		return m, nil
+		return true, nil
 
 	case key.Matches(msg, m.keys.Traffic):
 		m.currentView = trafficView
 		m.sidebar.SetActive(4)
 		m.updateStatusBarHints()
-		return m, nil
+		return true, nil
 
 	case key.Matches(msg, m.keys.Connections):
 		m.currentView = connectionsView
 		m.sidebar.SetActive(5)
 		m.updateStatusBarHints()
-		return m, nil
+		return true, nil
 
 	case key.Matches(msg, m.keys.Logs):
 		m.currentView = logsView
 		m.sidebar.SetActive(6)
 		m.updateStatusBarHints()
-		return m, nil
+		return true, nil
 	}
 
-	// TODO: Delegate to active view
-
-	return m, nil
+	// Key not handled
+	return false, nil
 }
 
 // View renders the UI (Bubbletea lifecycle)
