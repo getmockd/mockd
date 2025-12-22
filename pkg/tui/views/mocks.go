@@ -275,15 +275,12 @@ func (m MocksModel) handleKey(msg tea.KeyMsg) (MocksModel, tea.Cmd) {
 	case ViewModeList:
 		return m.handleListKeys(msg)
 	case ViewModeForm:
-		// Delegate to form
-		var cmd tea.Cmd
-		m.mockForm, cmd = m.mockForm.Update(msg)
-		return m, cmd
+		// Form keys are already handled in the main Update function
+		// to avoid double processing
+		return m, nil
 	case ViewModeConfirmDelete:
-		// Delegate to modal
-		var cmd tea.Cmd
-		m.modal, cmd = m.modal.Update(msg)
-		return m, cmd
+		// Modal keys are already handled above
+		return m, nil
 	}
 
 	return m, nil
