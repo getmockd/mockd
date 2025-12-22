@@ -35,7 +35,7 @@ type model struct {
 
 	// Views
 	dashboard views.DashboardModel
-	// mocks       mocksModel
+	mocks     views.MocksModel
 	// recordings  recordingsModel
 	// streams     streamsModel
 	// traffic     trafficModel
@@ -66,6 +66,7 @@ func newModel() model {
 		help:        components.NewHelp(),
 		adminClient: adminClient,
 		dashboard:   views.NewDashboard(adminClient),
+		mocks:       views.NewMocks(adminClient),
 	}
 }
 
@@ -76,6 +77,7 @@ func (m model) Init() tea.Cmd {
 		tea.EnterAltScreen,
 		tickCmd(),
 		m.dashboard.Init(),
+		m.mocks.Init(),
 	)
 }
 
@@ -100,6 +102,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		contentWidth := msg.Width - 16 // Sidebar width
 		contentHeight := msg.Height - 4
 		m.dashboard.SetSize(contentWidth, contentHeight)
+		m.mocks.SetSize(contentWidth, contentHeight)
 
 		// Initialize status bar hints
 		m.updateStatusBarHints()
@@ -131,6 +134,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.currentView {
 	case dashboardView:
 		m.dashboard, cmd = m.dashboard.Update(msg)
+		return m, cmd
+	case mocksView:
+		m.mocks, cmd = m.mocks.Update(msg)
 		return m, cmd
 	}
 
@@ -267,7 +273,7 @@ func (m model) renderContent() string {
 	case dashboardView:
 		return m.dashboard.View()
 	case mocksView:
-		return "Mocks View\n\nManage mock endpoints here.\n\nPress 'n' to create a new mock."
+		return m.mocks.View()
 	case recordingsView:
 		return "Recordings View\n\nView HTTP recordings here."
 	case streamsView:
@@ -299,14 +305,18 @@ func (m *model) updateStatusBarHints() {
 		}, baseHints...))
 	case mocksView:
 		m.statusBar.SetHints(append([]components.KeyHint{
+			{Key: "enter", Desc: "toggle"},
 			{Key: "n", Desc: "new"},
 			{Key: "e", Desc: "edit"},
 			{Key: "d", Desc: "delete"},
+			{Key: "/", Desc: "filter"},
 		}, baseHints...))
 	case trafficView:
 		m.statusBar.SetHints(append([]components.KeyHint{
 			{Key: "p", Desc: "pause"},
 			{Key: "c", Desc: "clear"},
+			{Key: "/", Desc: "filter"},
+			{Key: "enter", Desc: "details"},
 		}, baseHints...))
 	default:
 		m.statusBar.SetHints(baseHints)
