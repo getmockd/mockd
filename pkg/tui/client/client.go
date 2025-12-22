@@ -11,6 +11,8 @@ import (
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/recording"
+	"github.com/getmockd/mockd/pkg/sse"
+	"github.com/getmockd/mockd/pkg/websocket"
 )
 
 // Client is an HTTP client for the mockd Admin API.
@@ -462,4 +464,58 @@ func (c *Client) GetActiveSessions() ([]*recording.StreamRecordingSessionInfo, e
 	var result []*recording.StreamRecordingSessionInfo
 	err := c.doRequest("GET", "/stream-recordings/sessions", nil, &result)
 	return result, err
+}
+
+// --- WebSocket Connection Operations ---
+
+// WSConnectionListResponse represents a list of WebSocket connections.
+type WSConnectionListResponse struct {
+	Connections []websocket.ConnectionInfo `json:"connections"`
+	Total       int                        `json:"total"`
+}
+
+// ListWSConnections retrieves all WebSocket connections.
+func (c *Client) ListWSConnections(endpoint string) (*WSConnectionListResponse, error) {
+	path := "/ws/connections"
+	if endpoint != "" {
+		path += "?endpoint=" + endpoint
+	}
+
+	var result WSConnectionListResponse
+	err := c.doRequest("GET", path, nil, &result)
+	return &result, err
+}
+
+// DisconnectWS disconnects a WebSocket connection.
+func (c *Client) DisconnectWS(id string) error {
+	return c.doRequest("DELETE", "/ws/connections/"+id, nil, nil)
+}
+
+// SendWSMessage sends a message to a WebSocket connection.
+func (c *Client) SendWSMessage(id string, message string) error {
+	req := map[string]interface{}{
+		"data": message,
+		"type": "text",
+	}
+	return c.doRequest("POST", "/ws/connections/"+id+"/send", req, nil)
+}
+
+// --- SSE Connection Operations ---
+
+// SSEConnectionListResponse represents a list of SSE connections.
+type SSEConnectionListResponse struct {
+	Connections []sse.SSEStreamInfo `json:"connections"`
+	Stats       sse.ConnectionStats `json:"stats"`
+}
+
+// ListSSEConnections retrieves all SSE connections.
+func (c *Client) ListSSEConnections() (*SSEConnectionListResponse, error) {
+	var result SSEConnectionListResponse
+	err := c.doRequest("GET", "/sse/connections", nil, &result)
+	return &result, err
+}
+
+// CloseSSEConnection closes an SSE connection.
+func (c *Client) CloseSSEConnection(id string) error {
+	return c.doRequest("DELETE", "/sse/connections/"+id, nil, nil)
 }
