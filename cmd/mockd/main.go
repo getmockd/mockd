@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/getmockd/mockd/pkg/cli"
+	"github.com/getmockd/mockd/pkg/tui"
 )
 
 // Version is set at build time via ldflags
@@ -19,6 +20,17 @@ func main() {
 }
 
 func run(args []string) error {
+	// Check for TUI flag first (opt-in for Phase 1)
+	if len(args) > 0 && args[0] == "--tui" {
+		return tui.Run()
+	}
+
+	// Check for CI/no-TUI flags
+	if len(args) > 0 && (args[0] == "--ci" || args[0] == "--no-tui") {
+		// Remove the flag and continue with normal CLI
+		args = args[1:]
+	}
+
 	if len(args) == 0 {
 		printUsage()
 		return nil
@@ -120,6 +132,9 @@ Cloud Commands:
 Global Flags:
   -h, --help      Show this help message
   -v, --version   Show version information
+  --tui           Launch interactive TUI (experimental)
+  --ci            Run in headless/CI mode (disable TUI)
+  --no-tui        Alias for --ci
 
 Examples:
   # Start the server with defaults
