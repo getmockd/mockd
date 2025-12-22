@@ -206,7 +206,7 @@ func (m FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 			return m, nil
 
 		case "ctrl+d", "ctrl+enter":
-			// Submit form (Ctrl+D instead of Ctrl+D which conflicts with terminal XOFF)
+			// Submit form
 			m.submitted = true
 			return m, nil
 

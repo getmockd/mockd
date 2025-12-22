@@ -276,6 +276,13 @@ func (m MocksModel) handleKey(msg tea.KeyMsg) (MocksModel, tea.Cmd) {
 		return m.handleListKeys(msg)
 	}
 
+	// For form mode, delegate to form
+	if m.viewMode == ViewModeForm {
+		var cmd tea.Cmd
+		m.mockForm, cmd = m.mockForm.Update(msg)
+		return m, cmd
+	}
+
 	// For other modes, return early to let Update() delegation handle it
 	return m, nil
 }

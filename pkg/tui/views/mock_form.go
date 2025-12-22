@@ -35,14 +35,14 @@ type MockFormModel struct {
 func NewMockForm(adminClient *client.Client) MockFormModel {
 	form := components.NewForm("Create Mock")
 
-	// Add form fields
+	// Add form fields with default values
 	form.AddField("Name", "My API Mock", "", false, nil)
-	form.AddField("Method", "GET", "", true, validateMethod)
-	form.AddField("Path", "/api/users", "", true, validatePath)
-	form.AddField("Status", "200", "", true, validateStatus)
-	form.AddField("Headers", "{}", "", false, validateJSON)
-	form.AddField("Body", "{}", "", false, nil)
-	form.AddField("Delay (ms)", "0", "", false, validateDelay)
+	form.AddField("Method", "GET", "GET", true, validateMethod)
+	form.AddField("Path", "/api/users", "/api/users", true, validatePath)
+	form.AddField("Status", "200", "200", true, validateStatus)
+	form.AddField("Headers", "{}", "{}", false, validateJSON)
+	form.AddField("Body", "{}", "{}", false, nil)
+	form.AddField("Delay (ms)", "0", "0", false, validateDelay)
 
 	return MockFormModel{
 		client: adminClient,
@@ -96,12 +96,12 @@ func (m *MockFormModel) SetMode(mode MockFormMode, mock *config.MockConfiguratio
 		// Create mode - reset form
 		m.form = components.NewForm("Create Mock")
 		m.form.AddField("Name", "My API Mock", "", false, nil)
-		m.form.AddField("Method", "GET", "", true, validateMethod)
-		m.form.AddField("Path", "/api/users", "", true, validatePath)
-		m.form.AddField("Status", "200", "", true, validateStatus)
-		m.form.AddField("Headers", "{}", "", false, validateJSON)
-		m.form.AddField("Body", "{}", "", false, nil)
-		m.form.AddField("Delay (ms)", "0", "", false, validateDelay)
+		m.form.AddField("Method", "GET", "GET", true, validateMethod)
+		m.form.AddField("Path", "/api/users", "/api/users", true, validatePath)
+		m.form.AddField("Status", "200", "200", true, validateStatus)
+		m.form.AddField("Headers", "{}", "{}", false, validateJSON)
+		m.form.AddField("Body", "{}", "{}", false, nil)
+		m.form.AddField("Delay (ms)", "0", "0", false, validateDelay)
 		m.mockID = ""
 	}
 }
