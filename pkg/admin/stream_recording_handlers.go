@@ -56,6 +56,15 @@ func (m *StreamRecordingManager) Store() *recording.FileStore {
 	return m.store
 }
 
+// SetStore sets the file store directly (for testing).
+func (m *StreamRecordingManager) SetStore(store *recording.FileStore) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.store = store
+	m.replay = recording.NewReplayController(store)
+	m.initialized = true
+}
+
 // ReplayController returns the replay controller.
 func (m *StreamRecordingManager) ReplayController() *recording.ReplayController {
 	m.mu.RLock()
