@@ -117,10 +117,14 @@ func (m *MocksModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 
-	// Update table height
-	tableHeight := height - 8 // Account for header, filter, status
+	// Update table height - be conservative to avoid pushing content off screen
+	// Account for: title (1) + spacing (2) + filter hint (1) + spacing (1) + table header (2)
+	tableHeight := height - 7
 	if tableHeight < 5 {
 		tableHeight = 5
+	}
+	if tableHeight > 15 {
+		tableHeight = 15 // Cap max table height
 	}
 	m.table.SetHeight(tableHeight)
 
@@ -365,8 +369,7 @@ func (m MocksModel) renderList() string {
 	// Title
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(styles.ColorPrimary).
-		MarginBottom(1)
+		Foreground(styles.ColorPrimary)
 	b.WriteString(titleStyle.Render(fmt.Sprintf("Mocks (%d)", len(m.mocks))))
 	b.WriteString("\n\n")
 
@@ -379,7 +382,7 @@ func (m MocksModel) renderList() string {
 		filterHintStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
 		b.WriteString(filterHintStyle.Render("Press / to filter"))
 	}
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 
 	// Loading state
 	if m.loading && len(m.mocks) == 0 {
@@ -398,22 +401,18 @@ func (m MocksModel) renderList() string {
 
 	// Table
 	b.WriteString(m.table.View())
-	b.WriteString("\n\n")
 
-	// Detail panel for selected mock
-	if m.selectedMock != nil {
+	// Only show details if we have room (simplified for now)
+	// TODO: Make this responsive based on available height
+	if m.selectedMock != nil && len(m.mocks) < 5 {
+		b.WriteString("\n\n")
 		b.WriteString(m.renderMockDetail())
-	} else {
-		hintStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
-		b.WriteString(hintStyle.Render("No mock selected"))
 	}
-	b.WriteString("\n")
 
 	// Status message
 	if m.statusMessage != "" {
-		statusStyle := lipgloss.NewStyle().
-			Foreground(styles.ColorSuccess).
-			MarginTop(1)
+		b.WriteString("\n")
+		statusStyle := lipgloss.NewStyle().Foreground(styles.ColorSuccess)
 		b.WriteString(statusStyle.Render(m.statusMessage))
 	}
 

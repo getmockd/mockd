@@ -54,16 +54,19 @@ func (s *SidebarModel) SetHeight(height int) {
 func (s SidebarModel) View() string {
 	var items []string
 
+	// Add a blank line at top for padding
+	items = append(items, "")
+
 	for i, item := range s.items {
 		var style lipgloss.Style
 		var prefix string
 
 		if i == s.active {
 			style = styles.SidebarItemActiveStyle
-			prefix = "▶ "
+			prefix = " ▶ "
 		} else {
 			style = styles.SidebarItemStyle
-			prefix = "  "
+			prefix = "   "
 		}
 
 		label := prefix + item.Label

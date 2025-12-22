@@ -61,17 +61,15 @@ var (
 			BorderStyle(RoundedBorder).
 			BorderForeground(ColorBorder).
 			Padding(1, 2).
-			Width(14)
+			Width(20)
 
 	SidebarItemStyle = lipgloss.NewStyle().
-				Foreground(ColorForeground).
-				PaddingLeft(1)
+				Foreground(ColorForeground)
 
 	SidebarItemActiveStyle = lipgloss.NewStyle().
 				Foreground(ColorPrimary).
 				Background(lipgloss.Color("#3E4451")).
-				Bold(true).
-				PaddingLeft(1)
+				Bold(true)
 
 	// Content area styles
 	ContentStyle = lipgloss.NewStyle().

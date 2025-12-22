@@ -241,31 +241,31 @@ func (m *model) handleGlobalKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.currentView = recordingsView
 		m.sidebar.SetActive(2)
 		m.updateStatusBarHints()
-		return true, nil
+		return true, m.proxy.Init()
 
 	case key.Matches(msg, m.keys.Streams):
 		m.currentView = streamsView
 		m.sidebar.SetActive(3)
 		m.updateStatusBarHints()
-		return true, nil
+		return true, m.streams.Init()
 
 	case key.Matches(msg, m.keys.Traffic):
 		m.currentView = trafficView
 		m.sidebar.SetActive(4)
 		m.updateStatusBarHints()
-		return true, nil
+		return true, m.traffic.Init()
 
 	case key.Matches(msg, m.keys.Connections):
 		m.currentView = connectionsView
 		m.sidebar.SetActive(5)
 		m.updateStatusBarHints()
-		return true, nil
+		return true, m.connections.Init()
 
 	case key.Matches(msg, m.keys.Logs):
 		m.currentView = logsView
 		m.sidebar.SetActive(6)
 		m.updateStatusBarHints()
-		return true, nil
+		return true, m.logs.Init()
 	}
 
 	// Key not handled
