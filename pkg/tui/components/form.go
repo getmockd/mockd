@@ -269,9 +269,9 @@ func (m FormModel) View() string {
 	// Render fields
 	for i, field := range m.fields {
 		// Label
-		labelStyle := styles.FormLabelStyle.Copy().Width(15)
+		labelStyle := styles.FormLabelStyle.Width(15)
 		if field.Required {
-			labelStyle = labelStyle.Copy().Foreground(styles.ColorWarning)
+			labelStyle = labelStyle.Foreground(styles.ColorWarning)
 		}
 
 		label := field.Label

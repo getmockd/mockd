@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -362,67 +361,85 @@ func (m MocksModel) View() string {
 	}
 }
 
-// renderList renders the list view.
+// renderList renders the list view with improved lipgloss layouts.
 func (m MocksModel) renderList() string {
-	var b strings.Builder
-
-	// Title
+	// Title section
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(styles.ColorPrimary)
-	b.WriteString(titleStyle.Render(fmt.Sprintf("Mocks (%d)", len(m.mocks))))
-	b.WriteString("\n\n")
+		Foreground(styles.ColorPrimary).
+		MarginBottom(1)
+	title := titleStyle.Render(fmt.Sprintf("Mocks (%d)", len(m.mocks)))
 
-	// Filter input
+	// Filter section
+	var filterSection string
 	if m.filterActive {
-		b.WriteString(styles.FormLabelStyle.Render("Filter:"))
-		b.WriteString(" ")
-		b.WriteString(m.filterInput.View())
+		filterSection = lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			styles.FormLabelStyle.Render("Filter:"),
+			" ",
+			m.filterInput.View(),
+		)
 	} else {
 		filterHintStyle := lipgloss.NewStyle().Foreground(styles.ColorMuted)
-		b.WriteString(filterHintStyle.Render("Press / to filter"))
+		filterSection = filterHintStyle.Render("Press / to filter")
 	}
-	b.WriteString("\n")
 
 	// Loading state
 	if m.loading && len(m.mocks) == 0 {
-		b.WriteString(m.spinner.View())
-		b.WriteString(" Loading mocks...\n")
-		return b.String()
+		loadingStyle := lipgloss.NewStyle().
+			Foreground(styles.ColorPrimary).
+			MarginTop(2)
+		loading := lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			m.spinner.View(),
+			" Loading mocks...",
+		)
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			title,
+			filterSection,
+			loadingStyle.Render(loading),
+		)
 	}
 
 	// Error state
 	if m.err != nil {
-		errorStyle := lipgloss.NewStyle().Foreground(styles.ColorError)
-		b.WriteString(errorStyle.Render(fmt.Sprintf("Error: %v", m.err)))
-		b.WriteString("\n")
-		return b.String()
+		errorStyle := lipgloss.NewStyle().
+			Foreground(styles.ColorError).
+			MarginTop(2)
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			title,
+			filterSection,
+			errorStyle.Render(fmt.Sprintf("Error: %v", m.err)),
+		)
 	}
 
-	// Table
-	b.WriteString(m.table.View())
+	// Build main content sections
+	sections := []string{title, filterSection, m.table.View()}
 
-	// Only show details if we have room (simplified for now)
-	// TODO: Make this responsive based on available height
+	// Add details panel if we have room and a selection
 	if m.selectedMock != nil && len(m.mocks) < 5 {
-		b.WriteString("\n\n")
-		b.WriteString(m.renderMockDetail())
+		detailPanel := lipgloss.NewStyle().
+			MarginTop(1).
+			Render(m.renderMockDetail())
+		sections = append(sections, detailPanel)
 	}
 
-	// Status message
+	// Add status message if present
 	if m.statusMessage != "" {
-		b.WriteString("\n")
-		statusStyle := lipgloss.NewStyle().Foreground(styles.ColorSuccess)
-		b.WriteString(statusStyle.Render(m.statusMessage))
+		statusStyle := lipgloss.NewStyle().
+			Foreground(styles.ColorSuccess).
+			MarginTop(1)
+		sections = append(sections, statusStyle.Render(m.statusMessage))
 	}
 
-	return b.String()
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-// renderMockDetail renders the detail panel for the selected mock.
+// renderMockDetail renders the detail panel for the selected mock with improved layout.
 func (m MocksModel) renderMockDetail() string {
 	mock := m.selectedMock
-	var b strings.Builder
 
 	detailTitleStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -431,61 +448,65 @@ func (m MocksModel) renderMockDetail() string {
 
 	labelStyle := lipgloss.NewStyle().
 		Foreground(styles.ColorMuted).
-		Width(12)
+		Width(12).
+		Align(lipgloss.Right)
 
 	valueStyle := lipgloss.NewStyle().
 		Foreground(styles.ColorForeground)
 
-	b.WriteString(detailTitleStyle.Render("Mock Details"))
-	b.WriteString("\n")
+	// Helper to create detail rows
+	detailRow := func(label, value string) string {
+		return lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			labelStyle.Render(label+":"),
+			" ",
+			valueStyle.Render(value),
+		)
+	}
 
-	// Basic info
-	b.WriteString(labelStyle.Render("ID:"))
-	b.WriteString(valueStyle.Render(mock.ID))
-	b.WriteString("\n")
+	// Build detail sections
+	var sections []string
 
-	b.WriteString(labelStyle.Render("Name:"))
-	b.WriteString(valueStyle.Render(mock.Name))
-	b.WriteString("\n")
-
-	b.WriteString(labelStyle.Render("Enabled:"))
-	b.WriteString(valueStyle.Render(enabledStatus(mock.Enabled)))
-	b.WriteString("\n")
+	sections = append(sections, detailTitleStyle.Render("Mock Details"))
+	sections = append(sections, detailRow("ID", mock.ID))
+	sections = append(sections, detailRow("Name", mock.Name))
+	sections = append(sections, detailRow("Enabled", enabledStatus(mock.Enabled)))
 
 	// Response details
 	if mock.Response != nil {
-		b.WriteString(labelStyle.Render("Status:"))
-		b.WriteString(valueStyle.Render(fmt.Sprintf("%d", mock.Response.StatusCode)))
-		b.WriteString("\n")
+		sections = append(sections, detailRow("Status", fmt.Sprintf("%d", mock.Response.StatusCode)))
 
 		if mock.Response.DelayMs > 0 {
-			b.WriteString(labelStyle.Render("Delay:"))
-			b.WriteString(valueStyle.Render(fmt.Sprintf("%dms", mock.Response.DelayMs)))
-			b.WriteString("\n")
+			sections = append(sections, detailRow("Delay", fmt.Sprintf("%dms", mock.Response.DelayMs)))
 		}
 
 		if len(mock.Response.Headers) > 0 {
-			b.WriteString(labelStyle.Render("Headers:"))
-			b.WriteString("\n")
+			sections = append(sections, labelStyle.Render("Headers:"))
 			for k, v := range mock.Response.Headers {
-				b.WriteString(labelStyle.Render("  " + k + ":"))
-				b.WriteString(valueStyle.Render(v))
-				b.WriteString("\n")
+				headerRow := lipgloss.NewStyle().
+					MarginLeft(2).
+					Render(detailRow(k, v))
+				sections = append(sections, headerRow)
 			}
 		}
 
 		if mock.Response.Body != "" {
-			b.WriteString(labelStyle.Render("Body:"))
 			bodyPreview := mock.Response.Body
 			if len(bodyPreview) > 100 {
 				bodyPreview = bodyPreview[:100] + "..."
 			}
-			b.WriteString(valueStyle.Render(bodyPreview))
-			b.WriteString("\n")
+			sections = append(sections, detailRow("Body", bodyPreview))
 		}
 	}
 
-	return b.String()
+	// Use a border for the detail panel
+	detailPanel := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(styles.ColorBorder).
+		Padding(1, 2).
+		Render(lipgloss.JoinVertical(lipgloss.Left, sections...))
+
+	return detailPanel
 }
 
 // fetchMocks fetches the list of mocks from the API.

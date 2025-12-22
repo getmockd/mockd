@@ -186,10 +186,10 @@ var (
 
 // GetFocusedStyle returns focused variant of a style
 func GetFocusedStyle(base lipgloss.Style) lipgloss.Style {
-	return base.Copy().BorderForeground(ColorPrimary)
+	return base.BorderForeground(ColorPrimary)
 }
 
 // GetUnfocusedStyle returns unfocused variant of a style
 func GetUnfocusedStyle(base lipgloss.Style) lipgloss.Style {
-	return base.Copy().BorderForeground(ColorBorder)
+	return base.BorderForeground(ColorBorder)
 }

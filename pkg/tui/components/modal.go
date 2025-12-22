@@ -133,12 +133,12 @@ func (m ModalModel) View() string {
 		Padding(0, 2).
 		Margin(0, 1)
 
-	selectedButtonStyle := buttonStyle.Copy().
+	selectedButtonStyle := buttonStyle.
 		Background(styles.ColorPrimary).
 		Foreground(styles.ColorBackground).
 		Bold(true)
 
-	unselectedButtonStyle := buttonStyle.Copy().
+	unselectedButtonStyle := buttonStyle.
 		Background(styles.ColorMuted).
 		Foreground(styles.ColorForeground)
 
