@@ -2,10 +2,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
+	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/cli"
+	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/tui"
 )
 
@@ -22,7 +29,37 @@ func main() {
 func run(args []string) error {
 	// Check for TUI flag first (opt-in for Phase 1)
 	if len(args) > 0 && args[0] == "--tui" {
-		return tui.Run()
+		// Parse TUI-specific flags
+		tuiArgs := args[1:]
+		serve := false
+		adminURL := "http://localhost:9090"
+
+		// Parse flags
+		for i := 0; i < len(tuiArgs); i++ {
+			switch tuiArgs[i] {
+			case "--serve":
+				serve = true
+			case "--admin":
+				if i+1 < len(tuiArgs) {
+					adminURL = tuiArgs[i+1]
+					i++ // Skip next arg
+				} else {
+					return fmt.Errorf("--admin requires a URL argument")
+				}
+			case "--help", "-h":
+				printTUIUsage()
+				return nil
+			}
+		}
+
+		// Handle different modes
+		if serve {
+			// Hybrid mode: start embedded server + TUI
+			return runHybridMode(adminURL)
+		} else {
+			// Remote mode: connect to existing server
+			return tui.RunWithAdminURL(adminURL)
+		}
 	}
 
 	// Check for CI/no-TUI flags
@@ -132,9 +169,13 @@ Cloud Commands:
 Global Flags:
   -h, --help      Show this help message
   -v, --version   Show version information
-  --tui           Launch interactive TUI (experimental)
+  --tui           Launch interactive TUI
   --ci            Run in headless/CI mode (disable TUI)
   --no-tui        Alias for --ci
+
+TUI Flags (when using --tui):
+  --serve         Start embedded mock server with TUI (hybrid mode)
+  --admin <url>   Admin API URL (default: http://localhost:9090)
 
 Examples:
   # Start the server with defaults
@@ -142,6 +183,15 @@ Examples:
 
   # Start with custom port and config file
   mockd start --port 3000 --config mocks.json
+
+  # Launch TUI connected to local server
+  mockd --tui
+
+  # Launch TUI with embedded server (hybrid mode)
+  mockd --tui --serve
+
+  # Connect TUI to remote server
+  mockd --tui --admin http://remote:9090
 
   # Create CRUD mocks from template
   mockd new -t crud --resource users -o users.yaml
@@ -169,4 +219,100 @@ Examples:
 
 Run 'mockd <command> --help' for more information on a command.
 `)
+}
+
+func printTUIUsage() {
+	fmt.Print(`mockd TUI - Interactive Terminal UI for mockd
+
+Usage:
+  mockd --tui [flags]
+
+Modes:
+  Remote (default):  Connect to existing mockd server
+  Hybrid:            Start embedded server + TUI
+
+Flags:
+  --serve          Start embedded mock server with TUI (hybrid mode)
+  --admin <url>    Admin API URL (default: http://localhost:9090)
+  -h, --help       Show this help message
+
+Examples:
+  # Connect to local server (default)
+  mockd --tui
+
+  # Start embedded server + TUI (hybrid mode)
+  mockd --tui --serve
+
+  # Connect to remote server
+  mockd --tui --admin http://remote:9090
+
+  # Hybrid mode with custom admin URL
+  mockd --tui --serve --admin http://localhost:9999
+
+Navigation:
+  1-7    Switch views (Dashboard, Mocks, Proxy, Streams, Traffic, Connections, Logs)
+  ?      Toggle help
+  q      Quit
+
+`)
+}
+
+func runHybridMode(adminURL string) error {
+	// Parse admin URL to get port
+	// For simplicity, use default ports
+	cfg := config.DefaultServerConfiguration()
+	cfg.HTTPPort = 8080
+	cfg.AdminPort = 9090
+
+	// Create and start server
+	srv := engine.NewServer(cfg)
+	if err := srv.Start(); err != nil {
+		return fmt.Errorf("failed to start server: %w", err)
+	}
+
+	// Start admin API
+	adminSrv := admin.NewAdminAPI(srv, cfg.AdminPort)
+	if err := adminSrv.Start(); err != nil {
+		return fmt.Errorf("failed to start admin API: %w", err)
+	}
+
+	// Give servers a moment to start
+	time.Sleep(500 * time.Millisecond)
+
+	fmt.Printf("Mock server started on port %d\n", cfg.HTTPPort)
+	fmt.Printf("Admin API started on port %d\n", cfg.AdminPort)
+	fmt.Println("Starting TUI...")
+	time.Sleep(500 * time.Millisecond)
+
+	// Setup cleanup on exit
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle signals for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		cancel()
+	}()
+
+	// Run TUI in foreground
+	tuiErr := tui.RunWithAdminURL(adminURL)
+
+	// TUI exited, shutdown servers
+	fmt.Println("\nShutting down servers...")
+
+	if err := adminSrv.Stop(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error shutting down admin server: %v\n", err)
+	}
+
+	if err := srv.Stop(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error shutting down mock server: %v\n", err)
+	}
+
+	// Use ctx to avoid unused warning
+	_ = ctx
+
+	return tuiErr
 }

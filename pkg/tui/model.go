@@ -34,13 +34,14 @@ type model struct {
 	adminClient *client.Client
 
 	// Views
-	dashboard views.DashboardModel
-	mocks     views.MocksModel
-	// recordings  recordingsModel
-	// streams     streamsModel
-	// traffic     trafficModel
-	// connections connectionsModel
-	// logs        logsModel
+	dashboard   views.DashboardModel
+	mocks       views.MocksModel
+	mockForm    views.MockFormModel
+	traffic     views.TrafficModel
+	streams     views.StreamsModel
+	proxy       views.ProxyModel
+	connections views.ConnectionsModel
+	logs        views.LogsModel
 
 	// Application state
 	ready         bool
@@ -50,11 +51,13 @@ type model struct {
 	lastUpdate    time.Time
 }
 
-// newModel creates a new root model
+// newModel creates a new root model with default client
 func newModel() model {
-	// Create admin client
-	adminClient := client.NewDefaultClient()
+	return newModelWithClient(client.NewDefaultClient())
+}
 
+// newModelWithClient creates a new root model with custom admin client
+func newModelWithClient(adminClient *client.Client) model {
 	return model{
 		keys:        DefaultKeyMap(),
 		currentView: dashboardView,
@@ -67,6 +70,12 @@ func newModel() model {
 		adminClient: adminClient,
 		dashboard:   views.NewDashboard(adminClient),
 		mocks:       views.NewMocks(adminClient),
+		mockForm:    views.NewMockForm(adminClient),
+		traffic:     views.NewTraffic(adminClient),
+		streams:     views.NewStreams(adminClient),
+		proxy:       views.NewProxy(adminClient),
+		connections: views.NewConnections(adminClient),
+		logs:        views.NewLogs(adminClient),
 	}
 }
 
@@ -78,6 +87,12 @@ func (m model) Init() tea.Cmd {
 		tickCmd(),
 		m.dashboard.Init(),
 		m.mocks.Init(),
+		m.mockForm.Init(),
+		m.traffic.Init(),
+		m.streams.Init(),
+		m.proxy.Init(),
+		m.connections.Init(),
+		m.logs.Init(),
 	)
 }
 
@@ -103,6 +118,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		contentHeight := msg.Height - 4
 		m.dashboard.SetSize(contentWidth, contentHeight)
 		m.mocks.SetSize(contentWidth, contentHeight)
+		m.mockForm.SetSize(contentWidth, contentHeight)
+		m.traffic.SetSize(contentWidth, contentHeight)
+		m.streams.SetSize(contentWidth, contentHeight)
+		m.proxy.SetSize(contentWidth, contentHeight)
+		m.connections.SetSize(contentWidth, contentHeight)
+		m.logs.SetSize(contentWidth, contentHeight)
 
 		// Initialize status bar hints
 		m.updateStatusBarHints()
@@ -137,6 +158,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case mocksView:
 		m.mocks, cmd = m.mocks.Update(msg)
+		return m, cmd
+	case recordingsView:
+		m.mockForm, cmd = m.mockForm.Update(msg)
+		return m, cmd
+	case streamsView:
+		m.streams, cmd = m.streams.Update(msg)
+		return m, cmd
+	case trafficView:
+		m.traffic, cmd = m.traffic.Update(msg)
+		return m, cmd
+	case connectionsView:
+		m.connections, cmd = m.connections.Update(msg)
+		return m, cmd
+	case logsView:
+		m.logs, cmd = m.logs.Update(msg)
 		return m, cmd
 	}
 
@@ -275,15 +311,15 @@ func (m model) renderContent() string {
 	case mocksView:
 		return m.mocks.View()
 	case recordingsView:
-		return "Recordings View\n\nView HTTP recordings here."
+		return m.proxy.View()
 	case streamsView:
-		return "Streams View\n\nManage WebSocket and SSE recordings."
+		return m.streams.View()
 	case trafficView:
-		return "Traffic View\n\nLive request log will appear here."
+		return m.traffic.View()
 	case connectionsView:
-		return "Connections View\n\nActive WebSocket and SSE connections."
+		return m.connections.View()
 	case logsView:
-		return "Logs View\n\nApplication logs will appear here."
+		return m.logs.View()
 	default:
 		return "Unknown View"
 	}
@@ -311,12 +347,35 @@ func (m *model) updateStatusBarHints() {
 			{Key: "d", Desc: "delete"},
 			{Key: "/", Desc: "filter"},
 		}, baseHints...))
+	case recordingsView:
+		m.statusBar.SetHints(append([]components.KeyHint{
+			{Key: "s", Desc: "start/stop"},
+			{Key: "m", Desc: "mode"},
+			{Key: "t", Desc: "target"},
+		}, baseHints...))
+	case streamsView:
+		m.statusBar.SetHints(append([]components.KeyHint{
+			{Key: "enter", Desc: "details"},
+			{Key: "d", Desc: "delete"},
+			{Key: "r", Desc: "replay"},
+		}, baseHints...))
 	case trafficView:
 		m.statusBar.SetHints(append([]components.KeyHint{
 			{Key: "p", Desc: "pause"},
 			{Key: "c", Desc: "clear"},
 			{Key: "/", Desc: "filter"},
 			{Key: "enter", Desc: "details"},
+		}, baseHints...))
+	case connectionsView:
+		m.statusBar.SetHints(append([]components.KeyHint{
+			{Key: "k", Desc: "kill"},
+			{Key: "f", Desc: "filter"},
+		}, baseHints...))
+	case logsView:
+		m.statusBar.SetHints(append([]components.KeyHint{
+			{Key: "c", Desc: "clear"},
+			{Key: "l", Desc: "level"},
+			{Key: "/", Desc: "search"},
 		}, baseHints...))
 	default:
 		m.statusBar.SetHints(baseHints)
