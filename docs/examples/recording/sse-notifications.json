@@ -1,0 +1,87 @@
+{
+  "formatVersion": "1.0",
+  "id": "01EXAMPLE_SSE_NOTIFICATIONS",
+  "name": "notification-stream-example",
+  "description": "Example SSE recording demonstrating real-time notifications",
+  "protocol": "sse",
+  "status": "complete",
+  "startTime": "2024-01-15T14:00:00Z",
+  "endTime": "2024-01-15T14:00:30Z",
+  "duration": 30000,
+  "metadata": {
+    "path": "/events/notifications",
+    "query": {
+      "userId": "user-456"
+    },
+    "headers": {
+      "Accept": "text/event-stream",
+      "Cache-Control": "no-cache"
+    },
+    "source": "proxy",
+    "target": "https://api.example.com"
+  },
+  "sse": {
+    "events": [
+      {
+        "type": "connected",
+        "data": "{\"status\":\"connected\",\"sessionId\":\"sess-abc123\"}",
+        "id": "evt-001",
+        "timestamp": "2024-01-15T14:00:00.100Z",
+        "relativeMs": 100
+      },
+      {
+        "type": "notification",
+        "data": "{\"id\":\"notif-1\",\"type\":\"info\",\"title\":\"Welcome back!\",\"body\":\"You have 3 unread messages\"}",
+        "id": "evt-002",
+        "timestamp": "2024-01-15T14:00:01.000Z",
+        "relativeMs": 1000
+      },
+      {
+        "type": "notification",
+        "data": "{\"id\":\"notif-2\",\"type\":\"message\",\"title\":\"New message from Bob\",\"body\":\"Hey, are you free for a call?\"}",
+        "id": "evt-003",
+        "timestamp": "2024-01-15T14:00:05.000Z",
+        "relativeMs": 5000
+      },
+      {
+        "type": "heartbeat",
+        "data": "{\"timestamp\":\"2024-01-15T14:00:15Z\"}",
+        "id": "evt-004",
+        "timestamp": "2024-01-15T14:00:15.000Z",
+        "relativeMs": 15000
+      },
+      {
+        "type": "notification",
+        "data": "{\"id\":\"notif-3\",\"type\":\"alert\",\"title\":\"System update\",\"body\":\"Scheduled maintenance in 1 hour\",\"priority\":\"high\"}",
+        "id": "evt-005",
+        "timestamp": "2024-01-15T14:00:20.000Z",
+        "relativeMs": 20000
+      },
+      {
+        "type": "notification",
+        "data": "{\"id\":\"notif-4\",\"type\":\"success\",\"title\":\"Upload complete\",\"body\":\"Your file report.pdf has been uploaded\"}",
+        "id": "evt-006",
+        "timestamp": "2024-01-15T14:00:25.000Z",
+        "relativeMs": 25000
+      },
+      {
+        "type": "heartbeat",
+        "data": "{\"timestamp\":\"2024-01-15T14:00:30Z\"}",
+        "id": "evt-007",
+        "timestamp": "2024-01-15T14:00:30.000Z",
+        "relativeMs": 30000
+      }
+    ]
+  },
+  "stats": {
+    "frameCount": 7,
+    "eventCount": 7,
+    "eventTypes": {
+      "connected": 1,
+      "notification": 4,
+      "heartbeat": 2
+    },
+    "fileSizeBytes": 1536
+  },
+  "tags": ["sse", "notifications", "example"]
+}
