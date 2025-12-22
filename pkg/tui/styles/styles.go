@@ -132,17 +132,17 @@ var (
 	FormLabelStyle = lipgloss.NewStyle().
 			Foreground(ColorInfo).
 			Bold(true).
-			Width(12)
+			Width(15)
 
 	FormInputStyle = lipgloss.NewStyle().
 			Foreground(ColorForeground).
-			BorderStyle(lipgloss.NormalBorder()).
+			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(ColorBorder).
 			Padding(0, 1)
 
 	FormInputFocusedStyle = lipgloss.NewStyle().
 				Foreground(ColorForeground).
-				BorderStyle(lipgloss.NormalBorder()).
+				BorderStyle(lipgloss.RoundedBorder()).
 				BorderForeground(ColorPrimary).
 				Padding(0, 1)
 

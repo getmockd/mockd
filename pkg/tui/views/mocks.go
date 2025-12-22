@@ -131,6 +131,11 @@ func (m *MocksModel) SetSize(width, height int) {
 	m.modal.SetSize(width, height)
 }
 
+// IsInFormMode returns true if the view is in form mode.
+func (m *MocksModel) IsInFormMode() bool {
+	return m.viewMode == ViewModeForm
+}
+
 // Init initializes the view.
 func (m MocksModel) Init() tea.Cmd {
 	return tea.Batch(

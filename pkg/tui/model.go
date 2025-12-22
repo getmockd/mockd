@@ -102,37 +102,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// Let active view handle key first
 		var cmd tea.Cmd
-		var viewHandled bool
 		switch m.currentView {
 		case dashboardView:
 			m.dashboard, cmd = m.dashboard.Update(msg)
-			viewHandled = (cmd != nil)
 		case mocksView:
 			m.mocks, cmd = m.mocks.Update(msg)
-			viewHandled = (cmd != nil)
+			// Update status bar hints AFTER mocks view update completes
+			m.updateStatusBarForMocksView()
 		case recordingsView:
 			m.mockForm, cmd = m.mockForm.Update(msg)
-			viewHandled = (cmd != nil)
 		case streamsView:
 			m.streams, cmd = m.streams.Update(msg)
-			viewHandled = (cmd != nil)
 		case trafficView:
 			m.traffic, cmd = m.traffic.Update(msg)
-			viewHandled = (cmd != nil)
 		case connectionsView:
 			m.connections, cmd = m.connections.Update(msg)
-			viewHandled = (cmd != nil)
 		case logsView:
 			m.logs, cmd = m.logs.Update(msg)
-			viewHandled = (cmd != nil)
 		}
 
-		// If view handled the key, return
-		if viewHandled {
+		// Check if we should allow global keys
+		// Don't process global keys if we're in a special mode
+		if m.shouldBlockGlobalKeys() {
 			return m, cmd
 		}
 
-		// Otherwise, try global keys
+		// Try global keys
 		if handled, globalCmd := m.handleGlobalKeys(msg); handled {
 			return m, globalCmd
 		}
@@ -195,6 +190,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case mocksView:
 		m.mocks, cmd = m.mocks.Update(msg)
+		// Update status bar after other message types too
+		m.updateStatusBarForMocksView()
 		return m, cmd
 	case recordingsView:
 		m.mockForm, cmd = m.mockForm.Update(msg)
@@ -362,6 +359,44 @@ func (m model) renderContent() string {
 	}
 }
 
+// shouldBlockGlobalKeys returns true if global keys should be blocked.
+func (m *model) shouldBlockGlobalKeys() bool {
+	// Block global keys when in mocks form mode
+	if m.currentView == mocksView {
+		return m.mocks.IsInFormMode()
+	}
+	// Add other view-specific checks here as needed
+	return false
+}
+
+// updateStatusBarForMocksView updates status bar when mocks view state changes.
+func (m *model) updateStatusBarForMocksView() {
+	if m.currentView == mocksView {
+		baseHints := []components.KeyHint{
+			{Key: "?", Desc: "help"},
+			{Key: "q", Desc: "quit"},
+		}
+
+		if m.mocks.IsInFormMode() {
+			// Form mode hints
+			m.statusBar.SetHints([]components.KeyHint{
+				{Key: "tab", Desc: "next field"},
+				{Key: "ctrl+s", Desc: "save"},
+				{Key: "esc", Desc: "cancel"},
+			})
+		} else {
+			// List mode hints
+			m.statusBar.SetHints(append([]components.KeyHint{
+				{Key: "enter", Desc: "toggle"},
+				{Key: "n", Desc: "new"},
+				{Key: "e", Desc: "edit"},
+				{Key: "d", Desc: "delete"},
+				{Key: "/", Desc: "filter"},
+			}, baseHints...))
+		}
+	}
+}
+
 // updateStatusBarHints updates the status bar hints based on the current view.
 func (m *model) updateStatusBarHints() {
 	baseHints := []components.KeyHint{
@@ -377,13 +412,7 @@ func (m *model) updateStatusBarHints() {
 			{Key: "p", Desc: "proxy"},
 		}, baseHints...))
 	case mocksView:
-		m.statusBar.SetHints(append([]components.KeyHint{
-			{Key: "enter", Desc: "toggle"},
-			{Key: "n", Desc: "new"},
-			{Key: "e", Desc: "edit"},
-			{Key: "d", Desc: "delete"},
-			{Key: "/", Desc: "filter"},
-		}, baseHints...))
+		m.updateStatusBarForMocksView()
 	case recordingsView:
 		m.statusBar.SetHints(append([]components.KeyHint{
 			{Key: "s", Desc: "start/stop"},

@@ -47,7 +47,8 @@ func (m *FormModel) AddField(label, placeholder, value string, required bool, va
 	ti := textinput.New()
 	ti.Placeholder = placeholder
 	ti.SetValue(value)
-	ti.Width = 50
+	// Initial width - will be updated by SetSize
+	ti.Width = 60
 
 	field := FormField{
 		Label:       label,
@@ -70,6 +71,23 @@ func (m *FormModel) AddField(label, placeholder, value string, required bool, va
 func (m *FormModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+
+	// Calculate responsive input width
+	// Account for label width (15), borders/padding (6), and margins
+	inputWidth := width - 25
+
+	// Set minimum and maximum widths
+	if inputWidth < 40 {
+		inputWidth = 40
+	}
+	if inputWidth > 80 {
+		inputWidth = 80
+	}
+
+	// Update all input field widths
+	for i := range m.fields {
+		m.fields[i].Input.Width = inputWidth
+	}
 }
 
 // Reset resets the form state.
@@ -192,6 +210,22 @@ func (m FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 			m.submitted = true
 			return m, nil
 		}
+
+	case tea.MouseMsg:
+		// Handle mouse clicks on fields
+		if msg.Type == tea.MouseLeft {
+			// Calculate which field was clicked based on Y position
+			// Title takes 2 lines, each field takes 1 line
+			clickedLine := msg.Y - 2
+			if clickedLine >= 0 && clickedLine < len(m.fields) {
+				// Switch focus to clicked field
+				if m.focusIndex != clickedLine {
+					m.fields[m.focusIndex].Input.Blur()
+					m.focusIndex = clickedLine
+					m.fields[m.focusIndex].Input.Focus()
+				}
+			}
+		}
 	}
 
 	// Update focused field
@@ -214,14 +248,14 @@ func (m FormModel) View() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(styles.ColorPrimary).
-		MarginBottom(1)
+		MarginBottom(0)
 	b.WriteString(titleStyle.Render(m.title))
 	b.WriteString("\n\n")
 
 	// Render fields
 	for i, field := range m.fields {
 		// Label
-		labelStyle := styles.FormLabelStyle
+		labelStyle := styles.FormLabelStyle.Copy().Width(15)
 		if field.Required {
 			labelStyle = labelStyle.Copy().Foreground(styles.ColorWarning)
 		}
@@ -232,7 +266,7 @@ func (m FormModel) View() string {
 		}
 
 		b.WriteString(labelStyle.Render(label))
-		b.WriteString("  ")
+		b.WriteString(" ")
 
 		// Input
 		inputStyle := styles.FormInputStyle
@@ -241,7 +275,7 @@ func (m FormModel) View() string {
 		}
 
 		b.WriteString(inputStyle.Render(field.Input.View()))
-		b.WriteString("\n\n")
+		b.WriteString("\n")
 	}
 
 	// Help text
@@ -250,6 +284,7 @@ func (m FormModel) View() string {
 		MarginTop(1)
 
 	help := "Tab: next field • Shift+Tab: previous field • Ctrl+S: submit • Esc: cancel"
+	b.WriteString("\n")
 	b.WriteString(helpStyle.Render(help))
 
 	return b.String()
