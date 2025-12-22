@@ -297,11 +297,11 @@ func (m StreamsModel) renderError() string {
 func (m StreamsModel) renderStreamsView() string {
 	sections := []string{
 		m.renderHeader(),
-		"",
 		m.renderTable(),
 	}
 
-	if m.selectedRecording != nil {
+	// Only show details if we have room
+	if m.selectedRecording != nil && len(m.recordings) < 5 {
 		sections = append(sections, "", m.renderDetail())
 	}
 
@@ -455,7 +455,15 @@ func (m StreamsModel) renderStatusMessage() string {
 func (m *StreamsModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	m.table.SetHeight(height - 10)
+	// Conservative height to avoid pushing content off screen
+	tableHeight := height - 7
+	if tableHeight < 5 {
+		tableHeight = 5
+	}
+	if tableHeight > 15 {
+		tableHeight = 15
+	}
+	m.table.SetHeight(tableHeight)
 }
 
 // updateTable updates the table with current recordings data.

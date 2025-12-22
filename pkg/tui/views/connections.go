@@ -388,7 +388,15 @@ func (m ConnectionsModel) renderStatusMessage() string {
 func (m *ConnectionsModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	m.table.SetHeight(height - 10)
+	// Conservative height to avoid pushing content off screen
+	tableHeight := height - 7
+	if tableHeight < 5 {
+		tableHeight = 5
+	}
+	if tableHeight > 15 {
+		tableHeight = 15
+	}
+	m.table.SetHeight(tableHeight)
 }
 
 // mergeConnections merges WS and SSE connections into unified list.

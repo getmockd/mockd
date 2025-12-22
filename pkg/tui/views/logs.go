@@ -66,11 +66,10 @@ func NewLogs(adminClient *client.Client) LogsModel {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(styles.ColorPrimary)
 
-	vp := viewport.New(80, 20)
+	vp := viewport.New(80, 15)
 	vp.Style = lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(styles.ColorBorder).
-		Padding(1, 2)
+		BorderForeground(styles.ColorBorder)
 
 	si := textinput.New()
 	si.Placeholder = "Search logs..."
@@ -100,11 +99,7 @@ func (m LogsModel) Init() tea.Cmd {
 func (m LogsModel) Update(msg tea.Msg) (LogsModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.viewport.Width = msg.Width - 4
-		m.viewport.Height = msg.Height - 10
-		m.updateViewport()
+		m.SetSize(msg.Width, msg.Height)
 		return m, nil
 
 	case spinner.TickMsg:
@@ -263,7 +258,6 @@ func (m LogsModel) renderError() string {
 func (m LogsModel) renderLogsView() string {
 	sections := []string{
 		m.renderHeader(),
-		"",
 		m.viewport.View(),
 	}
 
@@ -366,7 +360,15 @@ func (m *LogsModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	m.viewport.Width = width - 4
-	m.viewport.Height = height - 10
+	// Very conservative height - header takes ~3 lines, viewport borders take ~2
+	viewportHeight := height - 10
+	if viewportHeight < 8 {
+		viewportHeight = 8
+	}
+	if viewportHeight > 12 {
+		viewportHeight = 12
+	}
+	m.viewport.Height = viewportHeight
 	m.updateViewport()
 }
 

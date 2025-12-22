@@ -463,13 +463,16 @@ func (m *TrafficModel) SetSize(width, height int) {
 // updateTableSize updates the table dimensions based on current size.
 func (m *TrafficModel) updateTableSize() {
 	if m.height > 0 {
-		// Reserve space for title, separator, filter, help, and padding
-		tableHeight := m.height - 10
+		// Conservative height to avoid pushing content off screen
+		tableHeight := m.height - 7
 		if m.filterActive || m.filterText != "" {
 			tableHeight -= 1
 		}
 		if tableHeight < 5 {
 			tableHeight = 5
+		}
+		if tableHeight > 15 {
+			tableHeight = 15
 		}
 		m.table.SetHeight(tableHeight)
 	}
