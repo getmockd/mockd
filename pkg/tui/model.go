@@ -26,7 +26,7 @@ type model struct {
 
 	// Components
 	header    components.HeaderModel
-	sidebar   components.SidebarModel
+	tabBar    components.TabBarModel
 	statusBar components.StatusBarModel
 	help      components.HelpModel
 
@@ -64,7 +64,7 @@ func newModelWithClient(adminClient *client.Client) model {
 		ready:       false,
 		loading:     false,
 		header:      components.NewHeader(),
-		sidebar:     components.NewSidebar(),
+		tabBar:      components.NewTabBar(),
 		statusBar:   components.NewStatusBar(),
 		help:        components.NewHelp(),
 		adminClient: adminClient,
@@ -141,13 +141,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Update component sizes
 		m.header.SetWidth(msg.Width)
-		m.sidebar.SetHeight(msg.Height - 4) // Account for header and statusbar
+		m.tabBar.SetWidth(msg.Width)
 		m.statusBar.SetWidth(msg.Width)
 		m.help.SetSize(msg.Width, msg.Height)
 
 		// Update view sizes
-		contentWidth := msg.Width - 16 // Sidebar width
-		contentHeight := msg.Height - 4
+		contentWidth := msg.Width       // Full width available now!
+		contentHeight := msg.Height - 5 // Header(1) + TabBar(2) + StatusBar(1) + borders(1)
 		m.dashboard.SetSize(contentWidth, contentHeight)
 		m.mocks.SetSize(contentWidth, contentHeight)
 		m.mockForm.SetSize(contentWidth, contentHeight)
@@ -175,6 +175,56 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusMsg:
 		m.statusMessage = msg.message
 		m.loading = false
+		return m, nil
+
+	case tea.MouseMsg:
+		// Handle tab bar clicks
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
+			if tabIdx := m.tabBar.GetTabAt(msg.X, msg.Y); tabIdx >= 0 {
+				// Map tab index to view
+				views := []viewState{
+					dashboardView, mocksView, recordingsView,
+					streamsView, trafficView, connectionsView, logsView,
+				}
+
+				m.currentView = views[tabIdx]
+				m.tabBar.SetActive(tabIdx)
+				m.updateStatusBarHints()
+
+				// Refresh data for the view
+				var cmd tea.Cmd
+				switch views[tabIdx] {
+				case mocksView:
+					cmd = m.mocks.Init()
+				case streamsView:
+					cmd = m.streams.Init()
+				case trafficView:
+					cmd = m.traffic.Init()
+				case connectionsView:
+					cmd = m.connections.Init()
+				case recordingsView:
+					cmd = m.proxy.Init()
+				}
+
+				return m, cmd
+			}
+		}
+
+		// Pass mouse events to active view for table interactions, etc.
+		var cmd tea.Cmd
+		switch m.currentView {
+		case mocksView:
+			m.mocks, cmd = m.mocks.Update(msg)
+			m.updateStatusBarForMocksView()
+			return m, cmd
+		case streamsView:
+			m.streams, cmd = m.streams.Update(msg)
+			return m, cmd
+		case trafficView:
+			m.traffic, cmd = m.traffic.Update(msg)
+			return m, cmd
+		}
+
 		return m, nil
 
 	case viewSwitchMsg:
@@ -226,44 +276,44 @@ func (m *model) handleGlobalKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.Dashboard):
 		m.currentView = dashboardView
-		m.sidebar.SetActive(0)
+		m.tabBar.SetActive(0)
 		m.updateStatusBarHints()
 		return true, nil
 
 	case key.Matches(msg, m.keys.Mocks):
 		m.currentView = mocksView
-		m.sidebar.SetActive(1)
+		m.tabBar.SetActive(1)
 		m.updateStatusBarHints()
 		// Trigger data refresh when switching to view
 		return true, m.mocks.Init()
 
 	case key.Matches(msg, m.keys.Recordings):
 		m.currentView = recordingsView
-		m.sidebar.SetActive(2)
+		m.tabBar.SetActive(2)
 		m.updateStatusBarHints()
 		return true, m.proxy.Init()
 
 	case key.Matches(msg, m.keys.Streams):
 		m.currentView = streamsView
-		m.sidebar.SetActive(3)
+		m.tabBar.SetActive(3)
 		m.updateStatusBarHints()
 		return true, m.streams.Init()
 
 	case key.Matches(msg, m.keys.Traffic):
 		m.currentView = trafficView
-		m.sidebar.SetActive(4)
+		m.tabBar.SetActive(4)
 		m.updateStatusBarHints()
 		return true, m.traffic.Init()
 
 	case key.Matches(msg, m.keys.Connections):
 		m.currentView = connectionsView
-		m.sidebar.SetActive(5)
+		m.tabBar.SetActive(5)
 		m.updateStatusBarHints()
 		return true, m.connections.Init()
 
 	case key.Matches(msg, m.keys.Logs):
 		m.currentView = logsView
-		m.sidebar.SetActive(6)
+		m.tabBar.SetActive(6)
 		m.updateStatusBarHints()
 		return true, m.logs.Init()
 	}
@@ -296,13 +346,13 @@ func (m model) renderLayout() string {
 	return m.renderMainLayout()
 }
 
-// renderMainLayout renders the main UI layout (header, sidebar, content, statusbar)
+// renderMainLayout renders the main UI layout (header, tabbar, content, statusbar)
 func (m model) renderMainLayout() string {
 	// Render header
 	header := m.header.View()
 
-	// Render sidebar
-	sidebar := m.sidebar.View()
+	// Render tab bar
+	tabBar := m.tabBar.View()
 
 	// Render content area based on current view
 	content := m.renderContent()
@@ -310,10 +360,9 @@ func (m model) renderMainLayout() string {
 	// Render status bar
 	statusBar := m.statusBar.View()
 
-	// Calculate dimensions for content area
-	sidebarWidth := lipgloss.Width(sidebar)
-	contentWidth := m.width - sidebarWidth - 2 // Account for borders/padding
-	contentHeight := m.height - 4              // Account for header and statusbar
+	// Calculate dimensions for content area (full width now!)
+	contentWidth := m.width - 4   // Just borders/padding, no sidebar!
+	contentHeight := m.height - 5 // Header(1) + TabBar(2) + StatusBar(1) + borders(1)
 
 	// Style content area
 	contentStyled := styles.ContentStyle.
@@ -321,18 +370,12 @@ func (m model) renderMainLayout() string {
 		Height(contentHeight).
 		Render(content)
 
-	// Compose main area (sidebar + content)
-	mainArea := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		sidebar,
-		contentStyled,
-	)
-
-	// Compose full layout
+	// Compose full layout vertically (no horizontal join needed)
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
-		mainArea,
+		tabBar,
+		contentStyled,
 		statusBar,
 	)
 }

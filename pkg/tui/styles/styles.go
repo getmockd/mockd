@@ -56,20 +56,28 @@ var (
 			Bold(true).
 			MarginLeft(1)
 
-	// Sidebar styles
-	SidebarStyle = lipgloss.NewStyle().
-			BorderStyle(RoundedBorder).
-			BorderForeground(ColorBorder).
-			Padding(1, 2).
-			Width(20)
+	// Tab bar styles
+	TabActiveStyle = lipgloss.NewStyle().
+			Foreground(ColorForeground).
+			Background(ColorPrimary).
+			Bold(true).
+			Padding(0, 2).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorPrimary).
+			BorderBottom(false)
 
-	SidebarItemStyle = lipgloss.NewStyle().
-				Foreground(ColorForeground)
+	TabInactiveStyle = lipgloss.NewStyle().
+				Foreground(ColorMuted).
+				Background(ColorBackground).
+				Padding(0, 2).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(ColorBorder).
+				BorderBottom(false)
 
-	SidebarItemActiveStyle = lipgloss.NewStyle().
-				Foreground(ColorPrimary).
-				Background(lipgloss.Color("#3E4451")).
-				Bold(true)
+	TabBarStyle = lipgloss.NewStyle().
+			BorderBottom(true).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(ColorBorder)
 
 	// Content area styles
 	ContentStyle = lipgloss.NewStyle().
