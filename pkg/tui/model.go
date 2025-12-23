@@ -360,9 +360,20 @@ func (m model) renderMainLayout() string {
 	// Render status bar
 	statusBar := m.statusBar.View()
 
-	// Calculate dimensions for content area (full width now!)
-	contentWidth := m.width - 4   // Just borders/padding, no sidebar!
-	contentHeight := m.height - 5 // Header(1) + TabBar(2) + StatusBar(1) + borders(1)
+	// Calculate actual heights
+	headerHeight := lipgloss.Height(header)
+	tabBarHeight := lipgloss.Height(tabBar)
+	statusBarHeight := lipgloss.Height(statusBar)
+
+	// Calculate dimensions for content area
+	contentWidth := m.width - 4 // Account for content borders
+	// Content height = total height - header - tabbar - status - extra padding
+	contentHeight := m.height - headerHeight - tabBarHeight - statusBarHeight - 2
+
+	// Ensure content height is at least 1
+	if contentHeight < 1 {
+		contentHeight = 1
+	}
 
 	// Style content area
 	contentStyled := styles.ContentStyle.
