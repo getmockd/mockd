@@ -242,15 +242,16 @@ type SSEStream struct {
 	Status StreamStatus `json:"status"`
 
 	// Internal fields (not serialized)
-	ctx     context.Context       `json:"-"`
-	cancel  context.CancelFunc    `json:"-"`
-	writer  http.ResponseWriter   `json:"-"`
-	flusher http.Flusher          `json:"-"`
-	config  *SSEConfig            `json:"-"`
-	mu      sync.Mutex            `json:"-"`
-	eventCh chan *SSEEventDef     `json:"-"`
-	errCh   chan error            `json:"-"`
-	doneCh  chan struct{}         `json:"-"`
+	ctx      context.Context     `json:"-"`
+	cancel   context.CancelFunc  `json:"-"`
+	writer   http.ResponseWriter `json:"-"`
+	flusher  http.Flusher        `json:"-"`
+	config   *SSEConfig          `json:"-"`
+	mu       sync.Mutex          `json:"-"`
+	eventCh  chan *SSEEventDef   `json:"-"`
+	errCh    chan error          `json:"-"`
+	doneCh   chan struct{}       `json:"-"`
+	recorder *StreamRecorder     `json:"-"`
 }
 
 // SSEConnectionManager tracks active SSE connections

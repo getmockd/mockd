@@ -8,6 +8,8 @@ import (
 	"time"
 
 	ws "github.com/coder/websocket"
+
+	"github.com/getmockd/mockd/pkg/recording"
 )
 
 // Connection represents an active WebSocket connection.
@@ -24,12 +26,13 @@ type Connection struct {
 	metadata      map[string]interface{}
 	scenarioState *ScenarioState
 
-	endpoint *Endpoint
-	manager  *ConnectionManager
-	ctx      context.Context
-	cancel   context.CancelFunc
-	mu       sync.RWMutex
-	closed   atomic.Bool
+	endpoint      *Endpoint
+	manager       *ConnectionManager
+	recordingHook recording.WebSocketRecordingHook
+	ctx           context.Context
+	cancel        context.CancelFunc
+	mu            sync.RWMutex
+	closed        atomic.Bool
 }
 
 // NewConnection creates a new Connection wrapping a websocket.Conn.
@@ -149,6 +152,14 @@ func (c *Connection) SetManager(m *ConnectionManager) {
 	c.manager = m
 }
 
+// SetRecordingHook sets the recording hook for this connection.
+// If set, messages will be recorded via the hook.
+func (c *Connection) SetRecordingHook(hook recording.WebSocketRecordingHook) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.recordingHook = hook
+}
+
 // IsClosed returns whether the connection is closed.
 func (c *Connection) IsClosed() bool {
 	return c.closed.Load()
@@ -177,6 +188,22 @@ func (c *Connection) Send(msgType MessageType, data []byte) error {
 
 	c.messagesSent.Add(1)
 	c.lastMessageAt.Store(time.Now())
+
+	// Record the sent message if recording hook is set
+	c.mu.RLock()
+	hook := c.recordingHook
+	c.mu.RUnlock()
+	if hook != nil {
+		frame := recording.NewWebSocketFrame(
+			c.messagesSent.Load(),
+			c.connectedAt,
+			recording.DirectionServerToClient,
+			convertMessageType(msgType),
+			data,
+		)
+		_ = hook.OnFrame(frame)
+	}
+
 	return nil
 }
 
@@ -216,6 +243,21 @@ func (c *Connection) Read() (MessageType, []byte, error) {
 		msgType = MessageText
 	}
 
+	// Record the received message if recording hook is set
+	c.mu.RLock()
+	hook := c.recordingHook
+	c.mu.RUnlock()
+	if hook != nil {
+		frame := recording.NewWebSocketFrame(
+			c.messagesRecv.Load(),
+			c.connectedAt,
+			recording.DirectionClientToServer,
+			convertMessageType(msgType),
+			data,
+		)
+		_ = hook.OnFrame(frame)
+	}
+
 	return msgType, data, nil
 }
 
@@ -226,6 +268,16 @@ func (c *Connection) Close(code CloseCode, reason string) error {
 	}
 
 	c.cancel()
+
+	// Notify recording hook of connection close and complete the recording
+	c.mu.RLock()
+	hook := c.recordingHook
+	c.mu.RUnlock()
+	if hook != nil {
+		hook.OnClose(int(code), reason)
+		// Complete the recording after close
+		_ = hook.OnComplete()
+	}
 
 	// Close the websocket connection
 	return c.conn.Close(ws.StatusCode(code), reason)

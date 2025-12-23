@@ -7,15 +7,20 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/recording"
 )
+
+// SSERecordingHookFactory creates SSE recording hooks for new connections.
+type SSERecordingHookFactory func(streamID string, mockID string, path string) (recording.SSERecordingHook, error)
 
 // SSEHandler handles SSE streaming responses for mock endpoints.
 type SSEHandler struct {
-	encoder    *Encoder
-	manager    *SSEConnectionManager
-	buffers    map[string]*EventBuffer // buffers by mock ID
-	templates  *TemplateRegistry
-	nextConnID atomic.Int64
+	encoder              *Encoder
+	manager              *SSEConnectionManager
+	buffers              map[string]*EventBuffer // buffers by mock ID
+	templates            *TemplateRegistry
+	nextConnID           atomic.Int64
+	recordingHookFactory SSERecordingHookFactory // factory to create per-connection hooks
 }
 
 // NewSSEHandler creates a new SSE handler.
@@ -26,6 +31,16 @@ func NewSSEHandler(maxConnections int) *SSEHandler {
 		buffers:   make(map[string]*EventBuffer),
 		templates: NewTemplateRegistry(),
 	}
+}
+
+// SetRecordingHookFactory sets a factory for creating per-connection recording hooks.
+func (h *SSEHandler) SetRecordingHookFactory(factory SSERecordingHookFactory) {
+	h.recordingHookFactory = factory
+}
+
+// GetRecordingHookFactory returns the current recording hook factory.
+func (h *SSEHandler) GetRecordingHookFactory() SSERecordingHookFactory {
+	return h.recordingHookFactory
 }
 
 // ServeHTTP handles an SSE request for a given mock configuration.
@@ -78,6 +93,23 @@ func (h *SSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, mock *con
 		return
 	}
 	defer h.manager.Deregister(stream.ID)
+
+	// Set up recording if hook factory is configured
+	if h.recordingHookFactory != nil {
+		path := ""
+		if mock.Matcher != nil {
+			path = mock.Matcher.Path
+		}
+		hook, err := h.recordingHookFactory(stream.ID, mock.ID, path)
+		if err == nil && hook != nil {
+			stream.recorder = NewStreamRecorder(stream, hook)
+			defer func() {
+				if stream.recorder != nil {
+					_ = stream.recorder.Complete()
+				}
+			}()
+		}
+	}
 
 	// Run the stream
 	stream.Status = StreamStatusActive
@@ -594,6 +626,14 @@ func (h *SSEHandler) sendEvent(stream *SSEStream, event *SSEEventDef, eventIndex
 	}
 	stream.flusher.Flush()
 	stream.mu.Unlock()
+
+	// Record the event if recording is enabled
+	if stream.recorder != nil {
+		if recordErr := stream.recorder.RecordEventDef(event); recordErr != nil {
+			// Recording errors are non-fatal, but we signal the error to the hook
+			stream.recorder.Error(recordErr)
+		}
+	}
 
 	// Update stream state
 	now := time.Now()
