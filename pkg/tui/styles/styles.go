@@ -61,18 +61,12 @@ var (
 			Foreground(ColorForeground).
 			Background(ColorPrimary).
 			Bold(true).
-			Padding(0, 2).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(ColorPrimary).
-			BorderBottom(false)
+			Padding(0, 2)
 
 	TabInactiveStyle = lipgloss.NewStyle().
 				Foreground(ColorMuted).
 				Background(ColorBackground).
-				Padding(0, 2).
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(ColorBorder).
-				BorderBottom(false)
+				Padding(0, 2)
 
 	TabBarStyle = lipgloss.NewStyle().
 			BorderBottom(true).

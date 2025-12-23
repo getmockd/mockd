@@ -80,7 +80,7 @@ func (t *TabBarModel) View() string {
 	var renderedTabs []string
 	currentX := 0
 
-	// Render each tab
+	// Render each tab with separator
 	for i, tabName := range t.tabs {
 		var style lipgloss.Style
 
@@ -90,24 +90,6 @@ func (t *TabBarModel) View() string {
 		} else {
 			style = styles.TabInactiveStyle
 		}
-
-		// Handle border connections for first/last tabs
-		border, _, _, _, _ := style.GetBorder()
-		isFirst := i == 0
-		isLast := i == len(t.tabs)-1
-		isActive := i == t.activeTab
-
-		if isFirst && isActive {
-			border.BottomLeft = "│"
-		} else if isFirst && !isActive {
-			border.BottomLeft = "├"
-		} else if isLast && isActive {
-			border.BottomRight = "│"
-		} else if isLast && !isActive {
-			border.BottomRight = "┤"
-		}
-
-		style = style.Border(border)
 
 		// Render tab
 		rendered := style.Render(tabName)
@@ -121,10 +103,19 @@ func (t *TabBarModel) View() string {
 
 		currentX += tabWidth
 		renderedTabs = append(renderedTabs, rendered)
+
+		// Add separator between tabs (except after last)
+		if i < len(t.tabs)-1 {
+			sep := lipgloss.NewStyle().
+				Foreground(styles.ColorBorder).
+				Render(" │ ")
+			renderedTabs = append(renderedTabs, sep)
+			currentX += lipgloss.Width(sep)
+		}
 	}
 
 	// Join tabs horizontally
-	tabRow := lipgloss.JoinHorizontal(lipgloss.Bottom, renderedTabs...)
+	tabRow := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 
 	// Create bottom border across full width
 	bottomBorder := styles.TabBarStyle.

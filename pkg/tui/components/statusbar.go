@@ -69,10 +69,10 @@ func (s StatusBarModel) View() string {
 		messageStyle := styles.StatusBarValueStyle.Bold(true)
 		message := messageStyle.Render(s.message)
 
-		// Calculate spacing
+		// Calculate spacing - account for padding in StatusBarStyle
 		messageWidth := lipgloss.Width(message)
 		hintsWidth := lipgloss.Width(hintsStr)
-		padding := s.width - messageWidth - hintsWidth - 2
+		padding := s.width - messageWidth - hintsWidth - 4 // -4 for left/right padding
 		if padding < 1 {
 			padding = 1
 		}
@@ -86,14 +86,16 @@ func (s StatusBarModel) View() string {
 	} else {
 		// Just show hints, right-aligned
 		hintsWidth := lipgloss.Width(hintsStr)
-		padding := s.width - hintsWidth - 1
+		padding := s.width - hintsWidth - 4 // -4 for left/right padding
 		if padding < 0 {
 			padding = 0
 		}
 		content = strings.Repeat(" ", padding) + hintsStr
 	}
 
+	// Use MaxWidth to prevent wrapping
 	return styles.StatusBarStyle.
 		Width(s.width).
+		MaxWidth(s.width).
 		Render(content)
 }
