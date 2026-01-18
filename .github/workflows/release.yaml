@@ -59,7 +59,7 @@ jobs:
             -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }} -X main.Commit=${{ github.sha }}" \
             -trimpath \
             -o "$output" \
-            .
+            ./cmd/mockd
 
       - name: Create checksum
         run: |

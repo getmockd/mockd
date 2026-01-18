@@ -82,4 +82,4 @@ jobs:
           if [ "$GOOS" = "windows" ]; then
             output="mockd.exe"
           fi
-          go build -ldflags="-s -w" -o "$output" .
+          go build -ldflags="-s -w" -o "$output" ./cmd/mockd
