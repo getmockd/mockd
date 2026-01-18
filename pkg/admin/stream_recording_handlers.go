@@ -590,7 +590,7 @@ func (m *StreamRecordingManager) handleStartReplay(w http.ResponseWriter, r *htt
 	}
 
 	// Parse mode
-	mode := recording.ReplayModePure
+	var mode recording.ReplayMode
 	switch req.Mode {
 	case "pure", "":
 		mode = recording.ReplayModePure

@@ -378,7 +378,7 @@ func TestRecordingStorageLifecycle(t *testing.T) {
 	}
 
 	// List should now show 2 (excluding deleted)
-	summaries, total, err = store.List(filter)
+	_, total, err = store.List(filter)
 	if err != nil {
 		t.Fatalf("failed to list after delete: %v", err)
 	}
@@ -388,7 +388,7 @@ func TestRecordingStorageLifecycle(t *testing.T) {
 
 	// List with include deleted should show 3
 	filter.IncludeDeleted = true
-	summaries, total, err = store.List(filter)
+	_, total, err = store.List(filter)
 	if err != nil {
 		t.Fatalf("failed to list with deleted: %v", err)
 	}
@@ -408,7 +408,7 @@ func TestRecordingStorageLifecycle(t *testing.T) {
 
 	// Final count should be 2
 	filter.IncludeDeleted = true
-	summaries, total, err = store.List(filter)
+	_, total, err = store.List(filter)
 	if err != nil {
 		t.Fatalf("failed to list after vacuum: %v", err)
 	}

@@ -177,7 +177,7 @@ func (c *DeploymentCache) Clear() error {
 			continue
 		}
 		filename := filepath.Join(c.cacheDir, file.Name())
-		os.Remove(filename)
+		_ = os.Remove(filename)
 	}
 
 	return nil
@@ -185,10 +185,10 @@ func (c *DeploymentCache) Clear() error {
 
 // DeploymentIndex maintains an index of deployments by URL path for fast lookups.
 type DeploymentIndex struct {
-	mu          sync.RWMutex
-	byID        map[string]*Deployment
-	byPath      map[string]*Deployment
-	cache       *DeploymentCache
+	mu     sync.RWMutex
+	byID   map[string]*Deployment
+	byPath map[string]*Deployment
+	cache  *DeploymentCache
 }
 
 // NewDeploymentIndex creates a new deployment index with optional cache.

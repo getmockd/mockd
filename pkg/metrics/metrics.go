@@ -566,10 +566,10 @@ func writeMetric(w http.ResponseWriter, m Metric) {
 	}
 
 	// Write HELP line
-	fmt.Fprintf(w, "# HELP %s %s\n", m.Name(), escapeHelp(m.Help()))
+	_, _ = fmt.Fprintf(w, "# HELP %s %s\n", m.Name(), escapeHelp(m.Help()))
 
 	// Write TYPE line
-	fmt.Fprintf(w, "# TYPE %s %s\n", m.Name(), m.Type())
+	_, _ = fmt.Fprintf(w, "# TYPE %s %s\n", m.Name(), m.Type())
 
 	// Write samples
 	for _, s := range samples {
@@ -580,9 +580,9 @@ func writeMetric(w http.ResponseWriter, m Metric) {
 // writeSample writes a single sample line.
 func writeSample(w http.ResponseWriter, s Sample) {
 	if len(s.Labels) == 0 {
-		fmt.Fprintf(w, "%s %s\n", s.Name, formatFloat(s.Value))
+		_, _ = fmt.Fprintf(w, "%s %s\n", s.Name, formatFloat(s.Value))
 	} else {
-		fmt.Fprintf(w, "%s{%s} %s\n", s.Name, formatLabels(s.Labels), formatFloat(s.Value))
+		_, _ = fmt.Fprintf(w, "%s{%s} %s\n", s.Name, formatLabels(s.Labels), formatFloat(s.Value))
 	}
 }
 

@@ -219,7 +219,7 @@ func TestOpenAIProvider(t *testing.T) {
 					},
 				},
 			}
-			json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp)
 		}))
 		defer server.Close()
 
@@ -253,7 +253,7 @@ func TestOpenAIProvider(t *testing.T) {
 					Message: "Rate limit exceeded",
 				},
 			}
-			json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp)
 		}))
 		defer server.Close()
 

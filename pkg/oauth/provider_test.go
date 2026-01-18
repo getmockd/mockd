@@ -597,7 +597,7 @@ func TestHandleToken(t *testing.T) {
 		}
 
 		var response TokenResponse
-		json.Unmarshal(rec.Body.Bytes(), &response)
+		_ = json.Unmarshal(rec.Body.Bytes(), &response)
 
 		if response.AccessToken == "" {
 			t.Error("expected access_token")
@@ -638,7 +638,7 @@ func TestHandleToken(t *testing.T) {
 		}
 
 		var response TokenResponse
-		json.Unmarshal(rec.Body.Bytes(), &response)
+		_ = json.Unmarshal(rec.Body.Bytes(), &response)
 
 		if response.AccessToken == "" {
 			t.Error("expected access_token")
@@ -678,7 +678,7 @@ func TestHandleToken(t *testing.T) {
 		}
 
 		var response TokenResponse
-		json.Unmarshal(rec.Body.Bytes(), &response)
+		_ = json.Unmarshal(rec.Body.Bytes(), &response)
 
 		if response.AccessToken == "" {
 			t.Error("expected access_token")
