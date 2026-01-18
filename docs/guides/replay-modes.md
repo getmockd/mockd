@@ -383,5 +383,5 @@ done
 ## Next Steps
 
 - [Stream Recording](stream-recording.md) - Recording WebSocket and SSE streams
-- [SSE Streaming](../SSE.md) - SSE mock configuration
+- [SSE Streaming](sse-streaming.md) - SSE mock configuration
 - [Admin API](../reference/admin-api.md) - Stream recording API endpoints
