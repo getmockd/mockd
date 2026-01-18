@@ -6,7 +6,7 @@ Thank you for your interest in contributing to mockd! This document provides gui
 
 ### Prerequisites
 
-- Go 1.23 or later
+- Go 1.25 or later
 - Git
 
 ### Getting Started
