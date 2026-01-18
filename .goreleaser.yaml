@@ -1,0 +1,100 @@
+version: 2
+
+project_name: mockd
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: mockd
+    main: ./cmd/mockd
+    binary: mockd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.Commit}}
+      - -X main.BuildDate={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - NOTICE
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - name: mockd
+    repository:
+      owner: getmockd
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://mockd.dev"
+    description: "High-performance, local-first HTTP/HTTPS mock server"
+    license: "Apache-2.0"
+    test: |
+      system "#{bin}/mockd", "--version"
+    install: |
+      bin.install "mockd"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/getmockd/mockd:{{ .Tag }}"
+      - "ghcr.io/getmockd/mockd:v{{ .Major }}"
+      - "ghcr.io/getmockd/mockd:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/getmockd/mockd:latest"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+      - "--platform=linux/amd64"
+
+release:
+  github:
+    owner: getmockd
+    name: mockd
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"

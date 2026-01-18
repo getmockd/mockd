@@ -1,0 +1,72 @@
+# docker-compose.yml - Example configuration for mockd
+#
+# Usage:
+#   docker-compose up -d
+#   docker-compose logs -f
+#   docker-compose down
+#
+# Build locally:
+#   docker-compose build --build-arg VERSION=1.0.0 --build-arg COMMIT=$(git rev-parse --short HEAD)
+
+services:
+  mockd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${MOCKD_VERSION:-dev}
+        COMMIT: ${MOCKD_COMMIT:-unknown}
+    image: mockd:latest
+    container_name: mockd
+    restart: unless-stopped
+
+    ports:
+      # Mock server port
+      - "4280:4280"
+      # Admin API port
+      - "4290:4290"
+
+    volumes:
+      # Mount configuration directory (read-only for security)
+      - ./config:/config:ro
+      # Mount recordings directory (read-write for recording sessions)
+      - ./recordings:/recordings:rw
+
+    environment:
+      # Server configuration
+      MOCKD_PORT: "4280"
+      MOCKD_ADMIN_PORT: "4290"
+      # Configuration file path
+      MOCKD_CONFIG: "/config/mocks.json"
+      # Recordings directory
+      MOCKD_RECORDINGS_DIR: "/recordings"
+      # Log level (debug, info, warn, error)
+      MOCKD_LOG_LEVEL: "info"
+      # Enable pretty logging (disable in production for JSON logs)
+      MOCKD_LOG_PRETTY: "false"
+      # Timezone (uses tzdata from container)
+      TZ: "UTC"
+
+    healthcheck:
+      test: ["/usr/local/bin/mockd", "health", "--admin-port", "4290"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 64M
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=10M,mode=1777

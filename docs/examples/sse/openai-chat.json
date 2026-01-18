@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "mocks": [
+    {
+      "id": "openai-chat-stream",
+      "name": "OpenAI Chat Completions (Streaming)",
+      "description": "Mock OpenAI's /v1/chat/completions endpoint with streaming response",
+      "matcher": {
+        "method": "POST",
+        "path": "/v1/chat/completions"
+      },
+      "sse": {
+        "template": "openai-chat",
+        "templateParams": {
+          "tokens": ["Hello", "!", " ", "How", " can", " I", " help", " you", " today", "?"],
+          "model": "gpt-4",
+          "finishReason": "stop",
+          "includeDone": true,
+          "delayPerToken": 50
+        }
+      },
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "version": "2.0",
+  "name": "Invalid Test Configuration - Wrong Version",
+  "mocks": [
+    {
+      "id": "invalid-mock-1",
+      "name": "Invalid Status Code",
+      "matcher": {
+        "method": "GET",
+        "path": "/api/invalid"
+      },
+      "response": {
+        "statusCode": 999,
+        "body": "Invalid status code"
+      }
+    }
+  ]
+}

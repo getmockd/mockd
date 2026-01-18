@@ -1,0 +1,237 @@
+SERVER-SENT EVENTS CONFIGURATION
+=================================
+
+mockd supports Server-Sent Events (SSE) for streaming HTTP responses.
+Configure event streams with timing controls, generators, and resumption.
+
+BASIC CONFIGURATION
+-------------------
+
+  SSE is configured within an HTTP mock using the sse field instead of
+  the standard response field.
+
+  http:
+    matcher:
+      method: GET
+      path: /events
+    sse:
+      events: [...]
+      timing: {...}
+      lifecycle: {...}
+
+EVENT CONFIGURATION
+-------------------
+
+  Define static events to stream to clients.
+
+  Event fields:
+
+    type       Event type (becomes event: field in SSE)
+    data       Event data (string, object, or array)
+    id         Event ID (for resumption)
+    retry      Client retry interval in milliseconds
+    comment    SSE comment (prefixed with :)
+    delay      Delay before this specific event (ms)
+
+  Example events:
+
+    events:
+      - type: message
+        data: {"text": "Hello"}
+        id: "1"
+      - type: update
+        data: {"count": 42}
+        id: "2"
+        delay: 1000
+
+TIMING CONFIGURATION
+--------------------
+
+  Control event delivery timing.
+
+    timing:
+      fixedDelay: 1000           # Fixed delay between events (ms)
+      initialDelay: 500          # Delay before first event (ms)
+
+  Random delay:
+
+    timing:
+      randomDelay:
+        min: 500
+        max: 2000
+
+  Per-event delays:
+
+    timing:
+      perEventDelays: [100, 200, 500, 1000]
+
+  Burst mode:
+
+    timing:
+      burst:
+        count: 5        # Events per burst
+        interval: 100   # Delay between burst events (ms)
+        pause: 2000     # Delay between bursts (ms)
+
+EVENT GENERATORS
+----------------
+
+  Generate events dynamically instead of using static definitions.
+
+  Generator types:
+
+    sequence     Generate incrementing numeric events
+    random       Generate random data events
+    template     Repeat events from a template
+
+  Sequence generator:
+
+    generator:
+      type: sequence
+      count: 100
+      sequence:
+        start: 1
+        increment: 1
+        format: "Event #%d"
+
+  Random generator:
+
+    generator:
+      type: random
+      count: 50
+      random:
+        schema:
+          value: "{{random.int 1 100}}"
+          timestamp: "{{now}}"
+
+  Template generator:
+
+    generator:
+      type: template
+      template:
+        events:
+          - type: tick
+            data: {"time": "{{now}}"}
+        repeat: 10
+
+LIFECYCLE CONFIGURATION
+-----------------------
+
+  Control connection behavior and termination.
+
+    lifecycle:
+      keepaliveInterval: 15000    # Keepalive comment interval (ms)
+      maxEvents: 100              # Close after N events
+      timeout: 60000              # Connection timeout (ms)
+      connectionTimeout: 5000     # Initial connection timeout (ms)
+
+  Simulated disconnection:
+
+    lifecycle:
+      simulateDisconnect: 30000   # Disconnect after 30s
+
+  Termination configuration:
+
+    lifecycle:
+      termination:
+        type: graceful          # graceful, error, or immediate
+        finalEvent:
+          type: close
+          data: {"reason": "Stream complete"}
+        closeDelay: 1000
+
+RESUME WITH LAST-EVENT-ID
+-------------------------
+
+  Support client reconnection with Last-Event-ID header.
+
+    resume:
+      enabled: true
+      bufferSize: 100      # Events to buffer for replay
+      maxAge: 300000       # Buffer expiry (ms)
+
+  When a client reconnects with Last-Event-ID, mockd replays events
+  from the buffer starting after the specified ID.
+
+RATE LIMITING
+-------------
+
+  Control event delivery rate.
+
+    rateLimit:
+      eventsPerSecond: 10
+      burstSize: 5
+      strategy: smooth    # smooth or burst
+      headers: true       # Include rate limit headers
+
+EXAMPLE
+-------
+
+  type: http
+  name: Stock Price Stream
+  http:
+    matcher:
+      method: GET
+      path: /api/stocks/stream
+    sse:
+      events:
+        - type: connected
+          data: {"status": "connected", "timestamp": "{{now}}"}
+          id: "0"
+        - type: price
+          data: {"symbol": "AAPL", "price": 150.25}
+          id: "1"
+        - type: price
+          data: {"symbol": "GOOGL", "price": 2750.00}
+          id: "2"
+
+      timing:
+        initialDelay: 100
+        fixedDelay: 1000
+
+      lifecycle:
+        keepaliveInterval: 15000
+        maxEvents: 1000
+        timeout: 300000
+        termination:
+          type: graceful
+          finalEvent:
+            type: close
+            data: {"reason": "Session ended"}
+
+      resume:
+        enabled: true
+        bufferSize: 50
+        maxAge: 60000
+
+  # Alternative with generator:
+  type: http
+  name: Counter Stream
+  http:
+    matcher:
+      method: GET
+      path: /api/counter
+    sse:
+      generator:
+        type: sequence
+        count: 100
+        sequence:
+          start: 1
+          increment: 1
+
+      timing:
+        randomDelay:
+          min: 500
+          max: 1500
+
+      lifecycle:
+        maxEvents: 100
+        termination:
+          type: graceful
+
+SEE ALSO
+--------
+
+  mockd help config
+  mockd help templating
+  mockd help matching

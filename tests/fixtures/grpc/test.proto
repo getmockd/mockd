@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package test;
+
+option go_package = "github.com/getmockd/mockd/tests/fixtures/grpc";
+
+// UserService provides user management operations.
+service UserService {
+  // GetUser retrieves a user by ID (unary).
+  rpc GetUser(GetUserRequest) returns (User);
+
+  // ListUsers returns all users (server streaming).
+  rpc ListUsers(ListUsersRequest) returns (stream User);
+
+  // CreateUsers creates multiple users (client streaming).
+  rpc CreateUsers(stream CreateUserRequest) returns (CreateUsersResponse);
+
+  // Chat is a bidirectional streaming RPC.
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage);
+}
+
+// HealthService provides health check operations.
+service HealthService {
+  // Check performs a health check.
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+
+message User {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+message ListUsersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message CreateUserRequest {
+  string name = 1;
+  string email = 2;
+}
+
+message CreateUsersResponse {
+  int32 created_count = 1;
+  repeated string ids = 2;
+}
+
+message ChatMessage {
+  string user_id = 1;
+  string content = 2;
+  int64 timestamp = 3;
+}
+
+message HealthCheckRequest {
+  string service = 1;
+}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+  }
+  ServingStatus status = 1;
+}

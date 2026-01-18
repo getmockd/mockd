@@ -1,0 +1,18 @@
+apiVersion: v2
+name: mockd
+description: A Helm chart for deploying mockd - a powerful HTTP mocking server
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - mock
+  - http
+  - api
+  - testing
+  - mocking
+home: https://github.com/getmockd/mockd
+sources:
+  - https://github.com/getmockd/mockd
+maintainers:
+  - name: mockd
+    url: https://github.com/getmockd

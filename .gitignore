@@ -1,0 +1,98 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/mockd
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+coverage.out
+coverage.html
+*.cover
+
+# Dependency directories
+vendor/
+
+# IDE/editor directories
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+build/
+
+# Log files
+*.log
+
+# Generated certificates (for HTTPS testing)
+*.pem
+*.crt
+*.key
+!tests/fixtures/test-certs/*.pem
+!tests/fixtures/test-certs/*.crt
+!tests/fixtures/test-certs/*.key
+
+# Temporary files
+*.tmp
+*.temp
+
+# MkDocs documentation build output
+site/
+
+# Python virtual environment (for docs tooling)
+.venv/
+__pycache__/
+*.py[cod]
+
+# TUI test artifacts
+tests/tui/screenshots/
+tests/tui/output/
+tests/tui/test_tabbar
+demo_resize_*.png
+mockd-test
+
+# Demo output
+demo/output/
+demo_tabs
+
+# Test binaries and artifacts
+mockd_test_bin
+ws
+test-*.png
+test-*.gif
+*.ascii
+
+# Internal dev notes (should never be committed)
+TUI_*.md
+AUDIT_*.md
+TEST_*.md
+*_COMPLETE.md
+*_SUMMARY.md
+
+# Internal development docs
+internal-docs/
+
+# Internal development docs
+internal-docs/
+mockd_bench

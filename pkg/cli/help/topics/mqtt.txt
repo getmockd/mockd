@@ -1,0 +1,211 @@
+MQTT BROKER CONFIGURATION
+=========================
+
+mockd supports MQTT broker mocking for IoT and messaging testing. Configure
+topics, QoS levels, authentication, and device simulation.
+
+BASIC CONFIGURATION
+-------------------
+
+  port           MQTT broker port (default: 1883)
+  tls            TLS/SSL configuration
+  auth           Authentication settings
+  topics         Topic configurations
+
+BROKER PORT CONFIGURATION
+-------------------------
+
+  The broker listens on the specified port for MQTT connections.
+
+    port: 1883
+
+  For TLS-encrypted connections:
+
+    port: 8883
+    tls:
+      enabled: true
+      certFile: ./certs/server.crt
+      keyFile: ./certs/server.key
+
+TOPIC CONFIGURATION
+-------------------
+
+  Configure mock behavior for MQTT topics.
+
+  Topic fields:
+
+    topic            Topic pattern (supports wildcards: +, #)
+    qos              Quality of Service level (0, 1, or 2)
+    retain           Retain last message for new subscribers
+    messages         Predefined messages to publish
+    onPublish        Handler for received messages
+    deviceSimulation Simulate multiple devices
+
+  Topic wildcards:
+
+    +    Single-level wildcard (sensors/+/temperature)
+    #    Multi-level wildcard (sensors/#)
+
+QOS LEVELS
+----------
+
+  QoS 0 - At most once:
+
+    Fire and forget. No acknowledgment required.
+
+  QoS 1 - At least once:
+
+    Message delivered at least once. May have duplicates.
+
+  QoS 2 - Exactly once:
+
+    Message delivered exactly once. Highest overhead.
+
+  Configure per-topic:
+
+    topics:
+      - topic: sensors/temperature
+        qos: 1
+
+RETAIN MESSAGES
+---------------
+
+  Retained messages are stored and delivered to new subscribers.
+
+    topics:
+      - topic: status/online
+        retain: true
+        messages:
+          - payload: '{"status": "online"}'
+
+MESSAGE CONFIGURATION
+---------------------
+
+  Define messages to publish on a topic.
+
+    messages:
+      - payload: '{"temperature": 22.5}'
+        delay: 0s
+        repeat: true
+        interval: 5s
+
+  Message fields:
+
+    payload     Message content (string or JSON)
+    delay       Initial delay before first publish
+    repeat      Continuously publish at interval
+    interval    Time between repeated publishes
+
+PUBLISH HANDLERS
+----------------
+
+  Respond to messages received on a topic.
+
+    onPublish:
+      response:
+        payload: '{"ack": true}'
+        delay: 100ms
+      forward: sensors/processed
+
+  Handler fields:
+
+    response    Message to publish in response
+    forward     Topic to forward the message to
+
+AUTHENTICATION CONFIGURATION
+-----------------------------
+
+  Configure username/password authentication.
+
+    auth:
+      enabled: true
+      users:
+        - username: device1
+          password: secret123
+          acl:
+            - topic: sensors/#
+              access: readwrite
+            - topic: admin/#
+              access: deny
+
+  ACL access levels:
+
+    read         Subscribe only
+    write        Publish only
+    readwrite    Both subscribe and publish
+    deny         No access
+
+DEVICE SIMULATION
+-----------------
+
+  Simulate multiple IoT devices publishing to topics.
+
+    topics:
+      - topic: devices/{{deviceId}}/telemetry
+        deviceSimulation:
+          enabled: true
+          deviceCount: 100
+          deviceIdPattern: "device-{{index}}"
+
+  This creates 100 virtual devices (device-0 through device-99)
+  each publishing to their own topic.
+
+EXAMPLE
+-------
+
+  type: mqtt
+  name: IoT Sensor Broker
+  mqtt:
+    port: 1883
+
+    auth:
+      enabled: true
+      users:
+        - username: sensor-gateway
+          password: gateway-secret
+          acl:
+            - topic: sensors/#
+              access: readwrite
+        - username: dashboard
+          password: readonly-pass
+          acl:
+            - topic: sensors/#
+              access: read
+            - topic: commands/#
+              access: deny
+
+    topics:
+      - topic: sensors/temperature
+        qos: 1
+        retain: true
+        messages:
+          - payload: '{"value": 22.5, "unit": "celsius", "timestamp": "{{now}}"}'
+            repeat: true
+            interval: 10s
+
+      - topic: sensors/humidity
+        qos: 1
+        messages:
+          - payload: '{"value": 65, "unit": "percent"}'
+            repeat: true
+            interval: 15s
+
+      - topic: commands/+/execute
+        qos: 2
+        onPublish:
+          response:
+            payload: '{"status": "executed", "id": "{{uuid}}"}'
+            delay: 50ms
+
+      - topic: devices/+/telemetry
+        qos: 0
+        deviceSimulation:
+          enabled: true
+          deviceCount: 10
+          deviceIdPattern: "sensor-{{index}}"
+
+SEE ALSO
+--------
+
+  mockd help config
+  mockd help templating

@@ -1,0 +1,319 @@
+# mockd
+
+![CI](https://github.com/getmockd/mockd/actions/workflows/ci.yaml/badge.svg) ![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go) ![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg) ![Release](https://img.shields.io/github/v/release/getmockd/mockd?include_prereleases)
+
+A high-performance, local-first HTTP/HTTPS mock server with CLI and Go API.
+
+## Features
+
+- **Local-First**: Zero external dependencies, works completely offline
+- **High Performance**: Handles 1000+ concurrent requests with sub-2-second startup
+- **CLI Tool**: Full command-line interface for managing mocks
+- **Flexible Matching**: Match requests by method, path, headers, query params, and body
+- **HTTPS Support**: Auto-generated self-signed certificates for secure testing
+- **Admin API**: RESTful API for dynamic mock configuration
+- **Stateful Mocking**: Simulate CRUD operations with persistent state
+- **Proxy Recording**: Record real API traffic for replay
+- **Request Logging**: Full request inspection for debugging
+- **Shell Completion**: Bash, Zsh, and Fish completion support
+
+## Installation
+
+```bash
+# Install with go install
+go install github.com/getmockd/mockd/cmd/mockd@latest
+
+# Or clone and build
+git clone https://github.com/getmockd/mockd.git
+cd mockd
+go build -o mockd ./cmd/mockd
+```
+
+## Quick Start
+
+```bash
+# Start the mock server
+mockd start
+
+# Start with custom port and config
+mockd start --port 3000 --config mocks.json
+
+# Add a mock endpoint
+mockd add --path /api/users --status 200 --body '{"users": []}'
+
+# Add a mock with headers
+mockd add -m POST --path /api/users -s 201 \
+  -b '{"id": "new-user"}' \
+  -H "Content-Type:application/json"
+
+# List all mocks
+mockd list
+
+# Get mock details
+mockd get <mock-id>
+
+# Delete a mock
+mockd delete <mock-id>
+
+# Export configuration
+mockd export -o mocks.json
+
+# Import configuration
+mockd import mocks.json
+
+# View request logs
+mockd logs
+
+# Show effective configuration
+mockd config
+
+# Generate shell completion
+mockd completion bash > /etc/bash_completion.d/mockd
+```
+
+## Environment Variables
+
+Configure mockd via environment variables for CI/CD:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MOCKD_PORT` | HTTP server port | 4280 |
+| `MOCKD_ADMIN_PORT` | Admin API port | 4290 |
+| `MOCKD_ADMIN_URL` | Admin API URL for CLI | http://localhost:4290 |
+| `MOCKD_CONFIG` | Path to config file | |
+| `MOCKD_HTTPS_PORT` | HTTPS port (0=disabled) | 0 |
+| `MOCKD_READ_TIMEOUT` | Read timeout seconds | 30 |
+| `MOCKD_WRITE_TIMEOUT` | Write timeout seconds | 30 |
+| `MOCKD_MAX_LOG_ENTRIES` | Max request log entries | 1000 |
+
+## Configuration Files
+
+mockd supports configuration files with the following precedence:
+
+1. Command-line flags (highest priority)
+2. Environment variables
+3. Local config `.mockdrc.json` (current directory)
+4. Global config `~/.config/mockd/config.json`
+5. Default values
+
+Example `.mockdrc.json`:
+```json
+{
+  "port": 3000,
+  "adminPort": 4290,
+  "maxLogEntries": 500
+}
+```
+
+## Go Library Usage
+
+```bash
+go get github.com/getmockd/mockd/pkg/engine
+go get github.com/getmockd/mockd/pkg/admin/engineclient
+```
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/getmockd/mockd/pkg/admin/engineclient"
+    "github.com/getmockd/mockd/pkg/config"
+    "github.com/getmockd/mockd/pkg/engine"
+    "github.com/getmockd/mockd/pkg/mock"
+)
+
+func main() {
+    // Create server configuration
+    cfg := &config.ServerConfiguration{
+        HTTPPort:  4280,
+        AdminPort: 4290,
+    }
+
+    // Create and start the engine
+    srv := engine.NewServer(cfg)
+    if err := srv.Start(); err != nil {
+        log.Fatalf("Failed to start server: %v", err)
+    }
+    defer srv.Stop()
+
+    // Use the HTTP client to add mocks
+    client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
+    ctx := context.Background()
+
+    // Add a mock via HTTP API
+    client.CreateMock(ctx, &config.MockConfiguration{
+        ID:   "get-users",
+        Name: "Get Users",
+        Type: mock.MockTypeHTTP,
+        HTTP: &mock.HTTPSpec{
+            Matcher: &mock.HTTPMatcher{
+                Method: "GET",
+                Path:   "/api/users",
+            },
+            Response: &mock.HTTPResponse{
+                StatusCode: 200,
+                Headers: map[string]string{
+                    "Content-Type": "application/json",
+                },
+                Body: `{"users": ["Alice", "Bob"]}`,
+            },
+        },
+    })
+
+    log.Println("Mock server running on :4280")
+    log.Println("Admin API running on :4290")
+    select {}
+}
+```
+
+## Admin API
+
+Create, update, and delete mocks at runtime:
+
+```bash
+# Create a mock
+curl -X POST http://localhost:4290/mocks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "matcher": {"method": "GET", "path": "/api/health"},
+    "response": {"statusCode": 200, "body": "{\"status\": \"ok\"}"}
+  }'
+
+# List all mocks
+curl http://localhost:4290/mocks
+
+# Delete a mock
+curl -X DELETE http://localhost:4290/mocks/{id}
+```
+
+## Mock Configuration File
+
+Load mocks from a JSON file:
+
+```json
+{
+  "version": "1.0",
+  "name": "My API Mocks",
+  "mocks": [
+    {
+      "id": "get-users",
+      "matcher": {"method": "GET", "path": "/api/users"},
+      "response": {"statusCode": 200, "body": "[]"}
+    }
+  ]
+}
+```
+
+## Documentation
+
+The documentation site is built with MkDocs and deployed to GitHub Pages.
+
+### Local Development
+
+```bash
+# Install mise if not already installed
+# https://mise.jdx.dev/getting-started.html
+
+# Trust the mise config and install tools
+mise trust
+mise install
+
+# Install documentation dependencies
+mise run docs-install
+
+# Start local server with live reload
+mise run docs-serve
+
+# Build static site
+mise run docs-build
+```
+
+The site will be available at `http://localhost:8000`.
+
+### Documentation Structure
+
+```
+docs/
+├── index.md              # Homepage
+├── getting-started/      # Installation, quickstart, concepts
+├── guides/               # Feature guides
+├── reference/            # CLI, config, API reference
+└── examples/             # Usage examples
+```
+
+### Adding New Pages
+
+1. Create a new `.md` file in the appropriate directory
+2. Add the page to `nav:` in `mkdocs.yml`
+3. Update the `llmstxt` plugin sections if needed
+4. Run `mkdocs serve` to preview
+
+## Extending mockd
+
+mockd provides extension points for custom audit logging integrations. This allows you to build custom integrations without modifying the core codebase.
+
+### Custom Audit Writers
+
+Register custom audit log writers to send logs to your SIEM, monitoring system, or custom backend:
+
+```go
+package main
+
+import (
+    "github.com/getmockd/mockd/pkg/audit"
+)
+
+func init() {
+    // Register your custom writer factory
+    audit.RegisterWriter("my-backend", func(config map[string]interface{}) (audit.AuditLogger, error) {
+        endpoint, _ := config["endpoint"].(string)
+        return &MyCustomWriter{
+            endpoint: endpoint,
+        }, nil
+    })
+}
+
+type MyCustomWriter struct {
+    endpoint string
+}
+
+func (w *MyCustomWriter) Log(entry audit.AuditEntry) error {
+    // Send to your backend
+    return nil
+}
+
+func (w *MyCustomWriter) Close() error {
+    return nil
+}
+```
+
+### Custom Redactors
+
+Register custom PII redaction logic for audit logs:
+
+```go
+func init() {
+    audit.RegisterRedactor(func(entry *audit.AuditEntry) *audit.AuditEntry {
+        // Redact sensitive fields from entry.Request.Headers, etc.
+        return entry
+    })
+}
+```
+
+Extensions are registered via `init()` functions and automatically discovered when your extension package is imported.
+
+## Requirements
+
+- Go 1.23+
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+Apache License 2.0 - see [LICENSE](LICENSE) for details.

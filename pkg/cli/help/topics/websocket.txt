@@ -1,0 +1,147 @@
+WEBSOCKET MOCK CONFIGURATION
+=============================
+
+mockd supports WebSocket mock endpoints for real-time bidirectional communication
+testing. Configure WebSocket mocks using the websocket spec type.
+
+BASIC CONFIGURATION
+-------------------
+
+  path                 Endpoint path (e.g., "/ws", "/chat")
+  subprotocols         List of supported subprotocols
+  requireSubprotocol   Reject connections without matching subprotocol
+  maxMessageSize       Maximum message size in bytes
+  maxConnections       Maximum concurrent connections
+  idleTimeout          Connection idle timeout (e.g., "30s")
+
+MESSAGE MATCHERS
+----------------
+
+  Matchers define how to respond to incoming WebSocket messages.
+  Each matcher has a match criteria and response configuration.
+
+  Match types:
+
+    exact         Exact string match
+    contains      Substring match
+    regex         Regular expression match
+    json          JSON path expression match
+    prefix        Prefix match
+    suffix        Suffix match
+    messageType   Match by message type ("text" or "binary")
+
+  Match criteria fields:
+
+    type          Match type (exact, contains, regex, json, prefix, suffix)
+    value         Value to match against
+    path          JSON path expression (for json type)
+    messageType   Filter by message type
+
+RESPONSE TYPES
+--------------
+
+  type           Response type: "text", "json", or "binary"
+  value          Response content (string, object, or base64 for binary)
+  delay          Response delay (e.g., "100ms", "1s")
+
+ECHO MODE
+---------
+
+  echoMode       When true, echoes received messages back to the client
+                 Useful for testing client message handling
+
+HEARTBEAT CONFIGURATION
+-----------------------
+
+  heartbeat.enabled    Enable ping/pong keepalive
+  heartbeat.interval   Ping interval (e.g., "30s")
+  heartbeat.timeout    Pong timeout before disconnect (e.g., "10s")
+
+SCENARIOS/SCRIPTS
+-----------------
+
+  Scenarios allow scripted message sequences for complex testing flows.
+
+  scenario.name              Scenario identifier
+  scenario.steps             List of scenario steps
+  scenario.loop              Repeat scenario on completion
+  scenario.resetOnReconnect  Reset scenario state on reconnect
+
+  Step types:
+
+    send          Send a message to the client
+    wait          Wait for a client message
+    delay         Pause for a duration
+
+  Step fields:
+
+    type          Step type (send, wait, delay)
+    message       Message to send (for send steps)
+    match         Match criteria (for wait steps)
+    duration      Delay duration (for delay steps)
+    timeout       Wait timeout (for wait steps)
+    optional      Skip step if timeout expires
+
+EXAMPLE
+-------
+
+  type: websocket
+  name: Chat WebSocket
+  websocket:
+    path: /ws/chat
+    subprotocols:
+      - chat.v1
+      - chat.v2
+    requireSubprotocol: true
+    maxMessageSize: 65536
+    idleTimeout: 5m
+
+    heartbeat:
+      enabled: true
+      interval: 30s
+      timeout: 10s
+
+    matchers:
+      - match:
+          type: json
+          path: $.type
+          value: ping
+        response:
+          type: json
+          value: {"type": "pong", "timestamp": "{{now}}"}
+
+      - match:
+          type: contains
+          value: hello
+        response:
+          type: text
+          value: "Hello from mockd!"
+          delay: 100ms
+
+    defaultResponse:
+      type: json
+      value: {"error": "Unknown message type"}
+
+    scenario:
+      name: welcome-flow
+      steps:
+        - type: send
+          message:
+            type: json
+            value: {"type": "welcome", "server": "mockd"}
+        - type: wait
+          match:
+            type: json
+            path: $.type
+            value: ready
+          timeout: 5s
+        - type: send
+          message:
+            type: json
+            value: {"type": "session_start", "id": "{{uuid}}"}
+
+SEE ALSO
+--------
+
+  mockd help config
+  mockd help templating

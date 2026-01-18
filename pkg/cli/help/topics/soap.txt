@@ -1,0 +1,192 @@
+SOAP MOCK CONFIGURATION
+=======================
+
+mockd supports SOAP/XML web service mocking for testing legacy integrations.
+Configure WSDL-based services with operation mocking and SOAP fault handling.
+
+BASIC CONFIGURATION
+-------------------
+
+  path           SOAP endpoint path (e.g., "/soap/service")
+  wsdl           Inline WSDL definition
+  wsdlFile       Path to external WSDL file
+  operations     Operation response configurations
+
+WSDL CONFIGURATION
+------------------
+
+  mockd uses WSDL definitions to validate SOAP requests and generate
+  appropriate responses.
+
+  External WSDL file:
+
+    wsdlFile: ./wsdl/service.wsdl
+
+  Inline WSDL (for simple services):
+
+    wsdl: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+                   xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+                   xmlns:tns="http://example.com/service">
+        ...
+      </definitions>
+
+  The WSDL endpoint is automatically served at the path with ?wsdl suffix.
+
+OPERATION MOCKING
+-----------------
+
+  Configure responses for each SOAP operation.
+
+  Operation fields:
+
+    soapAction     SOAPAction header value for matching
+    response       XML response body
+    delay          Response delay (e.g., "100ms")
+    fault          Return a SOAP fault
+    match          Conditional XPath matching
+
+  Basic operation response:
+
+    operations:
+      GetUser:
+        soapAction: "http://example.com/GetUser"
+        response: |
+          <GetUserResponse xmlns="http://example.com/service">
+            <User>
+              <Id>123</Id>
+              <Name>John Doe</Name>
+            </User>
+          </GetUserResponse>
+
+SOAP FAULTS
+-----------
+
+  Return SOAP fault responses for error testing.
+
+    fault:
+      code: soap:Client
+      message: "Invalid user ID provided"
+      detail: "<ErrorCode>USER_NOT_FOUND</ErrorCode>"
+
+  Common SOAP fault codes:
+
+    soap:Client         Client-side error (bad request)
+    soap:Server         Server-side error
+    soap:MustUnderstand Header processing error
+    soap:VersionMismatch SOAP version mismatch
+
+  The fault generates a complete SOAP Fault envelope:
+
+    <soap:Envelope>
+      <soap:Body>
+        <soap:Fault>
+          <faultcode>soap:Client</faultcode>
+          <faultstring>Invalid user ID</faultstring>
+          <detail>...</detail>
+        </soap:Fault>
+      </soap:Body>
+    </soap:Envelope>
+
+NAMESPACE HANDLING
+------------------
+
+  SOAP messages typically use XML namespaces. mockd handles these in
+  XPath matching and response generation.
+
+  XPath with namespaces:
+
+    match:
+      xpath:
+        "//ns:UserId": "123"
+
+  Namespace prefixes in responses should match your WSDL definitions.
+
+XPATH MATCHING
+--------------
+
+  Use XPath expressions to match specific request elements.
+
+    match:
+      xpath:
+        "//UserId/text()": "123"
+        "//Active": "true"
+
+  XPath patterns:
+
+    //Element             Select element anywhere in document
+    /Root/Child           Absolute path
+    //Element/text()      Element text content
+    //Element[@attr]      Element with attribute
+    //Element[@attr='x']  Element with specific attribute value
+
+EXAMPLE
+-------
+
+  type: soap
+  name: User SOAP Service
+  soap:
+    path: /soap/UserService
+    wsdlFile: ./wsdl/user-service.wsdl
+
+    operations:
+      GetUser:
+        soapAction: "http://example.com/GetUser"
+        match:
+          xpath:
+            "//UserId/text()": "123"
+        response: |
+          <GetUserResponse xmlns="http://example.com/user">
+            <User>
+              <Id>123</Id>
+              <Name>John Doe</Name>
+              <Email>john@example.com</Email>
+              <CreatedAt>{{now}}</CreatedAt>
+            </User>
+          </GetUserResponse>
+        delay: 50ms
+
+      GetUser:
+        soapAction: "http://example.com/GetUser"
+        match:
+          xpath:
+            "//UserId/text()": "999"
+        fault:
+          code: soap:Client
+          message: "User not found"
+          detail: |
+            <ErrorInfo xmlns="http://example.com/errors">
+              <Code>USER_NOT_FOUND</Code>
+              <UserId>999</UserId>
+            </ErrorInfo>
+
+      CreateUser:
+        soapAction: "http://example.com/CreateUser"
+        response: |
+          <CreateUserResponse xmlns="http://example.com/user">
+            <User>
+              <Id>{{uuid}}</Id>
+              <Name>New User</Name>
+              <CreatedAt>{{now}}</CreatedAt>
+            </User>
+          </CreateUserResponse>
+
+      ListUsers:
+        soapAction: "http://example.com/ListUsers"
+        response: |
+          <ListUsersResponse xmlns="http://example.com/user">
+            <Users>
+              <User><Id>1</Id><Name>Alice</Name></User>
+              <User><Id>2</Id><Name>Bob</Name></User>
+              <User><Id>3</Id><Name>Carol</Name></User>
+            </Users>
+          </ListUsersResponse>
+        delay: 100ms
+
+SEE ALSO
+--------
+
+  mockd help config
+  mockd help templating
+  mockd help matching

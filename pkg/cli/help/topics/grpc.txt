@@ -1,0 +1,207 @@
+GRPC MOCK CONFIGURATION
+=======================
+
+mockd supports gRPC mock services for testing gRPC clients. Configure
+unary RPCs, streaming methods, and reflection with protobuf definitions.
+
+BASIC CONFIGURATION
+-------------------
+
+  port           gRPC server port
+  protoFile      Single proto file path
+  protoFiles     Multiple proto file paths
+  importPaths    Additional proto import paths
+  reflection     Enable gRPC server reflection
+  services       Service and method configurations
+
+PROTO FILE CONFIGURATION
+------------------------
+
+  mockd requires protobuf definitions to validate and parse messages.
+
+  Single proto file:
+
+    protoFile: ./protos/service.proto
+
+  Multiple proto files:
+
+    protoFiles:
+      - ./protos/service.proto
+      - ./protos/messages.proto
+      - ./protos/common.proto
+
+  Import paths for dependencies:
+
+    importPaths:
+      - ./protos
+      - ./vendor/googleapis
+
+SERVICE AND METHOD MOCKING
+--------------------------
+
+  Configure responses for each service and method.
+
+  services:
+    ServiceName:
+      methods:
+        MethodName:
+          response: {...}
+
+  Method configuration fields:
+
+    response        Single response object (for unary/server streaming)
+    responses       Multiple responses (for server/bidi streaming)
+    delay           Response delay (e.g., "100ms")
+    streamDelay     Delay between stream messages
+    error           Return a gRPC error
+    match           Conditional matching
+
+STREAMING TYPES
+---------------
+
+  Unary (single request, single response):
+
+    services:
+      UserService:
+        methods:
+          GetUser:
+            response:
+              id: "123"
+              name: "John"
+
+  Server streaming (single request, multiple responses):
+
+    services:
+      UserService:
+        methods:
+          ListUsers:
+            responses:
+              - {id: "1", name: "Alice"}
+              - {id: "2", name: "Bob"}
+              - {id: "3", name: "Carol"}
+            streamDelay: 100ms
+
+  Client streaming (multiple requests, single response):
+
+    services:
+      UserService:
+        methods:
+          BatchCreate:
+            response:
+              count: 3
+              success: true
+
+  Bidirectional streaming (multiple requests, multiple responses):
+
+    services:
+      ChatService:
+        methods:
+          Chat:
+            responses:
+              - {type: "ack", message: "Received"}
+            streamDelay: 50ms
+
+METADATA MATCHING
+-----------------
+
+  Match requests based on gRPC metadata (headers).
+
+    match:
+      metadata:
+        authorization: "Bearer token123"
+        x-request-id: "req-*"
+
+REQUEST FIELD MATCHING
+----------------------
+
+  Match requests based on message field values.
+
+    match:
+      request:
+        user_id: "123"
+        active: true
+
+GRPC ERRORS
+-----------
+
+  Return gRPC status codes with error details.
+
+    error:
+      code: NOT_FOUND
+      message: "User not found"
+      details:
+        type: "UserError"
+        user_id: "123"
+
+  Common gRPC status codes:
+
+    OK, CANCELLED, UNKNOWN, INVALID_ARGUMENT, DEADLINE_EXCEEDED,
+    NOT_FOUND, ALREADY_EXISTS, PERMISSION_DENIED, RESOURCE_EXHAUSTED,
+    FAILED_PRECONDITION, ABORTED, OUT_OF_RANGE, UNIMPLEMENTED,
+    INTERNAL, UNAVAILABLE, DATA_LOSS, UNAUTHENTICATED
+
+REFLECTION
+----------
+
+  Enable server reflection for gRPC tooling (grpcurl, gRPC UI):
+
+    reflection: true
+
+  Allows clients to discover services and methods at runtime.
+
+EXAMPLE
+-------
+
+  type: grpc
+  name: User gRPC Service
+  grpc:
+    port: 50051
+    protoFiles:
+      - ./protos/user.proto
+      - ./protos/common.proto
+    importPaths:
+      - ./protos
+    reflection: true
+
+    services:
+      UserService:
+        methods:
+          GetUser:
+            match:
+              metadata:
+                authorization: "Bearer valid-token"
+              request:
+                id: "123"
+            response:
+              id: "123"
+              name: "John Doe"
+              email: "john@example.com"
+            delay: 50ms
+
+          GetUser:
+            match:
+              request:
+                id: "999"
+            error:
+              code: NOT_FOUND
+              message: "User with ID 999 not found"
+
+          ListUsers:
+            responses:
+              - {id: "1", name: "Alice", email: "alice@example.com"}
+              - {id: "2", name: "Bob", email: "bob@example.com"}
+              - {id: "3", name: "Carol", email: "carol@example.com"}
+            streamDelay: 100ms
+
+          CreateUser:
+            response:
+              id: "{{uuid}}"
+              name: "New User"
+              createdAt: "{{timestamp}}"
+
+SEE ALSO
+--------
+
+  mockd help config
+  mockd help templating
+  mockd help matching

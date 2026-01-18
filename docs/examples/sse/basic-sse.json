@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "mocks": [
+    {
+      "id": "basic-sse-events",
+      "name": "Basic SSE Events",
+      "description": "Simple SSE endpoint with multiple events",
+      "matcher": {
+        "method": "GET",
+        "path": "/events"
+      },
+      "sse": {
+        "events": [
+          { "data": "First event" },
+          { "data": "Second event" },
+          { "data": "Third event" }
+        ],
+        "timing": {
+          "fixedDelay": 1000
+        },
+        "lifecycle": {
+          "maxEvents": 3
+        }
+      },
+      "enabled": true
+    }
+  ]
+}

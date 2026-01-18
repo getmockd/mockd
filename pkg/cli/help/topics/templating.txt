@@ -1,0 +1,61 @@
+TEMPLATE VARIABLES
+==================
+
+mockd supports template variables in response bodies, headers, and delays.
+Variables use the {{name}} syntax.
+
+BUILT-IN VARIABLES
+------------------
+
+  {{now}}                         Current time (RFC3339 format)
+  {{uuid}}                        Random UUID v4
+  {{uuid.short}}                  First 8 characters of a UUID v4
+  {{timestamp}}                   Unix timestamp (seconds)
+  {{random}}                      Random 8-character hex string
+  {{random.int min max}}          Random integer between min and max (inclusive)
+  {{random.float}}                Random float between 0 and 1
+
+STRING FUNCTIONS
+----------------
+
+  {{upper value}}                 Convert value to uppercase
+  {{lower value}}                 Convert value to lowercase
+  {{default value "fallback"}}    Use fallback if value is empty
+
+  The value argument can be a literal string or a context reference
+  (e.g., request.query.name, request.header.X-Name).
+
+REQUEST VARIABLES
+-----------------
+
+  {{request.method}}              HTTP method (GET, POST, etc.)
+  {{request.path}}                Request path
+  {{request.url}}                 Full URL with query string
+  {{request.rawBody}}             Raw request body as string
+  {{request.body.field}}          JSON body field (dot notation)
+  {{request.query.param}}         Query parameter value
+  {{request.header.Name}}         Request header value
+  {{request.pathParam.name}}      Path parameter from {name} pattern
+
+EXAMPLES
+--------
+
+  Dynamic response:
+    {"id": "{{uuid}}", "created": "{{now}}"}
+
+  Short ID with random number:
+    {"id": "{{uuid.short}}", "order": {{random.int 1000 9999}}}
+
+  Echo request data:
+    {"received": "{{request.body.message}}"}
+
+  Path parameter:
+    {"userId": "{{request.pathParam.id}}"}
+
+  String transformation:
+    {"name": "{{upper request.query.name}}"}
+
+  Default value:
+    {"user": "{{default request.query.user "anonymous"}}"}
+
+NOTE: Use singular forms: pathParam (not pathParams), header (not headers)

@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "name": "WebSocket Scenario Test",
+  "mocks": [],
+  "websocketEndpoints": [
+    {
+      "path": "/ws/handshake",
+      "scenario": {
+        "name": "welcome-sequence",
+        "steps": [
+          {"type": "send", "message": {"type": "text", "value": "Welcome!"}},
+          {"type": "wait", "duration": "100ms"},
+          {"type": "send", "message": {"type": "json", "value": {"status": "ready", "version": "1.0"}}}
+        ],
+        "loop": false,
+        "resetOnReconnect": true
+      }
+    }
+  ]
+}

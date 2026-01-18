@@ -1,0 +1,126 @@
+{
+  "formatVersion": "1.0",
+  "id": "01EXAMPLE_CHAT_RECORDING",
+  "name": "chat-session-example",
+  "description": "Example WebSocket chat recording demonstrating bidirectional messaging",
+  "protocol": "websocket",
+  "status": "complete",
+  "startTime": "2024-01-15T10:30:00Z",
+  "endTime": "2024-01-15T10:30:15Z",
+  "duration": 15000,
+  "metadata": {
+    "path": "/ws/chat",
+    "query": {
+      "room": "general"
+    },
+    "headers": {
+      "Origin": "https://app.example.com",
+      "User-Agent": "Mozilla/5.0"
+    },
+    "source": "proxy",
+    "target": "wss://api.example.com"
+  },
+  "websocket": {
+    "subprotocol": "chat.v1",
+    "frames": [
+      {
+        "direction": "s2c",
+        "type": "text",
+        "data": "{\"type\":\"welcome\",\"server\":\"chat-1\",\"version\":\"2.0\"}",
+        "timestamp": "2024-01-15T10:30:00.100Z",
+        "relativeMs": 100
+      },
+      {
+        "direction": "c2s",
+        "type": "text",
+        "data": "{\"type\":\"auth\",\"token\":\"[REDACTED]\"}",
+        "timestamp": "2024-01-15T10:30:00.250Z",
+        "relativeMs": 250
+      },
+      {
+        "direction": "s2c",
+        "type": "text",
+        "data": "{\"type\":\"auth_success\",\"user\":{\"id\":\"user-123\",\"name\":\"Alice\"}}",
+        "timestamp": "2024-01-15T10:30:00.400Z",
+        "relativeMs": 400
+      },
+      {
+        "direction": "c2s",
+        "type": "text",
+        "data": "{\"type\":\"join\",\"room\":\"general\"}",
+        "timestamp": "2024-01-15T10:30:01.000Z",
+        "relativeMs": 1000
+      },
+      {
+        "direction": "s2c",
+        "type": "text",
+        "data": "{\"type\":\"room_joined\",\"room\":\"general\",\"members\":[\"Alice\",\"Bob\",\"Charlie\"]}",
+        "timestamp": "2024-01-15T10:30:01.150Z",
+        "relativeMs": 1150
+      },
+      {
+        "direction": "s2c",
+        "type": "text",
+        "data": "{\"type\":\"message\",\"from\":\"Bob\",\"text\":\"Hey Alice!\",\"timestamp\":\"2024-01-15T10:30:02Z\"}",
+        "timestamp": "2024-01-15T10:30:02.000Z",
+        "relativeMs": 2000
+      },
+      {
+        "direction": "c2s",
+        "type": "text",
+        "data": "{\"type\":\"message\",\"text\":\"Hi Bob! How are you?\"}",
+        "timestamp": "2024-01-15T10:30:03.500Z",
+        "relativeMs": 3500
+      },
+      {
+        "direction": "s2c",
+        "type": "text",
+        "data": "{\"type\":\"message\",\"from\":\"Alice\",\"text\":\"Hi Bob! How are you?\",\"timestamp\":\"2024-01-15T10:30:03Z\"}",
+        "timestamp": "2024-01-15T10:30:03.550Z",
+        "relativeMs": 3550
+      },
+      {
+        "direction": "s2c",
+        "type": "ping",
+        "data": "",
+        "timestamp": "2024-01-15T10:30:10.000Z",
+        "relativeMs": 10000
+      },
+      {
+        "direction": "c2s",
+        "type": "pong",
+        "data": "",
+        "timestamp": "2024-01-15T10:30:10.050Z",
+        "relativeMs": 10050
+      },
+      {
+        "direction": "c2s",
+        "type": "close",
+        "data": "",
+        "closeCode": 1000,
+        "timestamp": "2024-01-15T10:30:15.000Z",
+        "relativeMs": 15000
+      },
+      {
+        "direction": "s2c",
+        "type": "close",
+        "data": "",
+        "closeCode": 1000,
+        "timestamp": "2024-01-15T10:30:15.050Z",
+        "relativeMs": 15050
+      }
+    ],
+    "closeCode": 1000,
+    "closeReason": "Normal closure"
+  },
+  "stats": {
+    "frameCount": 12,
+    "textFrames": 8,
+    "binaryFrames": 0,
+    "pingPongs": 2,
+    "clientFrames": 5,
+    "serverFrames": 7,
+    "fileSizeBytes": 2048
+  },
+  "tags": ["chat", "example", "bidirectional"]
+}

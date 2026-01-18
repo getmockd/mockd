@@ -1,0 +1,995 @@
+package cli
+
+import (
+	"context"
+	"crypto/tls"
+	"flag"
+	"fmt"
+	"os"
+	"os/exec"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/getmockd/mockd/internal/cliconfig"
+	"github.com/getmockd/mockd/internal/runtime"
+	"github.com/getmockd/mockd/pkg/admin"
+	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/audit"
+	"github.com/getmockd/mockd/pkg/chaos"
+	"github.com/getmockd/mockd/pkg/cli/internal/ports"
+	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/engine"
+	"github.com/getmockd/mockd/pkg/graphql"
+	"github.com/getmockd/mockd/pkg/grpc"
+	"github.com/getmockd/mockd/pkg/mqtt"
+	"github.com/getmockd/mockd/pkg/oauth"
+	"github.com/getmockd/mockd/pkg/store"
+	"github.com/getmockd/mockd/pkg/store/file"
+	"github.com/getmockd/mockd/pkg/validation"
+)
+
+// shutdownTimeout is the maximum time to wait for graceful shutdown.
+const shutdownTimeout = 30 * time.Second
+
+// serveFlags holds all parsed command-line flags for the serve command.
+type serveFlags struct {
+	// Standard server flags
+	port          int
+	adminPort     int
+	configFile    string
+	httpsPort     int
+	readTimeout   int
+	writeTimeout  int
+	maxLogEntries int
+	autoCert      bool
+
+	// TLS flags
+	tlsCert string
+	tlsKey  string
+	tlsAuto bool
+
+	// mTLS flags
+	mtlsEnabled    bool
+	mtlsClientAuth string
+	mtlsCA         string
+	mtlsAllowedCNs string
+
+	// Audit flags
+	auditEnabled bool
+	auditFile    string
+	auditLevel   string
+
+	// Runtime mode flags
+	register     bool
+	controlPlane string
+	token        string
+	name         string
+	labels       string
+
+	// Pull mode flags
+	pull     string
+	cacheDir string
+
+	// GraphQL flags
+	graphqlSchema string
+	graphqlPath   string
+
+	// gRPC flags
+	grpcPort       int
+	grpcProto      string
+	grpcReflection bool
+
+	// OAuth flags
+	oauthEnabled bool
+	oauthIssuer  string
+	oauthPort    int
+
+	// MQTT flags
+	mqttPort int
+	mqttAuth bool
+
+	// Chaos flags
+	chaosEnabled   bool
+	chaosLatency   string
+	chaosErrorRate float64
+
+	// Validation flags
+	validateSpec string
+	validateFail bool
+
+	// Storage flags
+	dataDir string
+	noAuth  bool
+
+	// Daemon/detach flags
+	detach  bool
+	pidFile string
+}
+
+// serveContext holds all runtime state for the serve command.
+type serveContext struct {
+	flags         *serveFlags
+	serverCfg     *config.ServerConfiguration
+	server        *engine.Server
+	adminAPI      *admin.AdminAPI
+	runtimeClient *runtime.Client
+	mqttBroker    *mqtt.Broker
+	chaosInjector *chaos.Injector
+	store         *file.FileStore
+	ctx           context.Context
+	cancel        context.CancelFunc
+}
+
+// RunServe handles the serve command (enhanced start with runtime mode support).
+// It coordinates flag parsing, configuration, server startup, and shutdown.
+func RunServe(args []string) error {
+	// Parse command-line flags
+	flags, err := parseServeFlags(args)
+	if err != nil {
+		return err
+	}
+
+	// Handle detach mode (daemon) - re-exec as child and exit
+	if flags.detach && os.Getenv("MOCKD_CHILD") == "" {
+		return daemonize(args, flags.pidFile, flags.port, flags.adminPort)
+	}
+
+	// Validate flags for different modes
+	if err := validateServeFlags(flags); err != nil {
+		return err
+	}
+
+	// Check for port conflicts
+	if err := checkPortConflicts(flags); err != nil {
+		return err
+	}
+
+	// Build server configuration from flags
+	serverCfg, err := buildServerConfiguration(flags)
+	if err != nil {
+		return err
+	}
+
+	// Create serve context to hold all runtime state
+	ctx, cancel := context.WithCancel(context.Background())
+	sctx := &serveContext{
+		flags:     flags,
+		serverCfg: serverCfg,
+		ctx:       ctx,
+		cancel:    cancel,
+	}
+	defer cancel()
+
+	// Create and configure the mock server
+	sctx.server = engine.NewServer(serverCfg)
+
+	// Initialize persistent store if needed
+	if err := initializePersistentStore(sctx); err != nil {
+		return err
+	}
+	if sctx.store != nil {
+		defer sctx.store.Close()
+	}
+
+	// Configure protocol handlers (MQTT, chaos injection)
+	if err := configureProtocolHandlers(sctx); err != nil {
+		return err
+	}
+
+	// Handle runtime/pull/local modes and load mocks
+	if err := handleOperatingMode(sctx); err != nil {
+		return err
+	}
+
+	// Start all servers
+	if err := startServers(sctx); err != nil {
+		return err
+	}
+
+	// Run main event loop (blocks until shutdown signal)
+	return runMainLoop(sctx)
+}
+
+// parseServeFlags parses all command-line flags for the serve command.
+func parseServeFlags(args []string) (*serveFlags, error) {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	f := &serveFlags{}
+
+	// Standard server flags
+	fs.IntVar(&f.port, "port", cliconfig.DefaultPort, "HTTP server port")
+	fs.IntVar(&f.port, "p", cliconfig.DefaultPort, "HTTP server port (shorthand)")
+	fs.IntVar(&f.adminPort, "admin-port", cliconfig.DefaultAdminPort, "Admin API port")
+	fs.IntVar(&f.adminPort, "a", cliconfig.DefaultAdminPort, "Admin API port (shorthand)")
+	fs.StringVar(&f.configFile, "config", "", "Path to mock configuration file")
+	fs.StringVar(&f.configFile, "c", "", "Path to mock configuration file (shorthand)")
+	fs.IntVar(&f.httpsPort, "https-port", cliconfig.DefaultHTTPSPort, "HTTPS server port (0 = disabled)")
+	fs.IntVar(&f.readTimeout, "read-timeout", cliconfig.DefaultReadTimeout, "Read timeout in seconds")
+	fs.IntVar(&f.writeTimeout, "write-timeout", cliconfig.DefaultWriteTimeout, "Write timeout in seconds")
+	fs.IntVar(&f.maxLogEntries, "max-log-entries", cliconfig.DefaultMaxLogEntries, "Maximum request log entries")
+	fs.BoolVar(&f.autoCert, "auto-cert", cliconfig.DefaultAutoCert, "Auto-generate TLS certificate")
+
+	// TLS flags
+	fs.StringVar(&f.tlsCert, "tls-cert", "", "Path to TLS certificate file")
+	fs.StringVar(&f.tlsKey, "tls-key", "", "Path to TLS private key file")
+	fs.BoolVar(&f.tlsAuto, "tls-auto", false, "Auto-generate self-signed certificate")
+
+	// mTLS flags
+	fs.BoolVar(&f.mtlsEnabled, "mtls-enabled", false, "Enable mTLS client certificate validation")
+	fs.StringVar(&f.mtlsClientAuth, "mtls-client-auth", "require-and-verify", "Client auth mode (none, request, require, verify-if-given, require-and-verify)")
+	fs.StringVar(&f.mtlsCA, "mtls-ca", "", "Path to CA certificate for client validation")
+	fs.StringVar(&f.mtlsAllowedCNs, "mtls-allowed-cns", "", "Comma-separated list of allowed Common Names")
+
+	// Audit flags
+	fs.BoolVar(&f.auditEnabled, "audit-enabled", false, "Enable audit logging")
+	fs.StringVar(&f.auditFile, "audit-file", "", "Path to audit log file")
+	fs.StringVar(&f.auditLevel, "audit-level", "info", "Log level (debug, info, warn, error)")
+
+	// Runtime mode flags
+	fs.BoolVar(&f.register, "register", false, "Register with control plane as a runtime")
+	fs.StringVar(&f.controlPlane, "control-plane", "https://api.mockd.io", "Control plane URL")
+	fs.StringVar(&f.token, "token", "", "Runtime token (or set MOCKD_RUNTIME_TOKEN env var)")
+	fs.StringVar(&f.name, "name", "", "Runtime name (required with --register)")
+	fs.StringVar(&f.labels, "labels", "", "Runtime labels as key=value pairs (comma-separated)")
+
+	// Pull mode flags
+	fs.StringVar(&f.pull, "pull", "", "Pull and serve mocks from mockd:// URI")
+	fs.StringVar(&f.cacheDir, "cache", "", "Local cache directory for pulled mocks")
+
+	// GraphQL flags
+	fs.StringVar(&f.graphqlSchema, "graphql-schema", "", "Path to GraphQL schema file")
+	fs.StringVar(&f.graphqlPath, "graphql-path", "/graphql", "GraphQL endpoint path")
+
+	// gRPC flags
+	fs.IntVar(&f.grpcPort, "grpc-port", 0, "gRPC server port (0 = disabled)")
+	fs.StringVar(&f.grpcProto, "grpc-proto", "", "Path to .proto file")
+	fs.BoolVar(&f.grpcReflection, "grpc-reflection", true, "Enable gRPC reflection")
+
+	// OAuth flags
+	fs.BoolVar(&f.oauthEnabled, "oauth-enabled", false, "Enable OAuth provider")
+	fs.StringVar(&f.oauthIssuer, "oauth-issuer", "", "OAuth issuer URL")
+	fs.IntVar(&f.oauthPort, "oauth-port", 0, "OAuth server port")
+
+	// MQTT flags
+	fs.IntVar(&f.mqttPort, "mqtt-port", 0, "MQTT broker port (0 = disabled)")
+	fs.BoolVar(&f.mqttAuth, "mqtt-auth", false, "Enable MQTT authentication")
+
+	// Chaos flags
+	fs.BoolVar(&f.chaosEnabled, "chaos-enabled", false, "Enable chaos injection")
+	fs.StringVar(&f.chaosLatency, "chaos-latency", "", "Add random latency (e.g., \"10ms-100ms\")")
+	fs.Float64Var(&f.chaosErrorRate, "chaos-error-rate", 0, "Error rate (0.0-1.0)")
+
+	// Validation flags
+	fs.StringVar(&f.validateSpec, "validate-spec", "", "Path to OpenAPI spec for request validation")
+	fs.BoolVar(&f.validateFail, "validate-fail", false, "Fail on validation error")
+
+	// Storage flags
+	fs.StringVar(&f.dataDir, "data-dir", "", "Data directory for persistent storage (default: ~/.local/share/mockd)")
+	fs.BoolVar(&f.noAuth, "no-auth", false, "Disable API key authentication on admin API")
+
+	// Daemon/detach flags
+	fs.BoolVar(&f.detach, "detach", false, "Run server in background (daemon mode)")
+	fs.BoolVar(&f.detach, "d", false, "Run server in background (shorthand)")
+	fs.StringVar(&f.pidFile, "pid-file", DefaultPIDPath(), "Path to PID file")
+
+	fs.Usage = func() {
+		printServeUsage()
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+
+	// Get token from env var if not provided via flag
+	if f.token == "" {
+		f.token = os.Getenv("MOCKD_RUNTIME_TOKEN")
+	}
+
+	return f, nil
+}
+
+// printServeUsage prints the serve command usage information.
+func printServeUsage() {
+	fmt.Fprint(os.Stderr, `Usage: mockd serve [flags]
+
+Start the mock server. Can operate in three modes:
+
+1. Local mode (default): Serve mocks from local configuration
+2. Runtime mode (--register): Register with control plane and receive deployments
+3. Pull mode (--pull): Pull mocks from cloud and serve locally
+
+Flags:
+  -p, --port          HTTP server port (default: 4280)
+  -a, --admin-port    Admin API port (default: 4290)
+  -c, --config        Path to mock configuration file
+      --https-port    HTTPS server port (0 = disabled)
+      --read-timeout  Read timeout in seconds (default: 30)
+      --write-timeout Write timeout in seconds (default: 30)
+      --max-log-entries Maximum request log entries (default: 1000)
+      --auto-cert     Auto-generate TLS certificate (default: true)
+
+TLS flags:
+      --tls-cert      Path to TLS certificate file
+      --tls-key       Path to TLS private key file
+      --tls-auto      Auto-generate self-signed certificate
+
+mTLS flags:
+      --mtls-enabled  Enable mTLS client certificate validation
+      --mtls-client-auth Client auth mode (none, request, require, verify-if-given, require-and-verify)
+      --mtls-ca       Path to CA certificate for client validation
+      --mtls-allowed-cns Comma-separated list of allowed Common Names
+
+Audit flags:
+      --audit-enabled Enable audit logging
+      --audit-file    Path to audit log file
+      --audit-level   Log level (debug, info, warn, error)
+
+Runtime mode (register with control plane):
+      --register      Register with control plane as a runtime
+      --control-plane Control plane URL (default: https://api.mockd.io)
+      --token         Runtime token (or MOCKD_RUNTIME_TOKEN env var)
+      --name          Runtime name (required with --register)
+      --labels        Runtime labels (key=value,key2=value2)
+
+Pull mode (serve mocks from cloud):
+      --pull          mockd:// URI to pull and serve
+      --cache         Local cache directory for pulled mocks
+
+GraphQL flags:
+      --graphql-schema Path to GraphQL schema file
+      --graphql-path   GraphQL endpoint path (default: /graphql)
+
+gRPC flags:
+      --grpc-port       gRPC server port (0 = disabled)
+      --grpc-proto      Path to .proto file
+      --grpc-reflection Enable gRPC reflection (default: true)
+
+OAuth flags:
+      --oauth-enabled   Enable OAuth provider
+      --oauth-issuer    OAuth issuer URL
+      --oauth-port      OAuth server port
+
+MQTT flags:
+      --mqtt-port       MQTT broker port (0 = disabled)
+      --mqtt-auth       Enable MQTT authentication
+
+Chaos flags:
+      --chaos-enabled   Enable chaos injection
+      --chaos-latency   Add random latency (e.g., "10ms-100ms")
+      --chaos-error-rate Error rate (0.0-1.0)
+
+Validation flags:
+      --validate-spec   Path to OpenAPI spec for request validation
+      --validate-fail   Fail on validation error (default: false)
+
+Storage flags:
+      --data-dir      Data directory for persistent storage (default: ~/.local/share/mockd)
+      --no-auth       Disable API key authentication on admin API
+
+Daemon flags:
+  -d, --detach      Run server in background (daemon mode)
+      --pid-file    Path to PID file (default: ~/.mockd/mockd.pid)
+
+Examples:
+  # Start with defaults
+  mockd serve
+
+  # Start with config file on custom port
+  mockd serve --config mocks.json --port 3000
+
+  # Register as a runtime
+  mockd serve --register --name ci-runner-1 --token $MOCKD_RUNTIME_TOKEN
+
+  # Pull and serve from cloud
+  mockd serve --pull mockd://acme/payment-api
+
+  # Start with TLS using certificate files
+  mockd serve --tls-cert server.crt --tls-key server.key --https-port 8443
+
+  # Start with mTLS enabled
+  mockd serve --mtls-enabled --mtls-ca ca.crt --tls-cert server.crt --tls-key server.key
+
+  # Start with audit logging
+  mockd serve --audit-enabled --audit-file audit.log --audit-level debug
+
+  # Start in daemon/background mode
+  mockd serve -d
+  mockd serve --detach --config mocks.yaml
+`)
+}
+
+// validateServeFlags validates flag combinations for different operating modes.
+func validateServeFlags(f *serveFlags) error {
+	if f.register && f.pull != "" {
+		return fmt.Errorf("cannot use --register and --pull together")
+	}
+
+	if f.register {
+		if f.name == "" {
+			return fmt.Errorf("--name is required when using --register")
+		}
+		if f.token == "" {
+			return fmt.Errorf("--token is required when using --register (or set MOCKD_RUNTIME_TOKEN)")
+		}
+	}
+
+	if f.pull != "" && f.token == "" {
+		f.token = os.Getenv("MOCKD_TOKEN")
+		if f.token == "" {
+			return fmt.Errorf("--token is required when using --pull (or set MOCKD_TOKEN)")
+		}
+	}
+
+	if f.grpcPort > 0 && f.grpcProto == "" {
+		return fmt.Errorf("--grpc-proto is required when --grpc-port is specified")
+	}
+
+	return nil
+}
+
+// checkPortConflicts verifies that requested ports are available.
+func checkPortConflicts(f *serveFlags) error {
+	if err := ports.Check(f.port); err != nil {
+		return formatPortError(f.port, err)
+	}
+	if err := ports.Check(f.adminPort); err != nil {
+		return formatPortError(f.adminPort, err)
+	}
+	if f.httpsPort > 0 {
+		if err := ports.Check(f.httpsPort); err != nil {
+			return formatPortError(f.httpsPort, err)
+		}
+	}
+	return nil
+}
+
+// buildServerConfiguration creates the server configuration from parsed flags.
+func buildServerConfiguration(f *serveFlags) (*config.ServerConfiguration, error) {
+	serverCfg := &config.ServerConfiguration{
+		HTTPPort:      f.port,
+		HTTPSPort:     f.httpsPort,
+		AdminPort:     f.adminPort,
+		ReadTimeout:   f.readTimeout,
+		WriteTimeout:  f.writeTimeout,
+		MaxLogEntries: f.maxLogEntries,
+		LogRequests:   true,
+	}
+
+	// Configure TLS if any TLS flags are set or HTTPS port is configured
+	if f.tlsCert != "" || f.tlsKey != "" || f.tlsAuto || f.httpsPort > 0 {
+		serverCfg.TLS = &config.TLSConfig{
+			Enabled:          true,
+			CertFile:         f.tlsCert,
+			KeyFile:          f.tlsKey,
+			AutoGenerateCert: f.tlsAuto || f.autoCert,
+		}
+	}
+
+	// Configure mTLS if enabled
+	if f.mtlsEnabled {
+		var allowedCNs []string
+		if f.mtlsAllowedCNs != "" {
+			for _, cn := range strings.Split(f.mtlsAllowedCNs, ",") {
+				cn = strings.TrimSpace(cn)
+				if cn != "" {
+					allowedCNs = append(allowedCNs, cn)
+				}
+			}
+		}
+		serverCfg.MTLS = &config.MTLSConfig{
+			Enabled:    true,
+			ClientAuth: f.mtlsClientAuth,
+			CACertFile: f.mtlsCA,
+			AllowedCNs: allowedCNs,
+		}
+	}
+
+	// Configure audit if enabled
+	if f.auditEnabled {
+		serverCfg.Audit = &audit.AuditConfig{
+			Enabled:    true,
+			Level:      f.auditLevel,
+			OutputFile: f.auditFile,
+		}
+	}
+
+	// Configure GraphQL if schema specified
+	if f.graphqlSchema != "" {
+		serverCfg.GraphQL = []*graphql.GraphQLConfig{{
+			ID:            "cli-graphql",
+			Path:          f.graphqlPath,
+			SchemaFile:    f.graphqlSchema,
+			Introspection: true,
+			Enabled:       true,
+		}}
+	}
+
+	// Configure gRPC if port specified
+	if f.grpcPort > 0 {
+		serverCfg.GRPC = []*grpc.GRPCConfig{{
+			ID:         "cli-grpc",
+			Port:       f.grpcPort,
+			ProtoFile:  f.grpcProto,
+			Reflection: f.grpcReflection,
+			Enabled:    true,
+		}}
+	}
+
+	// Configure OAuth if enabled
+	if f.oauthEnabled {
+		issuer := f.oauthIssuer
+		if issuer == "" {
+			issuer = fmt.Sprintf("http://localhost:%d", f.oauthPort)
+		}
+		serverCfg.OAuth = []*oauth.OAuthConfig{{
+			ID:      "cli-oauth",
+			Issuer:  issuer,
+			Enabled: true,
+		}}
+	}
+
+	// Configure validation if spec specified
+	if f.validateSpec != "" {
+		serverCfg.Validation = &validation.ValidationConfig{
+			Enabled:         true,
+			SpecFile:        f.validateSpec,
+			ValidateRequest: true,
+			FailOnError:     f.validateFail,
+		}
+	}
+
+	return serverCfg, nil
+}
+
+// setupTLSConfig creates TLS configuration from server settings.
+// Returns nil if TLS is not enabled.
+func setupTLSConfig(cfg *config.ServerConfiguration) (*tls.Config, error) {
+	if cfg.TLS == nil || !cfg.TLS.Enabled {
+		return nil, nil
+	}
+
+	// TLS configuration is handled by the engine server itself
+	// This function is a placeholder for future custom TLS setup
+	return nil, nil
+}
+
+// initializePersistentStore sets up the file store for endpoint persistence.
+func initializePersistentStore(sctx *serveContext) error {
+	f := sctx.flags
+
+	// When --config is provided, the config file IS the source of truth
+	// When no --config, use ~/.local/share/mockd/data.json as the persistent store
+	if f.configFile != "" || f.register || f.pull != "" {
+		return nil
+	}
+
+	storeCfg := store.DefaultConfig()
+	if f.dataDir != "" {
+		storeCfg.DataDir = f.dataDir
+	}
+
+	sctx.store = file.New(storeCfg)
+	if err := sctx.store.Open(sctx.ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to initialize persistent store: %v\n", err)
+		sctx.store = nil
+		return nil
+	}
+
+	sctx.server.SetStore(sctx.store)
+
+	// Load mocks from store and register protocol handlers (GraphQL, SOAP, etc.)
+	if err := sctx.server.LoadFromStore(sctx.ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to load from store: %v\n", err)
+	}
+
+	return nil
+}
+
+// configureProtocolHandlers sets up MQTT broker and chaos injection.
+func configureProtocolHandlers(sctx *serveContext) error {
+	f := sctx.flags
+
+	// Configure MQTT if port specified
+	if f.mqttPort > 0 {
+		mqttCfg := &mqtt.MQTTConfig{
+			ID:      "cli-mqtt",
+			Port:    f.mqttPort,
+			Enabled: true,
+		}
+		if f.mqttAuth {
+			mqttCfg.Auth = &mqtt.MQTTAuthConfig{
+				Enabled: true,
+			}
+		}
+
+		broker, err := mqtt.NewBroker(mqttCfg)
+		if err != nil {
+			return fmt.Errorf("failed to create MQTT broker: %w", err)
+		}
+		if err := broker.Start(sctx.ctx); err != nil {
+			return fmt.Errorf("failed to start MQTT broker: %w", err)
+		}
+		sctx.mqttBroker = broker
+		fmt.Printf("MQTT broker running on port %d\n", f.mqttPort)
+	}
+
+	// Configure chaos if enabled
+	if f.chaosEnabled {
+		chaosCfg := &chaos.ChaosConfig{
+			Enabled: true,
+		}
+		if f.chaosLatency != "" {
+			min, max := ParseLatencyRange(f.chaosLatency)
+			chaosCfg.GlobalRules = &chaos.GlobalChaosRules{
+				Latency: &chaos.LatencyFault{
+					Min:         min,
+					Max:         max,
+					Probability: 1.0,
+				},
+			}
+		}
+		if f.chaosErrorRate > 0 {
+			if chaosCfg.GlobalRules == nil {
+				chaosCfg.GlobalRules = &chaos.GlobalChaosRules{}
+			}
+			chaosCfg.GlobalRules.ErrorRate = &chaos.ErrorRateFault{
+				Probability: f.chaosErrorRate,
+				DefaultCode: 500,
+			}
+		}
+
+		injector, err := chaos.NewInjector(chaosCfg)
+		if err != nil {
+			return fmt.Errorf("failed to create chaos injector: %w", err)
+		}
+		sctx.chaosInjector = injector
+		fmt.Println("Chaos injection enabled")
+	}
+
+	return nil
+}
+
+// handleOperatingMode handles runtime/pull/local modes and loads mocks.
+func handleOperatingMode(sctx *serveContext) error {
+	f := sctx.flags
+
+	if f.register {
+		return handleRuntimeMode(sctx)
+	} else if f.pull != "" {
+		return handlePullMode(sctx)
+	} else if f.configFile != "" {
+		return handleLocalMode(sctx)
+	}
+
+	return nil
+}
+
+// handleRuntimeMode registers with control plane and sets up heartbeat.
+func handleRuntimeMode(sctx *serveContext) error {
+	f := sctx.flags
+
+	sctx.runtimeClient = runtime.NewClient(runtime.Config{
+		ControlPlaneURL: f.controlPlane,
+		Token:           f.token,
+		Name:            f.name,
+		URL:             fmt.Sprintf("http://localhost:%d", f.port),
+		Labels:          parseLabels(f.labels),
+		Version:         "dev",
+	})
+
+	regResp, err := sctx.runtimeClient.Register(sctx.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to register with control plane: %w", err)
+	}
+
+	fmt.Printf("Registered as runtime %s (ID: %s)\n", regResp.Name, regResp.ID)
+
+	// Pull initial deployments
+	if err := sctx.runtimeClient.PullDeployments(sctx.ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to pull initial deployments: %v\n", err)
+	}
+
+	// Start heartbeat loop in background
+	go func() {
+		if err := sctx.runtimeClient.HeartbeatLoop(sctx.ctx); err != nil && sctx.ctx.Err() == nil {
+			fmt.Printf("Heartbeat loop error: %v\n", err)
+		}
+	}()
+
+	return nil
+}
+
+// handlePullMode fetches mocks from cloud and loads them.
+func handlePullMode(sctx *serveContext) error {
+	f := sctx.flags
+
+	pullClient := runtime.NewClient(runtime.Config{
+		ControlPlaneURL: f.controlPlane,
+		Token:           f.token,
+	})
+
+	content, err := pullClient.Pull(sctx.ctx, f.pull)
+	if err != nil {
+		return fmt.Errorf("failed to pull mocks: %w", err)
+	}
+
+	// Cache the content if cache dir specified
+	if f.cacheDir != "" {
+		if err := cachePulledContent(f.cacheDir, f.pull, content); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to cache content: %v\n", err)
+		}
+	}
+
+	// Load pulled content into server
+	if err := sctx.server.LoadConfigFromBytes(content, false); err != nil {
+		return fmt.Errorf("failed to load pulled mocks: %w", err)
+	}
+
+	fmt.Printf("Pulled mocks from %s\n", f.pull)
+	return nil
+}
+
+// handleLocalMode loads mocks from a local configuration file.
+func handleLocalMode(sctx *serveContext) error {
+	if err := sctx.server.LoadConfig(sctx.flags.configFile, false); err != nil {
+		return fmt.Errorf("failed to load config file: %w", err)
+	}
+	return nil
+}
+
+// startServers starts the mock server and admin API.
+func startServers(sctx *serveContext) error {
+	f := sctx.flags
+
+	// Start the mock server
+	if err := sctx.server.Start(); err != nil {
+		return fmt.Errorf("failed to start mock server: %w", err)
+	}
+
+	// Create and start the admin API
+	engineURL := fmt.Sprintf("http://localhost:%d", sctx.server.ManagementPort())
+	adminOpts := []admin.Option{admin.WithLocalEngine(engineURL)}
+	if f.noAuth {
+		adminOpts = append(adminOpts, admin.WithAPIKeyDisabled())
+	}
+	if f.dataDir != "" {
+		adminOpts = append(adminOpts, admin.WithDataDir(f.dataDir))
+	}
+
+	sctx.adminAPI = admin.NewAdminAPI(f.adminPort, adminOpts...)
+	if err := sctx.adminAPI.Start(); err != nil {
+		sctx.server.Stop()
+		return fmt.Errorf("failed to start admin API: %w", err)
+	}
+
+	// Create engine client and wait for health
+	engClient := engineclient.New(engineURL)
+	if err := waitForEngineHealth(sctx.ctx, engClient, 10*time.Second); err != nil {
+		sctx.server.Stop()
+		sctx.adminAPI.Stop()
+		return fmt.Errorf("engine control API did not become healthy: %w", err)
+	}
+
+	// Write PID file if in detach mode
+	if f.detach {
+		mocks, _ := engClient.ListMocks(sctx.ctx)
+		mocksLoaded := len(mocks)
+		if err := writePIDFileForServe(f.pidFile, "dev", f.port, f.httpsPort, f.adminPort, f.configFile, mocksLoaded); err != nil {
+			sctx.server.Stop()
+			sctx.adminAPI.Stop()
+			return fmt.Errorf("failed to write PID file: %w", err)
+		}
+	}
+
+	// Print startup message
+	mocks, _ := engClient.ListMocks(sctx.ctx)
+	mocksLoaded := len(mocks)
+	printServeStartupMessage(f.port, f.adminPort, f.httpsPort, f.register, f.pull, mocksLoaded)
+
+	return nil
+}
+
+// runMainLoop handles the main event loop and graceful shutdown.
+func runMainLoop(sctx *serveContext) error {
+	f := sctx.flags
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Wait for shutdown signal
+	<-sigChan
+	fmt.Println("\nShutting down...")
+
+	// Cancel context to stop background goroutines (heartbeat, etc.)
+	sctx.cancel()
+
+	// Create shutdown context with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
+
+	// Remove PID file if it was written
+	if f.detach && f.pidFile != "" {
+		if err := RemovePIDFile(f.pidFile); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to remove PID file: %v\n", err)
+		}
+	}
+
+	// Deregister from control plane if in runtime mode
+	if sctx.runtimeClient != nil {
+		fmt.Println("Deregistering from control plane...")
+		// TODO(FEAT-002): Implement graceful deregistration from control plane
+		// This should:
+		// 1. Send a deregistration request to the control plane API
+		// 2. Wait for acknowledgment with a timeout (e.g., 5 seconds)
+		// 3. Handle errors gracefully - log but don't block shutdown
+		// See: runtimeClient should expose a Deregister() method
+	}
+
+	// Stop admin API first (uses internal 5s timeout)
+	if sctx.adminAPI != nil {
+		if err := sctx.adminAPI.Stop(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: admin API shutdown error: %v\n", err)
+		}
+	}
+
+	// Stop mock server (uses internal 5s timeout)
+	if sctx.server != nil {
+		if err := sctx.server.Stop(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: server shutdown error: %v\n", err)
+		}
+	}
+
+	// Stop MQTT broker if running
+	if sctx.mqttBroker != nil {
+		if err := sctx.mqttBroker.Stop(shutdownCtx, shutdownTimeout); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: MQTT broker shutdown error: %v\n", err)
+		}
+	}
+
+	fmt.Println("Server stopped")
+	return nil
+}
+
+// parseLabels parses comma-separated key=value pairs into a map.
+func parseLabels(labelsStr string) map[string]string {
+	if labelsStr == "" {
+		return nil
+	}
+
+	labels := make(map[string]string)
+	pairs := strings.Split(labelsStr, ",")
+	for _, pair := range pairs {
+		kv := strings.SplitN(strings.TrimSpace(pair), "=", 2)
+		if len(kv) == 2 {
+			labels[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+		}
+	}
+	return labels
+}
+
+// cachePulledContent caches pulled content to the local filesystem.
+func cachePulledContent(cacheDir, uri string, content []byte) error {
+	// TODO: Implement local caching
+	_ = cacheDir
+	_ = uri
+	_ = content
+	return nil
+}
+
+// printServeStartupMessage prints the server startup information.
+func printServeStartupMessage(httpPort, adminPort, httpsPort int, isRuntime bool, pullURI string, mocksLoaded int) {
+	if mocksLoaded == 0 && !isRuntime && pullURI == "" {
+		// No mocks configured - show welcome message
+		printWelcomeMessage(httpPort, adminPort)
+	} else {
+		// Normal startup message
+		fmt.Printf("mockd server started (%d mocks loaded)\n", mocksLoaded)
+		fmt.Println()
+		fmt.Printf("  Mock server: http://localhost:%d\n", httpPort)
+		if httpsPort > 0 {
+			fmt.Printf("  HTTPS:       https://localhost:%d\n", httpsPort)
+		}
+		fmt.Printf("  Admin API:   http://localhost:%d\n", adminPort)
+		fmt.Println()
+
+		if isRuntime {
+			fmt.Println("Mode: Runtime (connected to control plane)")
+		} else if pullURI != "" {
+			fmt.Printf("Mode: Pull (serving from %s)\n", pullURI)
+		}
+
+		fmt.Println("Press Ctrl+C to stop")
+	}
+}
+
+// printWelcomeMessage prints a helpful welcome message when starting with no mocks.
+func printWelcomeMessage(mockPort, adminPort int) {
+	fmt.Println("mockd server started")
+	fmt.Println()
+	fmt.Printf("  Mock server: http://localhost:%d\n", mockPort)
+	fmt.Printf("  Admin API:   http://localhost:%d\n", adminPort)
+	fmt.Println()
+	fmt.Println("No mocks configured. Quick start options:")
+	fmt.Println()
+	fmt.Println("  # Create a config file")
+	fmt.Println("  mockd init")
+	fmt.Println("  mockd serve --config mockd.yaml")
+	fmt.Println()
+	fmt.Println("  # Or add a mock directly")
+	fmt.Printf("  mockd add --path /hello --body '{\"message\": \"Hello!\"}'\n")
+	fmt.Printf("  curl http://localhost:%d/hello\n", mockPort)
+	fmt.Println()
+	fmt.Println("Press Ctrl+C to stop")
+}
+
+// daemonize re-executes the current process as a background daemon.
+func daemonize(args []string, pidFilePath string, httpPort, adminPort int) error {
+	// Build the command with same arguments
+	cmd := exec.Command(os.Args[0], os.Args[1:]...)
+	cmd.Env = append(os.Environ(), "MOCKD_CHILD=1")
+
+	// Detach from terminal
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Stdin = nil
+
+	// Start the child process
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start daemon: %w", err)
+	}
+
+	// Wait briefly for child to start and write PID file
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify the daemon started by checking PID file
+	pidInfo, err := ReadPIDFile(pidFilePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: daemon may have failed to start (could not read PID file: %v)\n", err)
+		return nil
+	}
+
+	if !pidInfo.IsRunning() {
+		return fmt.Errorf("daemon process exited immediately")
+	}
+
+	// Print success message
+	fmt.Printf("mockd started in background (PID %d)\n", pidInfo.PID)
+	fmt.Printf("Admin API:   http://localhost:%d\n", adminPort)
+	fmt.Printf("Mock server: http://localhost:%d\n", httpPort)
+
+	// Show loaded mocks count if any
+	if pidInfo.Config.MocksLoaded > 0 {
+		fmt.Printf("Loaded %d mocks\n", pidInfo.Config.MocksLoaded)
+	}
+
+	return nil
+}
+
+// writePIDFileForServe writes the PID file with server component information.
+func writePIDFileForServe(pidFilePath string, version string, httpPort, httpsPort, adminPort int, configFile string, mocksLoaded int) error {
+	pidInfo := &PIDFile{
+		PID:       os.Getpid(),
+		StartTime: time.Now(),
+		Version:   version,
+		Components: ComponentsInfo{
+			Admin: ComponentStatus{
+				Enabled: true,
+				Port:    adminPort,
+				Host:    "localhost",
+			},
+			Engine: ComponentStatus{
+				Enabled:   true,
+				Port:      httpPort,
+				Host:      "localhost",
+				HTTPSPort: httpsPort,
+			},
+		},
+		Config: ConfigInfo{
+			File:        configFile,
+			MocksLoaded: mocksLoaded,
+		},
+	}
+
+	return WritePIDFile(pidFilePath, pidInfo)
+}

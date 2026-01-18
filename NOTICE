@@ -1,0 +1,244 @@
+mockd
+Copyright 2025 GetMockd LLC
+
+This product includes software developed by GetMockd LLC (https://mockd.io).
+
+Licensed under the Apache License, Version 2.0.
+
+---
+
+mockd is a local-first HTTP/HTTPS mock server for API development and testing.
+
+For commercial products, enterprise features, and support, visit:
+https://mockd.io
+
+For the open source project:
+https://github.com/getmockd/mockd
+
+================================================================================
+THIRD-PARTY DEPENDENCIES
+================================================================================
+
+This product includes software developed by third parties:
+
+---
+
+github.com/beevik/etree v1.6.0
+License: BSD-2-Clause
+Copyright (c) 2015-2024 Brett Vickers
+
+---
+
+github.com/bufbuild/protocompile v0.14.1
+License: Apache-2.0
+Copyright (c) 2020-2024 Buf Technologies, Inc.
+
+---
+
+github.com/coder/websocket v1.8.14
+License: ISC
+Copyright (c) 2023 Coder Technologies Inc.
+
+---
+
+github.com/eclipse/paho.mqtt.golang v1.5.1
+License: EPL-2.0
+Copyright (c) Eclipse Foundation
+
+---
+
+github.com/getkin/kin-openapi v0.133.0
+License: MIT
+Copyright (c) 2017 Mikael Ronström
+
+---
+
+github.com/golang-jwt/jwt/v5 v5.3.0
+License: MIT
+Copyright (c) 2012 Dave Grijalva
+Copyright (c) 2021 golang-jwt maintainers
+
+---
+
+github.com/google/uuid v1.6.0
+License: BSD-3-Clause
+Copyright (c) 2009, 2014 Google Inc.
+
+---
+
+github.com/gorilla/websocket v1.5.3
+License: BSD-3-Clause
+Copyright (c) 2013 The Gorilla WebSocket Authors
+
+---
+
+github.com/jhump/protoreflect v1.17.0
+License: Apache-2.0
+Copyright (c) 2017 Joshua Humphries
+
+---
+
+github.com/mochi-mqtt/server/v2 v2.7.9
+License: MIT
+Copyright (c) 2023 Mochi MQTT
+
+---
+
+github.com/ohler55/ojg v1.27.0
+License: MIT
+Copyright (c) 2020 Peter Ohler
+
+---
+
+github.com/stretchr/testify v1.11.1
+License: MIT
+Copyright (c) 2012-2020 Mat Ryer, Tyler Bunnell and contributors
+
+---
+
+github.com/vektah/gqlparser/v2 v2.5.31
+License: MIT
+Copyright (c) 2018 Adam Scarr
+
+---
+
+golang.org/x/sys v0.39.0
+License: BSD-3-Clause
+Copyright (c) 2009 The Go Authors
+
+---
+
+golang.org/x/text v0.31.0
+License: BSD-3-Clause
+Copyright (c) 2009 The Go Authors
+
+---
+
+google.golang.org/grpc v1.78.0
+License: Apache-2.0
+Copyright 2014 gRPC authors
+
+---
+
+google.golang.org/protobuf v1.36.11
+License: BSD-3-Clause
+Copyright (c) 2018 The Go Authors
+
+---
+
+gopkg.in/yaml.v3 v3.0.1
+License: MIT
+Copyright (c) 2006-2011 Kirill Simonov
+Copyright (c) 2011-2019 Canonical Ltd
+
+---
+
+Indirect dependencies:
+
+---
+
+github.com/agnivade/levenshtein v1.2.1
+License: MIT
+Copyright (c) 2017 Agniva De Sarker
+
+---
+
+github.com/davecgh/go-spew v1.1.1
+License: ISC
+Copyright (c) 2012-2016 Dave Collins
+
+---
+
+github.com/go-openapi/jsonpointer v0.21.0
+License: Apache-2.0
+Copyright 2013 sigu-399 (https://github.com/sigu-399)
+
+---
+
+github.com/go-openapi/swag v0.23.0
+License: Apache-2.0
+Copyright 2015 go-swagger maintainers
+
+---
+
+github.com/golang/protobuf v1.5.4
+License: BSD-3-Clause
+Copyright 2010 The Go Authors
+
+---
+
+github.com/gorilla/mux v1.8.0
+License: BSD-3-Clause
+Copyright (c) 2012-2018 The Gorilla Authors
+
+---
+
+github.com/josharian/intern v1.0.0
+License: MIT
+Copyright (c) 2019 Josh Bleecher Snyder
+
+---
+
+github.com/mailru/easyjson v0.7.7
+License: MIT
+Copyright (c) 2016 Mail.Ru Group
+
+---
+
+github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
+License: MIT
+Copyright (c) 2014 Joel
+
+---
+
+github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037
+License: MIT
+Copyright (c) 2022-2025 Tufin Software Technologies Ltd
+
+---
+
+github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90
+License: MIT
+Copyright (c) 2022-2025 Tufin Software Technologies Ltd
+
+---
+
+github.com/perimeterx/marshmallow v1.1.5
+License: MIT
+Copyright (c) 2022 PerimeterX
+
+---
+
+github.com/pmezard/go-difflib v1.0.0
+License: BSD-3-Clause
+Copyright (c) 2013 Patrick Mezard
+
+---
+
+github.com/rs/xid v1.4.0
+License: MIT
+Copyright (c) 2015 Olivier Poitrey
+
+---
+
+github.com/woodsbury/decimal128 v1.3.0
+License: BSD-3-Clause
+Copyright (c) 2023 Simon Woodsbury
+
+---
+
+golang.org/x/net v0.47.0
+License: BSD-3-Clause
+Copyright (c) 2009 The Go Authors
+
+---
+
+golang.org/x/sync v0.18.0
+License: BSD-3-Clause
+Copyright (c) 2009 The Go Authors
+
+---
+
+google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda
+License: Apache-2.0
+Copyright 2015 Google LLC
