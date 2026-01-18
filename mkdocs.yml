@@ -1,9 +1,9 @@
 # mockd Documentation
-# https://getmockd.github.io/mockd/
+# https://docs.mockd.io/
 
 site_name: mockd
 site_description: A fast, lightweight API mocking server for development and testing
-site_url: https://getmockd.github.io/mockd/
+site_url: https://docs.mockd.io/
 repo_name: getmockd/mockd
 repo_url: https://github.com/getmockd/mockd
 edit_uri: edit/main/docs/
