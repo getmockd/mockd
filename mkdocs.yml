@@ -96,7 +96,7 @@ markdown_extensions:
 plugins:
   - search:
       lang: en
-  -   llmstxt:
+  - llmstxt:
       markdown_description: |
         mockd is a fast, lightweight API mocking server written in Go.
         It supports HTTP, WebSocket, GraphQL, gRPC, MQTT, and SOAP protocols.
