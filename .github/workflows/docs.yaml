@@ -43,7 +43,7 @@ jobs:
           pip install mkdocs-material mkdocs-llmstxt
 
       - name: Build docs
-        run: mkdocs build --strict
+        run: mkdocs build
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

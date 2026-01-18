@@ -411,5 +411,5 @@ mockd stream-recordings show 01HXYZ123456 --json | jq '.websocket.frames[] | {re
 ## Next Steps
 
 - [Replay Modes](replay-modes.md) - Learn about Pure, Synchronized, and Triggered replay
-- [SSE Streaming](../SSE.md) - SSE mock configuration
+- [SSE Streaming](sse-streaming.md) - SSE mock configuration
 - [Admin API](../reference/admin-api.md) - Stream recording API endpoints
