@@ -1,0 +1,47 @@
+REQUEST MATCHING
+================
+
+mockd matches incoming requests against mock definitions.
+
+PATH MATCHING
+-------------
+
+  Exact:     /api/users
+  Parameter: /api/users/{id}
+  Wildcard:  /api/**
+  Regex:     pathPattern: "^/api/users/\\d+$"
+
+METHOD MATCHING
+---------------
+
+  method: GET
+  method: POST
+  method: ANY          # Matches all methods
+
+HEADER MATCHING
+---------------
+
+  headers:
+    Authorization: "Bearer *"    # Wildcard
+    Content-Type: "application/json"
+
+QUERY PARAMETER MATCHING
+------------------------
+
+  query:
+    page: "\\d+"       # Regex
+    limit: "10"        # Exact
+
+BODY MATCHING
+-------------
+
+  body: '{"exact": "match"}'
+  bodyContains: "partial"
+  bodyJSONPath:
+    $.user.name: "John"
+
+PRIORITY
+--------
+
+  Mocks are matched in order. First match wins.
+  Use 'priority' field to override (higher = matched first).

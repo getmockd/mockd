@@ -1,0 +1,13 @@
+goos: linux
+goarch: amd64
+pkg: github.com/getmockd/mockd/tests/performance
+cpu: Intel(R) Core(TM) i7-4790K CPU @ 4.00GHz
+BenchmarkWS_EchoLatency-8               	   80455	     30744 ns/op	    3501 B/op	      46 allocs/op
+BenchmarkWS_ConnectionEstablishment-8   	    8196	    311181 ns/op	   41890 B/op	     360 allocs/op
+BenchmarkWS_ConcurrentConnections-8     	     171	  14294123 ns/op	 4227594 B/op	   36877 allocs/op
+BenchmarkWS_MatcherPerformance-8        	   69098	     33390 ns/op	    3919 B/op	      53 allocs/op
+BenchmarkWS_MessageThroughput/small_64B-8         	   78540	     31953 ns/op	    3464 B/op	      46 allocs/op
+BenchmarkWS_MessageThroughput/medium_1KB-8        	   60498	     38754 ns/op	   10973 B/op	      74 allocs/op
+BenchmarkWS_MessageThroughput/large_64KB-8        	  827854	      2837 ns/op	     584 B/op	      14 allocs/op
+PASS
+ok  	github.com/getmockd/mockd/tests/performance	25.355s

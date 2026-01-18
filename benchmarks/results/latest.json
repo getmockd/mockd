@@ -1,0 +1,116 @@
+{
+  "timestamp": "2026-01-10T19:54:56Z",
+  "environment": {
+    "os": "linux",
+    "arch": "amd64",
+    "cpu": "Intel(R) Core(TM) i7-4790K CPU @ 4.00GHz",
+    "num_cpu": 8,
+    "go_version": "go1.25.5"
+  },
+  "protocols": {
+    "admin": {
+      "benchmarks": null,
+      "smoke_test_passed": true
+    },
+    "grpc": {
+      "benchmarks": null,
+      "smoke_test_passed": true
+    },
+    "mqtt": {
+      "benchmarks": null,
+      "smoke_test_passed": true
+    },
+    "soap": {
+      "benchmarks": null,
+      "smoke_test_passed": true
+    },
+    "startup": {
+      "benchmarks": null,
+      "smoke_test_passed": true
+    },
+    "websocket": {
+      "benchmarks": [
+        {
+          "name": "BenchmarkWS_EchoLatency",
+          "ns_per_op": 60643,
+          "ops_per_sec": 16489.949375855416,
+          "bytes_per_op": 3501,
+          "allocs_per_op": 46
+        },
+        {
+          "name": "BenchmarkWS_ConnectionEstablishment",
+          "ns_per_op": 411256,
+          "ops_per_sec": 2431.5754663761745,
+          "bytes_per_op": 41917,
+          "allocs_per_op": 360
+        },
+        {
+          "name": "BenchmarkWS_ConcurrentConnections",
+          "ns_per_op": 17423931,
+          "ops_per_sec": 57.3923301234377,
+          "bytes_per_op": 4240723,
+          "allocs_per_op": 36889
+        },
+        {
+          "name": "BenchmarkWS_MatcherPerformance",
+          "ns_per_op": 38621,
+          "ops_per_sec": 25892.64907692706,
+          "bytes_per_op": 3898,
+          "allocs_per_op": 53
+        },
+        {
+          "name": "BenchmarkWS_MessageThroughput/small_64B",
+          "ns_per_op": 33598,
+          "ops_per_sec": 29763.67640931008,
+          "bytes_per_op": 3464,
+          "allocs_per_op": 46
+        },
+        {
+          "name": "BenchmarkWS_MessageThroughput/medium_1KB",
+          "ns_per_op": 41592,
+          "ops_per_sec": 24043.08520869398,
+          "bytes_per_op": 10974,
+          "allocs_per_op": 74
+        }
+      ],
+      "smoke_test_passed": true
+    }
+  },
+  "summary": {
+    "http": {
+      "throughput_ops_per_sec": 0,
+      "latency_ns": 0,
+      "claim": "See run_all.sh results"
+    },
+    "websocket": {
+      "throughput_ops_per_sec": 16489.949375855416,
+      "latency_ns": 60643,
+      "claim": "13K+ msg/s"
+    },
+    "grpc": {
+      "throughput_ops_per_sec": 0,
+      "latency_ns": 0,
+      "claim": "0K+ calls/s"
+    },
+    "mqtt": {
+      "qos0_ops_per_sec": 0,
+      "qos1_ops_per_sec": 0,
+      "qos2_ops_per_sec": 0,
+      "claim": "100K+ msg/s (QoS 0)"
+    },
+    "soap": {
+      "throughput_ops_per_sec": 0,
+      "latency_ns": 0,
+      "claim": "0K+ req/s"
+    },
+    "startup": {
+      "server_ns": 0,
+      "cli_ns": 0,
+      "claim": "\u003c1ms server, \u003c5ms CLI"
+    },
+    "memory": {
+      "idle_mb": 25,
+      "claim": "\u003c30MB"
+    }
+  }
+}

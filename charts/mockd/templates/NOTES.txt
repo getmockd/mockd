@@ -1,0 +1,65 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named: {{ .Release.Name }}
+
+To get the application URL, run these commands:
+
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mockd.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "Mock server: http://$NODE_IP:$NODE_PORT"
+
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        You can watch the status by running:
+        kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "mockd.fullname" . }}
+
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "mockd.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo "Mock server: http://$SERVICE_IP:{{ .Values.service.port }}"
+  echo "Admin API:   http://$SERVICE_IP:{{ .Values.mockd.adminPort }}"
+
+{{- else if contains "ClusterIP" .Values.service.type }}
+  # Port-forward to access the mock server locally:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "mockd.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  
+  # Then access the mock server at:
+  echo "Mock server: http://127.0.0.1:{{ .Values.service.port }}"
+
+  # For the admin API:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "mockd.fullname" . }} {{ .Values.mockd.adminPort }}:{{ .Values.mockd.adminPort }}
+  echo "Admin API:   http://127.0.0.1:{{ .Values.mockd.adminPort }}"
+
+{{- end }}
+
+## Quick Start
+
+1. Create a mock endpoint via the Admin API:
+   curl -X POST http://127.0.0.1:{{ .Values.mockd.adminPort }}/api/mocks \
+     -H "Content-Type: application/json" \
+     -d '{
+       "request": {"method": "GET", "path": "/hello"},
+       "response": {"status": 200, "body": {"message": "Hello, World!"}}
+     }'
+
+2. Test the mock:
+   curl http://127.0.0.1:{{ .Values.service.port }}/hello
+
+## Configuration
+
+- Log level: {{ .Values.mockd.logLevel }}
+- Mock port: {{ .Values.service.port }}
+- Admin port: {{ .Values.mockd.adminPort }}
+
+{{- if .Values.mockDefinitions.enabled }}
+
+Mock definitions are loaded from the ConfigMap: {{ include "mockd.fullname" . }}-mocks
+{{- end }}
+
+For more information, visit: https://github.com/getmockd/mockd

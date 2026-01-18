@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "mocks": [
+    {
+      "id": "chunked-download",
+      "name": "Chunked File Download",
+      "description": "Simulate slow file download with chunked transfer encoding",
+      "matcher": {
+        "method": "GET",
+        "path": "/download/large-file"
+      },
+      "chunked": {
+        "data": "This is a large file being downloaded in chunks. Each chunk is sent with a delay to simulate network conditions. The total size is small for this example but chunked encoding allows streaming large files without buffering the entire content in memory.",
+        "chunkSize": 50,
+        "chunkDelay": 100
+      },
+      "enabled": true
+    }
+  ]
+}

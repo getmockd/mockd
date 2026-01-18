@@ -1,0 +1,142 @@
+/* mockd Documentation Custom Styles */
+
+/* Primary color variables (matches Material theme) */
+:root {
+  --md-primary-fg-color: #673ab7;  /* Deep Purple */
+  --md-accent-fg-color: #9c27b0;   /* Purple */
+}
+
+/* Homepage hero styling */
+.md-typeset .hero {
+  margin: 2rem 0;
+  text-align: center;
+}
+
+.md-typeset .hero h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.md-typeset .hero .tagline {
+  font-size: 1.25rem;
+  color: var(--md-default-fg-color--light);
+  margin-bottom: 2rem;
+}
+
+/* Call-to-action buttons */
+.md-typeset .cta-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 2rem 0;
+}
+
+.md-typeset .cta-buttons .md-button {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.md-typeset .cta-buttons .md-button--primary {
+  background-color: var(--md-primary-fg-color);
+  border-color: var(--md-primary-fg-color);
+  color: white;
+}
+
+.md-typeset .cta-buttons .md-button--primary:hover {
+  background-color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+}
+
+/* Feature grid for homepage */
+.md-typeset .feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.md-typeset .feature-card {
+  padding: 1.5rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 8px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.md-typeset .feature-card:hover {
+  border-color: var(--md-primary-fg-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.md-typeset .feature-card h3 {
+  margin-top: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.md-typeset .feature-card p {
+  margin-bottom: 0;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Code block improvements */
+.md-typeset pre > code {
+  font-size: 0.85rem;
+}
+
+/* Terminal-style code blocks */
+.md-typeset .highlight.language-bash,
+.md-typeset .highlight.language-shell {
+  background: #1e1e1e;
+}
+
+/* Admonition customization */
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+  border-color: var(--md-primary-fg-color);
+}
+
+.md-typeset .tip > .admonition-title,
+.md-typeset .tip > summary {
+  background-color: rgba(103, 58, 183, 0.1);
+}
+
+/* Quick install command styling */
+.md-typeset .install-command {
+  background: var(--md-code-bg-color);
+  padding: 1rem;
+  border-radius: 4px;
+  font-family: var(--md-code-font-family);
+  margin: 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.md-typeset .install-command code {
+  flex: 1;
+  background: none;
+  padding: 0;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 76.1875em) {
+  .md-typeset .hero h1 {
+    font-size: 2rem;
+  }
+
+  .md-typeset .feature-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Dark mode adjustments */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #9575cd;  /* Lighter purple for dark mode */
+}
+
+[data-md-color-scheme="slate"] .md-typeset .feature-card {
+  background: rgba(255, 255, 255, 0.02);
+}

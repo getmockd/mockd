@@ -1,0 +1,36 @@
+#:schema https://mise.jdx.dev/schema/mise.json
+# https://github.com/jdx/mise
+
+[tools]
+go = "1.25"
+
+# Documentation tasks (delegates to docs/ directory)
+# Python tooling is isolated in docs/mise.toml so Go users don't need Python
+
+[tasks.docs-install]
+description = "Install documentation dependencies"
+dir = "docs"
+run = "mise run install"
+
+[tasks.docs-serve]
+description = "Start documentation server with live reload"
+dir = "docs"
+run = "mise run serve"
+
+[tasks.docs-build]
+description = "Build static documentation site"
+dir = "docs"
+run = "mise run build"
+
+[tasks.docs-clean]
+description = "Clean documentation build artifacts"
+dir = "docs"
+run = "mise run clean"
+
+[tasks.tui]
+description = "Run the TUI (with hot reload from source)"
+run = "go run cmd/mockd/main.go"
+
+[tasks.build]
+description = "Build mockd binary"
+run = "go build -o mockd cmd/mockd/main.go"

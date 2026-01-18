@@ -1,0 +1,94 @@
+# Benchmark environment for mockd
+# Run: docker compose -f benchmarks/docker-compose.yml up --abort-on-container-exit
+
+services:
+  mockd:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "4280:4280"
+      - "4290:4290"
+    # Resource limits for consistent benchmarks
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+        reservations:
+          cpus: '1'
+          memory: 256M
+    command: ["start", "--port", "4280", "--admin-port", "4290"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4290/health"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ./fixtures:/fixtures:ro
+
+  # Setup mock endpoints before benchmarking
+  setup:
+    image: curlimages/curl:latest
+    depends_on:
+      mockd:
+        condition: service_healthy
+    volumes:
+      - ./fixtures:/fixtures:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Setting up benchmark mocks..."
+        # Simple echo endpoint
+        curl -s -X POST http://mockd:4290/mocks -H "Content-Type: application/json" -d '{
+          "name": "benchmark-echo",
+          "type": "http",
+          "enabled": true,
+          "http": {
+            "matcher": {"method": "GET", "path": "/echo"},
+            "response": {"statusCode": 200, "body": "{\"message\": \"hello\"}"}
+          }
+        }'
+        # Dynamic endpoint with path param
+        curl -s -X POST http://mockd:4290/mocks -H "Content-Type: application/json" -d '{
+          "name": "benchmark-user",
+          "type": "http",
+          "enabled": true,
+          "http": {
+            "matcher": {"method": "GET", "path": "/users/{id}"},
+            "response": {"statusCode": 200, "body": "{\"id\": \"{{request.path.id}}\", \"name\": \"User\"}"}
+          }
+        }'
+        # POST endpoint
+        curl -s -X POST http://mockd:4290/mocks -H "Content-Type: application/json" -d '{
+          "name": "benchmark-create",
+          "type": "http",
+          "enabled": true,
+          "http": {
+            "matcher": {"method": "POST", "path": "/items"},
+            "response": {"statusCode": 201, "body": "{\"created\": true}"}
+          }
+        }'
+        echo "Mocks configured. Ready for benchmarks."
+
+  # k6 load testing
+  k6:
+    image: grafana/k6:latest
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./k6:/scripts:ro
+      - ./results:/results
+    environment:
+      - K6_OUT=json=/results/k6-results.json
+    command: run --out json=/results/k6-results.json /scripts/load_test.js
+
+  # Alternative: wrk for simple throughput test
+  wrk:
+    image: williamyeh/wrk:latest
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    profiles: ["wrk"]  # Only run with --profile wrk
+    command: -t4 -c100 -d30s http://mockd:4280/echo

@@ -1,0 +1,590 @@
+{
+  "version": "1.0",
+  "name": "Multi-Protocol Demo",
+  "metadata": {
+    "name": "Multi-Protocol Demo",
+    "description": "Comprehensive demo showcasing HTTP, WebSocket, SSE, gRPC, MQTT, GraphQL, and SOAP protocols",
+    "tags": ["demo", "multi-protocol", "showcase"]
+  },
+  "serverConfig": {
+    "httpPort": 4280,
+    "adminPort": 4290,
+    "logRequests": true,
+    "maxLogEntries": 500,
+    "graphql": [
+      {
+        "id": "ecommerce-graphql",
+        "path": "/graphql",
+        "introspection": true,
+        "enabled": true,
+        "schema": "type Query {\n  products(limit: Int, category: String): [Product!]!\n  product(id: ID!): Product\n  cart(userId: ID!): Cart\n  user(id: ID!): User\n}\n\ntype Mutation {\n  addToCart(userId: ID!, productId: ID!, quantity: Int!): CartItem!\n  createOrder(userId: ID!, items: [OrderItemInput!]!): Order!\n}\n\ntype Subscription {\n  orderStatus(orderId: ID!): OrderStatusUpdate!\n  priceUpdates(productIds: [ID!]!): PriceUpdate!\n}\n\ntype Product {\n  id: ID!\n  name: String!\n  price: Float!\n  stock: Int!\n  category: String!\n  description: String\n}\n\ntype Cart {\n  id: ID!\n  userId: ID!\n  items: [CartItem!]!\n  total: Float!\n}\n\ntype CartItem {\n  id: ID!\n  product: Product!\n  quantity: Int!\n}\n\ntype User {\n  id: ID!\n  name: String!\n  email: String!\n}\n\ntype Order {\n  id: ID!\n  status: String!\n  items: [OrderItem!]!\n  total: Float!\n  createdAt: String!\n}\n\ntype OrderItem {\n  productId: ID!\n  quantity: Int!\n  price: Float!\n}\n\ntype OrderStatusUpdate {\n  orderId: ID!\n  status: String!\n  timestamp: String!\n}\n\ntype PriceUpdate {\n  productId: ID!\n  oldPrice: Float!\n  newPrice: Float!\n  timestamp: String!\n}\n\ninput OrderItemInput {\n  productId: ID!\n  quantity: Int!\n}",
+        "resolvers": {
+          "Query.products": {
+            "response": [
+              {"id": "prod-001", "name": "Wireless Headphones", "price": 79.99, "stock": 150, "category": "Electronics"},
+              {"id": "prod-002", "name": "USB-C Hub", "price": 49.99, "stock": 75, "category": "Electronics"},
+              {"id": "prod-003", "name": "Mechanical Keyboard", "price": 129.99, "stock": 42, "category": "Electronics"}
+            ]
+          },
+          "Query.product": {
+            "response": {"id": "prod-001", "name": "Wireless Headphones", "price": 79.99, "stock": 150, "category": "Electronics", "description": "Premium wireless headphones with noise cancellation"}
+          },
+          "Query.cart": {
+            "response": {
+              "id": "cart-001",
+              "userId": "user-123",
+              "items": [
+                {"id": "item-001", "product": {"id": "prod-001", "name": "Wireless Headphones", "price": 79.99, "stock": 150, "category": "Electronics"}, "quantity": 2}
+              ],
+              "total": 159.98
+            }
+          },
+          "Query.user": {
+            "response": {"id": "user-123", "name": "John Doe", "email": "john@example.com"}
+          },
+          "Mutation.addToCart": {
+            "response": {"id": "item-new", "product": {"id": "prod-001", "name": "Wireless Headphones", "price": 79.99, "stock": 150, "category": "Electronics"}, "quantity": 1},
+            "delay": "100ms"
+          },
+          "Mutation.createOrder": {
+            "response": {
+              "id": "order-001",
+              "status": "pending",
+              "items": [{"productId": "prod-001", "quantity": 2, "price": 79.99}],
+              "total": 159.98,
+              "createdAt": "2024-01-02T12:00:00Z"
+            },
+            "delay": "200ms"
+          }
+        }
+      }
+    ],
+    "grpc": [
+      {
+        "id": "order-service",
+        "port": 50051,
+        "protoFile": "protos/order.proto",
+        "reflection": true,
+        "enabled": true,
+        "services": {
+          "order.OrderService": {
+            "methods": {
+              "CreateOrder": {
+                "response": {
+                  "order_id": "ord-12345",
+                  "status": "PENDING",
+                  "created_at": "2024-01-02T12:00:00Z",
+                  "total_amount": 159.98
+                },
+                "delay": "100ms"
+              },
+              "GetOrder": {
+                "response": {
+                  "order_id": "ord-12345",
+                  "status": "SHIPPED",
+                  "items": [
+                    {"product_id": "prod-001", "quantity": 2, "unit_price": 79.99}
+                  ],
+                  "total_amount": 159.98,
+                  "shipping_address": {
+                    "street": "123 Main St",
+                    "city": "San Francisco",
+                    "country": "USA"
+                  }
+                }
+              },
+              "ListOrders": {
+                "responses": [
+                  {"order_id": "ord-001", "status": "DELIVERED", "total_amount": 99.99},
+                  {"order_id": "ord-002", "status": "SHIPPED", "total_amount": 149.99},
+                  {"order_id": "ord-003", "status": "PENDING", "total_amount": 79.99}
+                ],
+                "streamDelay": "200ms"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "stock-ticker-grpc",
+        "port": 50052,
+        "protoFile": "protos/stocks.proto",
+        "reflection": true,
+        "enabled": true,
+        "services": {
+          "stocks.StockService": {
+            "methods": {
+              "GetQuote": {
+                "response": {
+                  "symbol": "AAPL",
+                  "price": 185.50,
+                  "change": 2.35,
+                  "change_percent": 1.28,
+                  "volume": 45000000
+                }
+              },
+              "StreamQuotes": {
+                "responses": [
+                  {"symbol": "AAPL", "price": 185.50, "change": 2.35},
+                  {"symbol": "AAPL", "price": 185.75, "change": 2.60},
+                  {"symbol": "AAPL", "price": 185.25, "change": 2.10},
+                  {"symbol": "AAPL", "price": 186.00, "change": 2.85}
+                ],
+                "streamDelay": "1s"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "soap": [
+      {
+        "id": "payment-gateway",
+        "path": "/soap/payment",
+        "enabled": true,
+        "operations": {
+          "ProcessPayment": {
+            "soapAction": "http://payments.example.com/ProcessPayment",
+            "response": "<ProcessPaymentResponse xmlns=\"http://payments.example.com/\">\n  <TransactionId>txn-{{uuid}}</TransactionId>\n  <Status>SUCCESS</Status>\n  <AuthorizationCode>AUTH-{{randomInt 100000 999999}}</AuthorizationCode>\n  <Timestamp>{{now}}</Timestamp>\n</ProcessPaymentResponse>"
+          },
+          "RefundPayment": {
+            "soapAction": "http://payments.example.com/RefundPayment",
+            "response": "<RefundPaymentResponse xmlns=\"http://payments.example.com/\">\n  <RefundId>ref-{{uuid}}</RefundId>\n  <Status>COMPLETED</Status>\n  <Amount>{{request.Amount}}</Amount>\n  <Timestamp>{{now}}</Timestamp>\n</RefundPaymentResponse>",
+            "delay": "500ms"
+          },
+          "GetTransactionStatus": {
+            "soapAction": "http://payments.example.com/GetTransactionStatus",
+            "response": "<GetTransactionStatusResponse xmlns=\"http://payments.example.com/\">\n  <TransactionId>{{request.TransactionId}}</TransactionId>\n  <Status>COMPLETED</Status>\n  <Amount>99.99</Amount>\n  <Currency>USD</Currency>\n  <ProcessedAt>2024-01-02T12:00:00Z</ProcessedAt>\n</GetTransactionStatusResponse>"
+          }
+        }
+      },
+      {
+        "id": "erp-integration",
+        "path": "/soap/erp",
+        "enabled": true,
+        "operations": {
+          "CreatePurchaseOrder": {
+            "soapAction": "http://erp.example.com/CreatePurchaseOrder",
+            "response": "<CreatePurchaseOrderResponse xmlns=\"http://erp.example.com/\">\n  <OrderNumber>PO-2024-{{randomInt 10000 99999}}</OrderNumber>\n  <Status>CREATED</Status>\n  <EstimatedDelivery>2024-01-15</EstimatedDelivery>\n</CreatePurchaseOrderResponse>",
+            "delay": "300ms"
+          },
+          "GetInventory": {
+            "soapAction": "http://erp.example.com/GetInventory",
+            "response": "<GetInventoryResponse xmlns=\"http://erp.example.com/\">\n  <Items>\n    <Item>\n      <SKU>SKU-001</SKU>\n      <Name>Widget A</Name>\n      <Quantity>500</Quantity>\n      <Location>Warehouse-A</Location>\n    </Item>\n    <Item>\n      <SKU>SKU-002</SKU>\n      <Name>Widget B</Name>\n      <Quantity>250</Quantity>\n      <Location>Warehouse-B</Location>\n    </Item>\n  </Items>\n</GetInventoryResponse>"
+          }
+        }
+      }
+    ],
+    "mqtt": [
+      {
+        "id": "iot-broker",
+        "port": 1883,
+        "enabled": true,
+        "auth": {
+          "enabled": true,
+          "users": [
+            {
+              "username": "device",
+              "password": "device123",
+              "acl": [
+                {"topic": "sensors/#", "access": "readwrite"},
+                {"topic": "commands/#", "access": "read"}
+              ]
+            },
+            {
+              "username": "admin",
+              "password": "admin123",
+              "acl": [
+                {"topic": "#", "access": "readwrite"}
+              ]
+            }
+          ]
+        },
+        "topics": [
+          {
+            "topic": "sensors/temperature",
+            "qos": 1,
+            "messages": [
+              {"payload": "{\"sensor_id\":\"temp-001\",\"value\":22.5,\"unit\":\"celsius\",\"timestamp\":\"{{now}}\"}", "interval": "5s", "repeat": true}
+            ]
+          },
+          {
+            "topic": "sensors/humidity",
+            "qos": 1,
+            "messages": [
+              {"payload": "{\"sensor_id\":\"hum-001\",\"value\":45,\"unit\":\"percent\",\"timestamp\":\"{{now}}\"}", "interval": "5s", "repeat": true}
+            ]
+          },
+          {
+            "topic": "factory/machines/+/status",
+            "qos": 2,
+            "onPublish": {
+              "response": {"payload": "{\"ack\":true,\"timestamp\":\"{{now}}\"}"}
+            }
+          },
+          {
+            "topic": "fleet/vehicles/+/location",
+            "qos": 1,
+            "messages": [
+              {"payload": "{\"vehicle_id\":\"truck-001\",\"lat\":37.7749,\"lng\":-122.4194,\"speed\":45,\"timestamp\":\"{{now}}\"}", "interval": "10s", "repeat": true}
+            ]
+          },
+          {
+            "topic": "home/+/+/state",
+            "qos": 0,
+            "onPublish": {
+              "forward": "home/events"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "mocks": [
+    {
+      "id": "ecommerce-products",
+      "name": "E-Commerce: Get Products",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/products"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"products\":[{\"id\":\"prod-001\",\"name\":\"Wireless Headphones\",\"price\":79.99,\"stock\":150},{\"id\":\"prod-002\",\"name\":\"USB-C Hub\",\"price\":49.99,\"stock\":75},{\"id\":\"prod-003\",\"name\":\"Mechanical Keyboard\",\"price\":129.99,\"stock\":42}],\"total\":3}"
+      }
+    },
+    {
+      "id": "ecommerce-product-detail",
+      "name": "E-Commerce: Get Product by ID",
+      "priority": 10,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/products/*"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"id\":\"{{pathParams.0}}\",\"name\":\"Wireless Headphones\",\"price\":79.99,\"stock\":150,\"description\":\"Premium wireless headphones with noise cancellation\",\"category\":\"Electronics\"}"
+      }
+    },
+    {
+      "id": "auth-login",
+      "name": "Auth Gateway: Login",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "POST",
+        "path": "/auth/login",
+        "bodyContains": "password"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImlhdCI6MTcwNDIwMDAwMCwiZXhwIjoxNzA0Mjg2NDAwfQ.mock-signature\",\"expiresIn\":86400,\"tokenType\":\"Bearer\"}"
+      }
+    },
+    {
+      "id": "auth-protected",
+      "name": "Auth Gateway: Protected Resource",
+      "priority": 20,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/protected",
+        "headers": {
+          "Authorization": "Bearer *"
+        }
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"message\":\"Access granted\",\"user\":{\"id\":\"user-123\",\"role\":\"admin\"}}"
+      }
+    },
+    {
+      "id": "auth-unauthorized",
+      "name": "Auth Gateway: Unauthorized",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/protected"
+      },
+      "response": {
+        "statusCode": 401,
+        "headers": {
+          "Content-Type": "application/json",
+          "WWW-Authenticate": "Bearer realm=\"api\""
+        },
+        "body": "{\"error\":\"unauthorized\",\"message\":\"Valid Bearer token required\"}"
+      }
+    },
+    {
+      "id": "webhook-receiver",
+      "name": "Smart Webhook: Receive and Echo",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "POST",
+        "path": "/webhooks/events"
+      },
+      "response": {
+        "statusCode": 202,
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Webhook-ID": "{{uuid}}"
+        },
+        "body": "{\"received\":true,\"id\":\"{{uuid}}\",\"timestamp\":\"{{now}}\"}"
+      }
+    },
+    {
+      "id": "metrics-endpoint",
+      "name": "Real-time Metrics",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/metrics"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"cpu_usage\":{{randomFloat 10 90}},\"memory_mb\":{{randomInt 512 4096}},\"requests_per_sec\":{{randomInt 100 1000}},\"active_connections\":{{randomInt 10 200}},\"timestamp\":\"{{now}}\"}"
+      }
+    },
+    {
+      "id": "ai-streaming",
+      "name": "AI Streaming: Chat Completion",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "POST",
+        "path": "/v1/chat/completions"
+      },
+      "sse": {
+        "template": "openai-chat",
+        "templateParams": {
+          "message": "Hello! I'm a mock AI assistant. I can help you test streaming responses in your application."
+        },
+        "timing": {
+          "fixedDelay": 50
+        },
+        "lifecycle": {
+          "keepaliveInterval": 15
+        }
+      }
+    },
+    {
+      "id": "stock-ticker-sse",
+      "name": "Stock Ticker SSE",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/sse/stocks"
+      },
+      "sse": {
+        "generator": {
+          "type": "random",
+          "count": 20,
+          "random": {
+            "schema": {
+              "symbol": "AAPL",
+              "price": "{{randomFloat 150 200}}",
+              "change": "{{randomFloat -5 5}}",
+              "volume": "{{randomInt 1000 100000}}"
+            }
+          }
+        },
+        "timing": {
+          "randomDelay": {
+            "min": 500,
+            "max": 2000
+          }
+        },
+        "lifecycle": {
+          "maxEvents": 20
+        }
+      }
+    }
+  ],
+  "websocketEndpoints": [
+    {
+      "path": "/ws/trading",
+      "subprotocols": ["json"],
+      "heartbeat": {
+        "enabled": true,
+        "interval": "30s"
+      },
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "subscribe"
+          },
+          "response": {
+            "type": "json",
+            "value": {
+              "type": "subscribed",
+              "channel": "{{request.channel}}",
+              "timestamp": "{{now}}"
+            }
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "order"
+          },
+          "response": {
+            "type": "json",
+            "value": {
+              "type": "order_confirmed",
+              "orderId": "{{uuid}}",
+              "status": "pending",
+              "timestamp": "{{now}}"
+            },
+            "delay": "100ms"
+          }
+        }
+      ],
+      "defaultResponse": {
+        "type": "json",
+        "value": {
+          "type": "echo",
+          "received": "{{request}}"
+        }
+      },
+      "scenario": {
+        "name": "price-updates",
+        "steps": [
+          {
+            "type": "wait",
+            "duration": "1s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {
+                "type": "price_update",
+                "symbol": "AAPL",
+                "price": 185.50,
+                "change": 2.35
+              }
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "2s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {
+                "type": "price_update",
+                "symbol": "GOOGL",
+                "price": 142.75,
+                "change": -1.20
+              }
+            }
+          }
+        ],
+        "loop": true
+      }
+    },
+    {
+      "path": "/ws/collab",
+      "subprotocols": ["json"],
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "join"
+          },
+          "response": {
+            "type": "json",
+            "value": {
+              "type": "user_joined",
+              "userId": "{{uuid}}",
+              "document": "doc-001",
+              "cursors": []
+            }
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "edit"
+          },
+          "response": {
+            "type": "json",
+            "value": {
+              "type": "edit_ack",
+              "version": "{{randomInt 1 100}}",
+              "timestamp": "{{now}}"
+            }
+          }
+        }
+      ],
+      "echoMode": false
+    },
+    {
+      "path": "/ws/iot",
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.command",
+            "value": "status"
+          },
+          "response": {
+            "type": "json",
+            "value": {
+              "deviceId": "device-001",
+              "status": "online",
+              "battery": 85,
+              "lastSeen": "{{now}}"
+            }
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.command",
+            "value": "control"
+          },
+          "response": {
+            "type": "json",
+            "value": {
+              "success": true,
+              "deviceId": "{{request.deviceId}}",
+              "action": "{{request.action}}",
+              "timestamp": "{{now}}"
+            },
+            "delay": "50ms"
+          }
+        }
+      ]
+    }
+  ]
+}

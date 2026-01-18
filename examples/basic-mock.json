@@ -1,0 +1,91 @@
+{
+  "version": "1.0",
+  "name": "Basic Mock Examples",
+  "mocks": [
+    {
+      "id": "hello-world",
+      "name": "Hello World Endpoint",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/hello"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "text/plain"
+        },
+        "body": "Hello, World!"
+      }
+    },
+    {
+      "id": "get-users",
+      "name": "Get Users List",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/users"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"users\": [{\"id\": 1, \"name\": \"Alice\"}, {\"id\": 2, \"name\": \"Bob\"}]}"
+      }
+    },
+    {
+      "id": "create-user",
+      "name": "Create New User",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "POST",
+        "path": "/api/users"
+      },
+      "response": {
+        "statusCode": 201,
+        "headers": {
+          "Content-Type": "application/json",
+          "Location": "/api/users/new-id"
+        },
+        "body": "{\"id\": \"new-id\", \"created\": true}"
+      }
+    },
+    {
+      "id": "get-user-by-id",
+      "name": "Get Single User",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/users/*"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"id\": \"123\", \"name\": \"Alice\", \"email\": \"alice@example.com\"}"
+      }
+    },
+    {
+      "id": "not-found",
+      "name": "404 Not Found",
+      "priority": 0,
+      "enabled": false,
+      "matcher": {
+        "path": "/*"
+      },
+      "response": {
+        "statusCode": 404,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"error\": \"not_found\", \"message\": \"Resource not found\"}"
+      }
+    }
+  ]
+}

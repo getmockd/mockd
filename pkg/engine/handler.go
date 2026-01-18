@@ -1,0 +1,313 @@
+// Core HTTP request handler for the mock engine.
+
+package engine
+
+import (
+	"io"
+	"log/slog"
+	"maps"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/getmockd/mockd/internal/matching"
+	"github.com/getmockd/mockd/internal/storage"
+	"github.com/getmockd/mockd/pkg/graphql"
+	"github.com/getmockd/mockd/pkg/logging"
+	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/getmockd/mockd/pkg/mtls"
+	"github.com/getmockd/mockd/pkg/oauth"
+	"github.com/getmockd/mockd/pkg/requestlog"
+	"github.com/getmockd/mockd/pkg/soap"
+	"github.com/getmockd/mockd/pkg/sse"
+	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/template"
+	"github.com/getmockd/mockd/pkg/websocket"
+)
+
+// MaxStatefulBodySize is the maximum allowed request body size for stateful POST/PUT operations (1MB).
+const MaxStatefulBodySize = 1 << 20 // 1MB
+
+// Handler handles incoming HTTP requests and matches them against configured mocks.
+type Handler struct {
+	store          storage.MockStore
+	statefulStore  *stateful.StateStore
+	logger         RequestLogger
+	log            *slog.Logger // Operational logger for errors/warnings
+	sseHandler     *sse.SSEHandler
+	chunkedHandler *sse.ChunkedHandler
+	wsManager      *websocket.ConnectionManager
+	templateEngine *template.Engine
+
+	// Enterprise feature routing
+	graphqlMu       sync.RWMutex
+	graphqlHandlers map[string]*graphql.Handler
+	graphqlSubMu    sync.RWMutex
+	graphqlSubs     map[string]*graphql.SubscriptionHandler
+	oauthMu         sync.RWMutex
+	oauthHandlers   map[string]*oauth.Handler
+	soapMu          sync.RWMutex
+	soapHandlers    map[string]*soap.Handler
+}
+
+// NewHandler creates a new Handler.
+func NewHandler(store storage.MockStore) *Handler {
+	return &Handler{
+		store:           store,
+		log:             logging.Nop(), // Default to no-op logger
+		sseHandler:      sse.NewSSEHandler(100), // 100 max SSE connections
+		chunkedHandler:  sse.NewChunkedHandler(),
+		wsManager:       websocket.NewConnectionManager(),
+		templateEngine:  template.New(),
+		graphqlHandlers: make(map[string]*graphql.Handler),
+		graphqlSubs:     make(map[string]*graphql.SubscriptionHandler),
+		oauthHandlers:   make(map[string]*oauth.Handler),
+		soapHandlers:    make(map[string]*soap.Handler),
+	}
+}
+
+// SetLogger sets the request logger for the handler.
+func (h *Handler) SetLogger(logger RequestLogger) {
+	h.logger = logger
+}
+
+// SetOperationalLogger sets the operational logger for error/warning messages.
+func (h *Handler) SetOperationalLogger(log *slog.Logger) {
+	if log != nil {
+		h.log = log
+	} else {
+		h.log = logging.Nop()
+	}
+}
+
+// SetStatefulStore sets the stateful resource store for the handler.
+func (h *Handler) SetStatefulStore(store *stateful.StateStore) {
+	h.statefulStore = store
+}
+
+// SetStore sets the mock store for the handler.
+func (h *Handler) SetStore(store storage.MockStore) {
+	h.store = store
+}
+
+// ServeHTTP implements the http.Handler interface.
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+
+	// Add CORS headers for test panels and browser-based clients
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin")
+	w.Header().Set("Access-Control-Max-Age", "86400")
+
+	// Handle CORS preflight requests
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Check for health/ready endpoints with /__mockd/ prefix first (always takes priority)
+	switch r.URL.Path {
+	case "/__mockd/health":
+		h.handleHealth(w, r)
+		return
+	case "/__mockd/ready":
+		h.handleReady(w, r)
+		return
+	}
+
+	// Check for WebSocket upgrade first
+	if websocket.IsWebSocketRequest(r) {
+		// Check for GraphQL subscription WebSocket first
+		if subHandler := h.getGraphQLSubscriptionHandler(r.URL.Path); subHandler != nil {
+			subHandler.ServeHTTP(w, r)
+			return
+		}
+		h.handleWebSocket(w, r)
+		return
+	}
+
+	// Check for GraphQL handler
+	if gqlHandler := h.getGraphQLHandler(r.URL.Path); gqlHandler != nil {
+		gqlHandler.ServeHTTP(w, r)
+		return
+	}
+
+	// Check for OAuth handler
+	if oauthHandler := h.getOAuthHandler(r.URL.Path); oauthHandler != nil {
+		h.routeOAuthRequest(w, r, oauthHandler)
+		return
+	}
+
+	// Check for SOAP handler
+	if soapHandler := h.getSOAPHandler(r.URL.Path); soapHandler != nil {
+		soapHandler.ServeHTTP(w, r)
+		return
+	}
+
+	// Extract mTLS identity if available and inject into context
+	if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+		identity := mtls.ExtractIdentity(r.TLS.PeerCertificates[0], len(r.TLS.VerifiedChains) > 0)
+		r = r.WithContext(mtls.WithIdentity(r.Context(), identity))
+	}
+
+	// Capture request body for logging
+	var bodyBytes []byte
+	if r.Body != nil {
+		var err error
+		bodyBytes, err = io.ReadAll(r.Body)
+		if err != nil {
+			h.log.Warn("failed to read request body", "path", r.URL.Path, "error", err)
+		}
+		r.Body = io.NopCloser(NewBodyReader(bodyBytes))
+	}
+
+	// Capture headers for logging
+	headers := make(map[string][]string)
+	maps.Copy(headers, r.Header)
+
+	var statusCode int
+	var matchedID string
+
+	// Check stateful resources first
+	if h.statefulStore != nil {
+		if resource, itemID, pathParams := h.statefulStore.MatchPath(r.URL.Path); resource != nil {
+			statusCode = h.handleStateful(w, r, resource, itemID, pathParams, bodyBytes)
+			matchedID = "stateful:" + resource.Name()
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+			return
+		}
+	}
+
+	// Get all mocks (already sorted by priority) - only HTTP type mocks
+	mocks := h.store.ListByType(mock.MockTypeHTTP)
+
+	// Find best matching mock using scoring algorithm (with regex captures)
+	matchResult := SelectBestMatchWithCaptures(mocks, r)
+
+	if matchResult != nil {
+		match := matchResult.Mock
+		matchedID = match.ID
+
+		// Record mock hit for metrics
+		RecordMatchHit(matchedID)
+
+		// Extract path parameters from the matched pattern
+		matchPath := ""
+		if match.HTTP != nil && match.HTTP.Matcher != nil {
+			matchPath = match.HTTP.Matcher.Path
+		}
+		pathParams := matching.MatchPathVariable(matchPath, r.URL.Path)
+
+		// Get path pattern captures from regex matching
+		pathPatternCaptures := matchResult.PathPatternCaptures
+
+		// Check for SSE streaming response
+		if match.HTTP != nil && match.HTTP.SSE != nil {
+			h.sseHandler.ServeHTTP(w, r, match)
+			statusCode = http.StatusOK
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+			return
+		}
+
+		// Check for chunked streaming response
+		if match.HTTP != nil && match.HTTP.Chunked != nil {
+			h.chunkedHandler.ServeHTTP(w, r, match)
+			statusCode = http.StatusOK
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+			return
+		}
+
+		// Standard response
+		if match.HTTP != nil && match.HTTP.Response != nil {
+			statusCode = match.HTTP.Response.StatusCode
+			h.writeResponse(w, r, bodyBytes, pathParams, pathPatternCaptures, match.HTTP.Response)
+		}
+	} else {
+		// No match found - check for fallback health endpoints
+		switch r.URL.Path {
+		case "/health":
+			h.handleHealth(w, r)
+			h.logRequest(startTime, r, headers, bodyBytes, "__mockd:health", http.StatusOK)
+			return
+		case "/ready":
+			h.handleReady(w, r)
+			h.logRequest(startTime, r, headers, bodyBytes, "__mockd:ready", http.StatusOK)
+			return
+		}
+		// No match found - return 404 with informative message
+		statusCode = http.StatusNotFound
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		w.Write([]byte(`{"error": "no_match", "message": "No mock matched the request", "path": "` + r.URL.Path + `", "method": "` + r.Method + `"}`))
+	}
+
+	// Log the request
+	h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+}
+
+// logRequest logs a request to the logger.
+func (h *Handler) logRequest(startTime time.Time, r *http.Request, headers map[string][]string, bodyBytes []byte, matchedID string, statusCode int) {
+	if h.logger != nil {
+		entry := &requestlog.Entry{
+			Timestamp:      startTime,
+			Protocol:       requestlog.ProtocolHTTP,
+			Method:         r.Method,
+			Path:           r.URL.Path,
+			QueryString:    r.URL.RawQuery,
+			Headers:        headers,
+			Body:           string(bodyBytes),
+			BodySize:       len(bodyBytes),
+			RemoteAddr:     r.RemoteAddr,
+			MatchedMockID:  matchedID,
+			ResponseStatus: statusCode,
+			DurationMs:     int(time.Since(startTime).Milliseconds()),
+		}
+		h.logger.Log(entry)
+	}
+}
+
+// writeResponse writes the mock response to the HTTP response writer.
+// It processes any template variables in the response body using the request context.
+func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyBytes []byte, pathParams map[string]string, pathPatternCaptures map[string]string, resp *mock.HTTPResponse) {
+	// Apply delay if specified
+	if resp.DelayMs > 0 {
+		time.Sleep(time.Duration(resp.DelayMs) * time.Millisecond)
+	}
+
+	// Set headers
+	for name, value := range resp.Headers {
+		w.Header().Set(name, value)
+	}
+
+	// Set default Content-Type if not specified
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "text/plain")
+	}
+
+	// Write status code
+	w.WriteHeader(resp.StatusCode)
+
+	// Write body with template processing
+	if resp.Body != "" {
+		body := resp.Body
+		// Process template variables if the template engine is available
+		if h.templateEngine != nil {
+			ctx := template.NewContext(r, bodyBytes)
+			// Add path parameters to context
+			ctx.Request.PathParams = pathParams
+			// Add path pattern captures from regex matching
+			ctx.SetPathPatternCaptures(pathPatternCaptures)
+			// Add mTLS identity to context if available
+			if identity := mtls.FromContext(r.Context()); identity != nil {
+				ctx.SetMTLSFromIdentity(identity)
+			}
+			processedBody, err := h.templateEngine.Process(body, ctx)
+			if err == nil {
+				body = processedBody
+			}
+			// On error, use the original body (graceful degradation)
+		}
+		_, _ = w.Write([]byte(body))
+	}
+}

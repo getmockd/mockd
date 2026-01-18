@@ -1,0 +1,8 @@
+goos: linux
+goarch: amd64
+pkg: github.com/getmockd/mockd/tests/performance
+cpu: Intel(R) Core(TM) i7-4790K CPU @ 4.00GHz
+BenchmarkCLIStartup-8      	     382	   6289400 ns/op	   19954 B/op	      46 allocs/op
+BenchmarkServerStartup-8   	   17298	    127957 ns/op	   42403 B/op	     497 allocs/op
+PASS
+ok  	github.com/getmockd/mockd/tests/performance	14.334s

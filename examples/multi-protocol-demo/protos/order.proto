@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package order;
+
+option go_package = "github.com/getmockd/mockd/examples/order";
+
+service OrderService {
+  // Create a new order
+  rpc CreateOrder(CreateOrderRequest) returns (Order);
+  
+  // Get order by ID
+  rpc GetOrder(GetOrderRequest) returns (Order);
+  
+  // List orders with streaming response
+  rpc ListOrders(ListOrdersRequest) returns (stream Order);
+  
+  // Track order status with bidirectional streaming
+  rpc TrackOrder(stream TrackOrderRequest) returns (stream OrderStatusUpdate);
+}
+
+message CreateOrderRequest {
+  repeated OrderItem items = 1;
+  ShippingAddress shipping_address = 2;
+  string customer_id = 3;
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+message ListOrdersRequest {
+  string customer_id = 1;
+  int32 limit = 2;
+  string status_filter = 3;
+}
+
+message TrackOrderRequest {
+  string order_id = 1;
+}
+
+message Order {
+  string order_id = 1;
+  string status = 2;
+  repeated OrderItem items = 3;
+  double total_amount = 4;
+  ShippingAddress shipping_address = 5;
+  string created_at = 6;
+  string updated_at = 7;
+}
+
+message OrderItem {
+  string product_id = 1;
+  int32 quantity = 2;
+  double unit_price = 3;
+}
+
+message ShippingAddress {
+  string street = 1;
+  string city = 2;
+  string state = 3;
+  string postal_code = 4;
+  string country = 5;
+}
+
+message OrderStatusUpdate {
+  string order_id = 1;
+  string status = 2;
+  string message = 3;
+  string timestamp = 4;
+  Location current_location = 5;
+}
+
+message Location {
+  double latitude = 1;
+  double longitude = 2;
+  string description = 3;
+}

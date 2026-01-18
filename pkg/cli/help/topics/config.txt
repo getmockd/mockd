@@ -1,0 +1,158 @@
+CONFIGURATION FILE
+==================
+
+mockd configuration files use YAML or JSON format.
+
+BASIC STRUCTURE
+---------------
+
+  version: "1.0"
+  
+  mocks:
+    - id: unique-mock-id
+      name: "My Mock"
+      type: http
+      enabled: true
+      http:
+        matcher:
+          method: GET
+          path: /api/endpoint
+        response:
+          statusCode: 200
+          headers:
+            Content-Type: application/json
+          body: '{"key": "value"}'
+
+MOCK TYPES
+----------
+
+The 'type' field determines the mock protocol:
+  - http      HTTP/HTTPS endpoints (default)
+  - websocket WebSocket connections
+  - graphql   GraphQL API endpoints
+  - grpc      gRPC services
+  - mqtt      MQTT broker topics
+  - soap      SOAP/WSDL services
+
+HTTP MOCK EXAMPLE
+-----------------
+
+  mocks:
+    - id: get-users
+      name: Get Users
+      type: http
+      enabled: true
+      http:
+        matcher:
+          method: GET
+          path: /api/users
+          headers:
+            Authorization: "Bearer *"
+        response:
+          statusCode: 200
+          headers:
+            Content-Type: application/json
+          body: |
+            {"users": [{"id": 1, "name": "Alice"}]}
+          delayMs: 100
+
+WEBSOCKET MOCK EXAMPLE
+----------------------
+
+  mocks:
+    - id: chat-ws
+      name: Chat WebSocket
+      type: websocket
+      enabled: true
+      websocket:
+        path: /ws/chat
+        echoMode: true
+        matchers:
+          - match:
+              type: json
+              path: $.type
+              value: "ping"
+            response:
+              type: json
+              value: {"type": "pong"}
+
+GRAPHQL MOCK EXAMPLE
+--------------------
+
+  mocks:
+    - id: graphql-api
+      name: GraphQL API
+      type: graphql
+      enabled: true
+      graphql:
+        path: /graphql
+        introspection: true
+        resolvers:
+          Query.users:
+            response:
+              - {id: "1", name: "Alice"}
+
+SERVER CONFIGURATION
+--------------------
+
+Server settings can be included in the config file:
+
+  version: "1.0"
+  
+  server:
+    port: 4280
+    adminPort: 4290
+    httpsPort: 8443
+    readTimeout: 30
+    writeTimeout: 30
+  
+  mocks: [...]
+
+STATEFUL RESOURCES
+------------------
+
+For CRUD operations with persistent state:
+
+  statefulResources:
+    - name: users
+      collectionPath: /api/users
+      itemPath: /api/users/{id}
+      idField: id
+      autoGenerateId: true
+      initialData:
+        - {id: "1", name: "Alice"}
+        - {id: "2", name: "Bob"}
+
+TEMPLATE VARIABLES
+------------------
+
+Response bodies support template variables:
+
+  body: |
+    {
+      "id": "{{request.pathParam.id}}",
+      "timestamp": "{{now}}",
+      "uuid": "{{uuid}}"
+    }
+
+See 'mockd help templating' for all available variables.
+
+GETTING STARTED
+---------------
+
+  # Create a starter config
+  mockd init
+  
+  # Start server with config
+  mockd serve --config mockd.yaml
+  
+  # List available templates
+  mockd init --template list
+
+SEE ALSO
+--------
+
+  mockd help templating   - Template variable reference
+  mockd help matching     - Request matching patterns
+  mockd help websocket    - WebSocket configuration
+  mockd help graphql      - GraphQL configuration

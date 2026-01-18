@@ -1,0 +1,117 @@
+{
+  "version": "1.0",
+  "name": "Valid Test Configuration",
+  "serverConfig": {
+    "httpPort": 4280,
+    "httpsPort": 8443,
+    "adminPort": 4290,
+    "autoGenerateCert": true,
+    "logRequests": true,
+    "maxLogEntries": 1000,
+    "maxBodySize": 10485760,
+    "readTimeout": 30,
+    "writeTimeout": 30
+  },
+  "mocks": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440001",
+      "name": "Get Users",
+      "priority": 10,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/users"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"users\": [\"Alice\", \"Bob\", \"Charlie\"]}"
+      },
+      "createdAt": "2025-11-17T10:00:00Z",
+      "updatedAt": "2025-11-17T10:00:00Z"
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440002",
+      "name": "Create User",
+      "priority": 10,
+      "enabled": true,
+      "matcher": {
+        "method": "POST",
+        "path": "/api/users",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "response": {
+        "statusCode": 201,
+        "headers": {
+          "Content-Type": "application/json",
+          "Location": "/api/users/new-user-id"
+        },
+        "body": "{\"id\": \"new-user-id\", \"created\": true}"
+      },
+      "createdAt": "2025-11-17T10:00:00Z",
+      "updatedAt": "2025-11-17T10:00:00Z"
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440003",
+      "name": "Get User by ID",
+      "priority": 20,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/api/users/123",
+        "queryParams": {
+          "include": "profile"
+        }
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"id\": \"123\", \"name\": \"Alice\", \"profile\": {\"email\": \"alice@example.com\"}}",
+        "delayMs": 100
+      },
+      "createdAt": "2025-11-17T10:00:00Z",
+      "updatedAt": "2025-11-17T10:00:00Z"
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440004",
+      "name": "Delete User",
+      "priority": 10,
+      "enabled": true,
+      "matcher": {
+        "method": "DELETE",
+        "path": "/api/users/123"
+      },
+      "response": {
+        "statusCode": 204,
+        "body": ""
+      },
+      "createdAt": "2025-11-17T10:00:00Z",
+      "updatedAt": "2025-11-17T10:00:00Z"
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440005",
+      "name": "Health Check",
+      "priority": 0,
+      "enabled": true,
+      "matcher": {
+        "method": "GET",
+        "path": "/health"
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"status\": \"ok\"}"
+      },
+      "createdAt": "2025-11-17T10:00:00Z",
+      "updatedAt": "2025-11-17T10:00:00Z"
+    }
+  ]
+}

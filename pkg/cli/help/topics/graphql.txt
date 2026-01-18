@@ -1,0 +1,149 @@
+GRAPHQL MOCK CONFIGURATION
+==========================
+
+mockd supports GraphQL mock endpoints for testing GraphQL clients. Configure
+queries, mutations, subscriptions, and introspection with flexible resolvers.
+
+BASIC CONFIGURATION
+-------------------
+
+  path            GraphQL endpoint path (e.g., "/graphql")
+  schema          Inline GraphQL schema definition
+  schemaFile      Path to external .graphql schema file
+  introspection   Enable/disable introspection queries
+
+SCHEMA DEFINITION
+-----------------
+
+  Provide your GraphQL schema either inline or via an external file.
+  mockd will validate queries against this schema.
+
+  Inline schema:
+
+    schema: |
+      type Query {
+        user(id: ID!): User
+        users: [User!]!
+      }
+      type User {
+        id: ID!
+        name: String!
+        email: String
+      }
+
+  External schema file:
+
+    schemaFile: ./schemas/api.graphql
+
+RESOLVER CONFIGURATION
+----------------------
+
+  Resolvers define mock responses for GraphQL operations.
+  Use the format "Type.field" to specify resolvers.
+
+  Resolver fields:
+
+    response       Static response data
+    delay          Response delay (e.g., "100ms")
+    match          Conditional matching on arguments
+    error          Return a GraphQL error
+
+  Argument matching:
+
+    match.args     Map of argument names to expected values
+                   Supports exact values or patterns
+
+ERROR RESPONSES
+---------------
+
+  Configure GraphQL errors with custom messages and extensions.
+
+    error.message      Error message string
+    error.path         Path to the field that caused the error
+    error.extensions   Custom error metadata
+
+INTROSPECTION
+-------------
+
+  When introspection is enabled, mockd responds to __schema and __type
+  queries based on your schema definition. Useful for GraphQL tooling
+  and IDE support.
+
+SUBSCRIPTIONS
+-------------
+
+  GraphQL subscriptions are configured separately from queries/mutations.
+  Use the subscriptions map to define subscription behavior.
+
+    subscriptions:
+      newMessage:
+        # Subscription configuration
+
+EXAMPLE
+-------
+
+  type: graphql
+  name: User API
+  graphql:
+    path: /graphql
+    introspection: true
+    schema: |
+      type Query {
+        user(id: ID!): User
+        users(limit: Int): [User!]!
+      }
+      type Mutation {
+        createUser(name: String!, email: String!): User!
+        deleteUser(id: ID!): Boolean!
+      }
+      type User {
+        id: ID!
+        name: String!
+        email: String
+        createdAt: String
+      }
+
+    resolvers:
+      Query.user:
+        match:
+          args:
+            id: "123"
+        response:
+          id: "123"
+          name: "John Doe"
+          email: "john@example.com"
+          createdAt: "{{now}}"
+
+      Query.users:
+        response:
+          - id: "1"
+            name: "Alice"
+            email: "alice@example.com"
+          - id: "2"
+            name: "Bob"
+            email: "bob@example.com"
+        delay: 50ms
+
+      Mutation.createUser:
+        response:
+          id: "{{uuid}}"
+          name: "{{request.body.variables.name}}"
+          email: "{{request.body.variables.email}}"
+          createdAt: "{{now}}"
+
+      Mutation.deleteUser:
+        match:
+          args:
+            id: "nonexistent"
+        error:
+          message: "User not found"
+          path: ["deleteUser"]
+          extensions:
+            code: NOT_FOUND
+
+SEE ALSO
+--------
+
+  mockd help config
+  mockd help templating
+  mockd help matching

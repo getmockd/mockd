@@ -1,0 +1,38 @@
+IMPORT/EXPORT FORMATS
+=====================
+
+mockd supports multiple mock configuration formats.
+
+IMPORT FORMATS
+--------------
+
+  mockd      Native mockd format (YAML/JSON)
+  openapi    OpenAPI 3.x / Swagger 2.0
+  postman    Postman Collection v2.x
+  har        HTTP Archive (browser recordings)
+  wiremock   WireMock JSON mappings
+  curl       cURL commands
+
+EXAMPLES
+--------
+
+  # Import OpenAPI spec
+  mockd import openapi.yaml
+
+  # Import Postman collection
+  mockd import collection.json -f postman
+
+  # Import cURL command
+  mockd import "curl -X POST https://api.example.com/users"
+
+EXPORT FORMATS
+--------------
+
+  mockd      Native format (recommended)
+  openapi    OpenAPI 3.x specification
+
+  # Export to YAML
+  mockd export -o mocks.yaml
+
+  # Export as OpenAPI
+  mockd export -f openapi -o api.yaml
