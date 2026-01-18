@@ -309,7 +309,7 @@ func writeJSON(results BenchmarkResults, path string) {
 		fmt.Printf("Error marshaling JSON: %v\n", err)
 		return
 	}
-	os.WriteFile(path, data, 0644)
+	_ = os.WriteFile(path, data, 0644)
 }
 
 func writeMarkdown(results BenchmarkResults, path string) {
@@ -367,7 +367,7 @@ func writeMarkdown(results BenchmarkResults, path string) {
 	sb.WriteString("go test -bench=BenchmarkSOAP -benchtime=2s -benchmem ./tests/performance/...\n")
 	sb.WriteString("```\n")
 
-	os.WriteFile(path, []byte(sb.String()), 0644)
+	_ = os.WriteFile(path, []byte(sb.String()), 0644)
 }
 
 func printSummary(results BenchmarkResults) {

@@ -219,13 +219,13 @@ func TestRecordingStoreOperations(t *testing.T) {
 	}
 
 	// Filter by method
-	recordings, total = store.ListRecordings(recording.RecordingFilter{Method: "GET"})
+	_, total = store.ListRecordings(recording.RecordingFilter{Method: "GET"})
 	if total != 2 {
 		t.Errorf("Expected 2 GET recordings, got %d", total)
 	}
 
 	// Filter by path
-	recordings, total = store.ListRecordings(recording.RecordingFilter{Path: "/api/users"})
+	_, total = store.ListRecordings(recording.RecordingFilter{Path: "/api/users"})
 	if total != 2 {
 		t.Errorf("Expected 2 /api/users recordings, got %d", total)
 	}

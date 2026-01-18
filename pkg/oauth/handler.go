@@ -644,7 +644,7 @@ func (h *Handler) jsonResponse(w http.ResponseWriter, status int, data interface
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data)
 }
 
 func (h *Handler) errorResponse(w http.ResponseWriter, status int, errorCode, description string) {

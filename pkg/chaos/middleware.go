@@ -78,7 +78,7 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if hijacker, ok := w.(http.Hijacker); ok {
 				conn, _, err := hijacker.Hijack()
 				if err == nil {
-					conn.Close()
+					_ = conn.Close()
 				}
 			}
 			return
@@ -141,7 +141,7 @@ func (h *ChaosHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, fault := range faults {
 		switch fault.Type {
 		case FaultLatency:
-			h.injector.InjectLatencyFromConfig(r.Context(), fault.Config)
+			_ = h.injector.InjectLatencyFromConfig(r.Context(), fault.Config)
 		case FaultError:
 			h.injector.InjectErrorFromConfig(w, fault.Config)
 			return

@@ -135,7 +135,7 @@ func (c *Client) Register(ctx context.Context) (*RegistrationResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -203,11 +203,11 @@ func (c *Client) Heartbeat(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("heartbeat failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read heartbeat response: %w", err)
+		return fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {

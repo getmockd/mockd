@@ -1538,7 +1538,7 @@ func TestServerStartupErrors(t *testing.T) {
 
 		// The server starts in a goroutine, so we need to verify
 		// by attempting to use the port
-		err = srv2.Start()
+		_ = srv2.Start()
 		// The Start() itself may succeed because HTTP server starts in goroutine,
 		// but the server won't actually bind. Clean up regardless.
 		srv2.Stop()

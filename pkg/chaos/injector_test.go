@@ -521,7 +521,7 @@ func TestMiddleware_ServeHTTP(t *testing.T) {
 	// Create a simple handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	t.Run("disabled chaos passes through", func(t *testing.T) {
@@ -678,7 +678,7 @@ func TestTruncatingWriter(t *testing.T) {
 func TestConditionalMiddleware(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	config := &ChaosConfig{
@@ -732,11 +732,11 @@ func TestDelayedWriter(t *testing.T) {
 	dw := NewDelayedWriter(w, 50*time.Millisecond)
 
 	start := time.Now()
-	dw.Write([]byte("first"))
+	_, _ = dw.Write([]byte("first"))
 	firstWriteTime := time.Since(start)
 
 	start = time.Now()
-	dw.Write([]byte("second"))
+	_, _ = dw.Write([]byte("second"))
 	secondWriteTime := time.Since(start)
 
 	// First write should be delayed
@@ -820,7 +820,7 @@ func TestMiddleware_SlowBodyFault(t *testing.T) {
 	responseData := strings.Repeat("X", 100) // 100 bytes
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(responseData))
+		_, _ = w.Write([]byte(responseData))
 	})
 
 	config := &ChaosConfig{

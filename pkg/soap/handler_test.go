@@ -530,7 +530,7 @@ func TestHandler_SOAP12ActionInContentType(t *testing.T) {
 
 func TestMatchXPath(t *testing.T) {
 	doc := etree.NewDocument()
-	doc.ReadFromString(`<?xml version="1.0"?>
+	_ = doc.ReadFromString(`<?xml version="1.0"?>
 <root>
   <user>
     <name>John</name>
@@ -592,7 +592,7 @@ func TestMatchXPath(t *testing.T) {
 
 func TestExtractXPath(t *testing.T) {
 	doc := etree.NewDocument()
-	doc.ReadFromString(`<?xml version="1.0"?>
+	_ = doc.ReadFromString(`<?xml version="1.0"?>
 <root>
   <user id="u1">
     <name>John</name>

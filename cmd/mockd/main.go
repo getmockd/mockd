@@ -26,7 +26,7 @@ func main() {
 func run(args []string) error {
 	// Determine command and args
 	command := ""
-	cmdArgs := args
+	var cmdArgs []string
 
 	if len(args) == 0 {
 		// No args at all, run serve

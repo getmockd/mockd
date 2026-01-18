@@ -19,7 +19,7 @@ func IsAvailable(port int) bool {
 	if err != nil {
 		return false
 	}
-	ln.Close()
+	_ = ln.Close()
 	return true
 }
 
@@ -30,6 +30,6 @@ func Check(port int) error {
 	if err != nil {
 		return err
 	}
-	ln.Close()
+	_ = ln.Close()
 	return nil
 }

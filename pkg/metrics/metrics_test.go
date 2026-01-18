@@ -14,9 +14,9 @@ func TestCounter(t *testing.T) {
 		r := NewRegistry()
 		c := r.NewCounter("test_counter", "A test counter")
 
-		c.Inc()
-		c.Inc()
-		c.Add(3)
+		_ = c.Inc()
+		_ = c.Inc()
+		_ = c.Add(3)
 
 		samples := c.Collect()
 		if len(samples) != 1 {
@@ -91,26 +91,26 @@ func TestGauge(t *testing.T) {
 		r := NewRegistry()
 		g := r.NewGauge("test_gauge", "A test gauge")
 
-		g.Set(10)
+		_ = g.Set(10)
 		samples := g.Collect()
 		if len(samples) != 1 || samples[0].Value != 10 {
 			t.Errorf("expected value 10")
 		}
 
-		g.Inc()
+		_ = g.Inc()
 		samples = g.Collect()
 		if samples[0].Value != 11 {
 			t.Errorf("expected value 11, got %f", samples[0].Value)
 		}
 
-		g.Dec()
-		g.Dec()
+		_ = g.Dec()
+		_ = g.Dec()
 		samples = g.Collect()
 		if samples[0].Value != 9 {
 			t.Errorf("expected value 9, got %f", samples[0].Value)
 		}
 
-		g.Add(-5)
+		_ = g.Add(-5)
 		samples = g.Collect()
 		if samples[0].Value != 4 {
 			t.Errorf("expected value 4, got %f", samples[0].Value)
