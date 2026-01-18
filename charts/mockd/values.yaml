@@ -108,7 +108,7 @@ livenessProbe:
   enabled: true
   httpGet:
     path: /health
-    port: http
+    port: admin
   initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5
@@ -120,7 +120,7 @@ readinessProbe:
   enabled: true
   httpGet:
     path: /health
-    port: http
+    port: admin
   initialDelaySeconds: 5
   periodSeconds: 5
   timeoutSeconds: 3
