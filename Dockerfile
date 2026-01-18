@@ -25,7 +25,9 @@ RUN go mod download && go mod verify
 COPY . .
 
 # Build the binary with optimizations
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+# TARGETARCH is automatically set by Docker buildx for multi-platform builds
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
     -ldflags="-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT}" \
     -trimpath \
     -o mockd \
