@@ -129,6 +129,10 @@ func run(args []string) error {
 		return cli.RunHelp(cmdArgs)
 	case "doctor":
 		return cli.RunDoctor(cmdArgs)
+	case "context":
+		return cli.RunContext(cmdArgs)
+	case "workspace":
+		return cli.RunWorkspace(cmdArgs)
 	case "--help", "-h":
 		printUsage()
 		return nil
@@ -199,6 +203,10 @@ Template Commands:
 Cloud Commands:
   tunnel      Expose local mocks via secure tunnel
 
+Context Commands:
+  context     Manage contexts (admin server + workspace pairs)
+  workspace   Manage workspaces within the current context
+
 Global Flags:
   -h, --help      Show this help message
   -v, --version   Show version information
@@ -262,7 +270,7 @@ func isCommand(s string) bool {
 		"proxy", "recordings", "convert", "generate", "enhance",
 		"stream-recordings", "graphql", "chaos", "grpc", "mqtt", "soap",
 		"templates", "tunnel", "init", "help", "status", "stop", "doctor",
-		"websocket",
+		"websocket", "context", "workspace",
 	}
 	return slices.Contains(commands, s)
 }
