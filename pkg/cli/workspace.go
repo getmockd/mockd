@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -658,7 +659,7 @@ type jsonBodyReader struct {
 
 func (r *jsonBodyReader) Read(p []byte) (n int, err error) {
 	if r.pos >= len(r.data) {
-		return 0, fmt.Errorf("EOF")
+		return 0, io.EOF
 	}
 	n = copy(p, r.data[r.pos:])
 	r.pos += n

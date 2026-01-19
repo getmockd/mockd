@@ -63,8 +63,8 @@ Examples:
   # Switch to a different context
   mockd context use staging
 
-  # Add a new context
-  mockd context add staging --admin-url https://staging.example.com:4290
+  # Add a new context (flags before name)
+  mockd context add -u https://staging.example.com:4290 staging
 
   # Add context interactively
   mockd context add production
@@ -87,18 +87,42 @@ func runContextShow() error {
 		return fmt.Errorf("failed to load context config: %w", err)
 	}
 
-	ctx := cfg.GetCurrentContext()
+	// Check for env var override
+	envContext := cliconfig.GetContextFromEnv()
+	effectiveContext := cfg.CurrentContext
+	envOverride := false
+
+	if envContext != "" {
+		effectiveContext = envContext
+		envOverride = true
+	}
+
+	ctx := cfg.Contexts[effectiveContext]
 	if ctx == nil {
+		if envOverride {
+			return fmt.Errorf("context %q (from MOCKD_CONTEXT) not found", envContext)
+		}
 		fmt.Println("No current context set")
 		fmt.Println("\nRun 'mockd context add <name>' to create a context")
 		return nil
 	}
 
-	fmt.Printf("Current context: %s\n", cfg.CurrentContext)
+	fmt.Printf("Current context: %s", effectiveContext)
+	if envOverride {
+		fmt.Print("  (from MOCKD_CONTEXT)")
+	}
+	fmt.Println()
+
 	fmt.Printf("  Admin URL:  %s\n", ctx.AdminURL)
-	if ctx.Workspace != "" {
+
+	// Check for workspace env override
+	envWorkspace := cliconfig.GetWorkspaceFromEnv()
+	if envWorkspace != "" {
+		fmt.Printf("  Workspace:  %s  (from MOCKD_WORKSPACE)\n", envWorkspace)
+	} else if ctx.Workspace != "" {
 		fmt.Printf("  Workspace:  %s\n", ctx.Workspace)
 	}
+
 	if ctx.Description != "" {
 		fmt.Printf("  Description: %s\n", ctx.Description)
 	}
@@ -192,17 +216,17 @@ Flags:
       --json         Output in JSON format
 
 Examples:
-  # Add with flags
-  mockd context add staging --admin-url https://staging.example.com:4290
+  # Add with flags (flags must come before name)
+  mockd context add -u https://staging.example.com:4290 staging
 
   # Add interactively (will prompt for URL)
   mockd context add production
 
   # Add and switch to it
-  mockd context add dev --admin-url http://dev-server:4290 --use
+  mockd context add -u http://dev-server:4290 --use dev
 
   # Add with auth token
-  mockd context add cloud --admin-url https://api.mockd.io -t YOUR_TOKEN --use
+  mockd context add -u https://api.mockd.io -t YOUR_TOKEN --use cloud
 `)
 	}
 
@@ -218,8 +242,11 @@ Examples:
 	name := fs.Arg(0)
 
 	// Validate name
-	if strings.ContainsAny(name, " \t\n") {
-		return fmt.Errorf("context name cannot contain whitespace")
+	if name == "" {
+		return fmt.Errorf("context name cannot be empty")
+	}
+	if strings.ContainsAny(name, " \t\n/\\") {
+		return fmt.Errorf("context name cannot contain whitespace or path separators")
 	}
 
 	// If admin URL not provided, prompt interactively
@@ -238,8 +265,15 @@ Examples:
 	}
 
 	// Validate URL
-	if _, err := url.Parse(*adminURL); err != nil {
+	parsedURL, err := url.Parse(*adminURL)
+	if err != nil {
 		return fmt.Errorf("invalid admin URL: %w", err)
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("invalid admin URL: must start with http:// or https://")
+	}
+	if parsedURL.Host == "" {
+		return fmt.Errorf("invalid admin URL: missing host")
 	}
 
 	cfg, err := cliconfig.LoadContextConfig()

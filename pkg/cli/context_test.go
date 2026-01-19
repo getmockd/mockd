@@ -187,6 +187,24 @@ func TestRunContext_Add(t *testing.T) {
 		t.Errorf("RunContext add with token failed: %v", err)
 	}
 
+	// Test validation: empty name
+	err = RunContext([]string{"add", "-u", "http://test:4290", ""})
+	if err == nil {
+		t.Error("expected error for empty name")
+	}
+
+	// Test validation: invalid URL
+	err = RunContext([]string{"add", "-u", "not-a-url", "badurl"})
+	if err == nil {
+		t.Error("expected error for invalid URL")
+	}
+
+	// Test validation: whitespace in name
+	err = RunContext([]string{"add", "-u", "http://test:4290", "has space"})
+	if err == nil {
+		t.Error("expected error for whitespace in name")
+	}
+
 	loaded, _ = cliconfig.LoadContextConfig()
 	cloudCtx := loaded.Contexts["cloud"]
 	if cloudCtx == nil {
