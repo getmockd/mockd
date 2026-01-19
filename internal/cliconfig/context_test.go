@@ -343,6 +343,8 @@ func TestContextConfig_JSON_Serialization(t *testing.T) {
 				AdminURL:    "https://api.example.com:4290",
 				Workspace:   "ws-prod",
 				Description: "Production server",
+				AuthToken:   "secret-token",
+				TLSInsecure: true,
 			},
 		},
 	}
@@ -368,5 +370,104 @@ func TestContextConfig_JSON_Serialization(t *testing.T) {
 	}
 	if len(loaded.Contexts) != len(cfg.Contexts) {
 		t.Errorf("Contexts count mismatch: got %d, want %d", len(loaded.Contexts), len(cfg.Contexts))
+	}
+
+	// Verify new fields
+	prodCtx := loaded.Contexts["production"]
+	if prodCtx.AuthToken != "secret-token" {
+		t.Errorf("AuthToken mismatch: got %q, want %q", prodCtx.AuthToken, "secret-token")
+	}
+	if !prodCtx.TLSInsecure {
+		t.Error("TLSInsecure should be true")
+	}
+}
+
+func TestGetWorkspace(t *testing.T) {
+	// Create temp directory
+	tmpDir, err := os.MkdirTemp("", "mockd-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Override config dir
+	originalConfigDir := os.Getenv("XDG_CONFIG_HOME")
+	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	defer os.Setenv("XDG_CONFIG_HOME", originalConfigDir)
+
+	// Clear any env var
+	originalEnvWs := os.Getenv(EnvWorkspace)
+	os.Unsetenv(EnvWorkspace)
+	defer func() {
+		if originalEnvWs != "" {
+			os.Setenv(EnvWorkspace, originalEnvWs)
+		}
+	}()
+
+	// Create config with workspace
+	cfg := &ContextConfig{
+		Version:        1,
+		CurrentContext: "test",
+		Contexts: map[string]*Context{
+			"test": {
+				AdminURL:  "http://test:4290",
+				Workspace: "ws-from-context",
+			},
+		},
+	}
+	if err := SaveContextConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Should get workspace from context
+	ws := GetWorkspace()
+	if ws != "ws-from-context" {
+		t.Errorf("GetWorkspace() = %q, want %q", ws, "ws-from-context")
+	}
+
+	// Env var should take precedence
+	os.Setenv(EnvWorkspace, "ws-from-env")
+	ws = GetWorkspace()
+	if ws != "ws-from-env" {
+		t.Errorf("GetWorkspace() with env = %q, want %q", ws, "ws-from-env")
+	}
+}
+
+func TestResolveContext(t *testing.T) {
+	// Clear env
+	originalEnv := os.Getenv(EnvContext)
+	os.Unsetenv(EnvContext)
+	defer func() {
+		if originalEnv != "" {
+			os.Setenv(EnvContext, originalEnv)
+		}
+	}()
+
+	// Flag takes precedence
+	got := ResolveContext("flag-context")
+	if got != "flag-context" {
+		t.Errorf("ResolveContext with flag = %q, want %q", got, "flag-context")
+	}
+
+	// Env var next
+	os.Setenv(EnvContext, "env-context")
+	got = ResolveContext("")
+	if got != "env-context" {
+		t.Errorf("ResolveContext with env = %q, want %q", got, "env-context")
+	}
+}
+
+func TestContext_AuthTokenAndTLS(t *testing.T) {
+	ctx := &Context{
+		AdminURL:    "https://api.example.com:4290",
+		AuthToken:   "my-secret-token",
+		TLSInsecure: true,
+	}
+
+	if ctx.AuthToken != "my-secret-token" {
+		t.Errorf("AuthToken = %q, want %q", ctx.AuthToken, "my-secret-token")
+	}
+	if !ctx.TLSInsecure {
+		t.Error("TLSInsecure should be true")
 	}
 }

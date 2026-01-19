@@ -140,6 +140,7 @@ func runWorkspaceShow() error {
 func runWorkspaceUse(args []string) error {
 	fs := flag.NewFlagSet("workspace use", flag.ContinueOnError)
 	adminURL := fs.String("admin-url", "", "Admin API base URL (overrides context)")
+	fs.StringVar(adminURL, "u", "", "Admin API base URL (shorthand)")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd workspace use <id>
@@ -147,7 +148,7 @@ func runWorkspaceUse(args []string) error {
 Switch to a different workspace in the current context.
 
 Flags:
-      --admin-url  Admin API base URL (overrides context)
+  -u, --admin-url  Admin API base URL (overrides context)
 
 Examples:
   mockd workspace use ws_abc123
@@ -205,6 +206,7 @@ Examples:
 func runWorkspaceList(args []string) error {
 	fs := flag.NewFlagSet("workspace list", flag.ContinueOnError)
 	adminURL := fs.String("admin-url", "", "Admin API base URL (overrides context)")
+	fs.StringVar(adminURL, "u", "", "Admin API base URL (shorthand)")
 	jsonOutput := fs.Bool("json", false, "Output in JSON format")
 
 	fs.Usage = func() {
@@ -213,7 +215,7 @@ func runWorkspaceList(args []string) error {
 List all workspaces on the server.
 
 Flags:
-      --admin-url  Admin API base URL (overrides context)
+  -u, --admin-url  Admin API base URL (overrides context)
       --json       Output in JSON format
 
 Examples:
@@ -289,12 +291,13 @@ Examples:
 func runWorkspaceCreate(args []string) error {
 	fs := flag.NewFlagSet("workspace create", flag.ContinueOnError)
 	adminURL := fs.String("admin-url", "", "Admin API base URL (overrides context)")
+	fs.StringVar(adminURL, "u", "", "Admin API base URL (shorthand)")
 	name := fs.String("name", "", "Workspace name (required)")
 	fs.StringVar(name, "n", "", "Workspace name (shorthand)")
 	description := fs.String("description", "", "Workspace description")
 	fs.StringVar(description, "d", "", "Workspace description (shorthand)")
 	wsType := fs.String("type", "local", "Workspace type (local)")
-	setCurrent := fs.Bool("use", false, "Switch to this workspace after creating")
+	useCurrent := fs.Bool("use", false, "Switch to this workspace after creating")
 	jsonOutput := fs.Bool("json", false, "Output in JSON format")
 
 	fs.Usage = func() {
@@ -307,7 +310,7 @@ Flags:
   -d, --description  Workspace description
       --type         Workspace type (default: local)
       --use          Switch to this workspace after creating
-      --admin-url    Admin API base URL (overrides context)
+  -u, --admin-url    Admin API base URL (overrides context)
       --json         Output in JSON format
 
 Examples:
@@ -334,7 +337,7 @@ Examples:
 	}
 
 	// Optionally switch to this workspace
-	if *setCurrent {
+	if *useCurrent {
 		cfg, err := cliconfig.LoadContextConfig()
 		if err == nil {
 			ctx := cfg.GetCurrentContext()
@@ -352,7 +355,7 @@ Examples:
 	}
 
 	fmt.Printf("Created workspace %q (ID: %s)\n", ws.Name, ws.ID)
-	if *setCurrent {
+	if *useCurrent {
 		fmt.Printf("Switched to workspace %q\n", ws.ID)
 	}
 
@@ -363,6 +366,7 @@ Examples:
 func runWorkspaceDelete(args []string) error {
 	fs := flag.NewFlagSet("workspace delete", flag.ContinueOnError)
 	adminURL := fs.String("admin-url", "", "Admin API base URL (overrides context)")
+	fs.StringVar(adminURL, "u", "", "Admin API base URL (shorthand)")
 	force := fs.Bool("force", false, "Force deletion without confirmation")
 	fs.BoolVar(force, "f", false, "Force deletion (shorthand)")
 
@@ -372,8 +376,8 @@ func runWorkspaceDelete(args []string) error {
 Delete a workspace.
 
 Flags:
-  -f, --force    Force deletion without confirmation
-      --admin-url  Admin API base URL (overrides context)
+  -f, --force      Force deletion without confirmation
+  -u, --admin-url  Admin API base URL (overrides context)
 
 Examples:
   mockd workspace delete ws_abc123

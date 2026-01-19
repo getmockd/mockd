@@ -103,6 +103,7 @@ func runContextShow() error {
 		fmt.Printf("  Description: %s\n", ctx.Description)
 	}
 
+	fmt.Println("\nRun 'mockd context list' to see all contexts")
 	return nil
 }
 
@@ -170,7 +171,10 @@ func runContextAdd(args []string) error {
 	fs.StringVar(workspace, "w", "", "Default workspace (shorthand)")
 	description := fs.String("description", "", "Description for this context")
 	fs.StringVar(description, "d", "", "Description (shorthand)")
-	setCurrent := fs.Bool("set-current", false, "Switch to this context after adding")
+	authToken := fs.String("token", "", "Auth token for cloud/enterprise deployments")
+	fs.StringVar(authToken, "t", "", "Auth token (shorthand)")
+	tlsInsecure := fs.Bool("tls-insecure", false, "Skip TLS certificate verification")
+	useCurrent := fs.Bool("use", false, "Switch to this context after adding")
 	jsonOutput := fs.Bool("json", false, "Output in JSON format")
 
 	fs.Usage = func() {
@@ -182,7 +186,9 @@ Flags:
   -u, --admin-url    Admin API URL (e.g., http://localhost:4290)
   -w, --workspace    Default workspace for this context
   -d, --description  Description for this context
-      --set-current  Switch to this context after adding
+  -t, --token        Auth token for cloud/enterprise deployments
+      --tls-insecure Skip TLS certificate verification (for self-signed certs)
+      --use          Switch to this context after adding
       --json         Output in JSON format
 
 Examples:
@@ -193,7 +199,10 @@ Examples:
   mockd context add production
 
   # Add and switch to it
-  mockd context add dev --admin-url http://dev-server:4290 --set-current
+  mockd context add dev --admin-url http://dev-server:4290 --use
+
+  # Add with auth token
+  mockd context add cloud --admin-url https://api.mockd.io -t YOUR_TOKEN --use
 `)
 	}
 
@@ -242,13 +251,15 @@ Examples:
 		AdminURL:    *adminURL,
 		Workspace:   *workspace,
 		Description: *description,
+		AuthToken:   *authToken,
+		TLSInsecure: *tlsInsecure,
 	}
 
 	if err := cfg.AddContext(name, ctx); err != nil {
 		return err
 	}
 
-	if *setCurrent {
+	if *useCurrent {
 		cfg.CurrentContext = name
 	}
 
@@ -268,7 +279,7 @@ Examples:
 	}
 
 	fmt.Printf("Added context %q\n", name)
-	if *setCurrent {
+	if *useCurrent {
 		fmt.Printf("Switched to context %q\n", name)
 	}
 

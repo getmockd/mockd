@@ -154,6 +154,13 @@ Commands:
   start       Start the mock server (alias for serve)
   stop        Stop a running mockd server
   status      Show status of running mockd server
+
+Configuration:
+  context     Manage contexts (admin server + workspace pairs)
+  workspace   Manage workspaces within the current context
+  config      Show effective configuration
+
+Mock Management:
   add         Add a new mock endpoint
   new         Create mocks from templates (crud, auth, etc.)
   list        List all configured mocks
@@ -162,7 +169,8 @@ Commands:
   import      Import mocks from a configuration file
   export      Export current mocks to stdout or file
   logs        View request logs
-  config      Show effective configuration
+
+Utilities:
   completion  Generate shell completion scripts
   version     Show version information
   doctor      Diagnose common setup issues
@@ -203,10 +211,6 @@ Template Commands:
 Cloud Commands:
   tunnel      Expose local mocks via secure tunnel
 
-Context Commands:
-  context     Manage contexts (admin server + workspace pairs)
-  workspace   Manage workspaces within the current context
-
 Global Flags:
   -h, --help      Show this help message
   -v, --version   Show version information
@@ -218,6 +222,10 @@ Examples:
 
   # Start the server with defaults
   mockd start
+
+  # Connect to a remote mockd server
+  mockd context add staging --admin-url https://staging:4290 --use
+  mockd list  # uses staging server
 
   # Start with custom port and config file
   mockd start --port 3000 --config mocks.json

@@ -168,6 +168,33 @@ func TestRunContext_Add(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for missing name")
 	}
+
+	// Add with --use flag (unified from --set-current)
+	err = RunContext([]string{"add", "-u", "http://prod:4290", "--use", "production"})
+	if err != nil {
+		t.Errorf("RunContext add --use failed: %v", err)
+	}
+
+	// Verify it's now current
+	loaded, _ = cliconfig.LoadContextConfig()
+	if loaded.CurrentContext != "production" {
+		t.Errorf("CurrentContext = %q, want %q", loaded.CurrentContext, "production")
+	}
+
+	// Add with auth token
+	err = RunContext([]string{"add", "-u", "http://cloud:4290", "-t", "secret-token", "cloud"})
+	if err != nil {
+		t.Errorf("RunContext add with token failed: %v", err)
+	}
+
+	loaded, _ = cliconfig.LoadContextConfig()
+	cloudCtx := loaded.Contexts["cloud"]
+	if cloudCtx == nil {
+		t.Fatal("cloud context not found")
+	}
+	if cloudCtx.AuthToken != "secret-token" {
+		t.Errorf("AuthToken = %q, want %q", cloudCtx.AuthToken, "secret-token")
+	}
 }
 
 func TestRunContext_Remove(t *testing.T) {
