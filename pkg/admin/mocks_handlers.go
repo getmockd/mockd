@@ -100,7 +100,7 @@ func applyMockPatch(m *mock.Mock, patch map[string]interface{}) {
 }
 
 // handleListUnifiedMocks returns all mocks with optional filtering.
-// GET /v2/mocks?type=http&parentId=folder123&enabled=true&search=user
+// GET /mocks?type=http&parentId=folder123&enabled=true&search=user
 func (a *AdminAPI) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 	// Query from engine if available (engine is the runtime data plane)
 	// Fall back to dataStore for persistence-only scenarios
@@ -187,7 +187,7 @@ func (a *AdminAPI) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request
 }
 
 // handleGetUnifiedMock returns a single mock by ID.
-// GET /v2/mocks/{id}
+// GET /mocks/{id}
 func (a *AdminAPI) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -227,7 +227,7 @@ func (a *AdminAPI) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleCreateUnifiedMock creates a new mock.
-// POST /v2/mocks
+// POST /mocks
 func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	mockStore := a.getMockStore()
 	if mockStore == nil {
@@ -290,7 +290,7 @@ func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Reques
 }
 
 // handleUpdateUnifiedMock updates an existing mock (full replacement).
-// PUT /v2/mocks/{id}
+// PUT /mocks/{id}
 func (a *AdminAPI) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -357,7 +357,7 @@ func (a *AdminAPI) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Reques
 }
 
 // handlePatchUnifiedMock partially updates a mock.
-// PATCH /v2/mocks/{id}
+// PATCH /mocks/{id}
 func (a *AdminAPI) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -419,7 +419,7 @@ func (a *AdminAPI) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request
 }
 
 // handleDeleteUnifiedMock deletes a mock by ID.
-// DELETE /v2/mocks/{id}
+// DELETE /mocks/{id}
 func (a *AdminAPI) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -457,7 +457,7 @@ func (a *AdminAPI) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Reques
 }
 
 // handleDeleteAllUnifiedMocks deletes all mocks, optionally filtered by type.
-// DELETE /v2/mocks?type=http
+// DELETE /mocks?type=http
 func (a *AdminAPI) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 	mockStore := a.getMockStore()
 	if mockStore == nil {
@@ -483,7 +483,7 @@ func (a *AdminAPI) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Re
 }
 
 // handleToggleUnifiedMock toggles the enabled state of a mock.
-// POST /v2/mocks/{id}/toggle
+// POST /mocks/{id}/toggle
 func (a *AdminAPI) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -539,7 +539,7 @@ func (a *AdminAPI) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Reques
 }
 
 // handleBulkCreateUnifiedMocks creates multiple mocks in a single request.
-// POST /v2/mocks/bulk
+// POST /mocks/bulk
 func (a *AdminAPI) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 	mockStore := a.getMockStore()
 	if mockStore == nil {

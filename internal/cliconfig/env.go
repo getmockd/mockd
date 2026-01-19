@@ -10,6 +10,8 @@ const (
 	EnvPort          = "MOCKD_PORT"
 	EnvAdminPort     = "MOCKD_ADMIN_PORT"
 	EnvAdminURL      = "MOCKD_ADMIN_URL"
+	EnvWorkspace     = "MOCKD_WORKSPACE"
+	EnvContext       = "MOCKD_CONTEXT"
 	EnvConfig        = "MOCKD_CONFIG"
 	EnvHTTPSPort     = "MOCKD_HTTPS_PORT"
 	EnvAutoCert      = "MOCKD_AUTO_CERT"
@@ -99,10 +101,20 @@ func LoadEnvConfig(cfg *CLIConfig) {
 	}
 }
 
-// GetAdminURL returns the admin URL, preferring environment variable if set.
-func GetAdminURL() string {
-	if v := os.Getenv(EnvAdminURL); v != "" {
-		return v
-	}
-	return DefaultAdminURL(0)
+// GetAdminURLFromEnv returns the admin URL from environment variable.
+// Returns empty string if not set.
+func GetAdminURLFromEnv() string {
+	return os.Getenv(EnvAdminURL)
+}
+
+// GetWorkspaceFromEnv returns the workspace from environment variable.
+// Returns empty string if not set.
+func GetWorkspaceFromEnv() string {
+	return os.Getenv(EnvWorkspace)
+}
+
+// GetContextFromEnv returns the context name from environment variable.
+// Returns empty string if not set.
+func GetContextFromEnv() string {
+	return os.Getenv(EnvContext)
 }
