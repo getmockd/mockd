@@ -14,6 +14,36 @@ import (
 	"github.com/getmockd/mockd/internal/cliconfig"
 )
 
+// contextForJSON is a sanitized version of Context for JSON output.
+// It masks sensitive fields like AuthToken to prevent accidental exposure.
+type contextForJSON struct {
+	AdminURL    string `json:"adminUrl"`
+	Workspace   string `json:"workspace,omitempty"`
+	Description string `json:"description,omitempty"`
+	HasToken    bool   `json:"hasToken,omitempty"`
+	TLSInsecure bool   `json:"tlsInsecure,omitempty"`
+}
+
+// sanitizeContextForJSON converts a Context to a safe-for-output version.
+func sanitizeContextForJSON(ctx *cliconfig.Context) *contextForJSON {
+	return &contextForJSON{
+		AdminURL:    ctx.AdminURL,
+		Workspace:   ctx.Workspace,
+		Description: ctx.Description,
+		HasToken:    ctx.AuthToken != "",
+		TLSInsecure: ctx.TLSInsecure,
+	}
+}
+
+// sanitizeContextsForJSON converts a map of Contexts to safe-for-output versions.
+func sanitizeContextsForJSON(contexts map[string]*cliconfig.Context) map[string]*contextForJSON {
+	result := make(map[string]*contextForJSON, len(contexts))
+	for name, ctx := range contexts {
+		result[name] = sanitizeContextForJSON(ctx)
+	}
+	return result
+}
+
 // RunContext handles the context command and its subcommands.
 func RunContext(args []string) error {
 	if len(args) == 0 {
@@ -275,6 +305,10 @@ Examples:
 	if parsedURL.Host == "" {
 		return fmt.Errorf("invalid admin URL: missing host")
 	}
+	// Reject URLs with embedded credentials (user:pass@host)
+	if parsedURL.User != nil {
+		return fmt.Errorf("invalid admin URL: embedded credentials (user:pass@host) are not allowed; use --token for authentication")
+	}
 
 	cfg, err := cliconfig.LoadContextConfig()
 	if err != nil {
@@ -302,10 +336,14 @@ Examples:
 	}
 
 	if *jsonOutput {
-		output := map[string]interface{}{
-			"name":    name,
-			"context": ctx,
-			"current": cfg.CurrentContext == name,
+		output := struct {
+			Name    string          `json:"name"`
+			Context *contextForJSON `json:"context"`
+			Current bool            `json:"current"`
+		}{
+			Name:    name,
+			Context: sanitizeContextForJSON(ctx),
+			Current: cfg.CurrentContext == name,
 		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -350,11 +388,11 @@ Examples:
 
 	if *jsonOutput {
 		output := struct {
-			CurrentContext string                        `json:"currentContext"`
-			Contexts       map[string]*cliconfig.Context `json:"contexts"`
+			CurrentContext string                     `json:"currentContext"`
+			Contexts       map[string]*contextForJSON `json:"contexts"`
 		}{
 			CurrentContext: cfg.CurrentContext,
-			Contexts:       cfg.Contexts,
+			Contexts:       sanitizeContextsForJSON(cfg.Contexts),
 		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
