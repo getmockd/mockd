@@ -275,6 +275,9 @@ Examples:
 	if name == "" {
 		return fmt.Errorf("context name cannot be empty")
 	}
+	if len(name) > 64 {
+		return fmt.Errorf("context name cannot exceed 64 characters")
+	}
 	if strings.ContainsAny(name, " \t\n/\\") {
 		return fmt.Errorf("context name cannot contain whitespace or path separators")
 	}
