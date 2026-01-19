@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/getmockd/mockd/internal/cliconfig"
@@ -276,5 +277,105 @@ func TestContextConfigPath(t *testing.T) {
 	// Should contain contexts.json
 	if filepath.Base(path) != cliconfig.ContextConfigFileName {
 		t.Errorf("path = %q, want to end with %q", path, cliconfig.ContextConfigFileName)
+	}
+}
+
+func TestRunContext_Add_RejectsURLWithCredentials(t *testing.T) {
+	cleanup := setupTestContextConfig(t)
+	defer cleanup()
+
+	// Initialize with default config
+	cfg := cliconfig.NewDefaultContextConfig()
+	if err := cliconfig.SaveContextConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test URLs with embedded credentials - should be rejected
+	testCases := []struct {
+		name string
+		url  string
+	}{
+		{"user and password", "http://user:pass@example.com:4290"},
+		{"user only", "http://user@example.com:4290"},
+		{"user and password https", "https://admin:secret@staging.example.com:4290"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := RunContext([]string{"add", "-u", tc.url, "test-creds"})
+			if err == nil {
+				t.Errorf("expected error for URL with credentials: %s", tc.url)
+			}
+			if err != nil && !strings.Contains(err.Error(), "embedded credentials") {
+				t.Errorf("expected 'embedded credentials' error, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestSanitizeContextForJSON(t *testing.T) {
+	// Test that auth tokens are not exposed in sanitized output
+	ctx := &cliconfig.Context{
+		AdminURL:    "http://localhost:4290",
+		Workspace:   "test-ws",
+		Description: "Test context",
+		AuthToken:   "super-secret-token",
+		TLSInsecure: true,
+	}
+
+	sanitized := sanitizeContextForJSON(ctx)
+
+	// Verify token is not included
+	if sanitized.HasToken != true {
+		t.Error("HasToken should be true when token is set")
+	}
+
+	// Verify other fields are preserved
+	if sanitized.AdminURL != ctx.AdminURL {
+		t.Errorf("AdminURL = %q, want %q", sanitized.AdminURL, ctx.AdminURL)
+	}
+	if sanitized.Workspace != ctx.Workspace {
+		t.Errorf("Workspace = %q, want %q", sanitized.Workspace, ctx.Workspace)
+	}
+	if sanitized.Description != ctx.Description {
+		t.Errorf("Description = %q, want %q", sanitized.Description, ctx.Description)
+	}
+	if sanitized.TLSInsecure != ctx.TLSInsecure {
+		t.Errorf("TLSInsecure = %v, want %v", sanitized.TLSInsecure, ctx.TLSInsecure)
+	}
+
+	// Test with no token
+	ctxNoToken := &cliconfig.Context{
+		AdminURL: "http://localhost:4290",
+	}
+	sanitizedNoToken := sanitizeContextForJSON(ctxNoToken)
+	if sanitizedNoToken.HasToken != false {
+		t.Error("HasToken should be false when no token is set")
+	}
+}
+
+func TestSanitizeContextsForJSON(t *testing.T) {
+	contexts := map[string]*cliconfig.Context{
+		"local": {
+			AdminURL:  "http://localhost:4290",
+			AuthToken: "",
+		},
+		"cloud": {
+			AdminURL:  "https://api.mockd.io",
+			AuthToken: "secret-cloud-token",
+		},
+	}
+
+	sanitized := sanitizeContextsForJSON(contexts)
+
+	if len(sanitized) != 2 {
+		t.Errorf("expected 2 contexts, got %d", len(sanitized))
+	}
+
+	if sanitized["local"].HasToken != false {
+		t.Error("local context should not have token")
+	}
+	if sanitized["cloud"].HasToken != true {
+		t.Error("cloud context should have token")
 	}
 }
