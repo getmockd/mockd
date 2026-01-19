@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/getmockd/mockd/internal/cliconfig"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
 // reorderArgs moves flags before positional arguments to work around

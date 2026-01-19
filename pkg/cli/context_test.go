@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getmockd/mockd/internal/cliconfig"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
 func setupTestContextConfig(t *testing.T) (cleanup func()) {

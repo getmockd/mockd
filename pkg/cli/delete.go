@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getmockd/mockd/internal/cliconfig"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
 // RunDelete handles the delete command.

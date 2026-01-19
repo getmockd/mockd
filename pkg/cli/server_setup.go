@@ -11,7 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/getmockd/mockd/internal/cliconfig"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/audit"
 	"github.com/getmockd/mockd/pkg/chaos"

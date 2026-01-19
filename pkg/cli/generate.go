@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getmockd/mockd/internal/cliconfig"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/ai"
 	"github.com/getmockd/mockd/pkg/ai/generator"
 	"github.com/getmockd/mockd/pkg/config"
