@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getmockd/mockd/internal/cliconfig"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
 // RunConfig handles the config command.

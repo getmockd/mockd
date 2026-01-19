@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getmockd/mockd/internal/cliconfig"
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/cli/internal/flags"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
 	"github.com/gorilla/websocket"
