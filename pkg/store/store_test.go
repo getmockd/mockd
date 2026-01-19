@@ -769,8 +769,8 @@ func TestWorkspaceFileStore_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get default failed: %v", err)
 	}
-	if ws.Name != "Local" {
-		t.Errorf("Name = %q, want %q", ws.Name, "Local")
+	if ws.Name != "Default" {
+		t.Errorf("Name = %q, want %q", ws.Name, "Default")
 	}
 
 	// Create new workspace

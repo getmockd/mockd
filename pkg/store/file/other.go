@@ -193,11 +193,44 @@ type folderStore struct {
 	fs *FileStore
 }
 
-func (s *folderStore) List(ctx context.Context) ([]*config.Folder, error) {
+func (s *folderStore) List(ctx context.Context, filter *store.FolderFilter) ([]*config.Folder, error) {
 	s.fs.mu.RLock()
 	defer s.fs.mu.RUnlock()
-	result := make([]*config.Folder, len(s.fs.data.Folders))
-	copy(result, s.fs.data.Folders)
+
+	// If no filter, return all folders
+	if filter == nil {
+		result := make([]*config.Folder, len(s.fs.data.Folders))
+		copy(result, s.fs.data.Folders)
+		return result, nil
+	}
+
+	// Filter folders
+	var result []*config.Folder
+	for _, f := range s.fs.data.Folders {
+		// Filter by workspace
+		// Treat empty workspaceID as "local" for backward compatibility
+		if filter.WorkspaceID != "" {
+			folderWsID := f.WorkspaceID
+			if folderWsID == "" {
+				folderWsID = store.DefaultWorkspaceID
+			}
+			if folderWsID != filter.WorkspaceID {
+				continue
+			}
+		}
+		// Filter by parent
+		if filter.ParentID != nil {
+			if *filter.ParentID == "" {
+				// Root level only
+				if f.ParentID != "" {
+					continue
+				}
+			} else if f.ParentID != *filter.ParentID {
+				continue
+			}
+		}
+		result = append(result, f)
+	}
 	return result, nil
 }
 

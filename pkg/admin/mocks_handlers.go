@@ -35,9 +35,10 @@ func (a *AdminAPI) getMockStore() store.MockStore {
 
 // MockFilter contains filter criteria for listing mocks in-memory.
 type MockFilter struct {
-	Type     string
-	ParentID string
-	Enabled  *bool
+	Type        string
+	ParentID    string
+	Enabled     *bool
+	WorkspaceID string
 }
 
 // applyMockFilter filters mocks in-memory based on filter criteria.
@@ -70,6 +71,16 @@ func applyMockFilter(mocks []*mock.Mock, filter *MockFilter) []*mock.Mock {
 		filtered := make([]*mock.Mock, 0, len(mocks))
 		for _, m := range mocks {
 			if m.Enabled == *filter.Enabled {
+				filtered = append(filtered, m)
+			}
+		}
+		mocks = filtered
+	}
+
+	if filter.WorkspaceID != "" {
+		filtered := make([]*mock.Mock, 0, len(mocks))
+		for _, m := range mocks {
+			if m.WorkspaceID == filter.WorkspaceID {
 				filtered = append(filtered, m)
 			}
 		}
@@ -115,8 +126,9 @@ func (a *AdminAPI) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request
 
 		// Apply filters (engine returns all, we filter locally)
 		filter := &MockFilter{
-			Type:     query.Get("type"),
-			ParentID: query.Get("parentId"),
+			Type:        query.Get("type"),
+			ParentID:    query.Get("parentId"),
+			WorkspaceID: query.Get("workspaceId"),
 		}
 		if enabled := query.Get("enabled"); enabled != "" {
 			b := enabled == "true"
@@ -266,6 +278,14 @@ func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Reques
 	// Set default metaSortKey if not set (negative timestamp = newest first)
 	if m.MetaSortKey == 0 {
 		m.MetaSortKey = float64(-now.UnixMilli())
+	}
+
+	// Set workspaceId: use request body, then query param, then default
+	if m.WorkspaceID == "" {
+		m.WorkspaceID = r.URL.Query().Get("workspaceId")
+	}
+	if m.WorkspaceID == "" {
+		m.WorkspaceID = store.DefaultWorkspaceID
 	}
 
 	if err := mockStore.Create(r.Context(), &m); err != nil {
@@ -554,6 +574,7 @@ func (a *AdminAPI) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.R
 	}
 
 	now := time.Now()
+	queryWorkspaceID := r.URL.Query().Get("workspaceId")
 	for _, m := range mocks {
 		if m.ID == "" {
 			m.ID = generateMockID(m.Type)
@@ -562,6 +583,14 @@ func (a *AdminAPI) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.R
 		m.UpdatedAt = now
 		if m.MetaSortKey == 0 {
 			m.MetaSortKey = float64(-now.UnixMilli())
+		}
+		// Set workspaceId from query param if not provided in body
+		if m.WorkspaceID == "" && queryWorkspaceID != "" {
+			m.WorkspaceID = queryWorkspaceID
+		}
+		// Default to "local" workspace if still not set
+		if m.WorkspaceID == "" {
+			m.WorkspaceID = store.DefaultWorkspaceID
 		}
 	}
 

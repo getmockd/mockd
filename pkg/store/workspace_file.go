@@ -211,9 +211,9 @@ func (s *WorkspaceFileStore) ensureDefaultWorkspaceLocked() {
 	defaultPath := filepath.Join(s.dataDir, "workspaces", DefaultWorkspaceID)
 	defaultWS := &Workspace{
 		ID:          DefaultWorkspaceID,
-		Name:        "Local",
+		Name:        "Default",
 		Type:        WorkspaceTypeLocal,
-		Description: "Default local workspace",
+		Description: "Default workspace",
 		Path:        defaultPath,
 		SyncStatus:  SyncStatusLocal,
 		CreatedAt:   now,
