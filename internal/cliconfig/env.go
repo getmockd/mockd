@@ -99,10 +99,8 @@ func LoadEnvConfig(cfg *CLIConfig) {
 	}
 }
 
-// GetAdminURL returns the admin URL, preferring environment variable if set.
-func GetAdminURL() string {
-	if v := os.Getenv(EnvAdminURL); v != "" {
-		return v
-	}
-	return DefaultAdminURL(0)
+// GetAdminURLFromEnv returns the admin URL from environment variable.
+// Returns empty string if not set.
+func GetAdminURLFromEnv() string {
+	return os.Getenv(EnvAdminURL)
 }
