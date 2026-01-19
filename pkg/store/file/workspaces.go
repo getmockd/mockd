@@ -122,9 +122,9 @@ func (s *workspaceStore) ensureDefaultWorkspace() []*store.Workspace {
 	now := time.Now().Unix()
 	defaultWS := &store.Workspace{
 		ID:          store.DefaultWorkspaceID,
-		Name:        "Local",
+		Name:        "Default",
 		Type:        store.WorkspaceTypeLocal,
-		Description: "Default local workspace",
+		Description: "Default workspace",
 		SyncStatus:  store.SyncStatusLocal,
 		CreatedAt:   now,
 		UpdatedAt:   now,

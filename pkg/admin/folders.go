@@ -18,6 +18,7 @@ type CreateFolderRequest struct {
 	ParentID    string  `json:"parentId,omitempty"`
 	MetaSortKey float64 `json:"metaSortKey,omitempty"`
 	Description string  `json:"description,omitempty"`
+	WorkspaceID string  `json:"workspaceId,omitempty"`
 }
 
 // UpdateFolderRequest is the request body for updating a folder.
@@ -36,7 +37,7 @@ func (a *AdminAPI) getFolderStore() store.FolderStore {
 	return a.dataStore.Folders()
 }
 
-// handleListFolders returns all folders.
+// handleListFolders returns all folders, optionally filtered by workspace.
 func (a *AdminAPI) handleListFolders(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
@@ -44,7 +45,15 @@ func (a *AdminAPI) handleListFolders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	folders, err := folderStore.List(r.Context())
+	// Build filter from query params
+	var filter *store.FolderFilter
+	query := r.URL.Query()
+	workspaceID := query.Get("workspaceId")
+	if workspaceID != "" {
+		filter = &store.FolderFilter{WorkspaceID: workspaceID}
+	}
+
+	folders, err := folderStore.List(r.Context(), filter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
 		return
@@ -100,11 +109,29 @@ func (a *AdminAPI) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Validate parent exists if specified
+	// Determine workspaceId first: use request body, then query param, then default
+	workspaceID := req.WorkspaceID
+	if workspaceID == "" {
+		workspaceID = r.URL.Query().Get("workspaceId")
+	}
+	if workspaceID == "" {
+		workspaceID = store.DefaultWorkspaceID
+	}
+
+	// Validate parent exists and is in the same workspace if specified
 	if req.ParentID != "" {
-		_, err := folderStore.Get(ctx, req.ParentID)
+		parent, err := folderStore.Get(ctx, req.ParentID)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_parent", "parent folder not found")
+			return
+		}
+		// Validate parent is in the same workspace
+		parentWsID := parent.WorkspaceID
+		if parentWsID == "" {
+			parentWsID = store.DefaultWorkspaceID
+		}
+		if parentWsID != workspaceID {
+			writeError(w, http.StatusBadRequest, "invalid_parent", "parent folder must be in the same workspace")
 			return
 		}
 	}
@@ -131,6 +158,7 @@ func (a *AdminAPI) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 	}
 	folder.ParentID = req.ParentID
 	folder.MetaSortKey = metaSortKey
+	folder.WorkspaceID = workspaceID
 
 	if err := folderStore.Create(ctx, folder); err != nil {
 		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
@@ -260,7 +288,7 @@ func (a *AdminAPI) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Move orphaned children to root
-	folders, _ := folderStore.List(ctx)
+	folders, _ := folderStore.List(ctx, nil)
 	for _, f := range folders {
 		if f.ParentID == id {
 			f.ParentID = ""

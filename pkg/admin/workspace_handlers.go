@@ -46,7 +46,7 @@ func (a *AdminAPI) handleListWorkspaces(w http.ResponseWriter, r *http.Request) 
 		// Fallback to default workspace only
 		defaultWS := &WorkspaceDTO{
 			ID:        store.DefaultWorkspaceID,
-			Name:      "Local",
+			Name:      "Default",
 			Type:      string(store.WorkspaceTypeLocal),
 			CreatedAt: time.Now().Format(time.RFC3339),
 			UpdatedAt: time.Now().Format(time.RFC3339),
@@ -92,7 +92,7 @@ func (a *AdminAPI) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 		if id == store.DefaultWorkspaceID {
 			writeJSON(w, http.StatusOK, &WorkspaceDTO{
 				ID:        store.DefaultWorkspaceID,
-				Name:      "Local",
+				Name:      "Default",
 				Type:      string(store.WorkspaceTypeLocal),
 				CreatedAt: time.Now().Format(time.RFC3339),
 				UpdatedAt: time.Now().Format(time.RFC3339),

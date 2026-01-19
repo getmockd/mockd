@@ -124,9 +124,15 @@ type MockStore interface {
 	BulkUpdate(ctx context.Context, mocks []*mock.Mock) error
 }
 
+// FolderFilter provides filtering criteria for folder list operations.
+type FolderFilter struct {
+	WorkspaceID string  // Filter by workspace ("" = no filter)
+	ParentID    *string // Filter by parent folder (nil = no filter, "" = root level)
+}
+
 // FolderStore handles folder persistence.
 type FolderStore interface {
-	List(ctx context.Context) ([]*config.Folder, error)
+	List(ctx context.Context, filter *FolderFilter) ([]*config.Folder, error)
 	Get(ctx context.Context, id string) (*config.Folder, error)
 	Create(ctx context.Context, folder *config.Folder) error
 	Update(ctx context.Context, folder *config.Folder) error
