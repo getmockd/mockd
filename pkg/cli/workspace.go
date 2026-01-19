@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"bufio"
+	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -125,7 +128,10 @@ func runWorkspaceShow() error {
 	fmt.Printf("  Workspace: %s\n", ctx.Workspace)
 
 	// Try to fetch workspace details from server
-	client := NewWorkspaceClient(ctx.AdminURL)
+	client := NewWorkspaceClient(ctx.AdminURL, &WorkspaceClientOptions{
+		AuthToken:   ctx.AuthToken,
+		TLSInsecure: ctx.TLSInsecure,
+	})
 	ws, err := client.GetWorkspace(ctx.Workspace)
 	if err == nil && ws != nil {
 		fmt.Printf("    Name: %s\n", ws.Name)
@@ -183,7 +189,10 @@ Examples:
 	targetURL := cliconfig.ResolveAdminURL(*adminURL)
 
 	// Verify workspace exists on server
-	client := NewWorkspaceClient(targetURL)
+	client := NewWorkspaceClient(targetURL, &WorkspaceClientOptions{
+		AuthToken:   ctx.AuthToken,
+		TLSInsecure: ctx.TLSInsecure,
+	})
 	ws, err := client.GetWorkspace(workspaceID)
 	if err != nil {
 		return fmt.Errorf("failed to verify workspace: %w", err)
@@ -231,7 +240,18 @@ Examples:
 
 	targetURL := cliconfig.ResolveAdminURL(*adminURL)
 
-	client := NewWorkspaceClient(targetURL)
+	// Get client options from context
+	var opts *WorkspaceClientOptions
+	if cfg, err := cliconfig.LoadContextConfig(); err == nil {
+		if ctx := cfg.GetCurrentContext(); ctx != nil {
+			opts = &WorkspaceClientOptions{
+				AuthToken:   ctx.AuthToken,
+				TLSInsecure: ctx.TLSInsecure,
+			}
+		}
+	}
+
+	client := NewWorkspaceClient(targetURL, opts)
 	workspaces, err := client.ListWorkspaces()
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
@@ -331,7 +351,18 @@ Examples:
 
 	targetURL := cliconfig.ResolveAdminURL(*adminURL)
 
-	client := NewWorkspaceClient(targetURL)
+	// Get client options from context
+	var opts *WorkspaceClientOptions
+	if cfg, err := cliconfig.LoadContextConfig(); err == nil {
+		if ctx := cfg.GetCurrentContext(); ctx != nil {
+			opts = &WorkspaceClientOptions{
+				AuthToken:   ctx.AuthToken,
+				TLSInsecure: ctx.TLSInsecure,
+			}
+		}
+	}
+
+	client := NewWorkspaceClient(targetURL, opts)
 	ws, err := client.CreateWorkspace(*name, *wsType, *description)
 	if err != nil {
 		return fmt.Errorf("failed to create workspace: %w", err)
@@ -398,7 +429,18 @@ Examples:
 	workspaceID := fs.Arg(0)
 	targetURL := cliconfig.ResolveAdminURL(*adminURL)
 
-	client := NewWorkspaceClient(targetURL)
+	// Get client options from context
+	var opts *WorkspaceClientOptions
+	if cfg, err := cliconfig.LoadContextConfig(); err == nil {
+		if ctx := cfg.GetCurrentContext(); ctx != nil {
+			opts = &WorkspaceClientOptions{
+				AuthToken:   ctx.AuthToken,
+				TLSInsecure: ctx.TLSInsecure,
+			}
+		}
+	}
+
+	client := NewWorkspaceClient(targetURL, opts)
 
 	// Get workspace details first
 	ws, err := client.GetWorkspace(workspaceID)
@@ -412,8 +454,12 @@ Examples:
 		fmt.Printf("  ID: %s\n", ws.ID)
 		fmt.Print("Type 'yes' to confirm: ")
 
-		var input string
-		if _, err := fmt.Scanln(&input); err != nil || input != "yes" {
+		reader := bufio.NewReader(os.Stdin)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read input: %w", err)
+		}
+		if strings.TrimSpace(input) != "yes" {
 			fmt.Println("Aborted")
 			return nil
 		}
@@ -486,22 +532,75 @@ Examples:
 // WorkspaceClient provides methods for workspace API calls.
 type WorkspaceClient struct {
 	baseURL    string
+	authToken  string
 	httpClient *http.Client
 }
 
+// WorkspaceClientOptions configures the workspace client.
+type WorkspaceClientOptions struct {
+	AuthToken   string
+	TLSInsecure bool
+}
+
 // NewWorkspaceClient creates a new workspace API client.
-func NewWorkspaceClient(baseURL string) *WorkspaceClient {
-	return &WorkspaceClient{
+func NewWorkspaceClient(baseURL string, opts *WorkspaceClientOptions) *WorkspaceClient {
+	client := &WorkspaceClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+
+	if opts != nil {
+		client.authToken = opts.AuthToken
+
+		if opts.TLSInsecure {
+			client.httpClient.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			}
+		}
+	}
+
+	return client
+}
+
+// NewWorkspaceClientFromContext creates a workspace client using the current context settings.
+func NewWorkspaceClientFromContext() (*WorkspaceClient, error) {
+	cfg, err := cliconfig.LoadContextConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load context config: %w", err)
+	}
+
+	ctx := cfg.GetCurrentContext()
+	if ctx == nil {
+		// Fall back to default
+		return NewWorkspaceClient(cliconfig.DefaultAdminURL(cliconfig.DefaultAdminPort), nil), nil
+	}
+
+	return NewWorkspaceClient(ctx.AdminURL, &WorkspaceClientOptions{
+		AuthToken:   ctx.AuthToken,
+		TLSInsecure: ctx.TLSInsecure,
+	}), nil
+}
+
+// doRequest performs an HTTP request with auth token if configured.
+func (c *WorkspaceClient) doRequest(req *http.Request) (*http.Response, error) {
+	if c.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.authToken)
+	}
+	return c.httpClient.Do(req)
 }
 
 // ListWorkspaces returns all workspaces.
 func (c *WorkspaceClient) ListWorkspaces() ([]*WorkspaceDTO, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/workspaces")
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/workspaces", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, &APIError{
 			StatusCode: 0,
@@ -528,7 +627,12 @@ func (c *WorkspaceClient) ListWorkspaces() ([]*WorkspaceDTO, error) {
 
 // GetWorkspace returns a specific workspace.
 func (c *WorkspaceClient) GetWorkspace(id string) (*WorkspaceDTO, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/workspaces/" + url.PathEscape(id))
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/workspaces/"+url.PathEscape(id), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, &APIError{
 			StatusCode: 0,
@@ -574,7 +678,13 @@ func (c *WorkspaceClient) CreateWorkspace(name, wsType, description string) (*Wo
 		return nil, fmt.Errorf("failed to encode request: %w", err)
 	}
 
-	resp, err := c.httpClient.Post(c.baseURL+"/workspaces", "application/json", jsonReader(data))
+	req, err := http.NewRequest(http.MethodPost, c.baseURL+"/workspaces", bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, &APIError{
 			StatusCode: 0,
@@ -603,7 +713,7 @@ func (c *WorkspaceClient) DeleteWorkspace(id string) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return &APIError{
 			StatusCode: 0,
@@ -645,23 +755,4 @@ func parseAPIError(resp *http.Response) error {
 		ErrorCode:  "unknown_error",
 		Message:    fmt.Sprintf("server returned status %d", resp.StatusCode),
 	}
-}
-
-// jsonReader creates an io.Reader from JSON bytes.
-func jsonReader(data []byte) *jsonBodyReader {
-	return &jsonBodyReader{data: data}
-}
-
-type jsonBodyReader struct {
-	data []byte
-	pos  int
-}
-
-func (r *jsonBodyReader) Read(p []byte) (n int, err error) {
-	if r.pos >= len(r.data) {
-		return 0, io.EOF
-	}
-	n = copy(p, r.data[r.pos:])
-	r.pos += n
-	return n, nil
 }

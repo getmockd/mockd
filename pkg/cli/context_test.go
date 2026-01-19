@@ -354,6 +354,34 @@ func TestSanitizeContextForJSON(t *testing.T) {
 	}
 }
 
+func TestRunContext_Add_NameValidation(t *testing.T) {
+	cleanup := setupTestContextConfig(t)
+	defer cleanup()
+
+	// Initialize with default config
+	cfg := cliconfig.NewDefaultContextConfig()
+	if err := cliconfig.SaveContextConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test name length validation
+	longName := strings.Repeat("a", 65) // 65 chars, exceeds 64 limit
+	err := RunContext([]string{"add", "-u", "http://example.com:4290", longName})
+	if err == nil {
+		t.Error("expected error for name exceeding 64 characters")
+	}
+	if err != nil && !strings.Contains(err.Error(), "64 characters") {
+		t.Errorf("expected '64 characters' error, got: %v", err)
+	}
+
+	// Test that 64 chars is accepted
+	exactName := strings.Repeat("a", 64)
+	err = RunContext([]string{"add", "-u", "http://example.com:4290", exactName})
+	if err != nil {
+		t.Errorf("expected 64-char name to be accepted, got: %v", err)
+	}
+}
+
 func TestSanitizeContextsForJSON(t *testing.T) {
 	contexts := map[string]*cliconfig.Context{
 		"local": {

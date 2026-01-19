@@ -124,9 +124,9 @@ func SaveContextConfig(cfg *ContextConfig) error {
 		return err
 	}
 
-	// Ensure directory exists
+	// Ensure directory exists with restricted permissions (contains auth tokens)
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
