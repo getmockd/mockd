@@ -823,6 +823,298 @@ mockd doctor -p 3000 -a 3001
 
 ---
 
+## Context Commands
+
+### mockd context
+
+Manage contexts (admin server + workspace pairs). Similar to kubectl contexts, allows quick switching between different mockd deployments (local, staging, CI, cloud, etc.).
+
+```bash
+mockd context [command]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| (no command) | Show current context |
+| `show` | Show current context (same as no command) |
+| `use <name>` | Switch to a different context |
+| `add <name>` | Add a new context |
+| `list` | List all contexts |
+| `remove <name>` | Remove a context |
+
+**Configuration:**
+
+Contexts are stored in `~/.config/mockd/contexts.json`. A default "local" context pointing to `http://localhost:4290` is created automatically.
+
+---
+
+### mockd context show
+
+Show the current context.
+
+```bash
+mockd context
+mockd context show
+```
+
+**Output includes:**
+- Current context name
+- Admin URL
+- Workspace (if set)
+- Description (if set)
+- Environment variable overrides (if active)
+
+---
+
+### mockd context use
+
+Switch to a different context.
+
+```bash
+mockd context use <name>
+```
+
+**Examples:**
+
+```bash
+# Switch to staging context
+mockd context use staging
+
+# Switch back to local
+mockd context use local
+```
+
+---
+
+### mockd context add
+
+Add a new context.
+
+```bash
+mockd context add <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--admin-url` | `-u` | Admin API URL (e.g., http://localhost:4290) |
+| `--workspace` | `-w` | Default workspace for this context |
+| `--description` | `-d` | Description for this context |
+| `--token` | `-t` | Auth token for cloud/enterprise deployments |
+| `--tls-insecure` | | Skip TLS certificate verification (for self-signed certs) |
+| `--use` | | Switch to this context after adding |
+| `--json` | | Output in JSON format |
+
+**Examples:**
+
+```bash
+# Add with flags
+mockd context add -u https://staging.example.com:4290 staging
+
+# Add interactively (will prompt for URL)
+mockd context add production
+
+# Add and switch to it
+mockd context add -u http://dev-server:4290 --use dev
+
+# Add with auth token for cloud deployment
+mockd context add -u https://api.mockd.io -t YOUR_TOKEN --use cloud
+
+# Add with workspace preset
+mockd context add -u https://staging:4290 -w my-workspace staging
+```
+
+**Security Notes:**
+- URLs with embedded credentials (`http://user:pass@host`) are rejected for security
+- Auth tokens are stored in the config file but masked in JSON output
+- Config file is created with 0600 permissions (owner read/write only)
+
+---
+
+### mockd context list
+
+List all contexts.
+
+```bash
+mockd context list [flags]
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output in JSON format |
+
+**Examples:**
+
+```bash
+# List all contexts
+mockd context list
+
+# Output:
+# CURRENT  NAME     ADMIN URL                      WORKSPACE  DESCRIPTION
+# *        local    http://localhost:4290          -          Local mockd server
+#          staging  https://staging.example.com    ws-123     Staging server
+#          cloud    https://api.mockd.io           -          Cloud deployment
+
+# JSON output (tokens are masked)
+mockd context list --json
+```
+
+---
+
+### mockd context remove
+
+Remove a context.
+
+```bash
+mockd context remove <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--force` | `-f` | Force removal without confirmation |
+
+**Examples:**
+
+```bash
+# Remove with confirmation prompt
+mockd context remove old-server
+
+# Remove without confirmation
+mockd context remove old-server --force
+```
+
+**Note:** The current context cannot be removed. Switch to another context first.
+
+---
+
+## Workspace Commands
+
+### mockd workspace
+
+Manage workspaces for organizing mocks. Workspaces allow logical grouping and isolation of mocks within a mockd server.
+
+```bash
+mockd workspace [command]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| (no command) | Show current workspace |
+| `list` | List all workspaces |
+| `use <id>` | Switch to a workspace |
+| `create` | Create a new workspace |
+| `delete <id>` | Delete a workspace |
+| `clear` | Clear workspace selection (use all mocks) |
+
+---
+
+### mockd workspace show
+
+Show the current workspace.
+
+```bash
+mockd workspace
+mockd workspace show
+```
+
+---
+
+### mockd workspace list
+
+List all workspaces from the server.
+
+```bash
+mockd workspace list [flags]
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output in JSON format |
+
+---
+
+### mockd workspace use
+
+Switch to a workspace.
+
+```bash
+mockd workspace use <id>
+```
+
+**Examples:**
+
+```bash
+mockd workspace use ws-123
+mockd workspace use "my-project"
+```
+
+---
+
+### mockd workspace create
+
+Create a new workspace.
+
+```bash
+mockd workspace create [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--name` | `-n` | Workspace name |
+| `--description` | `-d` | Workspace description |
+| `--use` | | Switch to this workspace after creating |
+
+**Examples:**
+
+```bash
+# Create and switch to new workspace
+mockd workspace create -n "my-project" --use
+
+# Create with description
+mockd workspace create -n "api-tests" -d "Mocks for API integration tests"
+```
+
+---
+
+### mockd workspace delete
+
+Delete a workspace.
+
+```bash
+mockd workspace delete <id> [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--force` | `-f` | Force deletion without confirmation |
+
+---
+
+### mockd workspace clear
+
+Clear the workspace selection to use all mocks.
+
+```bash
+mockd workspace clear
+```
+
+---
+
 ## Proxy Commands
 
 ### mockd proxy
@@ -2432,7 +2724,9 @@ mockd --tui --serve --port 3000 --admin-port 3001
 
 | Variable | Description | Equivalent Flag |
 |----------|-------------|-----------------|
-| `MOCKD_ADMIN_URL` | Default admin URL | `--admin-url` |
+| `MOCKD_ADMIN_URL` | Default admin URL (overrides context) | `--admin-url` |
+| `MOCKD_CONTEXT` | Override current context | `--context` |
+| `MOCKD_WORKSPACE` | Override current workspace | `--workspace` |
 | `MOCKD_PORT` | Default mock port | `--port` |
 | `MOCKD_ADMIN_PORT` | Default admin port | `--admin-port` |
 | `MOCKD_TOKEN` | Cloud authentication token | `--token` |
@@ -2441,6 +2735,12 @@ mockd --tui --serve --port 3000 --admin-port 3001
 | `MOCKD_AI_API_KEY` | API key for AI provider | |
 | `MOCKD_AI_MODEL` | Default AI model | `--model` |
 | `MOCKD_AI_ENDPOINT` | Custom AI endpoint (for Ollama) | |
+
+**Priority Order:**
+
+For admin URL: explicit flag > `MOCKD_ADMIN_URL` > context config > default
+For workspace: explicit flag > `MOCKD_WORKSPACE` > context config > none
+For context: explicit flag > `MOCKD_CONTEXT` > saved current context
 
 ---
 

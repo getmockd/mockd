@@ -105,7 +105,7 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /mocks/{id}/sse/buffer", a.handleGetMockSSEBuffer)
 	mux.HandleFunc("DELETE /mocks/{id}/sse/buffer", a.handleClearMockSSEBuffer)
 
-	// Protocol endpoints (use the unified /v2/mocks API for all mock types)
+	// Protocol endpoints (use the unified /mocks API for all mock types)
 
 	// Stream recording management (WebSocket/SSE)
 	mux.HandleFunc("GET /stream-recordings", a.streamRecordingManager.handleListStreamRecordings)

@@ -129,6 +129,10 @@ func run(args []string) error {
 		return cli.RunHelp(cmdArgs)
 	case "doctor":
 		return cli.RunDoctor(cmdArgs)
+	case "context":
+		return cli.RunContext(cmdArgs)
+	case "workspace":
+		return cli.RunWorkspace(cmdArgs)
 	case "--help", "-h":
 		printUsage()
 		return nil
@@ -150,6 +154,13 @@ Commands:
   start       Start the mock server (alias for serve)
   stop        Stop a running mockd server
   status      Show status of running mockd server
+
+Configuration:
+  context     Manage contexts (admin server + workspace pairs)
+  workspace   Manage workspaces within the current context
+  config      Show effective configuration
+
+Mock Management:
   add         Add a new mock endpoint
   new         Create mocks from templates (crud, auth, etc.)
   list        List all configured mocks
@@ -158,7 +169,8 @@ Commands:
   import      Import mocks from a configuration file
   export      Export current mocks to stdout or file
   logs        View request logs
-  config      Show effective configuration
+
+Utilities:
   completion  Generate shell completion scripts
   version     Show version information
   doctor      Diagnose common setup issues
@@ -211,6 +223,10 @@ Examples:
   # Start the server with defaults
   mockd start
 
+  # Connect to a remote mockd server
+  mockd context add staging --admin-url https://staging:4290 --use
+  mockd list  # uses staging server
+
   # Start with custom port and config file
   mockd start --port 3000 --config mocks.json
 
@@ -262,7 +278,7 @@ func isCommand(s string) bool {
 		"proxy", "recordings", "convert", "generate", "enhance",
 		"stream-recordings", "graphql", "chaos", "grpc", "mqtt", "soap",
 		"templates", "tunnel", "init", "help", "status", "stop", "doctor",
-		"websocket",
+		"websocket", "context", "workspace",
 	}
 	return slices.Contains(commands, s)
 }
