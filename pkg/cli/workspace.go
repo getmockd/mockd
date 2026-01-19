@@ -164,6 +164,9 @@ Examples:
 	}
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
 		return err
 	}
 
@@ -174,7 +177,6 @@ Examples:
 
 	workspaceID := fs.Arg(0)
 
-	// Load context config
 	cfg, err := cliconfig.LoadContextConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load context config: %w", err)
@@ -235,6 +237,9 @@ Examples:
 	}
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
 		return err
 	}
 
@@ -341,6 +346,9 @@ Examples:
 	}
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
 		return err
 	}
 
@@ -418,6 +426,9 @@ Examples:
 	}
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
 		return err
 	}
 
@@ -500,6 +511,9 @@ Examples:
 	}
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
 		return err
 	}
 
