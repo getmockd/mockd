@@ -38,11 +38,17 @@ type Context struct {
 	// AdminURL is the base URL of the admin API (e.g., "http://localhost:4290")
 	AdminURL string `json:"adminUrl"`
 
-	// Workspace is the current workspace ID (nil = no workspace filtering)
+	// Workspace is the current workspace ID (empty = no workspace filtering)
 	Workspace string `json:"workspace,omitempty"`
 
 	// Description is an optional human-readable description
 	Description string `json:"description,omitempty"`
+
+	// AuthToken is an optional authentication token for cloud/enterprise deployments
+	AuthToken string `json:"authToken,omitempty"`
+
+	// TLSInsecure skips TLS certificate verification (for self-signed certs)
+	TLSInsecure bool `json:"tlsInsecure,omitempty"`
 }
 
 // NewDefaultContextConfig creates a new ContextConfig with default values.
@@ -223,6 +229,20 @@ func GetWorkspaceFromContext() string {
 	return ctx.Workspace
 }
 
+// GetWorkspace returns the workspace, checking sources in priority order:
+// 1. Environment variable (MOCKD_WORKSPACE)
+// 2. Context config (current context's workspace)
+// 3. Empty string (no workspace filtering)
+func GetWorkspace() string {
+	// First check environment variable
+	if ws := GetWorkspaceFromEnv(); ws != "" {
+		return ws
+	}
+
+	// Then check context config
+	return GetWorkspaceFromContext()
+}
+
 // GetAdminURL returns the admin URL, checking sources in priority order:
 // 1. Environment variable (MOCKD_ADMIN_URL)
 // 2. Context config (current context's adminUrl)
@@ -263,10 +283,74 @@ func ResolveAdminURL(flagValue string) string {
 }
 
 // ResolveWorkspace resolves the workspace from various sources.
-// Priority: explicit flag > context > empty
+// Priority: explicit flag > env var > context > empty
 func ResolveWorkspace(flagValue string) string {
 	if flagValue != "" {
 		return flagValue
 	}
-	return GetWorkspaceFromContext()
+	return GetWorkspace()
+}
+
+// ResolveContext resolves which context to use.
+// Priority: explicit flag > env var > current context
+func ResolveContext(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if envCtx := GetContextFromEnv(); envCtx != "" {
+		return envCtx
+	}
+	cfg, err := LoadContextConfig()
+	if err != nil {
+		return DefaultContextName
+	}
+	return cfg.CurrentContext
+}
+
+// GetContextByName returns a specific context by name.
+// Returns nil if not found.
+func GetContextByName(name string) *Context {
+	cfg, err := LoadContextConfig()
+	if err != nil {
+		return nil
+	}
+	return cfg.Contexts[name]
+}
+
+// ResolveAdminURLWithContext resolves admin URL considering context override.
+// Priority: flag > env > specified context > current context > default
+func ResolveAdminURLWithContext(flagAdminURL, flagContext string) string {
+	if flagAdminURL != "" {
+		return flagAdminURL
+	}
+	if url := GetAdminURLFromEnv(); url != "" {
+		return url
+	}
+
+	// If context flag specified, use that context
+	contextName := ResolveContext(flagContext)
+	if ctx := GetContextByName(contextName); ctx != nil && ctx.AdminURL != "" {
+		return ctx.AdminURL
+	}
+
+	return DefaultAdminURL(DefaultAdminPort)
+}
+
+// ResolveWorkspaceWithContext resolves workspace considering context override.
+// Priority: flag > env > specified context > current context > empty
+func ResolveWorkspaceWithContext(flagWorkspace, flagContext string) string {
+	if flagWorkspace != "" {
+		return flagWorkspace
+	}
+	if ws := GetWorkspaceFromEnv(); ws != "" {
+		return ws
+	}
+
+	// If context flag specified, use that context's workspace
+	contextName := ResolveContext(flagContext)
+	if ctx := GetContextByName(contextName); ctx != nil {
+		return ctx.Workspace
+	}
+
+	return ""
 }
