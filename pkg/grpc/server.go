@@ -37,7 +37,6 @@ var (
 	_ protocol.Handler          = (*Server)(nil)
 	_ protocol.StandaloneServer = (*Server)(nil)
 	_ protocol.RPCHandler       = (*Server)(nil)
-	_ protocol.Recordable       = (*Server)(nil)
 	_ protocol.RequestLoggable  = (*Server)(nil)
 	_ protocol.Observable       = (*Server)(nil)
 	_ protocol.Loggable         = (*Server)(nil)
@@ -58,42 +57,15 @@ var (
 	ErrNilSchema = errors.New("schema cannot be nil")
 )
 
-// RecordingStore is the interface for storing gRPC recordings.
-type RecordingStore interface {
-	Add(r *GRPCRecording) error
-}
-
-// GRPCRecording represents a captured gRPC request/response pair.
-// This is a re-export from the recording package to avoid circular imports.
-type GRPCRecording struct {
-	ID         string              `json:"id"`
-	Timestamp  time.Time           `json:"timestamp"`
-	Service    string              `json:"service"`
-	Method     string              `json:"method"`
-	StreamType GRPCStreamType      `json:"streamType"`
-	Request    interface{}         `json:"request"`
-	Response   interface{}         `json:"response"`
-	Metadata   map[string][]string `json:"metadata,omitempty"`
-	Error      *GRPCRecordedError  `json:"error,omitempty"`
-	Duration   time.Duration       `json:"duration"`
-	ProtoFile  string              `json:"protoFile,omitempty"`
-}
-
-// GRPCStreamType identifies the type of gRPC call.
-type GRPCStreamType string
+// streamType identifies the type of gRPC call (for internal logging).
+type streamType string
 
 const (
-	GRPCStreamUnary        GRPCStreamType = "unary"
-	GRPCStreamClientStream GRPCStreamType = "client_stream"
-	GRPCStreamServerStream GRPCStreamType = "server_stream"
-	GRPCStreamBidi         GRPCStreamType = "bidi"
+	streamUnary        streamType = "unary"
+	streamClientStream streamType = "client_stream"
+	streamServerStream streamType = "server_stream"
+	streamBidi         streamType = "bidi"
 )
-
-// GRPCRecordedError represents a gRPC error that was returned.
-type GRPCRecordedError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
 
 // Server is a mock gRPC server that serves configured responses
 // based on proto schema definitions.
@@ -106,11 +78,6 @@ type Server struct {
 	running    bool
 	startedAt  time.Time
 	log        *slog.Logger
-
-	// Recording support
-	recordingMu      sync.RWMutex
-	recordingEnabled bool
-	recordingStore   RecordingStore
 
 	// Request logging support
 	requestLoggerMu sync.RWMutex
@@ -306,14 +273,14 @@ func (s *Server) handleUnary(srv interface{}, ctx context.Context, dec func(inte
 	svc := s.schema.GetService(serviceName)
 	if svc == nil {
 		err := status.Errorf(codes.Unimplemented, "service %s not found", serviceName)
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamUnary, nil, nil, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamUnary, nil, nil, nil, err)
 		return nil, err
 	}
 
 	method := svc.GetMethod(methodName)
 	if method == nil {
 		err := status.Errorf(codes.Unimplemented, "method %s not found", methodName)
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamUnary, nil, nil, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamUnary, nil, nil, nil, err)
 		return nil, err
 	}
 
@@ -321,14 +288,14 @@ func (s *Server) handleUnary(srv interface{}, ctx context.Context, dec func(inte
 	inputDesc := method.GetInputDescriptor()
 	if inputDesc == nil {
 		err := status.Error(codes.Internal, "cannot get input descriptor")
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamUnary, nil, nil, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamUnary, nil, nil, nil, err)
 		return nil, err
 	}
 
 	reqMsg := dynamicpb.NewMessage(inputDesc)
 	if err := dec(reqMsg); err != nil {
 		grpcErr := status.Errorf(codes.InvalidArgument, "failed to decode request: %v", err)
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamUnary, nil, nil, nil, grpcErr)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamUnary, nil, nil, nil, grpcErr)
 		return nil, grpcErr
 	}
 
@@ -342,7 +309,7 @@ func (s *Server) handleUnary(srv interface{}, ctx context.Context, dec func(inte
 	methodCfg := s.findMethodConfig(serviceName, methodName, md, reqMap)
 	if methodCfg == nil {
 		err := status.Errorf(codes.Unimplemented, "no mock configured for %s/%s", serviceName, methodName)
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamUnary, md, reqMap, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamUnary, md, reqMap, nil, err)
 		return nil, err
 	}
 
@@ -353,21 +320,8 @@ func (s *Server) handleUnary(srv interface{}, ctx context.Context, dec func(inte
 	if methodCfg.Error != nil {
 		grpcErr := s.toGRPCError(methodCfg.Error)
 
-		// Record the error call
-		if s.IsRecordingEnabled() {
-			rec := s.newRecording(serviceName, methodName, GRPCStreamUnary)
-			rec.Request = reqMap
-			rec.Metadata = md
-			rec.Error = &GRPCRecordedError{
-				Code:    methodCfg.Error.Code,
-				Message: methodCfg.Error.Message,
-			}
-			rec.Duration = time.Since(startTime)
-			s.recordCall(rec)
-		}
-
 		// Log the error call
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamUnary, md, reqMap, nil, grpcErr)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamUnary, md, reqMap, nil, grpcErr)
 
 		return nil, grpcErr
 	}
@@ -376,24 +330,14 @@ func (s *Server) handleUnary(srv interface{}, ctx context.Context, dec func(inte
 	resp, err := s.buildResponse(method, methodCfg.Response)
 	if err != nil {
 		grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamUnary, md, reqMap, nil, grpcErr)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamUnary, md, reqMap, nil, grpcErr)
 		return nil, grpcErr
 	}
 
 	respMap := dynamicMessageToMap(resp)
 
-	// Record the successful call
-	if s.IsRecordingEnabled() {
-		rec := s.newRecording(serviceName, methodName, GRPCStreamUnary)
-		rec.Request = reqMap
-		rec.Metadata = md
-		rec.Response = respMap
-		rec.Duration = time.Since(startTime)
-		s.recordCall(rec)
-	}
-
 	// Log the successful call
-	s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamUnary, md, reqMap, respMap, nil)
+	s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamUnary, md, reqMap, respMap, nil)
 
 	return resp, nil
 }
@@ -466,14 +410,14 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 	inputDesc := method.GetInputDescriptor()
 	if inputDesc == nil {
 		err := status.Error(codes.Internal, "cannot get input descriptor")
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamServerStream, md, nil, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, nil, nil, err)
 		return err
 	}
 
 	reqMsg := dynamicpb.NewMessage(inputDesc)
 	if err := stream.RecvMsg(reqMsg); err != nil {
 		grpcErr := status.Errorf(codes.InvalidArgument, "failed to receive request: %v", err)
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamServerStream, md, nil, nil, grpcErr)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, nil, nil, grpcErr)
 		return grpcErr
 	}
 
@@ -483,7 +427,7 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 	methodCfg := s.findMethodConfig(serviceName, methodName, md, reqMap)
 	if methodCfg == nil {
 		err := status.Errorf(codes.Unimplemented, "no mock configured for %s/%s", serviceName, methodName)
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamServerStream, md, reqMap, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, nil, err)
 		return err
 	}
 
@@ -494,21 +438,8 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 	if methodCfg.Error != nil {
 		grpcErr := s.toGRPCError(methodCfg.Error)
 
-		// Record the error call
-		if s.IsRecordingEnabled() {
-			rec := s.newRecording(serviceName, methodName, GRPCStreamServerStream)
-			rec.Request = reqMap
-			rec.Metadata = md
-			rec.Error = &GRPCRecordedError{
-				Code:    methodCfg.Error.Code,
-				Message: methodCfg.Error.Message,
-			}
-			rec.Duration = time.Since(startTime)
-			s.recordCall(rec)
-		}
-
 		// Log the error call
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamServerStream, md, reqMap, nil, grpcErr)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, nil, grpcErr)
 
 		return grpcErr
 	}
@@ -520,25 +451,25 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 		responses = []interface{}{methodCfg.Response}
 	}
 
-	// Collect responses for recording and logging
-	var recordedResponses []interface{}
+	// Collect responses for logging
+	var collectedResponses []interface{}
 
 	for i, respData := range responses {
 		resp, err := s.buildResponse(method, respData)
 		if err != nil {
 			grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
-			s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamServerStream, md, reqMap, recordedResponses, grpcErr)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, collectedResponses, grpcErr)
 			return grpcErr
 		}
 
 		if err := stream.SendMsg(resp); err != nil {
 			grpcErr := status.Errorf(codes.Internal, "failed to send response: %v", err)
-			s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamServerStream, md, reqMap, recordedResponses, grpcErr)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, collectedResponses, grpcErr)
 			return grpcErr
 		}
 
-		// Collect for recording and logging
-		recordedResponses = append(recordedResponses, dynamicMessageToMap(resp))
+		// Collect for logging
+		collectedResponses = append(collectedResponses, dynamicMessageToMap(resp))
 
 		// Apply stream delay between messages (not after last)
 		if i < len(responses)-1 {
@@ -546,18 +477,8 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 		}
 	}
 
-	// Record the successful call
-	if s.IsRecordingEnabled() {
-		rec := s.newRecording(serviceName, methodName, GRPCStreamServerStream)
-		rec.Request = reqMap
-		rec.Metadata = md
-		rec.Response = recordedResponses
-		rec.Duration = time.Since(startTime)
-		s.recordCall(rec)
-	}
-
 	// Log the successful call
-	s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamServerStream, md, reqMap, recordedResponses, nil)
+	s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, collectedResponses, nil)
 
 	return nil
 }
@@ -578,7 +499,7 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 	inputDesc := method.GetInputDescriptor()
 	if inputDesc == nil {
 		err := status.Error(codes.Internal, "cannot get input descriptor")
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamClientStream, md, nil, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, nil, nil, err)
 		return err
 	}
 
@@ -592,7 +513,7 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 				break
 			}
 			grpcErr := status.Errorf(codes.InvalidArgument, "failed to receive request: %v", err)
-			s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamClientStream, md, allRequests, nil, grpcErr)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
 			return grpcErr
 		}
 		lastReqMap = dynamicMessageToMap(reqMsg)
@@ -603,7 +524,7 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 	methodCfg := s.findMethodConfig(serviceName, methodName, md, lastReqMap)
 	if methodCfg == nil {
 		err := status.Errorf(codes.Unimplemented, "no mock configured for %s/%s", serviceName, methodName)
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamClientStream, md, allRequests, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, err)
 		return err
 	}
 
@@ -614,21 +535,8 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 	if methodCfg.Error != nil {
 		grpcErr := s.toGRPCError(methodCfg.Error)
 
-		// Record the error call
-		if s.IsRecordingEnabled() {
-			rec := s.newRecording(serviceName, methodName, GRPCStreamClientStream)
-			rec.Request = allRequests
-			rec.Metadata = md
-			rec.Error = &GRPCRecordedError{
-				Code:    methodCfg.Error.Code,
-				Message: methodCfg.Error.Message,
-			}
-			rec.Duration = time.Since(startTime)
-			s.recordCall(rec)
-		}
-
 		// Log the error call
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamClientStream, md, allRequests, nil, grpcErr)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
 
 		return grpcErr
 	}
@@ -637,29 +545,19 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 	resp, err := s.buildResponse(method, methodCfg.Response)
 	if err != nil {
 		grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamClientStream, md, allRequests, nil, grpcErr)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
 		return grpcErr
 	}
 
 	if err := stream.SendMsg(resp); err != nil {
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamClientStream, md, allRequests, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, err)
 		return err
 	}
 
 	respMap := dynamicMessageToMap(resp)
 
-	// Record the successful call
-	if s.IsRecordingEnabled() {
-		rec := s.newRecording(serviceName, methodName, GRPCStreamClientStream)
-		rec.Request = allRequests
-		rec.Metadata = md
-		rec.Response = respMap
-		rec.Duration = time.Since(startTime)
-		s.recordCall(rec)
-	}
-
 	// Log the successful call
-	s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamClientStream, md, allRequests, respMap, nil)
+	s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, respMap, nil)
 
 	return nil
 }
@@ -680,7 +578,7 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 	inputDesc := method.GetInputDescriptor()
 	if inputDesc == nil {
 		err := status.Error(codes.Internal, "cannot get input descriptor")
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamBidi, md, nil, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, nil, nil, err)
 		return err
 	}
 
@@ -688,7 +586,7 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 	methodCfg := s.findMethodConfig(serviceName, methodName, md, nil)
 	if methodCfg == nil {
 		err := status.Errorf(codes.Unimplemented, "no mock configured for %s/%s", serviceName, methodName)
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamBidi, md, nil, nil, err)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, nil, nil, err)
 		return err
 	}
 
@@ -699,20 +597,8 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 	if methodCfg.Error != nil {
 		grpcErr := s.toGRPCError(methodCfg.Error)
 
-		// Record the error call
-		if s.IsRecordingEnabled() {
-			rec := s.newRecording(serviceName, methodName, GRPCStreamBidi)
-			rec.Metadata = md
-			rec.Error = &GRPCRecordedError{
-				Code:    methodCfg.Error.Code,
-				Message: methodCfg.Error.Message,
-			}
-			rec.Duration = time.Since(startTime)
-			s.recordCall(rec)
-		}
-
 		// Log the error call
-		s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamBidi, md, nil, nil, grpcErr)
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, nil, nil, grpcErr)
 
 		return grpcErr
 	}
@@ -725,37 +611,26 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 
 	respIndex := 0
 
-	// Collect for recording and logging (always collect for logging)
+	// Collect for logging
 	var allRequests []interface{}
 	var allResponses []interface{}
-	recordingEnabled := s.IsRecordingEnabled()
 
 	// Echo pattern: for each received message, send a response
 	for {
 		reqMsg := dynamicpb.NewMessage(inputDesc)
 		if err := stream.RecvMsg(reqMsg); err != nil {
 			if errors.Is(err, io.EOF) {
-				// Record the successful call
-				if recordingEnabled {
-					rec := s.newRecording(serviceName, methodName, GRPCStreamBidi)
-					rec.Request = allRequests
-					rec.Metadata = md
-					rec.Response = allResponses
-					rec.Duration = time.Since(startTime)
-					s.recordCall(rec)
-				}
-
 				// Log the successful call
-				s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamBidi, md, allRequests, allResponses, nil)
+				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, nil)
 
 				return nil
 			}
 			grpcErr := status.Errorf(codes.InvalidArgument, "failed to receive request: %v", err)
-			s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamBidi, md, allRequests, allResponses, grpcErr)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
 			return grpcErr
 		}
 
-		// Collect request for recording and logging
+		// Collect request for logging
 		allRequests = append(allRequests, dynamicMessageToMap(reqMsg))
 
 		// Send response if available
@@ -763,17 +638,17 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 			resp, err := s.buildResponse(method, responses[respIndex])
 			if err != nil {
 				grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
-				s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamBidi, md, allRequests, allResponses, grpcErr)
+				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
 				return grpcErr
 			}
 
 			if err := stream.SendMsg(resp); err != nil {
 				grpcErr := status.Errorf(codes.Internal, "failed to send response: %v", err)
-				s.logGRPCCall(startTime, fullPath, serviceName, methodName, GRPCStreamBidi, md, allRequests, allResponses, grpcErr)
+				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
 				return grpcErr
 			}
 
-			// Collect response for recording and logging
+			// Collect response for logging
 			allResponses = append(allResponses, dynamicMessageToMap(resp))
 
 			respIndex++
@@ -1281,74 +1156,6 @@ func (s *Server) GetMethodDescriptor(serviceName, methodName string) protoreflec
 	return method.GetDescriptor()
 }
 
-// SetRecordingStore sets the recording store for capturing gRPC calls.
-func (s *Server) SetRecordingStore(store RecordingStore) {
-	s.recordingMu.Lock()
-	defer s.recordingMu.Unlock()
-	s.recordingStore = store
-}
-
-// EnableRecording enables recording of gRPC calls.
-func (s *Server) EnableRecording() {
-	s.recordingMu.Lock()
-	defer s.recordingMu.Unlock()
-	s.recordingEnabled = true
-}
-
-// DisableRecording disables recording of gRPC calls.
-func (s *Server) DisableRecording() {
-	s.recordingMu.Lock()
-	defer s.recordingMu.Unlock()
-	s.recordingEnabled = false
-}
-
-// IsRecordingEnabled returns true if recording is enabled.
-func (s *Server) IsRecordingEnabled() bool {
-	s.recordingMu.RLock()
-	defer s.recordingMu.RUnlock()
-	return s.recordingEnabled && s.recordingStore != nil
-}
-
-// recordCall records a gRPC call if recording is enabled.
-func (s *Server) recordCall(rec *GRPCRecording) {
-	s.recordingMu.RLock()
-	enabled := s.recordingEnabled
-	store := s.recordingStore
-	s.recordingMu.RUnlock()
-
-	if !enabled || store == nil {
-		return
-	}
-
-	// Set proto file if available
-	if s.config != nil && rec.ProtoFile == "" {
-		if s.config.ProtoFile != "" {
-			rec.ProtoFile = s.config.ProtoFile
-		} else if len(s.config.ProtoFiles) > 0 {
-			rec.ProtoFile = s.config.ProtoFiles[0]
-		}
-	}
-
-	// Add to store (ignore errors for now)
-	_ = store.Add(rec)
-}
-
-// newRecording creates a new GRPCRecording with basic fields set.
-func (s *Server) newRecording(serviceName, methodName string, streamType GRPCStreamType) *GRPCRecording {
-	return &GRPCRecording{
-		ID:         generateRecordingID(),
-		Timestamp:  time.Now(),
-		Service:    serviceName,
-		Method:     methodName,
-		StreamType: streamType,
-	}
-}
-
-// generateRecordingID generates a unique ID for recordings.
-func generateRecordingID() string {
-	return fmt.Sprintf("grpc-%d", time.Now().UnixNano())
-}
-
 // grpcCodeToString converts a gRPC status code to its string name.
 func grpcCodeToString(code codes.Code) string {
 	for name, c := range GRPCStatusCode {
@@ -1395,7 +1202,6 @@ func (s *Server) Metadata() protocol.Metadata {
 		Capabilities: []protocol.Capability{
 			protocol.CapabilityStreaming,
 			protocol.CapabilityBidirectional,
-			protocol.CapabilityRecording,
 			protocol.CapabilitySchemaValidation,
 			protocol.CapabilitySchemaIntrospect,
 			protocol.CapabilityMetrics,
@@ -1527,13 +1333,18 @@ func toJSONString(v interface{}) string {
 	return string(data)
 }
 
-// streamTypeToString converts GRPCStreamType to a string for logging.
-func streamTypeToString(st GRPCStreamType) string {
+// streamTypeToString converts streamType to a string for logging.
+func streamTypeToString(st streamType) string {
 	return string(st)
 }
 
+// generateLogID generates a unique ID for request log entries.
+func generateLogID() string {
+	return fmt.Sprintf("grpc-%d", time.Now().UnixNano())
+}
+
 // logGRPCCall logs a gRPC call with all available information and records metrics.
-func (s *Server) logGRPCCall(startTime time.Time, fullPath, serviceName, methodName string, streamType GRPCStreamType, md metadata.MD, req interface{}, resp interface{}, grpcErr error) {
+func (s *Server) logGRPCCall(startTime time.Time, fullPath, serviceName, methodName string, st streamType, md metadata.MD, req interface{}, resp interface{}, grpcErr error) {
 	duration := time.Since(startTime)
 
 	// Record metrics
@@ -1590,7 +1401,7 @@ func (s *Server) logGRPCCall(startTime time.Time, fullPath, serviceName, methodN
 	}
 
 	entry := &requestlog.Entry{
-		ID:             generateRecordingID(),
+		ID:             generateLogID(),
 		Timestamp:      startTime,
 		Protocol:       requestlog.ProtocolGRPC,
 		Method:         methodName,
@@ -1605,7 +1416,7 @@ func (s *Server) logGRPCCall(startTime time.Time, fullPath, serviceName, methodN
 		GRPC: &requestlog.GRPCMeta{
 			Service:       serviceName,
 			MethodName:    methodName,
-			StreamType:    streamTypeToString(streamType),
+			StreamType:    streamTypeToString(st),
 			StatusCode:    statusCode,
 			StatusMessage: statusMessage,
 		},
@@ -1642,7 +1453,6 @@ var (
 	_ protocol.Handler          = (*Server)(nil)
 	_ protocol.StandaloneServer = (*Server)(nil)
 	_ protocol.RPCHandler       = (*Server)(nil)
-	_ protocol.Recordable       = (*Server)(nil)
 	_ protocol.RequestLoggable  = (*Server)(nil)
 	_ protocol.Observable       = (*Server)(nil)
 	_ protocol.Loggable         = (*Server)(nil)

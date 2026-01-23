@@ -30,7 +30,6 @@ type AdminAPI struct {
 
 	proxyManager           *ProxyManager
 	streamRecordingManager *StreamRecordingManager
-	grpcRecordingManager   *GRPCRecordingManager
 	mqttRecordingManager   *MQTTRecordingManager
 	soapRecordingManager   *SOAPRecordingManager
 	workspaceStore         *store.WorkspaceFileStore
@@ -89,7 +88,6 @@ func NewAdminAPI(port int, opts ...Option) *AdminAPI {
 	api := &AdminAPI{
 		proxyManager:                NewProxyManager(),
 		streamRecordingManager:      NewStreamRecordingManager(),
-		grpcRecordingManager:        NewGRPCRecordingManager(),
 		mqttRecordingManager:        NewMQTTRecordingManager(),
 		soapRecordingManager:        NewSOAPRecordingManager(),
 		engineRegistry:              store.NewEngineRegistry(),
@@ -156,6 +154,12 @@ func NewAdminAPI(port int, opts ...Option) *AdminAPI {
 	}
 	api.apiKeyAuth = apiKeyAuth
 
+	// Initialize stream recording manager with data directory
+	if err := api.streamRecordingManager.Initialize(api.dataDir); err != nil {
+		log.Warn("failed to initialize stream recording manager", "error", err)
+		// Continue without stream recording - feature will be unavailable
+	}
+
 	mux := http.NewServeMux()
 	api.registerRoutes(mux)
 
@@ -177,11 +181,6 @@ func (a *AdminAPI) InitializeStreamRecordings(dataDir string) error {
 // StreamRecordingManager returns the stream recording manager.
 func (a *AdminAPI) StreamRecordingManager() *StreamRecordingManager {
 	return a.streamRecordingManager
-}
-
-// GRPCRecordingManager returns the gRPC recording manager.
-func (a *AdminAPI) GRPCRecordingManager() *GRPCRecordingManager {
-	return a.grpcRecordingManager
 }
 
 // MQTTRecordingManager returns the MQTT recording manager.

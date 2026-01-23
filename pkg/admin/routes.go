@@ -130,22 +130,6 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /chaos", a.handleGetChaos)
 	mux.HandleFunc("PUT /chaos", a.handleSetChaos)
 
-	// gRPC server management
-	mux.HandleFunc("GET /grpc", a.grpcRecordingManager.handleListGRPCServers)
-	mux.HandleFunc("GET /grpc/{id}/status", a.grpcRecordingManager.handleGetGRPCServerStatus)
-	mux.HandleFunc("POST /grpc/{id}/record/start", a.grpcRecordingManager.handleStartGRPCRecording)
-	mux.HandleFunc("POST /grpc/{id}/record/stop", a.grpcRecordingManager.handleStopGRPCRecording)
-
-	// gRPC recording management
-	mux.HandleFunc("GET /grpc-recordings", a.grpcRecordingManager.handleListGRPCRecordings)
-	mux.HandleFunc("GET /grpc-recordings/stats", a.grpcRecordingManager.handleGetGRPCRecordingStats)
-	mux.HandleFunc("DELETE /grpc-recordings", a.grpcRecordingManager.handleClearGRPCRecordings)
-	mux.HandleFunc("POST /grpc-recordings/convert", a.grpcRecordingManager.handleConvertGRPCRecordings)
-	mux.HandleFunc("POST /grpc-recordings/export", a.grpcRecordingManager.handleExportGRPCRecordings)
-	mux.HandleFunc("GET /grpc-recordings/{id}", a.grpcRecordingManager.handleGetGRPCRecording)
-	mux.HandleFunc("DELETE /grpc-recordings/{id}", a.grpcRecordingManager.handleDeleteGRPCRecording)
-	mux.HandleFunc("POST /grpc-recordings/{id}/convert", a.grpcRecordingManager.handleConvertGRPCRecording)
-
 	// MQTT broker management
 	mux.HandleFunc("GET /mqtt", a.mqttRecordingManager.handleListMQTTBrokers)
 	mux.HandleFunc("GET /mqtt/status", a.mqttRecordingManager.handleGetMQTTStatus)
