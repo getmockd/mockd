@@ -370,14 +370,20 @@ Storage location defaults:
 Record real WebSocket traffic from production to create accurate test fixtures:
 
 ```bash
-# Proxy to production WebSocket
-mockd proxy --target wss://api.prod.example.com --record-streams
+# Start mockd and the proxy
+mockd serve
 
-# Run your app through the proxy
-WS_URL=ws://localhost:4280 npm test
+# Start recording via Admin API
+curl -X POST http://localhost:4290/stream-recordings/start \
+  -H "Content-Type: application/json" \
+  -d '{"protocol": "websocket", "path": "/ws", "name": "prod-traffic"}'
 
-# Convert recordings to mocks
-mockd stream-recordings convert 01HXYZ123456 -o fixtures/chat.json
+# Run your app (configure to use mockd as WebSocket proxy)
+WS_URL=ws://localhost:4280/ws npm test
+
+# Stop recording and convert to mocks
+curl -X POST http://localhost:4290/stream-recordings/{id}/stop
+mockd stream-recordings convert {id} -o fixtures/chat.json
 ```
 
 ### Integration Testing
