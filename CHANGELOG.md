@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Sharing mocks guide with third-party tunnel support (localtunnel, ngrok, Cloudflare)
+- Protocol support table documenting tunnel compatibility (HTTP, WebSocket, SSE supported; gRPC, MQTT deferred)
+- Auto-initialization of stream recording manager on server start
+
+### Changed
+
+- Chaos API `ErrorRateConfig` now uses `statusCodes` array and `defaultCode` (was single `statusCode`)
+- `/engines` endpoint now includes local engine in response (was returning empty)
+
+### Removed
+
+- **gRPC recording functionality** - Only recorded traffic from mockd's own server, providing no value. gRPC mocking (with proto files) remains fully supported. External service recording deferred pending community demand.
+
+### Fixed
+
+- Chaos latency documentation now shows correct format (`"min": "100ms"` not `"minMs": 100`)
+- Stream recording documentation updated to use Admin API workflow (removed non-existent `--record-streams` flag)
+
 ## [0.2.0] - 2026-01-21
 
 ### Added
