@@ -944,14 +944,14 @@ Get current chaos configuration.
 {
   "enabled": true,
   "latency": {
-    "enabled": true,
-    "minMs": 100,
-    "maxMs": 500
+    "min": "100ms",
+    "max": "500ms",
+    "probability": 1.0
   },
   "errorRate": {
-    "enabled": true,
-    "percentage": 10,
-    "statusCode": 500
+    "probability": 0.1,
+    "statusCodes": [500, 502, 503],
+    "defaultCode": 500
   }
 }
 ```
@@ -966,12 +966,33 @@ Update chaos configuration.
 {
   "enabled": true,
   "latency": {
-    "enabled": true,
-    "minMs": 50,
-    "maxMs": 200
+    "min": "50ms",
+    "max": "200ms",
+    "probability": 1.0
+  },
+  "errorRate": {
+    "probability": 0.1,
+    "statusCodes": [500, 503],
+    "defaultCode": 503
   }
 }
 ```
+
+**Latency Config Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `min` | string | Minimum latency (Go duration, e.g., "50ms", "1s") |
+| `max` | string | Maximum latency (Go duration, e.g., "200ms", "2s") |
+| `probability` | float | Probability of applying latency (0.0 to 1.0) |
+
+**Error Rate Config Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `probability` | float | Probability of returning an error (0.0 to 1.0) |
+| `statusCodes` | int[] | List of HTTP status codes to randomly choose from |
+| `defaultCode` | int | Default status code if statusCodes is empty (e.g., 500) |
 
 ---
 

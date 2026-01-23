@@ -105,7 +105,8 @@ type LatencyConfig struct {
 // ErrorRateConfig configures error rate injection.
 type ErrorRateConfig struct {
 	Probability float64 `json:"probability"`
-	StatusCode  int     `json:"statusCode"`
+	StatusCodes []int   `json:"statusCodes,omitempty"`
+	DefaultCode int     `json:"defaultCode,omitempty"`
 }
 
 // StatefulResource represents a stateful resource.

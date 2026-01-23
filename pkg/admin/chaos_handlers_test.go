@@ -118,7 +118,7 @@ func TestHandleGetChaos(t *testing.T) {
 			Enabled: true,
 			ErrorRate: &engineclient.ErrorRateConfig{
 				Probability: 0.25,
-				StatusCode:  500,
+				DefaultCode: 500,
 			},
 		}
 
@@ -137,7 +137,7 @@ func TestHandleGetChaos(t *testing.T) {
 		assert.True(t, resp.Enabled)
 		require.NotNil(t, resp.ErrorRate)
 		assert.Equal(t, 0.25, resp.ErrorRate.Probability)
-		assert.Equal(t, 500, resp.ErrorRate.StatusCode)
+		assert.Equal(t, 500, resp.ErrorRate.DefaultCode)
 	})
 
 	t.Run("returns chaos config with both latency and error rate", func(t *testing.T) {
@@ -154,7 +154,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 			ErrorRate: &engineclient.ErrorRateConfig{
 				Probability: 0.1,
-				StatusCode:  503,
+				DefaultCode: 503,
 			},
 		}
 
@@ -174,7 +174,7 @@ func TestHandleGetChaos(t *testing.T) {
 		require.NotNil(t, resp.Latency)
 		require.NotNil(t, resp.ErrorRate)
 		assert.Equal(t, "50ms", resp.Latency.Min)
-		assert.Equal(t, 503, resp.ErrorRate.StatusCode)
+		assert.Equal(t, 503, resp.ErrorRate.DefaultCode)
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
@@ -239,7 +239,7 @@ func TestHandleSetChaos(t *testing.T) {
 			Enabled: true,
 			ErrorRate: &engineclient.ErrorRateConfig{
 				Probability: 0.2,
-				StatusCode:  500,
+				DefaultCode: 500,
 			},
 		}
 		body, _ := json.Marshal(chaosConfig)
@@ -256,7 +256,7 @@ func TestHandleSetChaos(t *testing.T) {
 		assert.True(t, server.chaosConfig.Enabled)
 		require.NotNil(t, server.chaosConfig.ErrorRate)
 		assert.Equal(t, 0.2, server.chaosConfig.ErrorRate.Probability)
-		assert.Equal(t, 500, server.chaosConfig.ErrorRate.StatusCode)
+		assert.Equal(t, 500, server.chaosConfig.ErrorRate.DefaultCode)
 	})
 
 	t.Run("enables chaos with both latency and error rate", func(t *testing.T) {
@@ -274,7 +274,7 @@ func TestHandleSetChaos(t *testing.T) {
 			},
 			ErrorRate: &engineclient.ErrorRateConfig{
 				Probability: 0.1,
-				StatusCode:  503,
+				DefaultCode: 503,
 			},
 		}
 		body, _ := json.Marshal(chaosConfig)
@@ -352,7 +352,7 @@ func TestHandleSetChaos(t *testing.T) {
 			},
 			ErrorRate: &engineclient.ErrorRateConfig{
 				Probability: 0.05,
-				StatusCode:  502,
+				DefaultCode: 502,
 			},
 		}
 		body, _ := json.Marshal(newConfig)
@@ -373,7 +373,7 @@ func TestHandleSetChaos(t *testing.T) {
 		assert.Equal(t, 0.9, server.chaosConfig.Latency.Probability)
 		require.NotNil(t, server.chaosConfig.ErrorRate)
 		assert.Equal(t, 0.05, server.chaosConfig.ErrorRate.Probability)
-		assert.Equal(t, 502, server.chaosConfig.ErrorRate.StatusCode)
+		assert.Equal(t, 502, server.chaosConfig.ErrorRate.DefaultCode)
 	})
 
 	t.Run("returns 400 for invalid JSON", func(t *testing.T) {
@@ -520,7 +520,7 @@ func TestChaosConfigValidation(t *testing.T) {
 					Enabled: true,
 					ErrorRate: &engineclient.ErrorRateConfig{
 						Probability: 0.1,
-						StatusCode:  statusCode,
+						DefaultCode: statusCode,
 					},
 				}
 				body, _ := json.Marshal(chaosConfig)
@@ -532,7 +532,7 @@ func TestChaosConfigValidation(t *testing.T) {
 				api.handleSetChaos(rec, req)
 
 				assert.Equal(t, http.StatusOK, rec.Code)
-				assert.Equal(t, statusCode, server.chaosConfig.ErrorRate.StatusCode)
+				assert.Equal(t, statusCode, server.chaosConfig.ErrorRate.DefaultCode)
 			})
 		}
 	})
