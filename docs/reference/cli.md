@@ -2623,6 +2623,22 @@ mockd tunnel status
 mockd tunnel stop
 ```
 
+**Supported Protocols:**
+
+The tunnel relays HTTP-based traffic over port 443:
+
+| Protocol | Supported | Notes |
+|----------|-----------|-------|
+| HTTP/HTTPS | Yes | Full support |
+| WebSocket | Yes | Upgrade handled automatically |
+| SSE | Yes | Streaming responses work |
+| GraphQL | Yes | Runs over HTTP |
+| SOAP | Yes | Runs over HTTP |
+| gRPC | Planned | Considering gRPC-web proxy approach |
+| MQTT | Planned | Considering TCP-over-WebSocket approach |
+
+> **Note**: TCP-based protocols (native gRPC, MQTT) require dedicated ports and are being evaluated for future releases based on community interest. See [Sharing Mocks](../guides/sharing-mocks.md) for alternatives like ngrok TCP tunnels.
+
 **Flags:**
 
 | Flag | Short | Description | Default |
