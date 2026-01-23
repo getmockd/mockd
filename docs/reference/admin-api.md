@@ -651,7 +651,7 @@ Stop a replay session.
 
 ---
 
-### gRPC Recording
+### gRPC Management
 
 #### GET /grpc
 
@@ -665,8 +665,7 @@ List all registered gRPC servers.
     {
       "id": "grpc-server-1",
       "address": ":50051",
-      "running": true,
-      "recordingEnabled": false
+      "running": true
     }
   ],
   "count": 1
@@ -676,78 +675,6 @@ List all registered gRPC servers.
 #### GET /grpc/{id}/status
 
 Get gRPC server status.
-
-#### POST /grpc/{id}/record/start
-
-Start recording gRPC calls on a server.
-
-**Response:**
-
-```json
-{
-  "message": "Recording enabled for gRPC server 'grpc-server-1'",
-  "enabled": true
-}
-```
-
-#### POST /grpc/{id}/record/stop
-
-Stop recording gRPC calls.
-
-#### GET /grpc-recordings
-
-List gRPC recordings.
-
-**Query Parameters:**
-
-| Parameter | Description |
-|-----------|-------------|
-| `service` | Filter by service name |
-| `method` | Filter by method name |
-| `streamType` | Filter by stream type (unary, server_stream, client_stream, bidi) |
-| `hasError` | Filter by error presence (true/false) |
-| `limit` | Max recordings to return |
-| `offset` | Pagination offset |
-
-#### GET /grpc-recordings/{id}
-
-Get a specific gRPC recording.
-
-#### DELETE /grpc-recordings/{id}
-
-Delete a gRPC recording.
-
-#### DELETE /grpc-recordings
-
-Clear all gRPC recordings.
-
-#### GET /grpc-recordings/stats
-
-Get gRPC recording statistics.
-
-#### POST /grpc-recordings/convert
-
-Convert gRPC recordings to mock config.
-
-**Request:**
-
-```json
-{
-  "recordingIds": ["grpc-abc123"],
-  "service": "mypackage.MyService",
-  "includeMetadata": true,
-  "includeDelay": false,
-  "deduplicate": true
-}
-```
-
-#### POST /grpc-recordings/{id}/convert
-
-Convert a single gRPC recording to mock config.
-
-#### POST /grpc-recordings/export
-
-Export all gRPC recordings as JSON.
 
 ---
 

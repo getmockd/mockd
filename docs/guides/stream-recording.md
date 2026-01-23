@@ -17,19 +17,22 @@ Each recording preserves:
 
 ## Quick Start
 
-### 1. Start mockd with Recording Enabled
+### 1. Start mockd
 
 ```bash
-mockd start --config mocks.json --record-streams
+mockd serve --config mocks.json
 ```
 
-Or via proxy mode:
+### 2. Start Recording via Admin API
 
 ```bash
-mockd proxy --target wss://api.example.com --record-streams
+# Start recording WebSocket traffic on a specific path
+curl -X POST http://localhost:4290/stream-recordings/start \
+  -H "Content-Type: application/json" \
+  -d '{"protocol": "websocket", "path": "/ws/chat", "name": "chat-session"}'
 ```
 
-### 2. Generate Traffic
+### 3. Generate Traffic
 
 Connect to your WebSocket or SSE endpoint through mockd:
 
@@ -41,9 +44,13 @@ wscat -c ws://localhost:4280/ws/chat
 curl -N http://localhost:4280/events
 ```
 
-### 3. View Recordings
+### 4. Stop Recording and View
 
 ```bash
+# Stop recording
+curl -X POST http://localhost:4290/stream-recordings/{id}/stop
+
+# List recordings via CLI
 mockd stream-recordings list
 ```
 
@@ -53,14 +60,14 @@ ID            PROTOCOL   PATH           STATUS    FRAMES  DURATION  SIZE
 01HXYZ789012  sse        /events        complete  15      5.1s      2.1 KB
 ```
 
-### 4. Replay as Mock
+### 5. Convert to Mock
 
 ```bash
 # Convert to mock config
 mockd stream-recordings convert 01HXYZ123456 -o chat-scenario.json
 
 # Start with the mock
-mockd start --config chat-scenario.json
+mockd serve --config chat-scenario.json
 ```
 
 ## Recording via Admin API
