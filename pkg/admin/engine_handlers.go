@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -105,14 +106,76 @@ func (a *AdminAPI) handleListRegistrationTokens(w http.ResponseWriter, r *http.R
 	})
 }
 
+// LocalEngineID is the well-known ID for the local engine when running in co-located mode.
+const LocalEngineID = "local"
+
 // handleListEngines handles GET /engines.
 func (a *AdminAPI) handleListEngines(w http.ResponseWriter, r *http.Request) {
 	engines := a.engineRegistry.List()
+
+	// Include local engine if configured
+	if a.localEngine != nil {
+		localEngine := a.buildLocalEngineEntry(r.Context())
+		if localEngine != nil {
+			// Prepend local engine to the list
+			engines = append([]*store.Engine{localEngine}, engines...)
+		}
+	}
 
 	writeJSON(w, http.StatusOK, EngineListResponse{
 		Engines: engines,
 		Total:   len(engines),
 	})
+}
+
+// buildLocalEngineEntry creates a store.Engine representation of the local engine.
+// Returns nil if the local engine status cannot be retrieved.
+func (a *AdminAPI) buildLocalEngineEntry(ctx context.Context) *store.Engine {
+	if a.localEngine == nil {
+		return nil
+	}
+
+	// Query the local engine's status
+	status, err := a.localEngine.Status(ctx)
+	if err != nil {
+		a.log.Warn("failed to get local engine status", "error", err)
+		// Return a basic entry even if status query fails
+		return &store.Engine{
+			ID:           LocalEngineID,
+			Name:         "Local Engine",
+			Host:         "localhost",
+			Status:       store.EngineStatusOffline,
+			RegisteredAt: a.startTime,
+			LastSeen:     time.Now(),
+			Workspaces:   []store.EngineWorkspace{},
+		}
+	}
+
+	// Build the engine entry from status
+	engine := &store.Engine{
+		ID:           LocalEngineID,
+		Name:         status.Name,
+		Host:         "localhost",
+		Status:       store.EngineStatusOnline,
+		RegisteredAt: status.StartedAt,
+		LastSeen:     time.Now(),
+		Workspaces:   []store.EngineWorkspace{},
+	}
+
+	// Use ID from status if available, otherwise keep "local"
+	if status.ID != "" {
+		engine.ID = status.ID
+	}
+	if engine.Name == "" {
+		engine.Name = "Local Engine"
+	}
+
+	// Extract port from HTTP protocol if available
+	if httpProto, ok := status.Protocols["http"]; ok {
+		engine.Port = httpProto.Port
+	}
+
+	return engine
 }
 
 // handleRegisterEngine handles POST /engines/register.

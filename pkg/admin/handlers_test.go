@@ -12,6 +12,7 @@ import (
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/getmockd/mockd/pkg/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1272,5 +1273,114 @@ func TestAdminAPIWithTimeout(t *testing.T) {
 		// The handler should return an error since context is cancelled
 		// The exact status depends on how the engine client handles cancellation
 		assert.True(t, rec.Code >= 400 || rec.Code == 200) // Either error or success before context check
+	})
+}
+
+// TestHandleListEngines tests the GET /engines endpoint
+func TestHandleListEngines(t *testing.T) {
+	t.Run("returns empty list when no local engine configured", func(t *testing.T) {
+		// Create API without local engine
+		api := NewAdminAPI(0)
+
+		req := httptest.NewRequest("GET", "/engines", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleListEngines(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp EngineListResponse
+		err := json.NewDecoder(rec.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		assert.Equal(t, 0, resp.Total)
+		assert.Empty(t, resp.Engines)
+	})
+
+	t.Run("includes local engine when configured", func(t *testing.T) {
+		server := newMockEngineServer()
+		defer server.Close()
+
+		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+
+		req := httptest.NewRequest("GET", "/engines", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleListEngines(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp EngineListResponse
+		err := json.NewDecoder(rec.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, resp.Total)
+		require.Len(t, resp.Engines, 1)
+
+		// Verify local engine properties
+		localEngine := resp.Engines[0]
+		assert.Equal(t, "test-engine", localEngine.ID)
+		assert.Equal(t, "localhost", localEngine.Host)
+		assert.Equal(t, "online", string(localEngine.Status))
+	})
+
+	t.Run("includes both local and registered engines", func(t *testing.T) {
+		server := newMockEngineServer()
+		defer server.Close()
+
+		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+
+		// Register a remote engine
+		remoteEngine := &store.Engine{
+			ID:     "remote-engine-1",
+			Name:   "Remote Engine",
+			Host:   "remote.example.com",
+			Port:   8080,
+			Status: store.EngineStatusOnline,
+		}
+		_ = api.engineRegistry.Register(remoteEngine)
+
+		req := httptest.NewRequest("GET", "/engines", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleListEngines(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp EngineListResponse
+		err := json.NewDecoder(rec.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		assert.Equal(t, 2, resp.Total)
+		require.Len(t, resp.Engines, 2)
+
+		// Local engine should be first
+		assert.Equal(t, "test-engine", resp.Engines[0].ID)
+		assert.Equal(t, "remote-engine-1", resp.Engines[1].ID)
+	})
+
+	t.Run("returns offline status when local engine is unreachable", func(t *testing.T) {
+		// Create a client that points to a non-existent server
+		client := engineclient.New("http://localhost:99999")
+		api := NewAdminAPI(0, WithLocalEngineClient(client))
+
+		req := httptest.NewRequest("GET", "/engines", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleListEngines(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp EngineListResponse
+		err := json.NewDecoder(rec.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, resp.Total)
+		require.Len(t, resp.Engines, 1)
+
+		// Engine should be reported as offline
+		localEngine := resp.Engines[0]
+		assert.Equal(t, LocalEngineID, localEngine.ID)
+		assert.Equal(t, "offline", string(localEngine.Status))
 	})
 }
