@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -200,10 +201,10 @@ func (rl *RateLimiter) getClientIP(r *http.Request) string {
 		// Check X-Forwarded-For header (may contain multiple IPs)
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			// Take the first IP (original client)
-			if idx := indexByte(xff, ','); idx != -1 {
+			if idx := strings.IndexByte(xff, ','); idx != -1 {
 				xff = xff[:idx]
 			}
-			ip := trimSpaces(xff)
+			ip := strings.TrimSpace(xff)
 			if ip != "" && isValidIP(ip) {
 				return ip
 			}
@@ -211,7 +212,7 @@ func (rl *RateLimiter) getClientIP(r *http.Request) string {
 
 		// Check X-Real-IP header
 		if xri := r.Header.Get("X-Real-IP"); xri != "" {
-			ip := trimSpaces(xri)
+			ip := strings.TrimSpace(xri)
 			if ip != "" && isValidIP(ip) {
 				return ip
 			}
@@ -262,29 +263,6 @@ func (rl *RateLimiter) isTrustedProxy(ip string) bool {
 // isValidIP checks if the string is a valid IP address.
 func isValidIP(s string) bool {
 	return net.ParseIP(s) != nil
-}
-
-// indexByte returns the index of the first occurrence of c in s, or -1.
-func indexByte(s string, c byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == c {
-			return i
-		}
-	}
-	return -1
-}
-
-// trimSpaces removes leading and trailing spaces from s.
-func trimSpaces(s string) string {
-	start := 0
-	end := len(s)
-	for start < end && s[start] == ' ' {
-		start++
-	}
-	for end > start && s[end-1] == ' ' {
-		end--
-	}
-	return s[start:end]
 }
 
 // RateLimiterOption configures a RateLimiter.
