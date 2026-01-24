@@ -22,6 +22,12 @@ func NewMiddleware(handler http.Handler, logger AuditLogger, config *AuditConfig
 	if config == nil {
 		config = DefaultAuditConfig()
 	}
+
+	// Protect against nil logger
+	if logger == nil {
+		logger = &NoOpLogger{}
+	}
+
 	// Use registered redactor from enterprise extensions if available
 	redactor := GetRegisteredRedactor()
 	return &Middleware{
@@ -43,28 +49,25 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var requestBodyPreview string
 	var requestBodySize int64
 	if r.Body != nil && r.ContentLength != 0 {
-		bodyBuffer := &bytes.Buffer{}
-		// Use TeeReader to read body while preserving it for the handler
-		teeReader := io.TeeReader(r.Body, bodyBuffer)
-
-		// Read up to maxBodyPreviewSize for preview
 		maxPreview := m.config.MaxBodyPreviewSize
 		if maxPreview <= 0 {
-			maxPreview = 1024 // Default
+			maxPreview = 1024
 		}
+
+		// Only read preview bytes, don't buffer entire body
 		previewBytes := make([]byte, maxPreview)
-		n, _ := io.ReadFull(teeReader, previewBytes)
+		n, _ := io.ReadFull(r.Body, previewBytes)
 
-		// Read any remaining body into the buffer
-		_, _ = io.Copy(bodyBuffer, teeReader)
-
-		requestBodySize = int64(bodyBuffer.Len())
 		if n > 0 {
 			requestBodyPreview = string(previewBytes[:n])
+			// Recombine preview with remaining body
+			r.Body = io.NopCloser(io.MultiReader(
+				bytes.NewReader(previewBytes[:n]),
+				r.Body,
+			))
 		}
 
-		// Replace request body with the captured buffer
-		r.Body = io.NopCloser(bodyBuffer)
+		requestBodySize = r.ContentLength // Use header, not actual read
 	}
 
 	// Build request info
@@ -110,10 +113,15 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create response capture wrapper
+	maxPreview := m.config.MaxBodyPreviewSize
+	if maxPreview <= 0 {
+		maxPreview = 1024
+	}
 	capture := &responseCapture{
 		ResponseWriter: w,
 		statusCode:     http.StatusOK, // Default if WriteHeader not called
 		body:           &bytes.Buffer{},
+		maxCaptureSize: maxPreview,
 	}
 
 	// Call the wrapped handler
@@ -130,17 +138,9 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		DurationMs:  duration.Milliseconds(),
 	}
 
-	// Capture body preview from response
-	maxPreview := m.config.MaxBodyPreviewSize
-	if maxPreview <= 0 {
-		maxPreview = 1024
-	}
+	// Capture body preview from response (already limited by maxCaptureSize)
 	if capture.body.Len() > 0 {
-		preview := capture.body.Bytes()
-		if len(preview) > maxPreview {
-			preview = preview[:maxPreview]
-		}
-		responseInfo.BodyPreview = string(preview)
+		responseInfo.BodyPreview = capture.body.String()
 	}
 
 	// Include response headers if configured
@@ -170,9 +170,10 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // responseCapture captures response data for logging
 type responseCapture struct {
 	http.ResponseWriter
-	statusCode int
-	body       *bytes.Buffer
-	size       int
+	statusCode     int
+	body           *bytes.Buffer
+	size           int
+	maxCaptureSize int // limit for body capture
 }
 
 // WriteHeader captures the status code and delegates to the underlying ResponseWriter
@@ -183,8 +184,15 @@ func (rc *responseCapture) WriteHeader(code int) {
 
 // Write captures the response body and delegates to the underlying ResponseWriter
 func (rc *responseCapture) Write(b []byte) (int, error) {
-	// Capture the body for preview (up to buffer capacity)
-	rc.body.Write(b)
+	// Only capture up to maxCaptureSize
+	if rc.body.Len() < rc.maxCaptureSize {
+		remaining := rc.maxCaptureSize - rc.body.Len()
+		if len(b) <= remaining {
+			rc.body.Write(b)
+		} else {
+			rc.body.Write(b[:remaining])
+		}
+	}
 	rc.size += len(b)
 	return rc.ResponseWriter.Write(b)
 }

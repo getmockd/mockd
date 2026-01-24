@@ -33,11 +33,12 @@ type Client struct {
 	connectedAt       time.Time
 
 	// State
-	connected  atomic.Bool
-	reconnects atomic.Int32
-	mu         sync.RWMutex
-	done       chan struct{}
-	closeOnce  sync.Once
+	connected        atomic.Bool
+	reconnects       atomic.Int32
+	disconnectCalled atomic.Bool
+	mu               sync.RWMutex
+	done             chan struct{}
+	closeOnce        sync.Once
 }
 
 // RequestHandler handles incoming requests from the tunnel.
@@ -141,7 +142,7 @@ func (c *Client) Disconnect() {
 		}
 		c.mu.Unlock()
 
-		if c.cfg.OnDisconnect != nil {
+		if c.cfg.OnDisconnect != nil && c.disconnectCalled.CompareAndSwap(false, true) {
 			c.cfg.OnDisconnect(nil)
 		}
 	})
@@ -242,7 +243,7 @@ func (s *TunnelStats) MaxLatencyMs() float64 {
 func (c *Client) readPump(ctx context.Context) {
 	defer func() {
 		c.connected.Store(false)
-		if c.cfg.OnDisconnect != nil {
+		if c.cfg.OnDisconnect != nil && c.disconnectCalled.CompareAndSwap(false, true) {
 			c.cfg.OnDisconnect(fmt.Errorf("connection closed"))
 		}
 
@@ -388,18 +389,23 @@ func (c *Client) reconnectLoop(ctx context.Context) {
 
 	for {
 		select {
-		case <-c.done:
-			return
 		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+
+		// Check and reset state atomically
+		c.mu.Lock()
+		select {
+		case <-c.done:
+			// Already disconnected permanently
+			c.mu.Unlock()
 			return
 		default:
 		}
-
-		time.Sleep(delay)
-
-		c.mu.Lock()
 		c.done = make(chan struct{})
 		c.closeOnce = sync.Once{}
+		c.disconnectCalled.Store(false) // Reset for new connection
 		c.mu.Unlock()
 
 		if err := c.Connect(ctx); err != nil {

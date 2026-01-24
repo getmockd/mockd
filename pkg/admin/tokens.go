@@ -220,31 +220,22 @@ func (a *AdminAPI) GetTokenStats() TokenStats {
 // isLocalhost checks if the request originates from localhost by examining RemoteAddr.
 // This is more secure than checking r.Host which is client-controlled and can be spoofed.
 func isLocalhost(r *http.Request) bool {
-	// Parse RemoteAddr to extract the IP address
-	// RemoteAddr is set by the server and represents the actual connection source
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		// RemoteAddr might not have a port in some cases
-		ip = r.RemoteAddr
+		host = r.RemoteAddr
 	}
 
-	// Check for IPv4 loopback
-	if ip == "127.0.0.1" {
-		return true
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return false
 	}
 
-	// Check for IPv6 loopback
-	if ip == "::1" {
-		return true
+	parsedIP := net.ParseIP(host)
+	if parsedIP == nil {
+		return false
 	}
 
-	// Parse and check if it's a loopback address (handles various formats)
-	parsedIP := net.ParseIP(ip)
-	if parsedIP != nil && parsedIP.IsLoopback() {
-		return true
-	}
-
-	return false
+	return parsedIP.IsLoopback()
 }
 
 // getBearerToken extracts the bearer token from Authorization header.

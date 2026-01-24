@@ -347,9 +347,7 @@ func (s *Server) handleInitialize(session *MCPSession, params json.RawMessage) (
 	}
 
 	// Store client info
-	session.ProtocolVersion = initParams.ProtocolVersion
-	session.ClientInfo = initParams.ClientInfo
-	session.Capabilities = initParams.Capabilities
+	session.SetClientData(initParams.ProtocolVersion, initParams.ClientInfo, initParams.Capabilities)
 	session.SetState(SessionStateInitialized)
 
 	// Return server capabilities

@@ -89,6 +89,15 @@ func (s *MCPSession) GetState() SessionState {
 	return s.State
 }
 
+// SetClientData sets the client initialization data atomically.
+func (s *MCPSession) SetClientData(protocolVersion string, clientInfo ClientInfo, capabilities ClientCapabilities) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ProtocolVersion = protocolVersion
+	s.ClientInfo = clientInfo
+	s.Capabilities = capabilities
+}
+
 // Subscribe adds a resource URI to subscriptions.
 func (s *MCPSession) Subscribe(uri string) {
 	s.mu.Lock()

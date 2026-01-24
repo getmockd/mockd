@@ -33,6 +33,7 @@ type Connection struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	mu            sync.RWMutex
+	sendMu        sync.RWMutex // Coordinates Send/Read/Ping with Close to prevent TOCTOU races
 	closed        atomic.Bool
 }
 
@@ -184,6 +185,9 @@ func (c *Connection) IsClosed() bool {
 
 // Send sends a message to the client.
 func (c *Connection) Send(msgType MessageType, data []byte) error {
+	c.sendMu.RLock()
+	defer c.sendMu.RUnlock()
+
 	if c.closed.Load() {
 		return ErrConnectionClosed
 	}
@@ -251,6 +255,8 @@ func (c *Connection) SendJSON(v interface{}) error {
 // Read reads the next message from the connection.
 // Returns the message type, data, and any error.
 func (c *Connection) Read() (MessageType, []byte, error) {
+	// Note: We don't take sendMu here because Read() blocks on I/O.
+	// Close() will cancel the context, which will unblock Read().
 	if c.closed.Load() {
 		return 0, nil, ErrConnectionClosed
 	}
@@ -293,6 +299,9 @@ func (c *Connection) Read() (MessageType, []byte, error) {
 
 // Close closes the connection with the given close code and reason.
 func (c *Connection) Close(code CloseCode, reason string) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+
 	if c.closed.Swap(true) {
 		return ErrConnectionClosed
 	}
@@ -429,6 +438,9 @@ func (c *Connection) Info() *ConnectionInfo {
 
 // Ping sends a ping frame to the client.
 func (c *Connection) Ping(ctx context.Context) error {
+	c.sendMu.RLock()
+	defer c.sendMu.RUnlock()
+
 	if c.closed.Load() {
 		return ErrConnectionClosed
 	}

@@ -142,7 +142,14 @@ func (h *EngineHandler) buildResponse(requestID string, rr *httptest.ResponseRec
 	// Convert headers
 	headers := make(map[string]string)
 	for name, values := range rr.Header() {
-		if len(values) > 0 {
+		if len(values) == 0 {
+			continue
+		}
+
+		// Set-Cookie must preserve individual values (RFC 6265)
+		if http.CanonicalHeaderKey(name) == "Set-Cookie" {
+			headers[name] = strings.Join(values, "\x00")
+		} else {
 			headers[name] = strings.Join(values, ", ")
 		}
 	}

@@ -73,6 +73,10 @@ type AdminAPI struct {
 
 	// Version string for status endpoint
 	version string
+
+	// AllowLocalhostBypass allows unauthenticated access from localhost (dev mode only)
+	// Default is false - authentication is always required
+	allowLocalhostBypass bool
 }
 
 // NewAdminAPI creates a new AdminAPI.
