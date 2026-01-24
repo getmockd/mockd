@@ -74,6 +74,7 @@ type OpenIDConfiguration struct {
 	UserInfoEndpoint                  string   `json:"userinfo_endpoint"`
 	JwksURI                           string   `json:"jwks_uri"`
 	RevocationEndpoint                string   `json:"revocation_endpoint,omitempty"`
+	IntrospectionEndpoint             string   `json:"introspection_endpoint,omitempty"`
 	ResponseTypesSupported            []string `json:"response_types_supported"`
 	SubjectTypesSupported             []string `json:"subject_types_supported"`
 	IDTokenSigningAlgValuesSupported  []string `json:"id_token_signing_alg_values_supported"`
@@ -81,6 +82,22 @@ type OpenIDConfiguration struct {
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
 	ClaimsSupported                   []string `json:"claims_supported"`
 	GrantTypesSupported               []string `json:"grant_types_supported"`
+}
+
+// IntrospectionResponse represents an OAuth 2.0 Token Introspection response (RFC 7662)
+type IntrospectionResponse struct {
+	Active    bool   `json:"active"`
+	Scope     string `json:"scope,omitempty"`
+	ClientID  string `json:"client_id,omitempty"`
+	Username  string `json:"username,omitempty"`
+	TokenType string `json:"token_type,omitempty"`
+	ExpiresAt int64  `json:"exp,omitempty"`
+	IssuedAt  int64  `json:"iat,omitempty"`
+	NotBefore int64  `json:"nbf,omitempty"`
+	Subject   string `json:"sub,omitempty"`
+	Audience  string `json:"aud,omitempty"`
+	Issuer    string `json:"iss,omitempty"`
+	TokenID   string `json:"jti,omitempty"`
 }
 
 // JWKS represents a JSON Web Key Set

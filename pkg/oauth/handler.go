@@ -31,6 +31,17 @@ func NewHandler(provider *Provider) *Handler {
 	return &Handler{provider: provider}
 }
 
+// getDefaultUserID returns the user ID from the first configured user, or a default mock user ID.
+func (h *Handler) getDefaultUserID() string {
+	if len(h.provider.config.Users) > 0 {
+		if sub, ok := h.provider.config.Users[0].Claims["sub"].(string); ok {
+			return sub
+		}
+		return h.provider.config.Users[0].Username
+	}
+	return "mock-user"
+}
+
 // HandleAuthorize handles GET /authorize
 func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
@@ -99,16 +110,7 @@ func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 		// In a real scenario, you'd show a login page here
 		// For mock purposes, we auto-approve with the first user
-		var userID string
-		if len(h.provider.config.Users) > 0 {
-			if sub, ok := h.provider.config.Users[0].Claims["sub"].(string); ok {
-				userID = sub
-			} else {
-				userID = h.provider.config.Users[0].Username
-			}
-		} else {
-			userID = "mock-user"
-		}
+		userID := h.getDefaultUserID()
 
 		// Generate authorization code
 		code, err := generateRandomString(32)
@@ -142,16 +144,7 @@ func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 	// Implicit flow (response_type=token)
 	if responseType == ResponseTypeToken {
-		var userID string
-		if len(h.provider.config.Users) > 0 {
-			if sub, ok := h.provider.config.Users[0].Claims["sub"].(string); ok {
-				userID = sub
-			} else {
-				userID = h.provider.config.Users[0].Username
-			}
-		} else {
-			userID = "mock-user"
-		}
+		userID := h.getDefaultUserID()
 
 		// Generate access token
 		accessToken, err := h.provider.GenerateToken(map[string]interface{}{
@@ -596,6 +589,7 @@ func (h *Handler) HandleOpenIDConfig(w http.ResponseWriter, r *http.Request) {
 		UserInfoEndpoint:                  issuer + "/userinfo",
 		JwksURI:                           issuer + "/.well-known/jwks.json",
 		RevocationEndpoint:                issuer + "/revoke",
+		IntrospectionEndpoint:             issuer + "/introspect",
 		ResponseTypesSupported:            []string{"code", "token", "id_token", "code token", "code id_token", "token id_token", "code token id_token"},
 		SubjectTypesSupported:             []string{"public"},
 		IDTokenSigningAlgValuesSupported:  []string{"RS256"},
@@ -606,6 +600,106 @@ func (h *Handler) HandleOpenIDConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, config)
+}
+
+// HandleIntrospect handles POST /introspect (RFC 7662)
+// Token introspection allows resource servers to query the authorization server
+// about the current state of an access token.
+func (h *Handler) HandleIntrospect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.errorResponse(w, http.StatusMethodNotAllowed, ErrInvalidRequest, "method not allowed")
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		h.errorResponse(w, http.StatusBadRequest, ErrInvalidRequest, "failed to parse form")
+		return
+	}
+
+	token := r.FormValue("token")
+	if token == "" {
+		h.errorResponse(w, http.StatusBadRequest, ErrInvalidRequest, "token is required")
+		return
+	}
+
+	// Get client credentials (required for introspection per RFC 7662)
+	clientID, clientSecret, ok := r.BasicAuth()
+	if !ok {
+		clientID = r.FormValue("client_id")
+		clientSecret = r.FormValue("client_secret")
+	}
+
+	// Validate client credentials
+	if clientID == "" {
+		h.errorResponse(w, http.StatusUnauthorized, ErrInvalidClient, "client authentication required")
+		return
+	}
+
+	client := h.provider.ValidateClient(clientID, clientSecret)
+	if client == nil {
+		h.errorResponse(w, http.StatusUnauthorized, ErrInvalidClient, "invalid client credentials")
+		return
+	}
+
+	// Try to validate the token
+	claims, err := h.provider.ValidateToken(token)
+	if err != nil {
+		// Token is invalid or expired - return active: false per RFC 7662
+		h.jsonResponse(w, http.StatusOK, &IntrospectionResponse{
+			Active: false,
+		})
+		return
+	}
+
+	// Build introspection response from claims
+	response := &IntrospectionResponse{
+		Active: true,
+	}
+
+	// Extract standard claims
+	if iss, ok := claims["iss"].(string); ok {
+		response.Issuer = iss
+	}
+	if sub, ok := claims["sub"].(string); ok {
+		response.Subject = sub
+	}
+	if aud, ok := claims["aud"]; ok {
+		switch v := aud.(type) {
+		case string:
+			response.Audience = v
+		case []interface{}:
+			if len(v) > 0 {
+				if s, ok := v[0].(string); ok {
+					response.Audience = s
+				}
+			}
+		}
+	}
+	if exp, ok := claims["exp"].(float64); ok {
+		response.ExpiresAt = int64(exp)
+	}
+	if iat, ok := claims["iat"].(float64); ok {
+		response.IssuedAt = int64(iat)
+	}
+	if nbf, ok := claims["nbf"].(float64); ok {
+		response.NotBefore = int64(nbf)
+	}
+	if jti, ok := claims["jti"].(string); ok {
+		response.TokenID = jti
+	}
+	if scope, ok := claims["scope"].(string); ok {
+		response.Scope = scope
+	}
+	if clientID, ok := claims["client_id"].(string); ok {
+		response.ClientID = clientID
+	}
+	if username, ok := claims["username"].(string); ok {
+		response.Username = username
+	}
+	// Token type is always Bearer for access tokens
+	response.TokenType = "Bearer"
+
+	h.jsonResponse(w, http.StatusOK, response)
 }
 
 // HandleRevoke handles POST /revoke

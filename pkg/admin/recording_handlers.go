@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/config"
@@ -36,6 +39,7 @@ type ConvertResult struct {
 type ExportRequest struct {
 	SessionID    string   `json:"sessionId,omitempty"`
 	RecordingIDs []string `json:"recordingIds,omitempty"`
+	Format       string   `json:"format,omitempty"` // "json" (default) or "yaml"
 }
 
 // handleListRecordings handles GET /recordings.
@@ -226,23 +230,32 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	var jsonOutput []byte
-	var err error
+	// Gather recordings to export
+	var recordings []*recording.Recording
 
 	if req.SessionID != "" {
-		jsonOutput, err = pm.store.ExportSession(req.SessionID)
+		recordings, _ = pm.store.ListRecordings(recording.RecordingFilter{SessionID: req.SessionID})
 	} else if len(req.RecordingIDs) > 0 {
-		// Export specific recordings
-		var recordings []*recording.Recording
 		for _, id := range req.RecordingIDs {
 			rec := pm.store.GetRecording(id)
 			if rec != nil {
 				recordings = append(recordings, rec)
 			}
 		}
-		jsonOutput, err = json.MarshalIndent(recordings, "", "  ")
 	} else {
-		jsonOutput, err = pm.store.ExportRecordings(recording.RecordingFilter{})
+		recordings, _ = pm.store.ListRecordings(recording.RecordingFilter{})
+	}
+
+	// Marshal to requested format
+	var output []byte
+	var err error
+	contentType := "application/json"
+
+	if strings.EqualFold(req.Format, "yaml") {
+		output, err = yaml.Marshal(recordings)
+		contentType = "application/x-yaml"
+	} else {
+		output, err = json.MarshalIndent(recordings, "", "  ")
 	}
 
 	if err != nil {
@@ -250,9 +263,9 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(jsonOutput)
+	_, _ = w.Write(output)
 }
 
 // SingleConvertRequest represents a request to convert a single recording.
