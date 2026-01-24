@@ -25,12 +25,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	engineProtocols := s.engine.ProtocolStatus()
 	protocols := make(map[string]ProtocolStatus, len(engineProtocols))
 	for k, v := range engineProtocols {
-		protocols[k] = ProtocolStatus{
-			Enabled:     v.Enabled,
-			Port:        v.Port,
-			Connections: v.Connections,
-			Status:      v.Status,
-		}
+		protocols[k] = ProtocolStatus(v)
 	}
 
 	resp := StatusResponse{
@@ -561,12 +556,12 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(ErrorResponse{
+	_ = json.NewEncoder(w).Encode(ErrorResponse{
 		Error:   code,
 		Message: message,
 	})

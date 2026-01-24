@@ -393,7 +393,7 @@ func (m *StreamRecordingManager) handleExportStreamRecording(w http.ResponseWrit
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.json", id))
 	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 // handleConvertStreamRecording handles POST /stream-recordings/{id}/convert.

@@ -9,6 +9,18 @@ import (
 	"time"
 )
 
+// hasScope checks if a specific scope is present in a space-separated scope string.
+// This avoids false positives from substring matching (e.g., "openid" in "custom_openid_scope").
+func hasScope(scopeString, targetScope string) bool {
+	scopes := strings.Fields(scopeString)
+	for _, s := range scopes {
+		if s == targetScope {
+			return true
+		}
+	}
+	return false
+}
+
 // Handler provides OAuth endpoint handlers
 type Handler struct {
 	provider *Provider
@@ -275,7 +287,7 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 	}
 
 	// Generate ID token if openid scope is requested
-	if strings.Contains(authCode.Scope, "openid") {
+	if hasScope(authCode.Scope, "openid") {
 		user := h.provider.GetUserByID(authCode.UserID)
 		idTokenClaims := map[string]interface{}{
 			"sub": authCode.UserID,
@@ -393,7 +405,7 @@ func (h *Handler) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request
 	}
 
 	// Generate new ID token if openid scope is requested
-	if strings.Contains(scope, "openid") {
+	if hasScope(scope, "openid") {
 		user := h.provider.GetUserByID(refreshData.UserID)
 		idTokenClaims := map[string]interface{}{
 			"sub": refreshData.UserID,
@@ -488,7 +500,7 @@ func (h *Handler) handlePasswordGrant(w http.ResponseWriter, r *http.Request, cl
 	}
 
 	// Generate ID token if openid scope is requested
-	if strings.Contains(scope, "openid") {
+	if hasScope(scope, "openid") {
 		idTokenClaims := map[string]interface{}{
 			"sub": userID,
 			"aud": clientID,

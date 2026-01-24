@@ -23,6 +23,7 @@ type SSERecordingHookFactory func(streamID string, mockID string, path string) (
 type SSEHandler struct {
 	encoder              *Encoder
 	manager              *SSEConnectionManager
+	buffersMu            sync.RWMutex            // mutex for thread-safe buffers access
 	buffers              map[string]*EventBuffer // buffers by mock ID
 	templates            *TemplateRegistry
 	nextConnID           atomic.Int64
@@ -297,16 +298,7 @@ func (h *SSEHandler) configFromMock(cfg *mock.SSEConfig) *SSEConfig {
 	}
 
 	// Copy events
-	for _, e := range cfg.Events {
-		sseConfig.Events = append(sseConfig.Events, SSEEventDef{
-			Type:    e.Type,
-			Data:    e.Data,
-			ID:      e.ID,
-			Retry:   e.Retry,
-			Comment: e.Comment,
-			Delay:   e.Delay,
-		})
-	}
+	sseConfig.Events = append(sseConfig.Events, cfg.Events...)
 
 	// Copy timing config
 	sseConfig.Timing.InitialDelay = cfg.Timing.InitialDelay
@@ -388,16 +380,7 @@ func (h *SSEHandler) configFromMock(cfg *mock.SSEConfig) *SSEConfig {
 			sseConfig.Generator.Template = &TemplateGenerator{
 				Repeat: cfg.Generator.Template.Repeat,
 			}
-			for _, e := range cfg.Generator.Template.Events {
-				sseConfig.Generator.Template.Events = append(sseConfig.Generator.Template.Events, SSEEventDef{
-					Type:    e.Type,
-					Data:    e.Data,
-					ID:      e.ID,
-					Retry:   e.Retry,
-					Comment: e.Comment,
-					Delay:   e.Delay,
-				})
-			}
+			sseConfig.Generator.Template.Events = append(sseConfig.Generator.Template.Events, cfg.Generator.Template.Events...)
 		}
 	}
 
@@ -721,8 +704,11 @@ func (h *SSEHandler) generateTemplateEvents(gen *EventGenerator) []SSEEventDef {
 func (h *SSEHandler) findResumePosition(stream *SSEStream, events []SSEEventDef) int {
 	lastID := stream.ResumedFrom
 
-	// First check the buffer
-	if buffer, ok := h.buffers[stream.MockID]; ok {
+	// First check the buffer (thread-safe access)
+	h.buffersMu.RLock()
+	buffer := h.buffers[stream.MockID]
+	h.buffersMu.RUnlock()
+	if buffer != nil {
 		bufferedEvents := buffer.GetEventsAfterID(lastID)
 		if len(bufferedEvents) > 0 {
 			// Found in buffer - prepend to events
@@ -791,7 +777,7 @@ func (h *SSEHandler) sendEvent(stream *SSEStream, event *SSEEventDef, eventIndex
 	// Record Prometheus metric
 	if metrics.RequestsTotal != nil {
 		if vec, err := metrics.RequestsTotal.WithLabels("sse", stream.Path, "event"); err == nil {
-			vec.Inc()
+			_ = vec.Inc()
 		}
 	}
 
@@ -846,13 +832,16 @@ func (h *SSEHandler) handleTermination(stream *SSEStream, terminationType string
 }
 
 // bufferEvent adds an event to the resumption buffer.
+// This method is thread-safe.
 func (h *SSEHandler) bufferEvent(mockID string, event *SSEEventDef, index int64) {
+	h.buffersMu.Lock()
 	buffer, ok := h.buffers[mockID]
 	if !ok {
 		// Create buffer with default size
 		buffer = NewEventBuffer(DefaultBufferSize, 0)
 		h.buffers[mockID] = buffer
 	}
+	h.buffersMu.Unlock()
 
 	buffer.Add(BufferedEvent{
 		ID:        event.ID,
@@ -873,12 +862,18 @@ func (h *SSEHandler) GetTemplates() *TemplateRegistry {
 }
 
 // GetBuffer returns the event buffer for a mock.
+// This method is thread-safe.
 func (h *SSEHandler) GetBuffer(mockID string) *EventBuffer {
+	h.buffersMu.RLock()
+	defer h.buffersMu.RUnlock()
 	return h.buffers[mockID]
 }
 
 // ClearBuffer clears the event buffer for a mock.
+// This method is thread-safe.
 func (h *SSEHandler) ClearBuffer(mockID string) {
+	h.buffersMu.Lock()
+	defer h.buffersMu.Unlock()
 	delete(h.buffers, mockID)
 }
 

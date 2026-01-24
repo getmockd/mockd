@@ -155,7 +155,7 @@ func detectRunningServer(adminPort, enginePort int) *DetectedServer {
 	client := &http.Client{Timeout: 2 * time.Second}
 	adminResp, err := client.Get(detected.AdminURL + "/health")
 	if err == nil {
-		defer adminResp.Body.Close()
+		defer func() { _ = adminResp.Body.Close() }()
 		if adminResp.StatusCode == http.StatusOK {
 			detected.AdminRunning = true
 
@@ -169,7 +169,7 @@ func detectRunningServer(adminPort, enginePort int) *DetectedServer {
 	// Check if engine port is responding (could be any HTTP response)
 	engineResp, err := client.Get(detected.EngineURL + "/")
 	if err == nil {
-		defer engineResp.Body.Close()
+		defer func() { _ = engineResp.Body.Close() }()
 		// Any response means the engine is running (even 404 is valid - no mock matched)
 		detected.EngineRunning = true
 	}
@@ -382,7 +382,7 @@ func fetchLiveStats(adminURL string) (*StatusStats, *HealthInfo) {
 	// Get health info (includes uptime)
 	healthResp, err := client.Get(adminURL + "/health")
 	if err == nil {
-		defer healthResp.Body.Close()
+		defer func() { _ = healthResp.Body.Close() }()
 		if healthResp.StatusCode == http.StatusOK {
 			var health HealthInfo
 			if json.NewDecoder(healthResp.Body).Decode(&health) == nil {
@@ -409,7 +409,7 @@ func printJSONStatus(output StatusOutput) error {
 }
 
 // printHumanStatus prints status in human-readable format.
-func printHumanStatus(output StatusOutput, info *PIDFile) error {
+func printHumanStatus(output StatusOutput, _ *PIDFile) error {
 	// Header
 	if output.Commit != "" {
 		fmt.Printf("mockd v%s (%s)\n", output.Version, output.Commit)
@@ -464,6 +464,8 @@ func printHumanStatus(output StatusOutput, info *PIDFile) error {
 }
 
 // colorGreen returns text wrapped in ANSI green color codes.
+//
+//nolint:unparam // s is always the same value but function is intentionally generic
 func colorGreen(s string) string {
 	if !isTerminal() {
 		return s
@@ -472,6 +474,8 @@ func colorGreen(s string) string {
 }
 
 // colorRed returns text wrapped in ANSI red color codes.
+//
+//nolint:unparam // s is always the same value but function is intentionally generic
 func colorRed(s string) string {
 	if !isTerminal() {
 		return s

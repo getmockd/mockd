@@ -2,6 +2,7 @@ package stateful
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -62,7 +63,7 @@ func (s *StateStore) Get(name string) *StatefulResource {
 	return s.resources[name]
 }
 
-// List returns all resource names.
+// List returns all resource names in sorted order for deterministic output.
 func (s *StateStore) List() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -71,6 +72,7 @@ func (s *StateStore) List() []string {
 	for name := range s.resources {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
 
@@ -128,6 +130,7 @@ func (s *StateStore) Clear() {
 }
 
 // Overview returns information about all registered stateful resources.
+// Resource list is sorted for deterministic output.
 func (s *StateStore) Overview() *StateOverview {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -139,6 +142,8 @@ func (s *StateStore) Overview() *StateOverview {
 		names = append(names, name)
 		totalItems += resource.Count()
 	}
+
+	sort.Strings(names)
 
 	return &StateOverview{
 		Resources:    len(s.resources),

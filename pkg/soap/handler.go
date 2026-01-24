@@ -17,6 +17,7 @@ import (
 	"github.com/getmockd/mockd/pkg/metrics"
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/requestlog"
+	"github.com/getmockd/mockd/pkg/template"
 	"github.com/getmockd/mockd/pkg/util"
 )
 
@@ -59,42 +60,48 @@ type Handler struct {
 	recordingMu      sync.RWMutex
 	requestLogger    requestlog.Logger
 	loggerMu         sync.RWMutex
+	templateEngine   *template.Engine
 }
 
 // NewHandler creates a new SOAP handler with the given configuration.
-func NewHandler(config *SOAPConfig) *Handler {
+// Returns an error if a WSDL file is configured but cannot be loaded.
+func NewHandler(config *SOAPConfig) (*Handler, error) {
 	h := &Handler{
-		config: config,
+		config:         config,
+		templateEngine: template.New(),
 	}
 
 	// Load WSDL data
-	h.loadWSDL()
+	if err := h.loadWSDL(); err != nil {
+		return nil, err
+	}
 
-	return h
+	return h, nil
 }
 
 // loadWSDL loads WSDL content from file or inline config.
-func (h *Handler) loadWSDL() {
+// Returns an error if a file is configured but cannot be read.
+func (h *Handler) loadWSDL() error {
 	if h.config.WSDLFile != "" {
 		data, err := os.ReadFile(h.config.WSDLFile)
-		if err == nil {
-			h.wsdlData = data
+		if err != nil {
+			return fmt.Errorf("failed to load WSDL file %q: %w", h.config.WSDLFile, err)
 		}
+		h.wsdlData = data
 	} else if h.config.WSDL != "" {
 		h.wsdlData = []byte(h.config.WSDL)
 	}
+	return nil
 }
 
 // ServeHTTP implements the http.Handler interface.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Handle WSDL request - check if ?wsdl or ?WSDL is present in query string
-	if _, hasWsdl := r.URL.Query()["wsdl"]; hasWsdl {
-		h.serveWSDL(w, r)
-		return
-	}
-	if _, hasWSDL := r.URL.Query()["WSDL"]; hasWSDL {
-		h.serveWSDL(w, r)
-		return
+	// Handle WSDL request - check if ?wsdl query param is present (case-insensitive)
+	for key := range r.URL.Query() {
+		if strings.EqualFold(key, "wsdl") {
+			h.serveWSDL(w, r)
+			return
+		}
 	}
 
 	// Capture start time for recording
@@ -178,7 +185,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build and send response
-	responseBody, err := h.buildResponse(opConfig.Response, doc)
+	responseBody, err := h.buildResponse(opConfig.Response, doc, r, body)
 	if err != nil {
 		fault := &SOAPFault{
 			Code:    "soap:Server",
@@ -205,7 +212,7 @@ func (h *Handler) serveWSDL(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write(h.wsdlData)
+	_, _ = w.Write(h.wsdlData)
 }
 
 // parseEnvelope parses a SOAP envelope from the request body.
@@ -365,9 +372,18 @@ func (h *Handler) matchOperation(opName string, doc *etree.Document) *OperationC
 }
 
 // buildResponse builds the SOAP response XML from a template.
-func (h *Handler) buildResponse(template string, requestDoc *etree.Document) ([]byte, error) {
-	// Process template variables
-	result := processTemplate(template, requestDoc)
+// It processes both XPath variables ({{xpath:/path}}) and general template
+// variables ({{uuid}}, {{now}}, {{request.header.X-Custom}}, etc.).
+//
+//nolint:unparam // error is always nil but kept for future validation
+func (h *Handler) buildResponse(responseTemplate string, requestDoc *etree.Document, r *http.Request, body []byte) ([]byte, error) {
+	// First, process XPath variables from the SOAP request
+	result := processTemplate(responseTemplate, requestDoc)
+
+	// Then process general template variables using the template engine
+	ctx := template.NewContext(r, body)
+	result, _ = h.templateEngine.Process(result, ctx)
+
 	return []byte(result), nil
 }
 
@@ -400,7 +416,7 @@ func (h *Handler) writeFault(w http.ResponseWriter, fault *SOAPFault, version SO
 	}
 
 	w.WriteHeader(http.StatusInternalServerError)
-	w.Write(faultXML)
+	_, _ = w.Write(faultXML)
 }
 
 // writeFaultWithRecording writes a SOAP fault response and records if enabled.
@@ -418,7 +434,7 @@ func (h *Handler) writeFaultWithRecording(w http.ResponseWriter, fault *SOAPFaul
 
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusInternalServerError)
-	w.Write(faultXML)
+	_, _ = w.Write(faultXML)
 
 	duration := time.Since(startTime)
 	responseStr := string(faultXML)
@@ -536,7 +552,7 @@ func (h *Handler) writeResponseWithRecording(w http.ResponseWriter, body []byte,
 	response.WriteString(`</soap:Envelope>`)
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(response.Bytes())
+	_, _ = w.Write(response.Bytes())
 
 	duration := time.Since(startTime)
 	responseStr := response.String()
@@ -589,7 +605,7 @@ func (h *Handler) writeResponseWithRecording(w http.ResponseWriter, body []byte,
 func (h *Handler) writeError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(status)
-	w.Write([]byte(message))
+	_, _ = w.Write([]byte(message))
 }
 
 // escapeXML escapes special XML characters.
@@ -772,7 +788,7 @@ func (h *Handler) recordMetrics(path string, status int, duration time.Duration)
 	statusStr := strconv.Itoa(status)
 	if metrics.RequestsTotal != nil {
 		if vec, err := metrics.RequestsTotal.WithLabels("soap", path, statusStr); err == nil {
-			vec.Inc()
+			_ = vec.Inc()
 		}
 	}
 	if metrics.RequestDuration != nil {

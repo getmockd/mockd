@@ -378,14 +378,12 @@ func TestStreamRecordingAPI_Sessions(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	body, _ := io.ReadAll(resp.Body)
-	var result struct {
-		Sessions []interface{} `json:"sessions"`
-	}
-	err = json.Unmarshal(body, &result)
+	var sessions []interface{}
+	err = json.Unmarshal(body, &sessions)
 	require.NoError(t, err)
 
 	// No active sessions after completion
-	assert.Empty(t, result.Sessions)
+	assert.Empty(t, sessions)
 }
 
 // TestReplayAPI_StartAndList tests POST /stream-recordings/{id}/replay and GET /replay

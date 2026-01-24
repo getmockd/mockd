@@ -70,9 +70,7 @@ func ExtractXPathFromElement(elem *etree.Element, xpath string) string {
 	}
 
 	// Handle relative paths
-	if strings.HasPrefix(xpath, "./") {
-		xpath = xpath[2:]
-	}
+	xpath = strings.TrimPrefix(xpath, "./")
 
 	// Find child element
 	child := elem.FindElement(xpath)

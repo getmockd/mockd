@@ -2,9 +2,10 @@
 // for testing authentication and authorization flows.
 //
 // The package implements the following OAuth 2.0 grant types:
-//   - Authorization Code (with PKCE support)
+//   - Authorization Code
 //   - Client Credentials
 //   - Refresh Token
+//   - Resource Owner Password Credentials
 //
 // For OpenID Connect, it provides:
 //   - ID Token generation with standard claims

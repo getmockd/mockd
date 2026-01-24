@@ -80,7 +80,7 @@ func createDynamicStub(t *testing.T, port int) grpcdynamic.Stub {
 	return grpcdynamic.NewStub(conn)
 }
 
-// getSchema returns the parsed proto schema for testing
+//nolint:unused // kept for future tests
 func getSchema(t *testing.T) *grpc.ProtoSchema {
 	schema, err := grpc.ParseProtoFile(testProtoFile, nil)
 	require.NoError(t, err)

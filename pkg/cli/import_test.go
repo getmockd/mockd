@@ -221,6 +221,7 @@ func TestRunImport_CurlCommand(t *testing.T) {
 		if err != nil && !containsString(err.Error(), "connect") {
 			// If error is not about connection, it might be a parsing error
 			// which is acceptable for this test
+			t.Logf("curl parsing returned error (acceptable): %v", err)
 		}
 	})
 }

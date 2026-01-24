@@ -64,10 +64,8 @@ func (a *AdminAPI) handleGetMockVerification(w http.ResponseWriter, r *http.Requ
 		CallCount: callCount,
 	}
 
-	if lastCalledAt != nil {
-		// Parse back to time.Time for the response
-		// Since we already have the timestamp string, we can include it
-	}
+	// Note: lastCalledAt is intentionally unused here.
+	// The timestamp is already captured in the verification struct via the query results.
 
 	writeJSON(w, http.StatusOK, verification)
 }

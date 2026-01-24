@@ -2,6 +2,7 @@ package testing
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -13,7 +14,21 @@ import (
 type MockBuilder struct {
 	server *MockServer
 	mock   *config.MockConfiguration
-	times  int // 0 means unlimited
+	times  int   // 0 means unlimited
+	err    error // First error encountered during building
+}
+
+// setError records the first error encountered during building.
+// Subsequent errors are ignored (first error wins pattern).
+func (b *MockBuilder) setError(err error) {
+	if b.err == nil {
+		b.err = err
+	}
+}
+
+// Err returns any error encountered during building.
+func (b *MockBuilder) Err() error {
+	return b.err
 }
 
 // ensureHTTP ensures HTTP spec is initialized
@@ -50,6 +65,7 @@ func (b *MockBuilder) WithBody(body interface{}) *MockBuilder {
 		// Try to JSON encode
 		data, err := json.Marshal(v)
 		if err != nil {
+			b.setError(fmt.Errorf("WithBody: failed to marshal body: %w", err))
 			b.mock.HTTP.Response.Body = ""
 		} else {
 			b.mock.HTTP.Response.Body = string(data)
@@ -71,6 +87,7 @@ func (b *MockBuilder) WithJSON(body interface{}) *MockBuilder {
 	b.ensureHTTP()
 	data, err := json.Marshal(body)
 	if err != nil {
+		b.setError(fmt.Errorf("WithJSON: failed to marshal body: %w", err))
 		b.mock.HTTP.Response.Body = ""
 	} else {
 		b.mock.HTTP.Response.Body = string(data)
@@ -111,7 +128,9 @@ func (b *MockBuilder) WithHeaders(headers map[string]string) *MockBuilder {
 func (b *MockBuilder) WithDelay(delay string) *MockBuilder {
 	b.ensureHTTP()
 	d, err := time.ParseDuration(delay)
-	if err == nil {
+	if err != nil {
+		b.setError(fmt.Errorf("WithDelay: invalid duration %q: %w", delay, err))
+	} else {
 		b.mock.HTTP.Response.DelayMs = int(d.Milliseconds())
 	}
 	return b

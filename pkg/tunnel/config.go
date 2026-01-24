@@ -99,7 +99,7 @@ func (c *Config) Validate() error {
 		return errors.New("RelayURL is required")
 	}
 	if c.Token == "" {
-		return errors.New("Token is required")
+		return errors.New("token is required")
 	}
 	return nil
 }

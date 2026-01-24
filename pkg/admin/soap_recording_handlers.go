@@ -523,5 +523,5 @@ func (m *SOAPRecordingManager) handleExportSOAPRecordings(w http.ResponseWriter,
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", "attachment; filename=soap-recordings.json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	_, _ = w.Write(data)
 }

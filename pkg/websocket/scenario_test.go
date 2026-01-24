@@ -218,3 +218,173 @@ func TestScenario_ResetOnReconnect(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, s.ResetOnReconnect())
 }
+
+func TestScenarioState_ConcurrentAdvance(t *testing.T) {
+	// This test verifies that ScenarioState is safe for concurrent access.
+	// Run with -race flag to detect race conditions.
+	cfg := &ScenarioConfig{
+		Name: "concurrent-test",
+		Steps: []*ScenarioStepConfig{
+			{Type: "send", Message: &MessageResponse{Type: "text", Value: "1"}},
+			{Type: "send", Message: &MessageResponse{Type: "text", Value: "2"}},
+			{Type: "send", Message: &MessageResponse{Type: "text", Value: "3"}},
+			{Type: "send", Message: &MessageResponse{Type: "text", Value: "4"}},
+			{Type: "send", Message: &MessageResponse{Type: "text", Value: "5"}},
+		},
+		Loop: true,
+	}
+
+	s, err := NewScenario(cfg)
+	require.NoError(t, err)
+
+	state := NewScenarioState(s)
+
+	// Launch multiple goroutines that all access state concurrently
+	const numGoroutines = 50
+	const opsPerGoroutine = 100
+	done := make(chan bool, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			for j := 0; j < opsPerGoroutine; j++ {
+				switch j % 5 {
+				case 0:
+					state.AdvanceStep()
+				case 1:
+					_ = state.CurrentStep()
+				case 2:
+					_ = state.Completed()
+				case 3:
+					_ = state.GetCurrentStepConfig()
+				case 4:
+					_ = state.Info()
+				}
+			}
+			done <- true
+		}()
+	}
+
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+
+	// Verify state is still consistent
+	_ = state.CurrentStep()
+	_ = state.Completed()
+}
+
+func TestScenarioExecutor_HandleMessageChannelSignaling(t *testing.T) {
+	// Test that HandleMessage properly signals the matchCh channel
+	// and doesn't cause double-advance with Run().
+
+	cfg := &ScenarioConfig{
+		Name: "match-test",
+		Steps: []*ScenarioStepConfig{
+			{Type: "expect", Timeout: Duration(100 * time.Millisecond)},
+			{Type: "send", Message: &MessageResponse{Type: "text", Value: "done"}},
+		},
+	}
+
+	s, err := NewScenario(cfg)
+	require.NoError(t, err)
+
+	state := NewScenarioState(s)
+
+	// Create executor manually with channel (normally done via NewScenarioExecutor with a connection)
+	exec := &ScenarioExecutor{
+		state:   state,
+		matchCh: make(chan struct{}, 1),
+	}
+
+	// Initial state should be at step 0 (expect)
+	assert.Equal(t, 0, state.CurrentStep())
+
+	// Simulate HandleMessage matching
+	matched := exec.HandleMessage(MessageText, []byte("test"))
+	assert.True(t, matched)
+
+	// Should have advanced to step 1
+	assert.Equal(t, 1, state.CurrentStep())
+
+	// matchCh should have a signal
+	select {
+	case <-exec.matchCh:
+		// Expected - signal was sent
+	default:
+		t.Error("Expected matchCh to have a signal")
+	}
+}
+
+func TestScenarioExecutor_HandleMessageNoDoubleAdvance(t *testing.T) {
+	// Test that when HandleMessage matches, the step doesn't advance twice
+	// (once in HandleMessage, once in Run timeout).
+
+	cfg := &ScenarioConfig{
+		Name: "no-double-advance",
+		Steps: []*ScenarioStepConfig{
+			{Type: "expect", Timeout: Duration(50 * time.Millisecond)},
+			{Type: "expect", Timeout: Duration(50 * time.Millisecond)},
+			{Type: "expect", Timeout: Duration(50 * time.Millisecond)},
+		},
+	}
+
+	s, err := NewScenario(cfg)
+	require.NoError(t, err)
+
+	// Advance through steps using HandleMessage
+	state := NewScenarioState(s)
+	exec := &ScenarioExecutor{
+		state:   state,
+		matchCh: make(chan struct{}, 1),
+	}
+
+	// Call HandleMessage multiple times rapidly
+	for i := 0; i < 3; i++ {
+		startStep := state.CurrentStep()
+		exec.HandleMessage(MessageText, []byte("test"))
+
+		// Should advance exactly by 1
+		endStep := state.CurrentStep()
+		if i < 2 {
+			assert.Equal(t, startStep+1, endStep, "Step should advance by exactly 1")
+		}
+	}
+
+	// Should be at step 3 (completed since no loop)
+	assert.True(t, state.Completed())
+}
+
+func TestScenarioExecutor_HandleMessageMismatch(t *testing.T) {
+	// Test that HandleMessage returns false when step is not "expect"
+	cfg := &ScenarioConfig{
+		Name: "mismatch-test",
+		Steps: []*ScenarioStepConfig{
+			{Type: "send", Message: &MessageResponse{Type: "text", Value: "hello"}},
+			{Type: "expect", Match: &MatchCriteria{Type: "exact", Value: "specific"}},
+		},
+	}
+
+	s, err := NewScenario(cfg)
+	require.NoError(t, err)
+
+	state := NewScenarioState(s)
+	exec := &ScenarioExecutor{
+		state:   state,
+		matchCh: make(chan struct{}, 1),
+	}
+
+	// Step 0 is "send", HandleMessage should return false
+	matched := exec.HandleMessage(MessageText, []byte("test"))
+	assert.False(t, matched)
+	assert.Equal(t, 0, state.CurrentStep())
+
+	// Advance to step 1 (expect)
+	state.AdvanceStep()
+
+	// Now HandleMessage should work but only if message matches
+	matched = exec.HandleMessage(MessageText, []byte("wrong"))
+	assert.False(t, matched) // Doesn't match "specific"
+
+	matched = exec.HandleMessage(MessageText, []byte("specific"))
+	assert.True(t, matched) // Matches
+}

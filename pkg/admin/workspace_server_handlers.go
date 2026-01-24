@@ -76,7 +76,7 @@ func (a *AdminAPI) handleStartWorkspaceServer(w http.ResponseWriter, r *http.Req
 	}
 
 	// Update workspace status in registry
-	a.engineRegistry.UpdateWorkspaceStatus(engineID, workspaceID, "running")
+	_ = a.engineRegistry.UpdateWorkspaceStatus(engineID, workspaceID, "running")
 
 	// Get status
 	status := a.workspaceManager.GetWorkspaceStatus(workspaceID)
@@ -139,7 +139,7 @@ func (a *AdminAPI) handleStopWorkspaceServer(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Update workspace status in registry
-	a.engineRegistry.UpdateWorkspaceStatus(engineID, workspaceID, "stopped")
+	_ = a.engineRegistry.UpdateWorkspaceStatus(engineID, workspaceID, "stopped")
 
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -254,3 +254,56 @@ func (m *SessionManager) NotifyMessage(brokerID string, msg MQTTMessage) {
 		}
 	}
 }
+
+// CleanupStaleSessions removes sessions that have been inactive for longer than maxAge.
+// This prevents memory leaks from abandoned sessions with unclosed listener channels.
+func (m *SessionManager) CleanupStaleSessions(maxAge time.Duration) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	removed := 0
+
+	for sessionID, session := range m.sessions {
+		session.mu.RLock()
+		lastActivity := session.LastActivity
+		brokerID := session.BrokerID
+		session.mu.RUnlock()
+
+		if now.Sub(lastActivity) > maxAge {
+			// Close all listeners to prevent leaks
+			session.mu.Lock()
+			for _, listener := range session.listeners {
+				close(listener)
+			}
+			session.listeners = nil
+			session.mu.Unlock()
+
+			// Remove from byBroker map
+			brokerSessions := m.byBroker[brokerID]
+			for i, id := range brokerSessions {
+				if id == sessionID {
+					m.byBroker[brokerID] = append(brokerSessions[:i], brokerSessions[i+1:]...)
+					break
+				}
+			}
+
+			delete(m.sessions, sessionID)
+			removed++
+		}
+	}
+
+	return removed
+}
+
+// CloseListeners closes all listeners for a session without removing it.
+// This is useful when a client disconnects but may reconnect.
+func (s *TestPanelSession) CloseListeners() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, listener := range s.listeners {
+		close(listener)
+	}
+	s.listeners = nil
+}

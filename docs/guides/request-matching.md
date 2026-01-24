@@ -2,6 +2,8 @@
 
 Request matching determines which mock responds to an incoming HTTP request. mockd evaluates matchers in order and returns the first matching response.
 
+> **Note:** In JSON/YAML configuration files, the actual field name is `matcher`, not `request`. The examples below use the simplified format for clarity.
+
 ## Basic Matching
 
 ### Method Matching
@@ -143,21 +145,6 @@ Match requests with specific query parameters:
 }
 ```
 
-### Regex Query Matching
-
-Use regex patterns for flexible matching:
-
-```json
-{
-  "request": {
-    "query": {
-      "page": "[0-9]+",
-      "sort": "(asc|desc)"
-    }
-  }
-}
-```
-
 ### Optional Query Parameters
 
 Only specified parameters are required. Additional parameters are ignored:
@@ -167,7 +154,7 @@ Only specified parameters are required. Additional parameters are ignored:
   "request": {
     "path": "/api/search",
     "query": {
-      "q": ".*"
+      "q": "test"
     }
   }
 }
@@ -192,18 +179,25 @@ Match requests with specific headers:
 }
 ```
 
-### Regex Header Matching
+### Wildcard Header Matching
+
+Use `*` wildcards for flexible header matching:
 
 ```json
 {
   "request": {
     "headers": {
-      "Authorization": "Bearer [a-zA-Z0-9._-]+",
-      "Accept": "application/(json|xml)"
+      "Authorization": "Bearer *",
+      "Accept": "application/*"
     }
   }
 }
 ```
+
+Supported patterns:
+- `prefix*` - matches values starting with prefix
+- `*suffix` - matches values ending with suffix
+- `*contains*` - matches values containing the substring
 
 ### Case Sensitivity
 
@@ -417,23 +411,6 @@ Mocks with more conditions win:
 
 When priority is equal, earlier mocks in the config file win.
 
-## Negation
-
-Match requests that don't have certain properties:
-
-```json
-{
-  "request": {
-    "path": "/api/public",
-    "headers": {
-      "!Authorization": ".*"
-    }
-  }
-}
-```
-
-The `!` prefix means "does not have this header".
-
 ## Matching Examples
 
 ### API Key Required
@@ -447,23 +424,6 @@ The `!` prefix means "does not have this header".
     }
   },
   "response": { "status": 200 }
-}
-```
-
-### Unauthenticated Fallback
-
-```json
-{
-  "request": {
-    "path": "/api/.*",
-    "headers": {
-      "!X-API-Key": ".*"
-    }
-  },
-  "response": {
-    "status": 401,
-    "body": { "error": "API key required" }
-  }
 }
 ```
 

@@ -184,11 +184,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // recordMetrics records GraphQL request metrics.
-func (h *Handler) recordMetrics(path, opType string, status int, duration time.Duration) {
+func (h *Handler) recordMetrics(path, _ string, status int, duration time.Duration) {
 	if metrics.RequestsTotal != nil {
 		statusStr := strconv.Itoa(status)
 		if vec, err := metrics.RequestsTotal.WithLabels("graphql", path, statusStr); err == nil {
-			vec.Inc()
+			_ = vec.Inc()
 		}
 	}
 	if metrics.RequestDuration != nil {
@@ -243,7 +243,7 @@ func (h *Handler) writeError(w http.ResponseWriter, statusCode int, message stri
 		Errors: []GraphQLError{{Message: message}},
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // writeResponseWithCapture writes a GraphQL response and returns the response body as a string.
@@ -257,7 +257,7 @@ func (h *Handler) writeResponseWithCapture(w http.ResponseWriter, resp *GraphQLR
 	}
 
 	respBody := buf.String()
-	w.Write(buf.Bytes())
+	_, _ = w.Write(buf.Bytes())
 
 	return respBody
 }
@@ -272,7 +272,7 @@ func (h *Handler) parsePostRequestWithBody(r *http.Request) (*GraphQLRequest, st
 	if err != nil {
 		return nil, "", &parseError{message: "failed to read request body"}
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	rawBody := string(body)
 

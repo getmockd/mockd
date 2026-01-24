@@ -31,7 +31,14 @@ func SelectBestMatch(mocks []*mock.Mock, r *http.Request) *mock.Mock {
 func SelectBestMatchWithCaptures(mocks []*mock.Mock, r *http.Request) *MatchResult {
 	var body []byte
 	if r.Body != nil {
-		body, _ = io.ReadAll(r.Body)
+		var err error
+		body, err = io.ReadAll(r.Body)
+		if err != nil {
+			// If we can't read the body, continue with empty body for matching
+			// The body matchers simply won't match
+			body = nil
+		}
+		// Always restore a readable body for downstream handlers
 		r.Body = io.NopCloser(NewBodyReader(body))
 	}
 

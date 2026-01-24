@@ -112,9 +112,39 @@ func NewContextFromRequest(r *http.Request) (*Context, error) {
 	if err != nil {
 		return nil, err
 	}
-	r.Body.Close()
+	_ = r.Body.Close()
 
 	return NewContext(r, bodyBytes), nil
+}
+
+// NewContextFromMap creates a template context from parsed request data.
+// This is used by non-HTTP protocols (gRPC, GraphQL, SOAP) that don't have
+// a direct http.Request but have equivalent data.
+func NewContextFromMap(body interface{}, headers map[string][]string) *Context {
+	ctx := &Context{
+		Request: RequestContext{
+			Body:                body,
+			Headers:             headers,
+			Query:               make(map[string][]string),
+			PathParams:          make(map[string]string),
+			PathPatternCaptures: make(map[string]string),
+			JSONPath:            make(map[string]interface{}),
+		},
+	}
+
+	// Set RawBody from body if possible
+	if body != nil {
+		if jsonBytes, err := json.Marshal(body); err == nil {
+			ctx.Request.RawBody = string(jsonBytes)
+		}
+	}
+
+	// Initialize headers if nil
+	if ctx.Request.Headers == nil {
+		ctx.Request.Headers = make(map[string][]string)
+	}
+
+	return ctx
 }
 
 // SetMTLSFromIdentity populates the MTLS context from a ClientIdentity.

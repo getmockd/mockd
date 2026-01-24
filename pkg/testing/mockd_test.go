@@ -238,8 +238,14 @@ func TestAssertCalled(t *stdtesting.T) {
 	url := mock.Start()
 
 	// Make some requests
-	http.Get(url + "/api/users")
-	http.Post(url+"/api/users", "application/json", strings.NewReader("{}"))
+	resp, _ := http.Get(url + "/api/users")
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
+	resp2, _ := http.Post(url+"/api/users", "application/json", strings.NewReader("{}"))
+	if resp2 != nil && resp2.Body != nil {
+		defer resp2.Body.Close()
+	}
 
 	// These should pass
 	mock.AssertCalled(t, "GET", "/api/users")
@@ -255,9 +261,18 @@ func TestAssertCalledTimes(t *stdtesting.T) {
 	url := mock.Start()
 
 	// Make 3 requests
-	http.Get(url + "/api/endpoint")
-	http.Get(url + "/api/endpoint")
-	http.Get(url + "/api/endpoint")
+	resp1, _ := http.Get(url + "/api/endpoint")
+	if resp1 != nil {
+		resp1.Body.Close()
+	}
+	resp2, _ := http.Get(url + "/api/endpoint")
+	if resp2 != nil {
+		resp2.Body.Close()
+	}
+	resp3, _ := http.Get(url + "/api/endpoint")
+	if resp3 != nil {
+		resp3.Body.Close()
+	}
 
 	mock.AssertCalledTimes(t, "GET", "/api/endpoint", 3)
 }
@@ -272,7 +287,10 @@ func TestAssertNotCalled(t *stdtesting.T) {
 	url := mock.Start()
 
 	// Only call one endpoint
-	http.Get(url + "/called")
+	resp, _ := http.Get(url + "/called")
+	if resp != nil {
+		resp.Body.Close()
+	}
 
 	// This should pass
 	mock.AssertNotCalled(t, "DELETE", "/never-called")
@@ -285,7 +303,10 @@ func TestReset(t *stdtesting.T) {
 	mock.Mock("GET", "/first").WithStatus(200).Reply()
 	url := mock.Start()
 
-	http.Get(url + "/first")
+	resp0, _ := http.Get(url + "/first")
+	if resp0 != nil && resp0.Body != nil {
+		resp0.Body.Close()
+	}
 	mock.AssertCalled(t, "GET", "/first")
 
 	// Reset and add new mock
@@ -295,12 +316,18 @@ func TestReset(t *stdtesting.T) {
 
 	// First endpoint should now 404
 	resp, _ := http.Get(url + "/first")
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 	if resp.StatusCode != 404 {
 		t.Errorf("Expected 404 after reset, got %d", resp.StatusCode)
 	}
 
 	// Second endpoint should work
 	resp2, _ := http.Get(url + "/second")
+	if resp2 != nil && resp2.Body != nil {
+		defer resp2.Body.Close()
+	}
 	if resp2.StatusCode != 200 {
 		t.Errorf("Expected 200 for new mock, got %d", resp2.StatusCode)
 	}
@@ -334,7 +361,10 @@ func TestRequests(t *stdtesting.T) {
 	req.Header.Set("X-Request-ID", "abc123")
 
 	client := &http.Client{}
-	client.Do(req)
+	resp, _ := client.Do(req)
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 
 	requests := mock.Requests()
 	if len(requests) != 1 {
@@ -366,7 +396,10 @@ func TestRequestLogAssertions(t *stdtesting.T) {
 	req.Header.Set("Authorization", "Bearer token")
 
 	client := &http.Client{}
-	client.Do(req)
+	resp, _ := client.Do(req)
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 
 	requests := mock.Requests()
 	if len(requests) != 1 {
@@ -418,18 +451,27 @@ func TestMultipleMocks(t *stdtesting.T) {
 
 	// Test success endpoint
 	resp1, _ := http.Get(url + "/api/success")
+	if resp1 != nil && resp1.Body != nil {
+		defer resp1.Body.Close()
+	}
 	if resp1.StatusCode != 200 {
 		t.Errorf("Expected 200, got %d", resp1.StatusCode)
 	}
 
 	// Test error endpoint
 	resp2, _ := http.Get(url + "/api/error")
+	if resp2 != nil && resp2.Body != nil {
+		defer resp2.Body.Close()
+	}
 	if resp2.StatusCode != 500 {
 		t.Errorf("Expected 500, got %d", resp2.StatusCode)
 	}
 
 	// Test notfound endpoint
 	resp3, _ := http.Get(url + "/api/notfound")
+	if resp3 != nil && resp3.Body != nil {
+		defer resp3.Body.Close()
+	}
 	if resp3.StatusCode != 404 {
 		t.Errorf("Expected 404, got %d", resp3.StatusCode)
 	}
@@ -491,6 +533,9 @@ func TestBuilderRespondWith(t *stdtesting.T) {
 	url := mock.Start()
 
 	resp, _ := http.Get(url + "/custom")
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 	if resp.StatusCode != 201 {
 		t.Errorf("Expected 201, got %d", resp.StatusCode)
 	}
@@ -507,6 +552,9 @@ func TestBuilderRespondJSON(t *stdtesting.T) {
 	url := mock.Start()
 
 	resp, _ := http.Get(url + "/json")
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 	if resp.StatusCode != 200 {
 		t.Errorf("Expected 200, got %d", resp.StatusCode)
 	}
@@ -594,6 +642,9 @@ func TestDynamicMockAddition(t *stdtesting.T) {
 
 	// Initial mock should work
 	resp1, _ := http.Get(url + "/initial")
+	if resp1 != nil && resp1.Body != nil {
+		defer resp1.Body.Close()
+	}
 	if resp1.StatusCode != 200 {
 		t.Errorf("Expected 200, got %d", resp1.StatusCode)
 	}
@@ -603,6 +654,9 @@ func TestDynamicMockAddition(t *stdtesting.T) {
 
 	// New mock should also work
 	resp2, _ := http.Get(url + "/dynamic")
+	if resp2 != nil && resp2.Body != nil {
+		defer resp2.Body.Close()
+	}
 	if resp2.StatusCode != 201 {
 		t.Errorf("Expected 201, got %d", resp2.StatusCode)
 	}
@@ -630,6 +684,9 @@ func TestWithPriority(t *stdtesting.T) {
 
 	// Request without header should match default
 	resp1, _ := http.Get(url + "/api/data")
+	if resp1 != nil && resp1.Body != nil {
+		defer resp1.Body.Close()
+	}
 	body1, _ := io.ReadAll(resp1.Body)
 	if string(body1) != "default" {
 		t.Errorf("Expected 'default', got %q", string(body1))
@@ -640,6 +697,9 @@ func TestWithPriority(t *stdtesting.T) {
 	req.Header.Set("X-Special", "true")
 	client := &http.Client{}
 	resp2, _ := client.Do(req)
+	if resp2 != nil && resp2.Body != nil {
+		defer resp2.Body.Close()
+	}
 	body2, _ := io.ReadAll(resp2.Body)
 	if string(body2) != "special" {
 		t.Errorf("Expected 'special', got %q", string(body2))

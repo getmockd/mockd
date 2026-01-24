@@ -71,15 +71,14 @@ func handleGetMockData(args map[string]interface{}, session *MCPSession, server 
 		Header: make(http.Header),
 	}
 
-	if headers != nil {
-		for k, v := range headers {
-			req.Header.Set(k, v)
-		}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 
 	// Try to find a matching mock via HTTP
 	mocks, err := server.adminClient.ListMocks()
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to list mocks: " + err.Error()), nil
 	}
 	for _, m := range mocks {
@@ -155,6 +154,7 @@ func handleListEndpoints(args map[string]interface{}, session *MCPSession, serve
 
 	mocks, err := server.adminClient.ListMocks()
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to list mocks: " + err.Error()), nil
 	}
 	endpoints := make([]EndpointInfo, 0, len(mocks))
@@ -261,6 +261,7 @@ func handleCreateEndpoint(args map[string]interface{}, session *MCPSession, serv
 	// Add via HTTP client
 	createResult, err := server.adminClient.CreateMock(m)
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to create mock: " + err.Error()), nil
 	}
 
@@ -293,6 +294,7 @@ func handleUpdateEndpoint(args map[string]interface{}, session *MCPSession, serv
 
 	existingMock, err := server.adminClient.GetMock(id)
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("mock not found: " + id), nil
 	}
 
@@ -336,6 +338,7 @@ func handleUpdateEndpoint(args map[string]interface{}, session *MCPSession, serv
 
 	// Update via HTTP client
 	if _, err := server.adminClient.UpdateMock(id, existingMock); err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to update mock: " + err.Error()), nil
 	}
 
@@ -361,6 +364,7 @@ func handleDeleteEndpoint(args map[string]interface{}, session *MCPSession, serv
 	}
 
 	if err := server.adminClient.DeleteMock(id); err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to delete mock: " + err.Error()), nil
 	}
 
@@ -389,12 +393,14 @@ func handleToggleEndpoint(args map[string]interface{}, session *MCPSession, serv
 
 	mockCfg, err := server.adminClient.GetMock(id)
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("mock not found: " + id), nil
 	}
 
 	mockCfg.Enabled = enabled
 
 	if _, err := server.adminClient.UpdateMock(id, mockCfg); err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to toggle mock: " + err.Error()), nil
 	}
 
@@ -504,6 +510,7 @@ func handleStatefulCreate(args map[string]interface{}, session *MCPSession, serv
 
 	item, err := resource.Create(data, nil) // no path params for MCP
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to create item: " + err.Error()), nil
 	}
 
@@ -520,6 +527,7 @@ func handleStatefulReset(args map[string]interface{}, session *MCPSession, serve
 
 	response, err := server.statefulStore.Reset(resourceName)
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to reset: " + err.Error()), nil
 	}
 
@@ -550,6 +558,7 @@ func handleGetRequestLogs(args map[string]interface{}, session *MCPSession, serv
 
 	logsResult, err := server.adminClient.GetLogs(filter)
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to get logs: " + err.Error()), nil
 	}
 
@@ -578,6 +587,7 @@ func handleClearLogs(args map[string]interface{}, session *MCPSession, server *S
 
 	cleared, err := server.adminClient.ClearLogs()
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to clear logs: " + err.Error()), nil
 	}
 

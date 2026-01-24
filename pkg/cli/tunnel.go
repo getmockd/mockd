@@ -156,7 +156,7 @@ Environment Variables:
 	engineURL := fmt.Sprintf("http://localhost:%d", server.ManagementPort())
 	adminAPI := admin.NewAdminAPI(*adminPort, admin.WithLocalEngine(engineURL))
 	if err := adminAPI.Start(); err != nil {
-		server.Stop()
+		_ = server.Stop()
 		return fmt.Errorf("failed to start admin API: %w", err)
 	}
 
@@ -211,8 +211,8 @@ Environment Variables:
 	engineHandler := tunnel.NewEngineHandler(server.Handler())
 	tunnelClient, err := tunnel.NewClient(tunnelCfg, engineHandler)
 	if err != nil {
-		adminAPI.Stop()
-		server.Stop()
+		_ = adminAPI.Stop()
+		_ = server.Stop()
 		return fmt.Errorf("failed to create tunnel client: %w", err)
 	}
 
@@ -223,8 +223,8 @@ Environment Variables:
 	// Connect tunnel
 	fmt.Printf("Connecting to relay at %s...\n", *relayURL)
 	if err := tunnelClient.Connect(ctx); err != nil {
-		adminAPI.Stop()
-		server.Stop()
+		_ = adminAPI.Stop()
+		_ = server.Stop()
 		return fmt.Errorf("failed to connect tunnel: %w", err)
 	}
 

@@ -116,7 +116,7 @@ func (s *Store) GetRecording(id string) *Recording {
 	return nil
 }
 
-// ListRecordings returns recordings with optional filtering.
+// RecordingFilter specifies criteria for filtering recordings.
 type RecordingFilter struct {
 	SessionID string
 	Method    string

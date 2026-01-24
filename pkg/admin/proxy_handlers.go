@@ -328,7 +328,7 @@ func (pm *ProxyManager) handleGenerateCA(w http.ResponseWriter, r *http.Request)
 		CAPath string `json:"caPath"`
 	}
 	if r.Body != nil {
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 	}
 
 	if req.CAPath == "" {
@@ -383,7 +383,7 @@ func (pm *ProxyManager) handleDownloadCA(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/x-pem-file")
 	w.Header().Set("Content-Disposition", "attachment; filename=mockd-ca.crt")
 	w.WriteHeader(http.StatusOK)
-	w.Write(certPEM)
+	_, _ = w.Write(certPEM)
 }
 
 // getStatus returns the current proxy status (must be called with lock held).

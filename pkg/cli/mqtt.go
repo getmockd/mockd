@@ -123,12 +123,15 @@ Examples:
 		message = string(msgBytes)
 	}
 
+	//nolint:misspell // mosquitto is the correct name of the MQTT broker software
 	// Check if mosquitto_pub is available
+	//nolint:misspell // mosquitto is the correct name of the MQTT broker software
 	mosquittoPubPath, err := exec.LookPath("mosquitto_pub")
 	if err != nil {
 		return printMQTTPublishInstructions(*broker, topic, message, *username, *password, *qos, *retain)
 	}
 
+	//nolint:misspell // mosquitto is MQTT broker software name
 	// Build mosquitto_pub command
 	pubArgs := []string{"-h", extractMQTTHost(*broker), "-p", extractMQTTPort(*broker)}
 	if *username != "" {
@@ -221,11 +224,13 @@ Examples:
 	topic := fs.Arg(0)
 
 	// Check if mosquitto_sub is available
+	//nolint:misspell // mosquitto is the correct name of the MQTT broker software
 	mosquittoSubPath, err := exec.LookPath("mosquitto_sub")
 	if err != nil {
 		return printMQTTSubscribeInstructions(*broker, topic, *username, *password, *qos, *count, *timeout)
 	}
 
+	//nolint:misspell // mosquitto is the correct name of the MQTT broker software
 	// Build mosquitto_sub command
 	subArgs := []string{"-h", extractMQTTHost(*broker), "-p", extractMQTTPort(*broker)}
 	if *username != "" {
@@ -268,9 +273,9 @@ Examples:
 				return fmt.Errorf("subscription error: %w", err)
 			}
 		case <-sigChan:
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 		case <-time.After(*timeout):
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 			fmt.Println("\nTimeout reached")
 		}
 	} else {
@@ -280,7 +285,7 @@ Examples:
 				return fmt.Errorf("subscription error: %w", err)
 			}
 		case <-sigChan:
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 		}
 	}
 
@@ -308,11 +313,13 @@ func extractMQTTPort(broker string) string {
 }
 
 // printMQTTPublishInstructions prints instructions when mosquitto_pub is not available.
+//
+//nolint:misspell // mosquitto is MQTT broker software name, not a typo
 func printMQTTPublishInstructions(broker, topic, message, username, password string, qos int, retain bool) error {
 	fmt.Println("mosquitto_pub is not installed. To publish MQTT messages, install mosquitto-clients:")
 	fmt.Println()
 	fmt.Println("  # macOS")
-	fmt.Println("  brew install mosquitto")
+	fmt.Println("  brew install mosquitto") //nolint:misspell
 	fmt.Println()
 	fmt.Println("  # Ubuntu/Debian")
 	fmt.Println("  sudo apt install mosquitto-clients")
@@ -341,7 +348,9 @@ func printMQTTPublishInstructions(broker, topic, message, username, password str
 }
 
 // printMQTTSubscribeInstructions prints instructions when mosquitto_sub is not available.
-func printMQTTSubscribeInstructions(broker, topic, username, password string, qos, count int, timeout time.Duration) error {
+//
+//nolint:misspell // mosquitto is MQTT broker software name, not a typo
+func printMQTTSubscribeInstructions(broker, topic, username, password string, qos, count int, _ time.Duration) error {
 	fmt.Println("mosquitto_sub is not installed. To subscribe to MQTT topics, install mosquitto-clients:")
 	fmt.Println()
 	fmt.Println("  # macOS")

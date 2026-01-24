@@ -48,7 +48,10 @@ func connectWS(t *testing.T, url string) *ws.Conn {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := ws.Dial(ctx, url, nil)
+	conn, resp, err := ws.Dial(ctx, url, nil)
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		conn.Close(ws.StatusNormalClosure, "test cleanup")
@@ -143,7 +146,10 @@ func TestWS_US1_CloseFrame(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := ws.Dial(ctx, wsURL, nil)
+	conn, resp, err := ws.Dial(ctx, wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
 	require.NoError(t, err)
 
 	// Close the connection
@@ -176,7 +182,10 @@ func TestWS_US1_EndpointNotFound(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, _, err := ws.Dial(ctx, wsURL, nil)
+	_, resp, err := ws.Dial(ctx, wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
 	assert.Error(t, err) // Should fail to connect
 }
 
@@ -365,14 +374,20 @@ func TestWS_US4_MaxConnections(t *testing.T) {
 	ctx := context.Background()
 
 	// Connect first two clients
-	conn1, _, err := ws.Dial(ctx, wsURL, nil)
+	conn1, resp1, err := ws.Dial(ctx, wsURL, nil)
+	if resp1 != nil && resp1.Body != nil {
+		resp1.Body.Close()
+	}
 	require.NoError(t, err)
 	defer conn1.Close(ws.StatusNormalClosure, "")
 
 	// Small wait to ensure connection is registered
 	time.Sleep(50 * time.Millisecond)
 
-	conn2, _, err := ws.Dial(ctx, wsURL, nil)
+	conn2, resp2, err := ws.Dial(ctx, wsURL, nil)
+	if resp2 != nil && resp2.Body != nil {
+		resp2.Body.Close()
+	}
 	require.NoError(t, err)
 	defer conn2.Close(ws.StatusNormalClosure, "")
 
@@ -382,7 +397,10 @@ func TestWS_US4_MaxConnections(t *testing.T) {
 	// Third connection should fail with 503 Service Unavailable
 	ctx3, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, _, err = ws.Dial(ctx3, wsURL, nil)
+	_, resp3, err := ws.Dial(ctx3, wsURL, nil)
+	if resp3 != nil && resp3.Body != nil {
+		resp3.Body.Close()
+	}
 	assert.Error(t, err) // Should be rejected
 }
 
@@ -407,7 +425,12 @@ func TestWS_US5_SubprotocolNegotiation(t *testing.T) {
 		Subprotocols: []string{"json", "xml"},
 	})
 	require.NoError(t, err)
-	defer conn.Close(ws.StatusNormalClosure, "")
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+		conn.Close(ws.StatusNormalClosure, "")
+	}()
 
 	// Server should select "json" (first match)
 	assert.Equal(t, "json", resp.Header.Get("Sec-WebSocket-Protocol"))
@@ -428,7 +451,10 @@ func TestWS_US5_RequireSubprotocol(t *testing.T) {
 	defer cancel()
 
 	// Connect without subprotocol - should fail
-	_, _, err := ws.Dial(ctx, wsURL, nil)
+	_, resp, err := ws.Dial(ctx, wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
 	assert.Error(t, err)
 }
 
@@ -572,7 +598,10 @@ func TestWS_AdminAPI_Disconnect(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/test"
 
 	ctx := context.Background()
-	conn, _, err := ws.Dial(ctx, wsURL, nil)
+	conn, resp, err := ws.Dial(ctx, wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
 	require.NoError(t, err)
 
 	time.Sleep(50 * time.Millisecond)
@@ -747,6 +776,9 @@ func TestWS_FullServer_WithMiddleware(t *testing.T) {
 	defer cancel()
 
 	conn, resp, err := ws.Dial(ctx, wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 	if err != nil {
 		if resp != nil {
 			t.Fatalf("WebSocket connection failed with status %d: %v", resp.StatusCode, err)

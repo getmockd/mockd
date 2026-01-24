@@ -36,4 +36,6 @@ var (
 	ErrAlreadyInGroup = errors.New("already in group")
 	// ErrNotInGroup indicates the connection is not in the group.
 	ErrNotInGroup = errors.New("not in group")
+	// ErrTooManyGroups indicates the connection has joined too many groups.
+	ErrTooManyGroups = errors.New("too many groups")
 )

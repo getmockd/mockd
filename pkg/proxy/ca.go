@@ -65,7 +65,10 @@ func (c *certLRUCache) get(key string) (*CertPair, bool) {
 
 	// Move to front (most recently used)
 	c.order.MoveToFront(elem)
-	entry := elem.Value.(*certCacheEntry)
+	entry, ok := elem.Value.(*certCacheEntry)
+	if !ok {
+		return nil, false
+	}
 	entry.lastAccess = time.Now()
 
 	return entry.pair, true
@@ -79,7 +82,10 @@ func (c *certLRUCache) set(key string, pair *CertPair) {
 	// Check if key already exists
 	if elem, ok := c.items[key]; ok {
 		c.order.MoveToFront(elem)
-		entry := elem.Value.(*certCacheEntry)
+		entry, ok := elem.Value.(*certCacheEntry)
+		if !ok {
+			return
+		}
 		entry.pair = pair
 		entry.lastAccess = time.Now()
 		return
@@ -106,7 +112,10 @@ func (c *certLRUCache) evictOldest() {
 	if oldest == nil {
 		return
 	}
-	entry := oldest.Value.(*certCacheEntry)
+	entry, ok := oldest.Value.(*certCacheEntry)
+	if !ok {
+		return
+	}
 	delete(c.items, entry.key)
 	c.order.Remove(oldest)
 }
@@ -229,7 +238,7 @@ func (m *CAManager) Generate() error {
 	if err != nil {
 		return err
 	}
-	defer certOut.Close()
+	defer func() { _ = certOut.Close() }()
 
 	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
 		return err
@@ -240,7 +249,7 @@ func (m *CAManager) Generate() error {
 	if err != nil {
 		return err
 	}
-	defer keyOut.Close()
+	defer func() { _ = keyOut.Close() }()
 
 	keyBytes := x509.MarshalPKCS1PrivateKey(key)
 	if err := pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyBytes}); err != nil {

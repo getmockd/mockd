@@ -406,7 +406,10 @@ func (mm *MockManager) registerSOAPMock(m *mock.Mock) error {
 	}
 
 	// Create handler and register
-	handler := soap.NewHandler(cfg)
+	handler, err := soap.NewHandler(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create SOAP handler: %w", err)
+	}
 	mm.handler.RegisterSOAPHandler(cfg.Path, handler)
 
 	mm.log.Info("registered SOAP handler", "path", cfg.Path, "name", cfg.Name)
@@ -562,9 +565,7 @@ func (mm *MockManager) registerGRPCMock(m *mock.Mock) error {
 					StreamDelay: method.StreamDelay,
 				}
 				// Convert responses slice
-				for _, resp := range method.Responses {
-					grpcMethod.Responses = append(grpcMethod.Responses, resp)
-				}
+				grpcMethod.Responses = append(grpcMethod.Responses, method.Responses...)
 				// Convert error config
 				if method.Error != nil {
 					grpcMethod.Error = &grpc.GRPCErrorConfig{

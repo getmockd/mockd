@@ -248,7 +248,7 @@ func (s *WorkspaceFileStore) saveLocked() error {
 	}
 
 	if err := os.Rename(tmpFile, s.filePath); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return err
 	}
 

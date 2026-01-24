@@ -282,6 +282,36 @@ func (e *Engine) evaluateRequest(expr string, ctx *Context) string {
 	return ""
 }
 
+// ProcessInterface recursively processes all string values in an interface{}
+// with template variables. This is useful for processing nested data structures
+// like GraphQL responses or gRPC response configs.
+// Non-string values are returned unchanged.
+func (e *Engine) ProcessInterface(data interface{}, ctx *Context) interface{} {
+	if data == nil {
+		return nil
+	}
+
+	switch v := data.(type) {
+	case string:
+		result, _ := e.Process(v, ctx)
+		return result
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for key, val := range v {
+			result[key] = e.ProcessInterface(val, ctx)
+		}
+		return result
+	case []interface{}:
+		result := make([]interface{}, len(v))
+		for i, val := range v {
+			result[i] = e.ProcessInterface(val, ctx)
+		}
+		return result
+	default:
+		return data
+	}
+}
+
 // evaluateBodyField extracts a nested field from the parsed JSON body.
 // Supports dot notation like "user.name" or "items.0.id"
 func (e *Engine) evaluateBodyField(path string, body interface{}) string {

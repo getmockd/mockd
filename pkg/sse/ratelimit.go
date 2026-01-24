@@ -39,7 +39,6 @@ func NewRateLimiter(config *RateLimitConfig) *RateLimiter {
 // Returns nil if strategy is "drop" (caller should skip the event).
 func (r *RateLimiter) Wait(ctx context.Context) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	// Refill tokens based on elapsed time
 	now := time.Now()
@@ -53,31 +52,35 @@ func (r *RateLimiter) Wait(ctx context.Context) error {
 	// Check if we have tokens
 	if r.tokens >= 1 {
 		r.tokens--
+		r.mu.Unlock()
 		return nil
 	}
 
 	// No tokens available - handle based on strategy
 	switch r.config.Strategy {
 	case RateLimitStrategyDrop:
+		r.mu.Unlock()
 		return ErrRateLimited // Caller should skip this event
 
 	case RateLimitStrategyError:
+		r.mu.Unlock()
 		return ErrRateLimited
 
 	case RateLimitStrategyWait:
 		fallthrough
 	default:
-		// Calculate wait time
+		// Calculate wait time before releasing lock
 		waitTime := time.Duration((1 - r.tokens) / r.config.EventsPerSecond * float64(time.Second))
 		r.mu.Unlock()
 
 		select {
 		case <-ctx.Done():
-			r.mu.Lock()
 			return ctx.Err()
 		case <-time.After(waitTime):
+			// Re-acquire lock to update tokens
 			r.mu.Lock()
 			r.tokens = 0 // Consume the token we waited for
+			r.mu.Unlock()
 			return nil
 		}
 	}

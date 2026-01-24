@@ -25,9 +25,8 @@ func TestRunPorts_HelpFlag(t *testing.T) {
 	output := buf.String()
 
 	// --help causes flag.ErrHelp which is an error, but also prints usage
-	if err == nil {
-		// Some flag packages return nil for --help
-	}
+	// Some flag packages return nil for --help, which is acceptable
+	_ = err
 
 	// Check that help text was printed
 	if !strings.Contains(output, "Show all ports in use") {

@@ -80,7 +80,7 @@ Note: Stopping individual components (admin/engine) is not yet supported.
 	// Check if process is actually running
 	if !info.IsRunning() {
 		// Stale PID file - clean it up
-		RemovePIDFile(pidPath)
+		_ = RemovePIDFile(pidPath)
 		return fmt.Errorf("mockd is not running (stale PID file removed)")
 	}
 
@@ -111,7 +111,7 @@ Note: Stopping individual components (admin/engine) is not yet supported.
 		fmt.Println("done")
 		// Wait a moment then clean up PID file
 		time.Sleep(100 * time.Millisecond)
-		RemovePIDFile(pidPath)
+		_ = RemovePIDFile(pidPath)
 		return nil
 	}
 
@@ -122,7 +122,7 @@ Note: Stopping individual components (admin/engine) is not yet supported.
 	for time.Now().Before(deadline) {
 		if !checkProcessRunning(info.PID) {
 			fmt.Println("done")
-			RemovePIDFile(pidPath)
+			_ = RemovePIDFile(pidPath)
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)

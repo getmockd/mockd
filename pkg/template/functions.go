@@ -6,30 +6,7 @@ import (
 	"math/rand/v2"
 	"strconv"
 	"strings"
-	"time"
 )
-
-// Time functions
-
-// funcNow returns the current time in RFC3339 format
-func funcNow() string {
-	return time.Now().Format(time.RFC3339)
-}
-
-// funcNowUnix returns the current Unix timestamp as a string
-func funcNowUnix() string {
-	return strconv.FormatInt(time.Now().Unix(), 10)
-}
-
-// funcNowISO returns the current time in ISO 8601 format
-func funcNowISO() string {
-	return time.Now().Format("2006-01-02T15:04:05Z07:00")
-}
-
-// funcNowUnixMilli returns the current Unix timestamp in milliseconds as a string
-func funcNowUnixMilli() string {
-	return strconv.FormatInt(time.Now().UnixMilli(), 10)
-}
 
 // UUID functions
 
@@ -85,16 +62,6 @@ func funcUpper(s string) string {
 // funcLower converts a string to lowercase
 func funcLower(s string) string {
 	return strings.ToLower(s)
-}
-
-// funcTrim trims whitespace from both ends of a string
-func funcTrim(s string) string {
-	return strings.TrimSpace(s)
-}
-
-// funcLen returns the length of a string as a string
-func funcLen(s string) string {
-	return strconv.Itoa(len(s))
 }
 
 // Default function

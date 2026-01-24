@@ -4,8 +4,8 @@ package engine
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/getmockd/mockd/pkg/stateful"
 )
@@ -49,7 +49,9 @@ func (h *Handler) handleStatefulGet(w http.ResponseWriter, resource *stateful.St
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(item.ToJSON())
+	if err := json.NewEncoder(w).Encode(item.ToJSON()); err != nil {
+		h.log.Error("failed to encode stateful get response", "error", err)
+	}
 	return http.StatusOK
 }
 
@@ -59,7 +61,9 @@ func (h *Handler) handleStatefulList(w http.ResponseWriter, r *http.Request, res
 	result := resource.List(filter)
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(result)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		h.log.Error("failed to encode stateful list response", "error", err)
+	}
 	return http.StatusOK
 }
 
@@ -76,14 +80,16 @@ func (h *Handler) handleStatefulCreate(w http.ResponseWriter, resource *stateful
 
 	item, err := resource.Create(data, pathParams)
 	if err != nil {
-		if _, ok := err.(*stateful.ConflictError); ok {
-			return h.writeStatefulError(w, http.StatusConflict, "resource already exists", resource.Name(), data["id"].(string))
+		if conflictErr, ok := err.(*stateful.ConflictError); ok {
+			return h.writeStatefulError(w, http.StatusConflict, "resource already exists", resource.Name(), conflictErr.ID)
 		}
 		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), "")
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(item.ToJSON())
+	if err := json.NewEncoder(w).Encode(item.ToJSON()); err != nil {
+		h.log.Error("failed to encode stateful create response", "error", err)
+	}
 	return http.StatusCreated
 }
 
@@ -107,7 +113,9 @@ func (h *Handler) handleStatefulUpdate(w http.ResponseWriter, resource *stateful
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(item.ToJSON())
+	if err := json.NewEncoder(w).Encode(item.ToJSON()); err != nil {
+		h.log.Error("failed to encode stateful update response", "error", err)
+	}
 	return http.StatusOK
 }
 
@@ -129,7 +137,9 @@ func (h *Handler) handleStatefulDelete(w http.ResponseWriter, resource *stateful
 func (h *Handler) writeStatefulError(w http.ResponseWriter, statusCode int, errorMsg, resource, id string) int {
 	w.WriteHeader(statusCode)
 	resp := stateful.ErrorResponse{Error: errorMsg, Resource: resource, ID: id, StatusCode: statusCode}
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		h.log.Error("failed to encode stateful error response", "error", err)
+	}
 	return statusCode
 }
 
@@ -137,7 +147,9 @@ func (h *Handler) writeStatefulError(w http.ResponseWriter, statusCode int, erro
 func (h *Handler) writeStatefulErrorWithHint(w http.ResponseWriter, statusCode int, errorMsg, resource, id, hint string) int {
 	w.WriteHeader(statusCode)
 	resp := stateful.ErrorResponse{Error: errorMsg, Resource: resource, ID: id, StatusCode: statusCode, Hint: hint}
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		h.log.Error("failed to encode stateful error response", "error", err)
+	}
 	return statusCode
 }
 
@@ -185,18 +197,13 @@ func (h *Handler) parseQueryFilter(r *http.Request, resource *stateful.StatefulR
 	return filter
 }
 
-// parseIntParam parses an integer parameter.
+// parseIntParam parses an integer parameter safely using strconv.
+// It validates that the string contains a valid non-negative integer.
 func parseIntParam(s string, v *int) (int, error) {
-	var n int
-	_, err := func() (int, error) {
-		for _, c := range s {
-			if c < '0' || c > '9' {
-				return 0, io.EOF
-			}
-			n = n*10 + int(c-'0')
-		}
-		*v = n
-		return n, nil
-	}()
-	return n, err
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, err
+	}
+	*v = n
+	return n, nil
 }

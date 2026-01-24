@@ -226,7 +226,7 @@ func TestFromContext(t *testing.T) {
 	})
 
 	t.Run("handles nil context", func(t *testing.T) {
-		retrieved := FromContext(nil)
+		retrieved := FromContext(context.TODO())
 		if retrieved != nil {
 			t.Errorf("expected nil for nil context, got %v", retrieved)
 		}
@@ -251,7 +251,7 @@ func TestWithIdentity(t *testing.T) {
 			CommonName: "test-client",
 		}
 
-		ctx := WithIdentity(nil, identity)
+		ctx := WithIdentity(context.TODO(), identity)
 
 		if ctx == nil {
 			t.Fatal("expected non-nil context")

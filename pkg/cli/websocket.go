@@ -134,13 +134,16 @@ Examples:
 	// Connect
 	fmt.Printf("Connecting to %s...\n", url)
 	conn, resp, err := dialer.Dial(url, requestHeader)
+	if resp != nil && resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		if resp != nil {
 			return fmt.Errorf("connection failed: %v (HTTP %d)", err, resp.StatusCode)
 		}
 		return fmt.Errorf("connection failed: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if *subprotocol != "" && resp.Header.Get("Sec-WebSocket-Protocol") != "" {
 		fmt.Printf("Connected (subprotocol: %s)\n", resp.Header.Get("Sec-WebSocket-Protocol"))
@@ -160,7 +163,7 @@ Examples:
 		<-sigChan
 		fmt.Println("\nDisconnecting...")
 		cancel()
-		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	}()
 
 	// Channel for incoming messages
@@ -356,13 +359,16 @@ Examples:
 
 	// Connect
 	conn, resp, err := dialer.Dial(url, requestHeader)
+	if resp != nil && resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		if resp != nil {
 			return fmt.Errorf("connection failed: %v (HTTP %d)", err, resp.StatusCode)
 		}
 		return fmt.Errorf("connection failed: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send message
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
@@ -370,7 +376,7 @@ Examples:
 	}
 
 	// Close gracefully
-	conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 	if *jsonOutput {
 		output := map[string]interface{}{
@@ -467,13 +473,16 @@ Examples:
 	// Connect
 	fmt.Fprintf(os.Stderr, "Connecting to %s...\n", url)
 	conn, resp, err := dialer.Dial(url, requestHeader)
+	if resp != nil && resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		if resp != nil {
 			return fmt.Errorf("connection failed: %v (HTTP %d)", err, resp.StatusCode)
 		}
 		return fmt.Errorf("connection failed: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if *count > 0 {
 		fmt.Fprintf(os.Stderr, "Listening for %d messages (Ctrl+C to stop)\n", *count)
@@ -496,7 +505,7 @@ Examples:
 		<-sigChan
 		fmt.Fprintln(os.Stderr, "\nDisconnecting...")
 		cancel()
-		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	}()
 
 	received := 0

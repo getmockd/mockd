@@ -120,7 +120,7 @@ func (pm *ProxyManager) handleDeleteSessions(w http.ResponseWriter, r *http.Requ
 	count := len(sessions)
 
 	for _, s := range sessions {
-		pm.store.DeleteSession(s.ID)
+		_ = pm.store.DeleteSession(s.ID)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]int{"deleted": count})

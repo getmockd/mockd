@@ -79,6 +79,7 @@ func GetContextConfigPath() (string, error) {
 func LoadContextConfig() (*ContextConfig, error) {
 	path, err := GetContextConfigPath()
 	if err != nil {
+		//nolint:nilerr // intentionally returning default config when config path cannot be determined
 		return NewDefaultContextConfig(), nil
 	}
 
@@ -197,7 +198,7 @@ func (c *ContextConfig) SetWorkspace(workspace string) error {
 	return nil
 }
 
-// GetAdminURL returns the admin URL for the current context.
+// GetAdminURLFromContext returns the admin URL for the current context.
 // Falls back to default if no context is set.
 func GetAdminURLFromContext() string {
 	cfg, err := LoadContextConfig()

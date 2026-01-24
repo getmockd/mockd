@@ -323,6 +323,185 @@ var (
 	_ SSERecordingHook       = (*FileStoreSSEHook)(nil)
 )
 
+// FileStoreHookFactory creates recording hooks from active FileStore sessions.
+// This implements the websocket.RecordingHookFactory interface.
+type FileStoreHookFactory struct {
+	store *FileStore
+}
+
+// NewFileStoreHookFactory creates a new hook factory backed by a FileStore.
+func NewFileStoreHookFactory(store *FileStore) *FileStoreHookFactory {
+	return &FileStoreHookFactory{store: store}
+}
+
+// CreateHook creates a WebSocket recording hook for the given path if there's an active session.
+// Returns nil if no active recording session exists for this path.
+func (f *FileStoreHookFactory) CreateHook(path string) WebSocketRecordingHook {
+	if f.store == nil {
+		return nil
+	}
+
+	// Check if there's an active recording session for this path
+	sessionID := f.store.GetActiveSessionForPath(path, ProtocolWebSocket)
+	if sessionID == "" {
+		return nil
+	}
+
+	// Get the session and create a wrapper hook that appends to it
+	f.store.mu.RLock()
+	session, ok := f.store.sessions[sessionID]
+	f.store.mu.RUnlock()
+
+	if !ok || session == nil {
+		return nil
+	}
+
+	// Return a hook that appends frames to the existing session
+	return &sessionAppendHook{
+		store:     f.store,
+		sessionID: sessionID,
+		session:   session,
+	}
+}
+
+// sessionAppendHook is a WebSocketRecordingHook that appends to an existing session.
+type sessionAppendHook struct {
+	store     *FileStore
+	sessionID string
+	session   *StreamRecordingSession
+}
+
+func (h *sessionAppendHook) ID() string {
+	return h.sessionID
+}
+
+func (h *sessionAppendHook) OnConnect(subprotocol string) {
+	h.session.mu.Lock()
+	defer h.session.mu.Unlock()
+	if h.session.recording != nil {
+		h.session.recording.Metadata.Subprotocol = subprotocol
+	}
+}
+
+func (h *sessionAppendHook) OnFrame(frame any) error {
+	wsFrame, ok := frame.(WebSocketFrame)
+	if !ok {
+		if wsFramePtr, ok := frame.(*WebSocketFrame); ok {
+			wsFrame = *wsFramePtr
+		} else {
+			return fmt.Errorf("expected WebSocketFrame, got %T", frame)
+		}
+	}
+
+	h.session.mu.Lock()
+	defer h.session.mu.Unlock()
+
+	if h.session.closed {
+		return ErrNoActiveSession
+	}
+
+	h.session.recording.AddWebSocketFrame(wsFrame)
+	return nil
+}
+
+func (h *sessionAppendHook) OnClose(code int, reason string) {
+	_ = h.store.AppendWebSocketCloseFrame(h.sessionID, DirectionServerToClient, code, reason)
+}
+
+func (h *sessionAppendHook) OnComplete() error {
+	// Don't complete the session here - it's managed by the admin API via /stop endpoint
+	return nil
+}
+
+func (h *sessionAppendHook) OnError(err error) {
+	// Don't mark incomplete - let the admin API handle it
+}
+
+// CreateSSEHookFactory returns a function that creates SSE recording hooks.
+// This is used by the SSE handler which expects a function signature.
+func (f *FileStoreHookFactory) CreateSSEHookFactory() func(streamID, mockID, path string) (SSERecordingHook, error) {
+	return func(streamID, mockID, path string) (SSERecordingHook, error) {
+		if f.store == nil {
+			return nil, nil
+		}
+
+		// Check if there's an active recording session for this path
+		sessionID := f.store.GetActiveSessionForPath(path, ProtocolSSE)
+		if sessionID == "" {
+			return nil, nil
+		}
+
+		// Get the session and create a wrapper hook that appends to it
+		f.store.mu.RLock()
+		session, ok := f.store.sessions[sessionID]
+		f.store.mu.RUnlock()
+
+		if !ok || session == nil {
+			return nil, nil
+		}
+
+		// Return a hook that appends events to the existing session
+		return &sseSessionAppendHook{
+			store:     f.store,
+			sessionID: sessionID,
+			session:   session,
+		}, nil
+	}
+}
+
+// sseSessionAppendHook is an SSERecordingHook that appends to an existing session.
+type sseSessionAppendHook struct {
+	store     *FileStore
+	sessionID string
+	session   *StreamRecordingSession
+}
+
+func (h *sseSessionAppendHook) ID() string {
+	return h.sessionID
+}
+
+func (h *sseSessionAppendHook) OnStreamStart() {
+	// Nothing to do - session already started via admin API
+}
+
+func (h *sseSessionAppendHook) OnFrame(frame any) error {
+	sseEvent, ok := frame.(SSEEvent)
+	if !ok {
+		if sseEventPtr, ok := frame.(*SSEEvent); ok {
+			sseEvent = *sseEventPtr
+		} else {
+			return fmt.Errorf("expected SSEEvent, got %T", frame)
+		}
+	}
+
+	h.session.mu.Lock()
+	defer h.session.mu.Unlock()
+
+	if h.session.closed {
+		return ErrNoActiveSession
+	}
+
+	h.session.recording.AddSSEEvent(sseEvent)
+	return nil
+}
+
+func (h *sseSessionAppendHook) OnStreamEnd() {
+	h.session.mu.Lock()
+	defer h.session.mu.Unlock()
+	if h.session.recording != nil {
+		h.session.recording.SetSSEEnd()
+	}
+}
+
+func (h *sseSessionAppendHook) OnComplete() error {
+	// Don't complete the session here - it's managed by the admin API via /stop endpoint
+	return nil
+}
+
+func (h *sseSessionAppendHook) OnError(err error) {
+	// Don't mark incomplete - let the admin API handle it
+}
+
 // HookManager manages multiple recording hooks for a single connection.
 type HookManager struct {
 	mu    sync.RWMutex

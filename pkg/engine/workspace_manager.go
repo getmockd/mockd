@@ -139,7 +139,7 @@ func (m *WorkspaceManager) StartWorkspace(ctx context.Context, ws *store.EngineW
 			return fmt.Errorf("workspace %s is already running on port %d", ws.WorkspaceID, existing.HTTPPort)
 		}
 		// Stop existing server before restarting
-		existing.Stop()
+		_ = existing.Stop()
 	}
 
 	// Create workspace server
@@ -479,7 +479,6 @@ func (s *WorkspaceServer) Logger() RequestLogger {
 }
 
 // AddMock adds a mock to this workspace's store.
-// 
 func (s *WorkspaceServer) AddMock(cfg *config.MockConfiguration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

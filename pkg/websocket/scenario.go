@@ -258,10 +258,11 @@ func (s *ScenarioState) Info() *ScenarioStateInfo {
 
 // ScenarioExecutor runs a scenario on a connection.
 type ScenarioExecutor struct {
-	conn   *Connection
-	state  *ScenarioState
-	ctx    context.Context
-	cancel context.CancelFunc
+	conn    *Connection
+	state   *ScenarioState
+	ctx     context.Context
+	cancel  context.CancelFunc
+	matchCh chan struct{} // signals when HandleMessage matches an "expect" step
 }
 
 // NewScenarioExecutor creates a new ScenarioExecutor.
@@ -272,10 +273,11 @@ func NewScenarioExecutor(conn *Connection, scenario *Scenario) *ScenarioExecutor
 	conn.SetScenarioState(state)
 
 	return &ScenarioExecutor{
-		conn:   conn,
-		state:  state,
-		ctx:    ctx,
-		cancel: cancel,
+		conn:    conn,
+		state:   state,
+		ctx:     ctx,
+		cancel:  cancel,
+		matchCh: make(chan struct{}, 1), // buffered to prevent blocking
 	}
 }
 
@@ -286,6 +288,7 @@ func (e *ScenarioExecutor) State() *ScenarioState {
 
 // HandleMessage processes an incoming message for the scenario.
 // Returns true if the message was consumed by the scenario.
+// This method is safe to call concurrently with Run().
 func (e *ScenarioExecutor) HandleMessage(msgType MessageType, data []byte) bool {
 	step := e.state.GetCurrentStepConfig()
 	if step == nil || step.stepType != "expect" {
@@ -299,6 +302,14 @@ func (e *ScenarioExecutor) HandleMessage(msgType MessageType, data []byte) bool 
 
 	// Message matched - advance to next step
 	e.state.AdvanceStep()
+
+	// Signal to Run() that the step was handled (non-blocking)
+	select {
+	case e.matchCh <- struct{}{}:
+	default:
+		// Channel already has a signal, no need to add another
+	}
+
 	return true
 }
 
@@ -334,14 +345,26 @@ func (e *ScenarioExecutor) Run() {
 			}
 
 		case "expect":
-			// Wait for message via HandleMessage or timeout
+			// Wait for message via HandleMessage or timeout.
+			// HandleMessage will call AdvanceStep() and signal matchCh if a message matches.
+			// We only call AdvanceStep() here on timeout for optional steps.
 			select {
+			case <-e.matchCh:
+				// HandleMessage matched and already advanced the step.
+				// Continue to next iteration.
 			case <-time.After(step.timeout):
-				if step.optional {
-					e.state.AdvanceStep()
-				} else {
-					// Timeout - could close connection or just continue
-					return
+				// Timeout reached - check if HandleMessage matched while we were selecting
+				select {
+				case <-e.matchCh:
+					// HandleMessage matched just as we timed out, step already advanced
+				default:
+					// No match - handle timeout
+					if step.optional {
+						e.state.AdvanceStep()
+					} else {
+						// Required step timed out - end scenario
+						return
+					}
 				}
 			case <-e.ctx.Done():
 				return

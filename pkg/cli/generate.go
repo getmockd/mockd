@@ -234,7 +234,7 @@ func generateFromPrompt(prompt, outputFile, providerName, model string, dryRun b
 	return outputMocks(collection, outputFile, dryRun, adminURL)
 }
 
-func outputMocks(collection *config.MockCollection, outputFile string, dryRun bool, adminURL string) error {
+func outputMocks(collection *config.MockCollection, outputFile string, dryRun bool, _ string) error {
 	if dryRun {
 		fmt.Println("\nDry run - mocks that would be created:")
 		for _, mock := range collection.Mocks {

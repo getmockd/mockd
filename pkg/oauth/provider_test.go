@@ -2,10 +2,12 @@ package oauth
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -942,5 +944,117 @@ func TestParseDuration(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestProvider_Stop(t *testing.T) {
+	provider, err := NewProvider(testConfig())
+	if err != nil {
+		t.Fatalf("failed to create provider: %v", err)
+	}
+
+	// Stop should complete without hanging
+	done := make(chan struct{})
+	go func() {
+		provider.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop() did not complete in time - possible deadlock")
+	}
+}
+
+func TestProvider_RevokeToken_NoDeadlock(t *testing.T) {
+	provider, err := NewProvider(testConfig())
+	if err != nil {
+		t.Fatalf("failed to create provider: %v", err)
+	}
+	defer provider.Stop()
+
+	// Test concurrent RevokeToken and ValidateRefreshToken calls
+	// This exercises the lock ordering that could cause deadlock
+	var wg sync.WaitGroup
+
+	for i := 0; i < 10; i++ {
+		// Store a refresh token
+		token := fmt.Sprintf("refresh-token-%d", i)
+		provider.StoreRefreshToken(&RefreshTokenData{
+			Token:     token,
+			ClientID:  "test-client",
+			UserID:    "user-123",
+			ExpiresAt: time.Now().Add(time.Hour),
+		})
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 100; i++ {
+			wg.Add(2)
+			token := fmt.Sprintf("refresh-token-%d", i%10)
+
+			go func(t string) {
+				defer wg.Done()
+				provider.RevokeToken(t)
+			}(token)
+
+			go func(t string) {
+				defer wg.Done()
+				// This validates and may try to delete expired tokens
+				provider.ValidateRefreshToken(t, "test-client")
+			}(token)
+		}
+		wg.Wait()
+	}()
+
+	select {
+	case <-done:
+		// Success - no deadlock
+	case <-time.After(10 * time.Second):
+		t.Fatal("Test timed out - possible deadlock in RevokeToken")
+	}
+}
+
+func TestProvider_CleanupExpiredTokens(t *testing.T) {
+	provider, err := NewProvider(testConfig())
+	if err != nil {
+		t.Fatalf("failed to create provider: %v", err)
+	}
+	defer provider.Stop()
+
+	// Store an expired auth code
+	provider.StoreAuthorizationCode(&AuthorizationCode{
+		Code:      "expired-code",
+		ClientID:  "test-client",
+		ExpiresAt: time.Now().Add(-time.Hour), // Already expired
+	})
+
+	// Store an expired refresh token
+	provider.StoreRefreshToken(&RefreshTokenData{
+		Token:     "expired-refresh",
+		ClientID:  "test-client",
+		ExpiresAt: time.Now().Add(-time.Hour), // Already expired
+	})
+
+	// Manually trigger cleanup
+	provider.cleanupExpiredTokens()
+
+	// Verify expired tokens are cleaned up
+	provider.authCodesMu.RLock()
+	_, hasCode := provider.authCodes["expired-code"]
+	provider.authCodesMu.RUnlock()
+	if hasCode {
+		t.Error("expected expired auth code to be cleaned up")
+	}
+
+	provider.refreshTokensMu.RLock()
+	_, hasRefresh := provider.refreshTokens["expired-refresh"]
+	provider.refreshTokensMu.RUnlock()
+	if hasRefresh {
+		t.Error("expected expired refresh token to be cleaned up")
 	}
 }

@@ -12,7 +12,6 @@ type SlowWriter struct {
 	w              http.ResponseWriter
 	bytesPerSecond int
 	mu             sync.Mutex
-	lastWrite      time.Time
 }
 
 // Header returns the header map
@@ -56,9 +55,9 @@ func (sw *SlowWriter) Write(p []byte) (int, error) {
 			f.Flush()
 		}
 
-		// Sleep to maintain bandwidth limit
+		// Sleep to maintain bandwidth limit based on actual bytes written
 		if len(p) > 0 {
-			sleepDuration := time.Second * time.Duration(chunkSize) / time.Duration(sw.bytesPerSecond)
+			sleepDuration := time.Second * time.Duration(n) / time.Duration(sw.bytesPerSecond)
 			time.Sleep(sleepDuration)
 		}
 	}
@@ -82,8 +81,7 @@ func (sw *SlowWriter) Unwrap() http.ResponseWriter {
 type CorruptingWriter struct {
 	w           http.ResponseWriter
 	corruptRate float64
-	rng         *rand.Rand
-	mu          sync.Mutex
+	rng         *rand.Rand // Each CorruptingWriter has its own rng instance, no mutex needed
 }
 
 // Header returns the header map
@@ -106,14 +104,12 @@ func (cw *CorruptingWriter) Write(p []byte) (int, error) {
 	corrupted := make([]byte, len(p))
 	copy(corrupted, p)
 
-	cw.mu.Lock()
-	// Corrupt random bytes
+	// Corrupt random bytes (each CorruptingWriter has its own rng, so no mutex needed)
 	for i := range corrupted {
 		if cw.rng.Float64() < cw.corruptRate {
 			corrupted[i] = byte(cw.rng.Intn(256))
 		}
 	}
-	cw.mu.Unlock()
 
 	return cw.w.Write(corrupted)
 }

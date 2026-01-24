@@ -677,19 +677,19 @@ func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Reques
 	// Handle blocking conflicts (cross-workspace or cross-protocol)
 	if portResult.Conflict != nil {
 		conflict := portResult.Conflict
-		conflictName := conflict.ConflictName
-		if conflictName == "" {
-			conflictName = conflict.ConflictID
-		}
 		// Determine the type of conflict for better error message
 		if conflict.ConflictType != m.Type {
 			writeError(w, http.StatusConflict, "port_conflict",
 				fmt.Sprintf("Port %d is in use by protocol '%s'. Different protocols cannot share ports.",
 					conflict.Port, conflict.ConflictType))
 		} else {
+			conflictName := conflict.ConflictName
+			if conflictName == "" {
+				conflictName = conflict.ConflictID
+			}
 			writeError(w, http.StatusConflict, "port_conflict",
 				fmt.Sprintf("Port %d is in use by workspace '%s'. Ports cannot be shared across workspaces.",
-					conflict.Port, conflict.ConflictID))
+					conflict.Port, conflictName))
 		}
 		return
 	}

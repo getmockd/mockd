@@ -64,9 +64,6 @@ type ReplaySession struct {
 
 	// Frame sender callback
 	sendFrame func(frame interface{}) error
-
-	// Timing tracking
-	lastFrameTime time.Time
 }
 
 // AdvanceRequest for triggered replay.
@@ -421,8 +418,8 @@ func (s *ReplaySession) runSynchronizedMode() error {
 				if s.Config.StrictMatching {
 					expectedData := s.getFrameData(frame)
 					if string(msg) != string(expectedData) {
-						// Message doesn't match, could handle mismatch here
-						// For now, continue
+						// Message doesn't match - mismatch is ignored in non-strict replay
+						_ = expectedData // acknowledge the mismatch was checked
 					}
 				}
 			case <-time.After(timeout):

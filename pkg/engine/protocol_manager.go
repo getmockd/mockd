@@ -253,7 +253,11 @@ func (pm *ProtocolManager) startSOAP(cfg *ProtocolConfig, handler *Handler) erro
 		}
 
 		// Create SOAP handler
-		soapHandler := soap.NewHandler(soapCfg)
+		soapHandler, err := soap.NewHandler(soapCfg)
+		if err != nil {
+			pm.log.Error("failed to create SOAP handler", "path", soapCfg.Path, "error", err)
+			continue
+		}
 
 		// Set request logger for unified logging
 		if pm.requestLogger != nil {

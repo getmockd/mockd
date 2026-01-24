@@ -122,8 +122,13 @@ func (h *ResponseHandler) executeResponse(resp *MockResponse, triggerTopic strin
 	template := NewTemplate(resp.PayloadTemplate, h.sequences)
 	responsePayload := template.Render(ctx)
 
-	// Publish the response
-	_ = h.broker.Publish(responseTopic, []byte(responsePayload), 0, false)
+	// Publish the response and log any errors
+	if err := h.broker.Publish(responseTopic, []byte(responsePayload), 0, false); err != nil {
+		h.broker.log.Error("failed to publish mock response",
+			"topic", responseTopic,
+			"responseID", resp.ID,
+			"error", err)
+	}
 
 	// Notify test panel sessions about the mock response
 	h.broker.notifyMockResponse(responseTopic, []byte(responsePayload), resp.ID)

@@ -123,12 +123,12 @@ Examples:
 
 	// Table output
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tMETHOD\tPATH\tSTATUS\tDURATION")
+	_, _ = fmt.Fprintln(w, "ID\tMETHOD\tPATH\tSTATUS\tDURATION")
 	for _, r := range recordings {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%v\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%v\n",
 			r.ID[:8], r.Request.Method, r.Request.Path, r.Response.StatusCode, r.Duration)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	if len(recordings) < total {
 		fmt.Printf("\nShowing %d of %d recordings\n", len(recordings), total)
@@ -363,7 +363,7 @@ Examples:
 
 		fmt.Printf("This will clear %d recordings. Continue? [y/N]: ", total)
 		var response string
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		if response != "y" && response != "Y" {
 			fmt.Println("Cancelled")
 			return nil

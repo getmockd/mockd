@@ -241,7 +241,7 @@ func TestRunExport_ConnectionError(t *testing.T) {
 		if !containsString(errStr, "connect") &&
 			!containsString(errStr, "connection") &&
 			!containsString(errStr, "refused") {
-			// Error format may vary, but should be about connectivity
+			t.Logf("Error format may vary, but should be about connectivity: %s", errStr)
 		}
 	}
 }

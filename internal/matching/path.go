@@ -4,7 +4,45 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 )
+
+// regexCache caches compiled regex patterns for performance.
+// Patterns are validated at config load time, so cache misses
+// are rare in steady-state operation.
+var (
+	regexCache   = make(map[string]*regexp.Regexp)
+	regexCacheMu sync.RWMutex
+)
+
+// getCompiledRegex returns a cached compiled regex or compiles and caches it.
+// Returns nil if the pattern is invalid.
+func getCompiledRegex(pattern string) *regexp.Regexp {
+	// Fast path: check cache with read lock
+	regexCacheMu.RLock()
+	re, ok := regexCache[pattern]
+	regexCacheMu.RUnlock()
+	if ok {
+		return re
+	}
+
+	// Slow path: compile and cache
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil
+	}
+
+	regexCacheMu.Lock()
+	// Double-check after acquiring write lock
+	if existing, ok := regexCache[pattern]; ok {
+		regexCacheMu.Unlock()
+		return existing
+	}
+	regexCache[pattern] = re
+	regexCacheMu.Unlock()
+
+	return re
+}
 
 // MatchPath checks if the request path matches the pattern.
 // Returns a score > 0 if matched, 0 if not matched.
@@ -111,14 +149,15 @@ func matchWildcard(pattern, path string) bool {
 // The score is ScorePathPattern (between exact match and named params).
 // Also returns a map of named capture groups for template variable access.
 // Uses Go's regexp package with RE2 syntax.
+// Compiled patterns are cached for performance.
 func MatchPathPattern(pattern, path string) (score int, captures map[string]string) {
 	if pattern == "" {
 		return 0, nil
 	}
 
-	// Compile the regex pattern
-	re, err := regexp.Compile(pattern)
-	if err != nil {
+	// Get cached compiled regex pattern
+	re := getCompiledRegex(pattern)
+	if re == nil {
 		// Invalid regex pattern - gracefully return no match
 		return 0, nil
 	}

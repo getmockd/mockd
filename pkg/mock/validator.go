@@ -45,17 +45,13 @@ func (m *Mock) Validate() error {
 	case MockTypeWebSocket:
 		return m.validateWebSocket()
 	case MockTypeGraphQL:
-		// TODO: Add GraphQL validation
-		return nil
+		return m.validateGraphQL()
 	case MockTypeGRPC:
-		// TODO: Add gRPC validation
-		return nil
+		return m.validateGRPC()
 	case MockTypeSOAP:
-		// TODO: Add SOAP validation
-		return nil
+		return m.validateSOAP()
 	case MockTypeMQTT:
-		// TODO: Add MQTT validation
-		return nil
+		return m.validateMQTT()
 	case MockTypeOAuth:
 		return m.validateOAuth()
 	case "":
@@ -276,7 +272,7 @@ func (m *MTLSMatch) Validate() error {
 		}
 		// Check that it's valid hex
 		for _, c := range normalized {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 				return &ValidationError{
 					Field:   "matcher.mtls.fingerprint",
 					Message: "fingerprint must contain only hex characters",
@@ -418,6 +414,149 @@ func (c *ChunkedConfig) Validate() error {
 	// Validate chunk delay
 	if c.ChunkDelay < 0 {
 		return &ValidationError{Field: "chunked.chunkDelay", Message: "must be >= 0"}
+	}
+
+	return nil
+}
+
+// validateGraphQL validates GraphQL mock specifics.
+func (m *Mock) validateGraphQL() error {
+	if m.GraphQL == nil {
+		return &ValidationError{Field: "graphql", Message: "graphql spec is required for GraphQL mocks"}
+	}
+
+	if m.GraphQL.Path == "" {
+		return &ValidationError{Field: "graphql.path", Message: "path is required"}
+	}
+
+	if !strings.HasPrefix(m.GraphQL.Path, "/") {
+		return &ValidationError{Field: "graphql.path", Message: "path must start with /"}
+	}
+
+	// Either schema or schemaFile must be specified (but not both)
+	hasSchema := m.GraphQL.Schema != ""
+	hasSchemaFile := m.GraphQL.SchemaFile != ""
+
+	if !hasSchema && !hasSchemaFile {
+		return &ValidationError{Field: "graphql", Message: "one of schema or schemaFile is required"}
+	}
+
+	if hasSchema && hasSchemaFile {
+		return &ValidationError{Field: "graphql", Message: "cannot specify both schema and schemaFile"}
+	}
+
+	return nil
+}
+
+// validateGRPC validates gRPC mock specifics.
+func (m *Mock) validateGRPC() error {
+	if m.GRPC == nil {
+		return &ValidationError{Field: "grpc", Message: "grpc spec is required for gRPC mocks"}
+	}
+
+	if m.GRPC.Port <= 0 || m.GRPC.Port > 65535 {
+		return &ValidationError{Field: "grpc.port", Message: "port must be between 1 and 65535"}
+	}
+
+	// At least one proto file must be specified
+	hasProtoFile := m.GRPC.ProtoFile != ""
+	hasProtoFiles := len(m.GRPC.ProtoFiles) > 0
+
+	if !hasProtoFile && !hasProtoFiles {
+		return &ValidationError{Field: "grpc", Message: "one of protoFile or protoFiles is required"}
+	}
+
+	if hasProtoFile && hasProtoFiles {
+		return &ValidationError{Field: "grpc", Message: "cannot specify both protoFile and protoFiles"}
+	}
+
+	return nil
+}
+
+// validateSOAP validates SOAP mock specifics.
+func (m *Mock) validateSOAP() error {
+	if m.SOAP == nil {
+		return &ValidationError{Field: "soap", Message: "soap spec is required for SOAP mocks"}
+	}
+
+	if m.SOAP.Path == "" {
+		return &ValidationError{Field: "soap.path", Message: "path is required"}
+	}
+
+	if !strings.HasPrefix(m.SOAP.Path, "/") {
+		return &ValidationError{Field: "soap.path", Message: "path must start with /"}
+	}
+
+	// WSDL and WSDLFile are mutually exclusive
+	hasWSDL := m.SOAP.WSDL != ""
+	hasWSDLFile := m.SOAP.WSDLFile != ""
+
+	if hasWSDL && hasWSDLFile {
+		return &ValidationError{Field: "soap", Message: "cannot specify both wsdl and wsdlFile"}
+	}
+
+	// Validate operations if present
+	for name, op := range m.SOAP.Operations {
+		if op.Response == "" && op.Fault == nil {
+			return &ValidationError{
+				Field:   fmt.Sprintf("soap.operations.%s", name),
+				Message: "operation must have either response or fault",
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateMQTT validates MQTT mock specifics.
+func (m *Mock) validateMQTT() error {
+	if m.MQTT == nil {
+		return &ValidationError{Field: "mqtt", Message: "mqtt spec is required for MQTT mocks"}
+	}
+
+	if m.MQTT.Port <= 0 || m.MQTT.Port > 65535 {
+		return &ValidationError{Field: "mqtt.port", Message: "port must be between 1 and 65535"}
+	}
+
+	// Validate TLS config if present
+	if m.MQTT.TLS != nil && m.MQTT.TLS.Enabled {
+		if m.MQTT.TLS.CertFile == "" {
+			return &ValidationError{Field: "mqtt.tls.certFile", Message: "certFile is required when TLS is enabled"}
+		}
+		if m.MQTT.TLS.KeyFile == "" {
+			return &ValidationError{Field: "mqtt.tls.keyFile", Message: "keyFile is required when TLS is enabled"}
+		}
+	}
+
+	// Validate auth config if present
+	if m.MQTT.Auth != nil && m.MQTT.Auth.Enabled {
+		if len(m.MQTT.Auth.Users) == 0 {
+			return &ValidationError{Field: "mqtt.auth.users", Message: "at least one user is required when auth is enabled"}
+		}
+		for i, user := range m.MQTT.Auth.Users {
+			if user.Username == "" {
+				return &ValidationError{
+					Field:   fmt.Sprintf("mqtt.auth.users[%d].username", i),
+					Message: "username is required",
+				}
+			}
+		}
+	}
+
+	// Validate topics if present
+	for i, topic := range m.MQTT.Topics {
+		if topic.Topic == "" {
+			return &ValidationError{
+				Field:   fmt.Sprintf("mqtt.topics[%d].topic", i),
+				Message: "topic is required",
+			}
+		}
+		if topic.QoS < 0 || topic.QoS > 2 {
+			return &ValidationError{
+				Field:   fmt.Sprintf("mqtt.topics[%d].qos", i),
+				Message: "qos must be 0, 1, or 2",
+			}
+		}
 	}
 
 	return nil

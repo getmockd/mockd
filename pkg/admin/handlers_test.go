@@ -205,7 +205,7 @@ func (mes *mockEngineServer) addMock(m *config.MockConfiguration) {
 }
 
 func (mes *mockEngineServer) client() *engineclient.Client {
-	return engineclient.New(mes.Server.URL)
+	return engineclient.New(mes.URL)
 }
 
 // TestHandleListMocks tests the GET /mocks handler.

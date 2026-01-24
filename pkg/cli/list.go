@@ -136,7 +136,7 @@ func outputMocksTable(mocks []*mock.Mock) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tTYPE\tPATH\tMETHOD\tSTATUS\tENABLED")
+	_, _ = fmt.Fprintln(w, "ID\tTYPE\tPATH\tMETHOD\tSTATUS\tENABLED")
 
 	for _, m := range mocks {
 		path, method, status := extractMockDetails(m)
@@ -162,7 +162,7 @@ func outputMocksTable(mocks []*mock.Mock) error {
 			mockType = "http"
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\n",
 			id, mockType, path, method, statusStr, m.Enabled)
 	}
 

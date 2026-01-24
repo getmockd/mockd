@@ -286,7 +286,7 @@ Examples:
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tDESCRIPTION")
+	_, _ = fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tDESCRIPTION")
 
 	for _, ws := range workspaces {
 		current := ""
@@ -307,7 +307,7 @@ Examples:
 			id = id[:17] + "..."
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, id, ws.Name, ws.Type, description)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, id, ws.Name, ws.Type, description)
 	}
 
 	return w.Flush()
@@ -570,6 +570,7 @@ func NewWorkspaceClient(baseURL string, opts *WorkspaceClientOptions) *Workspace
 
 		if opts.TLSInsecure {
 			client.httpClient.Transport = &http.Transport{
+				//nolint:gosec // G402: InsecureSkipVerify is intentional when --insecure flag is used
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},
@@ -622,7 +623,7 @@ func (c *WorkspaceClient) ListWorkspaces() ([]*WorkspaceDTO, error) {
 			Message:    fmt.Sprintf("cannot connect to admin API at %s: %v", c.baseURL, err),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, parseAPIError(resp)
@@ -654,7 +655,7 @@ func (c *WorkspaceClient) GetWorkspace(id string) (*WorkspaceDTO, error) {
 			Message:    fmt.Sprintf("cannot connect to admin API at %s: %v", c.baseURL, err),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, &APIError{
@@ -706,7 +707,7 @@ func (c *WorkspaceClient) CreateWorkspace(name, wsType, description string) (*Wo
 			Message:    fmt.Sprintf("cannot connect to admin API at %s: %v", c.baseURL, err),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		return nil, parseAPIError(resp)
@@ -735,7 +736,7 @@ func (c *WorkspaceClient) DeleteWorkspace(id string) error {
 			Message:    fmt.Sprintf("cannot connect to admin API at %s: %v", c.baseURL, err),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return &APIError{

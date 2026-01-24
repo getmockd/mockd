@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Protocol version supported by this implementation.
+// ProtocolVersion is the MCP protocol version supported by this implementation.
 const ProtocolVersion = "2025-06-18"
 
 // JSON-RPC 2.0 Types
@@ -25,10 +25,10 @@ func (r *JSONRPCRequest) IsNotification() bool {
 
 // JSONRPCResponse represents an outgoing JSON-RPC 2.0 response.
 type JSONRPCResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      interface{}     `json:"id"`
-	Result  interface{}     `json:"result,omitempty"`
-	Error   *JSONRPCError   `json:"error,omitempty"`
+	JSONRPC string        `json:"jsonrpc"`
+	ID      interface{}   `json:"id"`
+	Result  interface{}   `json:"result,omitempty"`
+	Error   *JSONRPCError `json:"error,omitempty"`
 }
 
 // JSONRPCError represents a JSON-RPC 2.0 error object.
@@ -142,11 +142,11 @@ type ToolResult struct {
 
 // ContentBlock represents a content item in tool results.
 type ContentBlock struct {
-	Type     string            `json:"type"`
-	Text     string            `json:"text,omitempty"`
-	MimeType string            `json:"mimeType,omitempty"`
-	Blob     string            `json:"blob,omitempty"`
-	Resource *ResourceContent  `json:"resource,omitempty"`
+	Type     string           `json:"type"`
+	Text     string           `json:"text,omitempty"`
+	MimeType string           `json:"mimeType,omitempty"`
+	Blob     string           `json:"blob,omitempty"`
+	Resource *ResourceContent `json:"resource,omitempty"`
 }
 
 // Resource Types
@@ -222,11 +222,11 @@ type ListEndpointsParams struct {
 
 // CreateEndpointParams are parameters for create_endpoint tool.
 type CreateEndpointParams struct {
-	Path        string          `json:"path"`
-	Method      string          `json:"method"`
-	Response    ResponseConfig  `json:"response"`
-	Description string          `json:"description,omitempty"`
-	Priority    int             `json:"priority,omitempty"`
+	Path        string         `json:"path"`
+	Method      string         `json:"method"`
+	Response    ResponseConfig `json:"response"`
+	Description string         `json:"description,omitempty"`
+	Priority    int            `json:"priority,omitempty"`
 }
 
 // ResponseConfig defines the response for a mock endpoint.
@@ -362,14 +362,14 @@ type PaginationMeta struct {
 
 // RequestLogEntry represents a captured request log entry.
 type RequestLogEntry struct {
-	ID            string              `json:"id"`
-	Method        string              `json:"method"`
-	Path          string              `json:"path"`
-	Status        int                 `json:"status"`
-	Duration      string              `json:"duration"`
-	Timestamp     time.Time           `json:"timestamp"`
-	MockID        string              `json:"mockId,omitempty"`
-	Headers       map[string][]string `json:"headers,omitempty"`
-	QueryParams   map[string]string   `json:"queryParams,omitempty"`
-	Body          string              `json:"body,omitempty"`
+	ID          string              `json:"id"`
+	Method      string              `json:"method"`
+	Path        string              `json:"path"`
+	Status      int                 `json:"status"`
+	Duration    string              `json:"duration"`
+	Timestamp   time.Time           `json:"timestamp"`
+	MockID      string              `json:"mockId,omitempty"`
+	Headers     map[string][]string `json:"headers,omitempty"`
+	QueryParams map[string]string   `json:"queryParams,omitempty"`
+	Body        string              `json:"body,omitempty"`
 }

@@ -1,5 +1,9 @@
 package chaos
 
+import (
+	"fmt"
+)
+
 // ChaosConfig configures chaos injection for fault simulation
 type ChaosConfig struct {
 	Enabled     bool              `json:"enabled" yaml:"enabled"`
@@ -111,4 +115,140 @@ func NewChaosStats() *ChaosStats {
 	return &ChaosStats{
 		FaultsByType: make(map[FaultType]int64),
 	}
+}
+
+// validateProbability checks that a probability value is in the valid range [0.0, 1.0].
+func validateProbability(value float64, fieldName string) error {
+	if value < 0.0 || value > 1.0 {
+		return fmt.Errorf("%s must be between 0.0 and 1.0, got %v", fieldName, value)
+	}
+	return nil
+}
+
+// Validate checks if the ChaosConfig is valid.
+func (c *ChaosConfig) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+
+	for i, rule := range c.Rules {
+		if err := rule.Validate(); err != nil {
+			return fmt.Errorf("rules[%d]: %w", i, err)
+		}
+	}
+
+	if c.GlobalRules != nil {
+		if err := c.GlobalRules.Validate(); err != nil {
+			return fmt.Errorf("global: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// Validate checks if the ChaosRule is valid.
+func (r *ChaosRule) Validate() error {
+	if r.Probability != 0 {
+		if err := validateProbability(r.Probability, "probability"); err != nil {
+			return err
+		}
+	}
+
+	for i, fault := range r.Faults {
+		if err := fault.Validate(); err != nil {
+			return fmt.Errorf("faults[%d]: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// Validate checks if the FaultConfig is valid.
+func (f *FaultConfig) Validate() error {
+	return validateProbability(f.Probability, "probability")
+}
+
+// Validate checks if the GlobalChaosRules are valid.
+func (g *GlobalChaosRules) Validate() error {
+	if g.Latency != nil {
+		if err := g.Latency.Validate(); err != nil {
+			return fmt.Errorf("latency: %w", err)
+		}
+	}
+	if g.ErrorRate != nil {
+		if err := g.ErrorRate.Validate(); err != nil {
+			return fmt.Errorf("errorRate: %w", err)
+		}
+	}
+	if g.Bandwidth != nil {
+		if err := g.Bandwidth.Validate(); err != nil {
+			return fmt.Errorf("bandwidth: %w", err)
+		}
+	}
+	return nil
+}
+
+// Validate checks if the LatencyFault is valid.
+func (l *LatencyFault) Validate() error {
+	return validateProbability(l.Probability, "probability")
+}
+
+// Validate checks if the ErrorRateFault is valid.
+func (e *ErrorRateFault) Validate() error {
+	return validateProbability(e.Probability, "probability")
+}
+
+// Validate checks if the BandwidthFault is valid.
+func (b *BandwidthFault) Validate() error {
+	if err := validateProbability(b.Probability, "probability"); err != nil {
+		return err
+	}
+	if b.BytesPerSecond <= 0 {
+		return fmt.Errorf("bytesPerSecond must be > 0, got %d", b.BytesPerSecond)
+	}
+	return nil
+}
+
+// Validate checks if the TimeoutFault is valid.
+func (t *TimeoutFault) Validate() error {
+	return validateProbability(t.Probability, "probability")
+}
+
+// Validate checks if the CorruptBodyFault is valid.
+func (c *CorruptBodyFault) Validate() error {
+	if err := validateProbability(c.Probability, "probability"); err != nil {
+		return err
+	}
+	if err := validateProbability(c.CorruptRate, "corruptRate"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Validate checks if the SlowBodyFault is valid.
+func (s *SlowBodyFault) Validate() error {
+	if err := validateProbability(s.Probability, "probability"); err != nil {
+		return err
+	}
+	if s.BytesPerSecond <= 0 {
+		return fmt.Errorf("bytesPerSecond must be > 0, got %d", s.BytesPerSecond)
+	}
+	return nil
+}
+
+// Validate checks if the PartialResponseFault is valid.
+func (p *PartialResponseFault) Validate() error {
+	if err := validateProbability(p.Probability, "probability"); err != nil {
+		return err
+	}
+	if err := validateProbability(p.MinPercent, "minPercent"); err != nil {
+		return err
+	}
+	if err := validateProbability(p.MaxPercent, "maxPercent"); err != nil {
+		return err
+	}
+	if p.MinPercent > p.MaxPercent {
+		return fmt.Errorf("minPercent (%v) must be <= maxPercent (%v)", p.MinPercent, p.MaxPercent)
+	}
+	return nil
 }

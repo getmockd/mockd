@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"io"
 	"log/slog"
 	"maps"
@@ -246,7 +247,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		statusCode = http.StatusNotFound
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(statusCode)
-		w.Write([]byte(`{"error": "no_match", "message": "No mock matched the request", "path": "` + r.URL.Path + `", "method": "` + r.Method + `"}`))
+		// Use json.Marshal for proper escaping to prevent JSON injection
+		errResp := map[string]string{
+			"error":   "no_match",
+			"message": "No mock matched the request",
+			"path":    r.URL.Path,
+			"method":  r.Method,
+		}
+		if jsonBytes, err := json.Marshal(errResp); err == nil {
+			_, _ = w.Write(jsonBytes)
+		} else {
+			// Fallback with static message if marshaling fails
+			_, _ = w.Write([]byte(`{"error": "no_match", "message": "No mock matched the request"}`))
+		}
 	}
 
 	// Log the request

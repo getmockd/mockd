@@ -415,6 +415,8 @@ func MockCollectionToNativeV1(collection *config.MockCollection) (*NativeV1, err
 }
 
 // convertMockToEndpoint converts a MockConfiguration to NativeV1Endpoint.
+//
+//nolint:unparam // error is always nil but kept for future validation
 func convertMockToEndpoint(m *config.MockConfiguration) (*NativeV1Endpoint, error) {
 	ep := &NativeV1Endpoint{
 		ID:      m.ID,

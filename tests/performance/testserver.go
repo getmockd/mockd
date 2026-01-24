@@ -1,3 +1,4 @@
+// Package performance provides performance tests and benchmarks.
 package performance
 
 import (

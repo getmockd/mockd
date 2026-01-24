@@ -204,9 +204,18 @@ func TestLoggingFilterByCriteria(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make mixed requests
-	http.Get(fmt.Sprintf("http://localhost:%d/api/users", bundle.HTTPPort))
-	http.Get(fmt.Sprintf("http://localhost:%d/api/users", bundle.HTTPPort))
-	http.Post(fmt.Sprintf("http://localhost:%d/api/orders", bundle.HTTPPort), "application/json", nil)
+	resp1, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/users", bundle.HTTPPort))
+	if resp1 != nil && resp1.Body != nil {
+		resp1.Body.Close()
+	}
+	resp2, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/users", bundle.HTTPPort))
+	if resp2 != nil && resp2.Body != nil {
+		resp2.Body.Close()
+	}
+	resp3, _ := http.Post(fmt.Sprintf("http://localhost:%d/api/orders", bundle.HTTPPort), "application/json", nil)
+	if resp3 != nil && resp3.Body != nil {
+		resp3.Body.Close()
+	}
 
 	// Filter by method
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/requests?method=GET", bundle.AdminPort))
@@ -259,7 +268,10 @@ func TestLoggingClearLogs(t *testing.T) {
 
 	// Make some requests
 	for i := 0; i < 5; i++ {
-		http.Get(fmt.Sprintf("http://localhost:%d/api/test", bundle.HTTPPort))
+		resp, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/test", bundle.HTTPPort))
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
 	}
 
 	// Verify 5 logs exist
@@ -313,7 +325,10 @@ func TestLoggingGetSingleRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make a request
-	http.Get(fmt.Sprintf("http://localhost:%d/api/single", bundle.HTTPPort))
+	resp0, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/single", bundle.HTTPPort))
+	if resp0 != nil && resp0.Body != nil {
+		resp0.Body.Close()
+	}
 
 	// Get all logs to find the log ID
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/requests", bundle.AdminPort))
@@ -461,7 +476,10 @@ func TestLoggingLimitAndOffset(t *testing.T) {
 
 	// Make several requests
 	for i := 0; i < 10; i++ {
-		http.Get(fmt.Sprintf("http://localhost:%d/api/test", bundle.HTTPPort))
+		resp, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/test", bundle.HTTPPort))
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
 	}
 
 	// Get with limit

@@ -23,8 +23,8 @@ func TestGeneratePrivateKey(t *testing.T) {
 
 	// Verify we can use it to sign/verify
 	assert.NotNil(t, key.D)
-	assert.NotNil(t, key.PublicKey.X)
-	assert.NotNil(t, key.PublicKey.Y)
+	assert.NotNil(t, key.X)
+	assert.NotNil(t, key.Y)
 }
 
 func TestCreateCertificateTemplate(t *testing.T) {

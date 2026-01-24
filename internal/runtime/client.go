@@ -359,7 +359,7 @@ func (c *Client) PullDeployments(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch deployments: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -436,7 +436,7 @@ func (c *Client) Pull(ctx context.Context, uri string) (json.RawMessage, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to pull: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

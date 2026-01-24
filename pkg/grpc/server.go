@@ -17,6 +17,7 @@ import (
 	"github.com/getmockd/mockd/pkg/metrics"
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/requestlog"
+	"github.com/getmockd/mockd/pkg/template"
 	"github.com/getmockd/mockd/pkg/util"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
@@ -70,14 +71,15 @@ const (
 // Server is a mock gRPC server that serves configured responses
 // based on proto schema definitions.
 type Server struct {
-	config     *GRPCConfig
-	schema     *ProtoSchema
-	grpcServer *grpc.Server
-	listener   net.Listener
-	mu         sync.RWMutex
-	running    bool
-	startedAt  time.Time
-	log        *slog.Logger
+	config         *GRPCConfig
+	schema         *ProtoSchema
+	grpcServer     *grpc.Server
+	listener       net.Listener
+	mu             sync.RWMutex
+	running        bool
+	startedAt      time.Time
+	log            *slog.Logger
+	templateEngine *template.Engine
 
 	// Request logging support
 	requestLoggerMu sync.RWMutex
@@ -94,9 +96,10 @@ func NewServer(config *GRPCConfig, schema *ProtoSchema) (*Server, error) {
 	}
 
 	return &Server{
-		config: config,
-		schema: schema,
-		log:    logging.Nop(),
+		config:         config,
+		schema:         schema,
+		log:            logging.Nop(),
+		templateEngine: template.New(),
 	}, nil
 }
 
@@ -265,7 +268,7 @@ func (s *Server) makeStreamHandler(serviceName, methodName string) func(srv inte
 }
 
 // handleUnary handles unary RPC calls.
-func (s *Server) handleUnary(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor, serviceName, methodName string) (interface{}, error) {
+func (s *Server) handleUnary(_ interface{}, ctx context.Context, dec func(interface{}) error, _ grpc.UnaryServerInterceptor, serviceName, methodName string) (interface{}, error) {
 	startTime := time.Now()
 	fullPath := fmt.Sprintf("/%s/%s", serviceName, methodName)
 
@@ -326,8 +329,11 @@ func (s *Server) handleUnary(srv interface{}, ctx context.Context, dec func(inte
 		return nil, grpcErr
 	}
 
+	// Create template context for response processing
+	templateCtx := s.createTemplateContext(md, reqMap)
+
 	// Build and return response
-	resp, err := s.buildResponse(method, methodCfg.Response)
+	resp, err := s.buildResponse(method, methodCfg.Response, templateCtx)
 	if err != nil {
 		grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
 		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamUnary, md, reqMap, nil, grpcErr)
@@ -364,7 +370,7 @@ func (s *Server) handleStream(srv interface{}, stream grpc.ServerStream) error {
 }
 
 // handleStreamMethod handles streaming RPC calls for a specific method.
-func (s *Server) handleStreamMethod(srv interface{}, stream grpc.ServerStream, serviceName, methodName string) error {
+func (s *Server) handleStreamMethod(_ interface{}, stream grpc.ServerStream, serviceName, methodName string) error {
 	// Get method descriptor
 	svc := s.schema.GetService(serviceName)
 	if svc == nil {
@@ -451,11 +457,14 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 		responses = []interface{}{methodCfg.Response}
 	}
 
+	// Create template context for response processing
+	templateCtx := s.createTemplateContext(md, reqMap)
+
 	// Collect responses for logging
 	var collectedResponses []interface{}
 
 	for i, respData := range responses {
-		resp, err := s.buildResponse(method, respData)
+		resp, err := s.buildResponse(method, respData, templateCtx)
 		if err != nil {
 			grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
 			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, collectedResponses, grpcErr)
@@ -541,8 +550,11 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 		return grpcErr
 	}
 
+	// Create template context from last request for response processing
+	templateCtx := s.createTemplateContext(md, lastReqMap)
+
 	// Build and send response
-	resp, err := s.buildResponse(method, methodCfg.Response)
+	resp, err := s.buildResponse(method, methodCfg.Response, templateCtx)
 	if err != nil {
 		grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
 		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
@@ -631,11 +643,15 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 		}
 
 		// Collect request for logging
-		allRequests = append(allRequests, dynamicMessageToMap(reqMsg))
+		reqMap := dynamicMessageToMap(reqMsg)
+		allRequests = append(allRequests, reqMap)
 
 		// Send response if available
 		if respIndex < len(responses) {
-			resp, err := s.buildResponse(method, responses[respIndex])
+			// Create template context from current request for response processing
+			templateCtx := s.createTemplateContext(md, reqMap)
+
+			resp, err := s.buildResponse(method, responses[respIndex], templateCtx)
 			if err != nil {
 				grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
 				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
@@ -760,7 +776,8 @@ func valuesEqual(expected, actual interface{}) bool {
 
 // buildResponse builds a protobuf response from JSON config data.
 // Returns a *dynamicpb.Message which can be used with gRPC streaming APIs.
-func (s *Server) buildResponse(method *MethodDescriptor, data interface{}) (*dynamicpb.Message, error) {
+// The ctx parameter provides template context for variable substitution.
+func (s *Server) buildResponse(method *MethodDescriptor, data interface{}, ctx *template.Context) (*dynamicpb.Message, error) {
 	outputDesc := method.GetOutputDescriptor()
 	if outputDesc == nil {
 		return nil, errors.New("cannot get output descriptor")
@@ -772,8 +789,11 @@ func (s *Server) buildResponse(method *MethodDescriptor, data interface{}) (*dyn
 		return respMsg, nil
 	}
 
+	// Process template variables in the response data
+	processedData := s.templateEngine.ProcessInterface(data, ctx)
+
 	// Convert data to JSON and unmarshal into dynamic message using protojson
-	jsonData, err := json.Marshal(data)
+	jsonData, err := json.Marshal(processedData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal response data: %w", err)
 	}
@@ -783,6 +803,19 @@ func (s *Server) buildResponse(method *MethodDescriptor, data interface{}) (*dyn
 	}
 
 	return respMsg, nil
+}
+
+// createTemplateContext creates a template context from gRPC metadata and request data.
+func (s *Server) createTemplateContext(md metadata.MD, reqMap map[string]interface{}) *template.Context {
+	// Convert metadata to headers format
+	var headers map[string][]string
+	if md != nil {
+		headers = make(map[string][]string)
+		for k, v := range md {
+			headers[k] = v
+		}
+	}
+	return template.NewContextFromMap(reqMap, headers)
 }
 
 // applyDelay applies configured delay.
@@ -1438,7 +1471,7 @@ func (s *Server) recordGRPCMetrics(fullPath string, grpcErr error, duration time
 
 	if metrics.RequestsTotal != nil {
 		if vec, err := metrics.RequestsTotal.WithLabels("grpc", fullPath, statusCode); err == nil {
-			vec.Inc()
+			_ = vec.Inc()
 		}
 	}
 	if metrics.RequestDuration != nil {
@@ -1447,13 +1480,3 @@ func (s *Server) recordGRPCMetrics(fullPath string, grpcErr error, duration time
 		}
 	}
 }
-
-// Interface compliance checks.
-var (
-	_ protocol.Handler          = (*Server)(nil)
-	_ protocol.StandaloneServer = (*Server)(nil)
-	_ protocol.RPCHandler       = (*Server)(nil)
-	_ protocol.RequestLoggable  = (*Server)(nil)
-	_ protocol.Observable       = (*Server)(nil)
-	_ protocol.Loggable         = (*Server)(nil)
-)

@@ -178,9 +178,8 @@ func TestRunServe_ConfigFile(t *testing.T) {
 			"--port", "0",
 		})
 		// Should fail when trying to load config (after port checks which may also fail)
-		if err == nil {
-			// This might pass if port 0 causes an earlier error, which is fine
-		}
+		// This might pass if port 0 causes an earlier error, which is fine
+		_ = err
 	})
 
 	t.Run("valid config file path format", func(t *testing.T) {

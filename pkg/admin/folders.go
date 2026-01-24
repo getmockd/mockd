@@ -293,7 +293,7 @@ func (a *AdminAPI) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 		if f.ParentID == id {
 			f.ParentID = ""
 			f.UpdatedAt = time.Now()
-			folderStore.Update(ctx, f)
+			_ = folderStore.Update(ctx, f)
 		}
 	}
 

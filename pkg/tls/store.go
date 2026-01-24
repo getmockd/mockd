@@ -31,7 +31,7 @@ func SaveCertToFiles(cert *GeneratedCertificate, certPath, keyPath string) error
 	// Write private key with restricted permissions
 	if err := os.WriteFile(keyPath, cert.KeyPEM, 0600); err != nil {
 		// Clean up cert file if key write fails
-		os.Remove(certPath)
+		_ = os.Remove(certPath)
 		return fmt.Errorf("failed to write key file: %w", err)
 	}
 
@@ -152,7 +152,7 @@ func VerifyKeyPair(cert *x509.Certificate, key *ecdsa.PrivateKey) error {
 	}
 
 	// Compare public keys
-	if certPubKey.X.Cmp(key.PublicKey.X) != 0 || certPubKey.Y.Cmp(key.PublicKey.Y) != 0 {
+	if certPubKey.X.Cmp(key.X) != 0 || certPubKey.Y.Cmp(key.Y) != 0 {
 		return fmt.Errorf("private key does not match certificate public key")
 	}
 

@@ -436,7 +436,7 @@ func (h *Histogram) Collect() []Sample {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	var samples []Sample
+	samples := make([]Sample, 0, (len(h.buckets)+2)*len(h.values))
 	for _, hv := range h.values {
 		// Emit bucket samples
 		cumulativeCount := uint64(0)

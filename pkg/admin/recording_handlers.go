@@ -252,7 +252,7 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(jsonOutput)
+	_, _ = w.Write(jsonOutput)
 }
 
 // SingleConvertRequest represents a request to convert a single recording.

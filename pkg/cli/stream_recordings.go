@@ -180,7 +180,7 @@ Examples:
 
 	// Table output
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tPROTOCOL\tPATH\tSTATUS\tFRAMES\tDURATION\tSIZE")
+	_, _ = fmt.Fprintln(w, "ID\tPROTOCOL\tPATH\tSTATUS\tFRAMES\tDURATION\tSIZE")
 	for _, r := range recordings {
 		duration := formatDurationMs(r.Duration)
 		size := formatBytes(r.FileSize)
@@ -188,10 +188,10 @@ Examples:
 		if len(idShort) > 12 {
 			idShort = idShort[:12]
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			idShort, r.Protocol, truncatePath(r.Path, 30), r.Status, r.FrameCount, duration, size)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	if len(recordings) < total {
 		fmt.Printf("\nShowing %d of %d recordings (use --offset for more)\n", len(recordings), total)
@@ -327,7 +327,7 @@ Examples:
 	if !*force {
 		fmt.Printf("Delete recording '%s' (%s %s)? [y/N]: ", rec.Name, rec.Protocol, rec.Metadata.Path)
 		var response string
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		if response != "y" && response != "Y" {
 			fmt.Println("Cancelled")
 			return nil
@@ -547,7 +547,7 @@ Examples:
 	if !*force {
 		fmt.Print("This will permanently remove all soft-deleted recordings. Continue? [y/N]: ")
 		var response string
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		if response != "y" && response != "Y" {
 			fmt.Println("Cancelled")
 			return nil
@@ -604,16 +604,16 @@ Flags:
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tPROTOCOL\tPATH\tDURATION\tFRAMES")
+	_, _ = fmt.Fprintln(w, "ID\tPROTOCOL\tPATH\tDURATION\tFRAMES")
 	for _, s := range sessions {
 		idShort := s.ID
 		if len(idShort) > 12 {
 			idShort = idShort[:12]
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\n",
 			idShort, s.Protocol, truncatePath(s.Path, 30), s.Duration, s.FrameCount)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	return nil
 }

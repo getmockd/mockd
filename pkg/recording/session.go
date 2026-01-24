@@ -101,7 +101,7 @@ func (s *Session) GetRecording(id string) *Recording {
 	return nil
 }
 
-// Summary returns a summary of the session.
+// SessionSummary represents a summary of a recording session.
 type SessionSummary struct {
 	ID             string     `json:"id"`
 	Name           string     `json:"name"`

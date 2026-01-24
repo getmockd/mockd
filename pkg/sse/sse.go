@@ -39,7 +39,7 @@ const (
 	fieldComment = ":"
 )
 
-// Stream status values
+// StreamStatus represents the status of an SSE stream.
 type StreamStatus string
 
 const (

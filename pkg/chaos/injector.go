@@ -302,10 +302,12 @@ func (i *Injector) WrapResponseWriter(w http.ResponseWriter, fault *BandwidthFau
 
 // WrapForCorruption wraps writer for body corruption
 func (i *Injector) WrapForCorruption(w http.ResponseWriter, corruptRate float64) http.ResponseWriter {
+	// Create a new RNG for this writer to avoid race conditions
+	// when multiple CorruptingWriters run concurrently
 	return &CorruptingWriter{
 		w:           w,
 		corruptRate: corruptRate,
-		rng:         i.rng,
+		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 

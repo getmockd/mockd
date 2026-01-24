@@ -26,10 +26,14 @@ type Provider struct {
 	refreshTokensMu sync.RWMutex
 	refreshTokens   map[string]*RefreshTokenData
 	revokedTokensMu sync.RWMutex
-	revokedTokens   map[string]bool
+	revokedTokens   map[string]time.Time // token -> revocation time (for cleanup)
 
 	tokenExpiry   time.Duration
 	refreshExpiry time.Duration
+
+	// Cleanup goroutine management
+	stopCleanup chan struct{}
+	cleanupDone chan struct{}
 }
 
 // NewProvider creates a new OAuth provider
@@ -75,17 +79,24 @@ func NewProvider(config *OAuthConfig) (*Provider, error) {
 		config.DefaultScopes = []string{"openid", "profile", "email"}
 	}
 
-	return &Provider{
+	p := &Provider{
 		config:        config,
 		privateKey:    privateKey,
 		publicKey:     &privateKey.PublicKey,
 		keyID:         keyID,
 		authCodes:     make(map[string]*AuthorizationCode),
 		refreshTokens: make(map[string]*RefreshTokenData),
-		revokedTokens: make(map[string]bool),
+		revokedTokens: make(map[string]time.Time),
 		tokenExpiry:   tokenExpiry,
 		refreshExpiry: refreshExpiry,
-	}, nil
+		stopCleanup:   make(chan struct{}),
+		cleanupDone:   make(chan struct{}),
+	}
+
+	// Start background cleanup goroutine
+	go p.cleanupLoop()
+
+	return p, nil
 }
 
 // GenerateToken creates a new access token
@@ -183,11 +194,11 @@ func (p *Provider) GetJWKS() map[string]interface{} {
 func (p *Provider) ValidateToken(tokenString string) (map[string]interface{}, error) {
 	// Check if token is revoked
 	p.revokedTokensMu.RLock()
-	if p.revokedTokens[tokenString] {
-		p.revokedTokensMu.RUnlock()
+	_, isRevoked := p.revokedTokens[tokenString]
+	p.revokedTokensMu.RUnlock()
+	if isRevoked {
 		return nil, fmt.Errorf("token has been revoked")
 	}
-	p.revokedTokensMu.RUnlock()
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		// Validate signing method
@@ -278,14 +289,16 @@ func (p *Provider) ValidateRefreshToken(token, clientID string) (*RefreshTokenDa
 
 // RevokeToken marks a token as revoked
 func (p *Provider) RevokeToken(token string) {
-	p.revokedTokensMu.Lock()
-	defer p.revokedTokensMu.Unlock()
-	p.revokedTokens[token] = true
-
-	// Also remove from refresh tokens if it's a refresh token
+	// Remove from refresh tokens first (if it's a refresh token)
+	// This prevents deadlock by always acquiring locks in the same order
 	p.refreshTokensMu.Lock()
 	delete(p.refreshTokens, token)
 	p.refreshTokensMu.Unlock()
+
+	// Mark as revoked with timestamp for cleanup
+	p.revokedTokensMu.Lock()
+	p.revokedTokens[token] = time.Now()
+	p.revokedTokensMu.Unlock()
 }
 
 // GetClient returns a client configuration by ID
@@ -375,6 +388,67 @@ func (p *Provider) TokenExpiry() time.Duration {
 // RefreshExpiry returns the refresh token expiry duration
 func (p *Provider) RefreshExpiry() time.Duration {
 	return p.refreshExpiry
+}
+
+// Stop stops the cleanup goroutine and releases resources.
+// Should be called when the provider is no longer needed.
+func (p *Provider) Stop() {
+	close(p.stopCleanup)
+	<-p.cleanupDone
+}
+
+// cleanupLoop periodically removes expired tokens to prevent memory leaks.
+func (p *Provider) cleanupLoop() {
+	defer close(p.cleanupDone)
+
+	// Run cleanup every minute
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-p.stopCleanup:
+			return
+		case <-ticker.C:
+			p.cleanupExpiredTokens()
+		}
+	}
+}
+
+// cleanupExpiredTokens removes expired authorization codes, refresh tokens,
+// and old revoked token entries.
+func (p *Provider) cleanupExpiredTokens() {
+	now := time.Now()
+
+	// Cleanup expired authorization codes
+	p.authCodesMu.Lock()
+	for code, authCode := range p.authCodes {
+		if now.After(authCode.ExpiresAt) {
+			delete(p.authCodes, code)
+		}
+	}
+	p.authCodesMu.Unlock()
+
+	// Cleanup expired refresh tokens
+	p.refreshTokensMu.Lock()
+	for token, data := range p.refreshTokens {
+		if now.After(data.ExpiresAt) {
+			delete(p.refreshTokens, token)
+		}
+	}
+	p.refreshTokensMu.Unlock()
+
+	// Cleanup old revoked token entries (keep for 24 hours after revocation)
+	// This is enough time to reject any token that was revoked but might still
+	// be presented before the access token's natural expiry
+	revokedCutoff := now.Add(-24 * time.Hour)
+	p.revokedTokensMu.Lock()
+	for token, revokedAt := range p.revokedTokens {
+		if revokedAt.Before(revokedCutoff) {
+			delete(p.revokedTokens, token)
+		}
+	}
+	p.revokedTokensMu.Unlock()
 }
 
 // generateRandomString generates a cryptographically random string

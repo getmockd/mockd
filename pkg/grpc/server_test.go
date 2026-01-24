@@ -761,7 +761,7 @@ func TestBuildResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := srv.buildResponse(method, tt.data)
+			resp, err := srv.buildResponse(method, tt.data, nil)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {

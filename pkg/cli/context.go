@@ -416,7 +416,7 @@ Examples:
 	sort.Strings(names)
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "CURRENT\tNAME\tADMIN URL\tWORKSPACE\tDESCRIPTION")
+	_, _ = fmt.Fprintln(w, "CURRENT\tNAME\tADMIN URL\tWORKSPACE\tDESCRIPTION")
 
 	for _, name := range names {
 		ctx := cfg.Contexts[name]
@@ -443,7 +443,7 @@ Examples:
 			adminURL = adminURL[:32] + "..."
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, name, adminURL, workspace, description)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, name, adminURL, workspace, description)
 	}
 
 	return w.Flush()

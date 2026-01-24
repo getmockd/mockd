@@ -45,7 +45,10 @@ func setupBenchSOAPHandler(b *testing.B) *httptest.Server {
 		},
 	}
 
-	handler := soap.NewHandler(cfg)
+	handler, err := soap.NewHandler(cfg)
+	if err != nil {
+		b.Fatalf("failed to create SOAP handler: %v", err)
+	}
 	return httptest.NewServer(handler)
 }
 

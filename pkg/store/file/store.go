@@ -84,7 +84,7 @@ func (s *FileStore) saveLoop() {
 			}
 			timer = time.AfterFunc(s.saveDebounce, func() {
 				if s.dirty.Load() && !s.saving.Load() {
-					s.doSave()
+					_ = s.doSave()
 				}
 			})
 		case <-s.closeCh:
@@ -93,7 +93,7 @@ func (s *FileStore) saveLoop() {
 			}
 			// Final save on close
 			if s.dirty.Load() {
-				s.doSave()
+				_ = s.doSave()
 			}
 			return
 		}
@@ -176,7 +176,7 @@ func (s *FileStore) doSave() error {
 	}
 
 	if err := os.Rename(tmpFile, dataFile); err != nil {
-		os.Remove(tmpFile) // Clean up temp file on failure
+		_ = os.Remove(tmpFile) // Clean up temp file on failure
 		return err
 	}
 
@@ -219,7 +219,7 @@ func (s *FileStore) notify(collection, operation, id string, data any) {
 	}
 	for _, l := range listeners {
 		go func(listener store.ChangeListener) {
-			defer func() { recover() }() // Prevent listener panics from crashing store
+			defer func() { _ = recover() }() // Prevent listener panics from crashing store
 			listener(event)
 		}(l)
 	}

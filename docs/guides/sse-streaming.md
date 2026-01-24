@@ -120,7 +120,7 @@ Control event delivery timing:
       "initialDelay": 100,
       "fixedDelay": 500,
       "randomDelay": { "min": 100, "max": 500 },
-      "burstMode": { "count": 5, "delay": 10, "pauseAfter": 1000 },
+      "burst": { "count": 5, "interval": 10, "pause": 1000 },
       "perEventDelays": [100, 200, 500]
     }
   }
@@ -132,7 +132,7 @@ Control event delivery timing:
 | `initialDelay` | Delay before first event (ms) |
 | `fixedDelay` | Constant delay between events (ms) |
 | `randomDelay` | Random delay range (min/max ms) |
-| `burstMode` | Send events in bursts |
+| `burst` | Send events in bursts (count/interval/pause in ms) |
 | `perEventDelays` | Specific delay for each event |
 
 ### Lifecycle Management
@@ -146,9 +146,12 @@ Control connection behavior:
       "keepaliveInterval": 15,
       "timeout": 300,
       "maxEvents": 100,
-      "duration": 60,
-      "gracefulShutdown": true,
-      "terminationEvent": { "type": "close", "data": "Stream ended" }
+      "connectionTimeout": 60,
+      "termination": {
+        "type": "graceful",
+        "finalEvent": { "type": "close", "data": "Stream ended" },
+        "closeDelay": 0
+      }
     }
   }
 }
@@ -159,9 +162,10 @@ Control connection behavior:
 | `keepaliveInterval` | Keepalive ping interval (seconds, min 5) |
 | `timeout` | Connection timeout (seconds) |
 | `maxEvents` | Maximum events before closing |
-| `duration` | Maximum stream duration (seconds) |
-| `gracefulShutdown` | Send termination event before closing |
-| `terminationEvent` | Event to send on graceful close |
+| `connectionTimeout` | Maximum stream duration (seconds) |
+| `termination.type` | Termination type: "graceful", "abrupt", "error" |
+| `termination.finalEvent` | Event to send on graceful close |
+| `termination.closeDelay` | Delay in ms before closing after final event |
 
 ### Rate Limiting
 
