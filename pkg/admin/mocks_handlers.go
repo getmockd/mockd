@@ -714,19 +714,20 @@ func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Reques
 	if a.localEngine != nil {
 		// config.MockConfiguration is an alias for mock.Mock, so pass directly
 		if _, err := a.localEngine.CreateMock(r.Context(), &m); err != nil {
+			// Rollback the store operation - mock can't actually run
+			if deleteErr := mockStore.Delete(r.Context(), m.ID); deleteErr != nil {
+				a.log.Warn("failed to rollback mock after engine error", "id", m.ID, "error", deleteErr)
+			}
+
 			errMsg := err.Error()
-			// Check if this is a port-related error (engine couldn't bind to port)
 			if isPortError(errMsg) {
-				// Rollback the store operation since the mock can't actually run
-				if deleteErr := mockStore.Delete(r.Context(), m.ID); deleteErr != nil {
-					a.log.Warn("failed to rollback mock after engine error", "id", m.ID, "error", deleteErr)
-				}
 				writeError(w, http.StatusConflict, "port_unavailable",
 					fmt.Sprintf("Failed to start mock: %s. The port may be in use by another process.", errMsg))
-				return
+			} else {
+				writeError(w, http.StatusInternalServerError, "engine_error",
+					fmt.Sprintf("Failed to activate mock: %s", errMsg))
 			}
-			// For other errors, log but don't fail - the mock is stored, just not active yet
-			a.log.Warn("failed to notify engine of new mock", "id", m.ID, "error", err)
+			return
 		}
 	}
 
@@ -1181,6 +1182,19 @@ func (a *AdminAPI) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.R
 	if err := json.NewDecoder(r.Body).Decode(&mocks); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", "invalid request body: "+err.Error())
 		return
+	}
+
+	// Check for duplicate IDs within the batch
+	seenIDs := make(map[string]bool)
+	for i, m := range mocks {
+		if m.ID != "" {
+			if seenIDs[m.ID] {
+				writeError(w, http.StatusBadRequest, "duplicate_id",
+					fmt.Sprintf("duplicate mock ID '%s' at index %d", m.ID, i))
+				return
+			}
+			seenIDs[m.ID] = true
+		}
 	}
 
 	now := time.Now()

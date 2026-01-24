@@ -292,6 +292,8 @@ func (w *Watcher) Start() <-chan WatchEvent {
 		return w.eventCh
 	}
 
+	// Recreate stopCh for restart capability
+	w.stopCh = make(chan struct{})
 	w.running = true
 	go w.watchLoop()
 

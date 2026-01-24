@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -17,6 +19,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// getTestProtoFile returns the absolute path to the test proto file
+func getTestProtoFile() string {
+	_, currentFile, _, _ := runtime.Caller(0)
+	testDir := filepath.Dir(currentFile)
+	return filepath.Join(testDir, "..", "fixtures", "grpc", "test.proto")
+}
 
 // getUniquePort returns a unique port - wrapper around shared helper
 func getUniquePort() int {
@@ -125,7 +134,7 @@ func createGRPCMock(t *testing.T, adminPort int, name string, grpcPort int, work
 		"workspaceId": workspaceID,
 		"grpc": map[string]interface{}{
 			"port":      grpcPort,
-			"protoFile": "test.proto",
+			"protoFile": getTestProtoFile(),
 		},
 	}
 	body, _ := json.Marshal(mockData)
@@ -263,28 +272,17 @@ func TestPortConflict_CreateMQTT_ConflictsWithGRPC(t *testing.T) {
 	// Get a free port
 	port := getUniquePort()
 
-	// Create gRPC mock first
-	// NOTE: This test uses an invalid proto file ("test.proto"), so the gRPC server
-	// won't actually start. The mock will be stored but non-functional.
-	// The Admin-level port conflict check queries from the engine, not the dataStore,
-	// so it won't see this non-running gRPC mock.
+	// Create gRPC mock first (using valid proto file)
 	status1, data1 := createGRPCMock(t, bundle.AdminPort, "gRPC Server", port, "local")
 	assert.Equal(t, http.StatusCreated, status1)
 	assert.NotEmpty(t, data1["id"])
 
-	// Since the gRPC mock couldn't actually bind the port (invalid proto),
-	// the MQTT mock CAN successfully bind to it.
-	// This test documents the current behavior - for true cross-protocol conflict
-	// detection, the admin layer would need to query the dataStore as fallback.
+	// Try to create MQTT mock on same port - should fail (cross-protocol conflict)
 	status2, data2 := createMQTTMock(t, bundle.AdminPort, "MQTT Broker", port, "local")
-
-	// In current implementation: MQTT succeeds because gRPC didn't actually bind the port
-	// This is expected behavior for gRPC mocks with invalid proto files
-	assert.Equal(t, http.StatusCreated, status2, "MQTT can bind port when gRPC mock failed to start (invalid proto)")
-	assert.NotEmpty(t, data2["id"])
-
-	// If we wanted true cross-protocol conflict detection, we'd need to also check dataStore
-	// or validate gRPC proto files before storing the mock.
+	assert.Equal(t, http.StatusConflict, status2)
+	assert.Equal(t, "port_conflict", data2["error"])
+	assert.Contains(t, data2["message"].(string), "grpc")
+	assert.Contains(t, data2["message"].(string), "Different protocols cannot share ports")
 }
 
 func TestPortConflict_UpdateMock_ToConflictingPort(t *testing.T) {

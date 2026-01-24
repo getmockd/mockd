@@ -344,13 +344,23 @@ func (s *SSEConfig) Validate() error {
 	hasGenerator := s.Generator != nil
 	hasTemplate := s.Template != ""
 
-	if !hasEvents && !hasGenerator && !hasTemplate {
-		return &ValidationError{Field: "sse", Message: "one of events, generator, or template is required"}
+	// Count how many data sources are specified
+	count := 0
+	if hasEvents {
+		count++
+	}
+	if hasGenerator {
+		count++
+	}
+	if hasTemplate {
+		count++
 	}
 
-	// Events and generator are mutually exclusive
-	if hasEvents && hasGenerator {
-		return &ValidationError{Field: "sse", Message: "events and generator are mutually exclusive"}
+	if count == 0 {
+		return &ValidationError{Field: "sse", Message: "one of events, generator, or template is required"}
+	}
+	if count > 1 {
+		return &ValidationError{Field: "sse", Message: "events, generator, and template are mutually exclusive"}
 	}
 
 	// Validate each event if present
@@ -397,13 +407,23 @@ func (c *ChunkedConfig) Validate() error {
 	hasDataFile := c.DataFile != ""
 	hasNDJSON := len(c.NDJSONItems) > 0
 
-	if !hasData && !hasDataFile && !hasNDJSON {
-		return &ValidationError{Field: "chunked", Message: "one of data, dataFile, or ndjsonItems is required"}
+	// Count how many data sources are specified
+	count := 0
+	if hasData {
+		count++
+	}
+	if hasDataFile {
+		count++
+	}
+	if hasNDJSON {
+		count++
 	}
 
-	// Data and dataFile are mutually exclusive
-	if hasData && hasDataFile {
-		return &ValidationError{Field: "chunked", Message: "data and dataFile are mutually exclusive"}
+	if count == 0 {
+		return &ValidationError{Field: "chunked", Message: "one of data, dataFile, or ndjsonItems is required"}
+	}
+	if count > 1 {
+		return &ValidationError{Field: "chunked", Message: "data, dataFile, and ndjsonItems are mutually exclusive"}
 	}
 
 	// Validate chunk size

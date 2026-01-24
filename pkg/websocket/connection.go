@@ -121,6 +121,18 @@ func (c *Connection) Groups() []string {
 	return groups
 }
 
+// GetGroups returns a copy of the groups the connection belongs to.
+// This is thread-safe and returns a snapshot of the current groups.
+func (c *Connection) GetGroups() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	groups := make([]string, 0, len(c.groups))
+	for g := range c.groups {
+		groups = append(groups, g)
+	}
+	return groups
+}
+
 // Metadata returns the connection metadata.
 func (c *Connection) Metadata() map[string]interface{} {
 	c.mu.RLock()
