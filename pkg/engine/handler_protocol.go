@@ -96,6 +96,7 @@ func (h *Handler) RegisterOAuthHandler(cfg *oauth.OAuthConfig, handler *oauth.Ha
 	h.oauthHandlers[basePath+"/token"] = handler
 	h.oauthHandlers[basePath+"/userinfo"] = handler
 	h.oauthHandlers[basePath+"/revoke"] = handler
+	h.oauthHandlers[basePath+"/introspect"] = handler
 	h.oauthHandlers[basePath+"/.well-known/jwks.json"] = handler
 	h.oauthHandlers[basePath+"/.well-known/openid-configuration"] = handler
 }
@@ -165,6 +166,8 @@ func (h *Handler) routeOAuthRequest(w http.ResponseWriter, r *http.Request, hand
 		handler.HandleUserInfo(w, r)
 	case strings.HasSuffix(path, "/revoke"):
 		handler.HandleRevoke(w, r)
+	case strings.HasSuffix(path, "/introspect"):
+		handler.HandleIntrospect(w, r)
 	case strings.HasSuffix(path, "/.well-known/jwks.json"):
 		handler.HandleJWKS(w, r)
 	case strings.HasSuffix(path, "/.well-known/openid-configuration"):
