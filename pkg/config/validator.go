@@ -262,20 +262,39 @@ func (s *ServerConfiguration) Validate() error {
 				Message: fmt.Sprintf("adminPort conflicts with %s (both are %d)", name, s.AdminPort),
 			}
 		}
+		ports[s.AdminPort] = "adminPort"
 	}
-
-	// If HTTPSPort > 0, TLS must be configured
-	if s.HTTPSPort > 0 && s.TLS != nil && s.TLS.Enabled && !s.TLS.AutoGenerateCert {
-		if s.TLS.CertFile == "" {
+	if s.ManagementPort > 0 {
+		if name, exists := ports[s.ManagementPort]; exists {
 			return &ValidationError{
-				Field:   "serverConfig.tls.certFile",
-				Message: "certFile is required when httpsPort is set and autoGenerateCert is false",
+				Field:   "serverConfig",
+				Message: fmt.Sprintf("managementPort conflicts with %s (both are %d)", name, s.ManagementPort),
 			}
 		}
-		if s.TLS.KeyFile == "" {
+		ports[s.ManagementPort] = "managementPort"
+	}
+
+	// HTTPS requires TLS to be configured
+	if s.HTTPSPort > 0 {
+		if s.TLS == nil || !s.TLS.Enabled {
 			return &ValidationError{
-				Field:   "serverConfig.tls.keyFile",
-				Message: "keyFile is required when httpsPort is set and autoGenerateCert is false",
+				Field:   "serverConfig.tls",
+				Message: "TLS must be enabled when httpsPort is set",
+			}
+		}
+		// If not auto-generating, cert and key files are required
+		if !s.TLS.AutoGenerateCert {
+			if s.TLS.CertFile == "" {
+				return &ValidationError{
+					Field:   "serverConfig.tls.certFile",
+					Message: "certFile is required when httpsPort is set and autoGenerateCert is false",
+				}
+			}
+			if s.TLS.KeyFile == "" {
+				return &ValidationError{
+					Field:   "serverConfig.tls.keyFile",
+					Message: "keyFile is required when httpsPort is set and autoGenerateCert is false",
+				}
 			}
 		}
 	}

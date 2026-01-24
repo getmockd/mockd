@@ -170,8 +170,8 @@ func (m *ConnectionManager) Remove(id string) {
 		delete(eps, id)
 	}
 
-	// Remove from all groups
-	for group := range conn.groups {
+	// Remove from all groups (get snapshot to avoid race)
+	for _, group := range conn.GetGroups() {
 		if grp, ok := m.byGroup[group]; ok {
 			delete(grp, id)
 			if len(grp) == 0 {
@@ -711,9 +711,14 @@ func (m *ConnectionManager) Start(ctx context.Context) error {
 // Stop gracefully shuts down the handler.
 func (m *ConnectionManager) Stop(ctx context.Context, timeout time.Duration) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	// Close all connections
+	conns := make([]*Connection, 0, len(m.connections))
 	for _, conn := range m.connections {
+		conns = append(conns, conn)
+	}
+	m.mu.Unlock()
+
+	// Close connections outside the lock to prevent deadlock
+	for _, conn := range conns {
 		_ = conn.Close(CloseGoingAway, "server shutdown")
 	}
 	return nil

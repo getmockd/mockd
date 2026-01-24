@@ -62,6 +62,10 @@ func (l *FileLogger) Log(entry AuditEntry) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if l.file == nil {
+		return fmt.Errorf("audit: logger is closed")
+	}
+
 	// Set the sequence number atomically
 	entry.Sequence = atomic.AddInt64(&l.sequence, 1)
 
