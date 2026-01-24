@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -121,6 +123,21 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 	// Create CA manager if path provided
 	var ca *proxy.CAManager
 	if req.CAPath != "" {
+		// Validate CA path to prevent path traversal
+		if strings.Contains(req.CAPath, "..") {
+			writeError(w, http.StatusBadRequest, "invalid_path", "CA path cannot contain path traversal sequences")
+			return
+		}
+		if filepath.IsAbs(req.CAPath) {
+			writeError(w, http.StatusBadRequest, "invalid_path", "CA path must be a relative path")
+			return
+		}
+		cleanPath := filepath.Clean(req.CAPath)
+		if strings.HasPrefix(cleanPath, "..") {
+			writeError(w, http.StatusBadRequest, "invalid_path", "CA path cannot escape the working directory")
+			return
+		}
+
 		ca = proxy.NewCAManager(req.CAPath+"/ca.crt", req.CAPath+"/ca.key")
 		if err := ca.EnsureCA(); err != nil {
 			writeError(w, http.StatusInternalServerError, "ca_error", "Failed to initialize CA: "+err.Error())

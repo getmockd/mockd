@@ -28,6 +28,7 @@ type Server struct {
 	resources     *ResourceProvider
 	httpServer    *http.Server
 	stopCh        chan struct{}
+	stopOnce      sync.Once
 	mu            sync.RWMutex
 	running       bool
 	log           *slog.Logger
@@ -109,7 +110,9 @@ func (s *Server) Stop() error {
 		return nil
 	}
 
-	close(s.stopCh)
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
