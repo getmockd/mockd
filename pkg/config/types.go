@@ -197,15 +197,15 @@ type WebSocketEndpointConfig struct {
 // StatefulResourceConfig defines configuration for a stateful CRUD resource.
 type StatefulResourceConfig struct {
 	// Name is the unique resource name (e.g., "users", "products")
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name"`
 	// BasePath is the URL path prefix (e.g., "/api/users")
-	BasePath string `json:"basePath"`
+	BasePath string `json:"basePath" yaml:"basePath"`
 	// IDField is the field name for ID (default: "id")
-	IDField string `json:"idField,omitempty"`
+	IDField string `json:"idField,omitempty" yaml:"idField,omitempty"`
 	// ParentField is the field name for parent FK in nested resources
-	ParentField string `json:"parentField,omitempty"`
+	ParentField string `json:"parentField,omitempty" yaml:"parentField,omitempty"`
 	// SeedData is the initial data to load on startup/reset
-	SeedData []map[string]interface{} `json:"seedData,omitempty"`
+	SeedData []map[string]interface{} `json:"seedData,omitempty" yaml:"seedData,omitempty"`
 }
 
 // DefaultServerConfiguration returns a ServerConfiguration with sensible defaults.
