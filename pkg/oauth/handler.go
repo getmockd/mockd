@@ -42,6 +42,35 @@ func (h *Handler) getDefaultUserID() string {
 	return "mock-user"
 }
 
+// generateIDTokenForUser generates an ID token for the given user with standard claims.
+// If user is nil, it will look up the user by userID.
+func (h *Handler) generateIDTokenForUser(userID, clientID, nonce string, user *UserConfig) string {
+	if user == nil {
+		user = h.provider.GetUserByID(userID)
+	}
+
+	claims := map[string]interface{}{
+		"sub": userID,
+		"aud": clientID,
+	}
+	if nonce != "" {
+		claims["nonce"] = nonce
+	}
+	if user != nil {
+		for k, v := range user.Claims {
+			if k != "sub" { // sub already set
+				claims[k] = v
+			}
+		}
+	}
+
+	idToken, err := h.provider.GenerateIDToken(claims)
+	if err != nil {
+		return ""
+	}
+	return idToken
+}
+
 // HandleAuthorize handles GET /authorize
 func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
@@ -281,23 +310,7 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 
 	// Generate ID token if openid scope is requested
 	if hasScope(authCode.Scope, "openid") {
-		user := h.provider.GetUserByID(authCode.UserID)
-		idTokenClaims := map[string]interface{}{
-			"sub": authCode.UserID,
-			"aud": clientID,
-		}
-		if authCode.Nonce != "" {
-			idTokenClaims["nonce"] = authCode.Nonce
-		}
-		if user != nil {
-			for k, v := range user.Claims {
-				if k != "sub" { // sub already set
-					idTokenClaims[k] = v
-				}
-			}
-		}
-		idToken, err := h.provider.GenerateIDToken(idTokenClaims)
-		if err == nil {
+		if idToken := h.generateIDTokenForUser(authCode.UserID, clientID, authCode.Nonce, nil); idToken != "" {
 			response.IDToken = idToken
 		}
 	}
@@ -399,20 +412,7 @@ func (h *Handler) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request
 
 	// Generate new ID token if openid scope is requested
 	if hasScope(scope, "openid") {
-		user := h.provider.GetUserByID(refreshData.UserID)
-		idTokenClaims := map[string]interface{}{
-			"sub": refreshData.UserID,
-			"aud": clientID,
-		}
-		if user != nil {
-			for k, v := range user.Claims {
-				if k != "sub" {
-					idTokenClaims[k] = v
-				}
-			}
-		}
-		idToken, err := h.provider.GenerateIDToken(idTokenClaims)
-		if err == nil {
+		if idToken := h.generateIDTokenForUser(refreshData.UserID, clientID, "", nil); idToken != "" {
 			response.IDToken = idToken
 		}
 	}
@@ -494,17 +494,7 @@ func (h *Handler) handlePasswordGrant(w http.ResponseWriter, r *http.Request, cl
 
 	// Generate ID token if openid scope is requested
 	if hasScope(scope, "openid") {
-		idTokenClaims := map[string]interface{}{
-			"sub": userID,
-			"aud": clientID,
-		}
-		for k, v := range user.Claims {
-			if k != "sub" {
-				idTokenClaims[k] = v
-			}
-		}
-		idToken, err := h.provider.GenerateIDToken(idTokenClaims)
-		if err == nil {
+		if idToken := h.generateIDTokenForUser(userID, clientID, "", user); idToken != "" {
 			response.IDToken = idToken
 		}
 	}

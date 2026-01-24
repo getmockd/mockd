@@ -210,22 +210,51 @@ func (i *Injector) InjectLatency(ctx context.Context, fault *LatencyFault) error
 	}
 }
 
+// getStringOrDefault extracts a string value from a map, returning defaultVal if not found or not a string.
+func getStringOrDefault(m map[string]interface{}, key, defaultVal string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return defaultVal
+}
+
+// getIntOrDefault extracts an int value from a map, handling both int and float64 types.
+// Returns defaultVal if not found or not a numeric type.
+func getIntOrDefault(m map[string]interface{}, key string, defaultVal int) int {
+	if v, ok := m[key].(int); ok {
+		return v
+	}
+	if v, ok := m[key].(float64); ok {
+		return int(v)
+	}
+	return defaultVal
+}
+
+// getIntSlice extracts an int slice from a map, handling []interface{} and []int types.
+func getIntSlice(m map[string]interface{}, key string) []int {
+	if v, ok := m[key].([]int); ok {
+		return v
+	}
+	if v, ok := m[key].([]interface{}); ok {
+		var result []int
+		for _, item := range v {
+			if c, ok := item.(int); ok {
+				result = append(result, c)
+			} else if c, ok := item.(float64); ok {
+				result = append(result, int(c))
+			}
+		}
+		return result
+	}
+	return nil
+}
+
 // InjectLatencyFromConfig injects latency from a FaultConfig
 func (i *Injector) InjectLatencyFromConfig(ctx context.Context, config map[string]interface{}) error {
-	fault := &LatencyFault{}
-
-	if v, ok := config["min"].(string); ok {
-		fault.Min = v
-	} else {
-		fault.Min = "0ms"
+	fault := &LatencyFault{
+		Min: getStringOrDefault(config, "min", "0ms"),
+		Max: getStringOrDefault(config, "max", "100ms"),
 	}
-
-	if v, ok := config["max"].(string); ok {
-		fault.Max = v
-	} else {
-		fault.Max = "100ms"
-	}
-
 	return i.InjectLatency(ctx, fault)
 }
 
@@ -254,27 +283,9 @@ func (i *Injector) InjectError(w http.ResponseWriter, fault *ErrorRateFault) {
 // InjectErrorFromConfig injects an error from a FaultConfig
 func (i *Injector) InjectErrorFromConfig(w http.ResponseWriter, config map[string]interface{}) {
 	fault := &ErrorRateFault{
-		DefaultCode: http.StatusInternalServerError,
+		DefaultCode: getIntOrDefault(config, "defaultCode", http.StatusInternalServerError),
+		StatusCodes: getIntSlice(config, "statusCodes"),
 	}
-
-	if v, ok := config["defaultCode"].(int); ok {
-		fault.DefaultCode = v
-	} else if v, ok := config["defaultCode"].(float64); ok {
-		fault.DefaultCode = int(v)
-	}
-
-	if v, ok := config["statusCodes"].([]interface{}); ok {
-		for _, code := range v {
-			if c, ok := code.(int); ok {
-				fault.StatusCodes = append(fault.StatusCodes, c)
-			} else if c, ok := code.(float64); ok {
-				fault.StatusCodes = append(fault.StatusCodes, int(c))
-			}
-		}
-	} else if v, ok := config["statusCodes"].([]int); ok {
-		fault.StatusCodes = v
-	}
-
 	i.InjectError(w, fault)
 }
 
