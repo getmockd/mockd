@@ -691,7 +691,10 @@ func findBestSwaggerResponse(responses map[string]SwaggerResponse) (int, *Swagge
 
 // parseStatusCode parses a status code string to int.
 func parseStatusCode(s string) int {
-	code := 200
+	if s == "" {
+		return 200
+	}
+	code := 0
 	for _, c := range s {
 		if c >= '0' && c <= '9' {
 			code = code*10 + int(c-'0')
