@@ -96,3 +96,7 @@ internal-docs/
 # Internal development docs
 internal-docs/
 mockd_bench
+
+# Internal audit files
+AUDIT_*.md
+*_AUDIT_*.md
