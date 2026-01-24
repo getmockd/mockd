@@ -386,7 +386,7 @@ func TestObservability_RequestDurationHistogram(t *testing.T) {
 func TestObservability_ErrorRateMetrics(t *testing.T) {
 	bundle := setupObservabilityTest(t)
 
-	// Create mock returning 500
+	// Create mock returning 500 with unique path to avoid cross-test pollution
 	errorMock := &config.MockConfiguration{
 		Name:    "Error Response Test",
 		Enabled: true,
@@ -394,7 +394,7 @@ func TestObservability_ErrorRateMetrics(t *testing.T) {
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
-				Path:   "/api/error",
+				Path:   "/api/error-rate-test",
 			},
 			Response: &mock.HTTPResponse{
 				StatusCode: 500,
@@ -406,14 +406,14 @@ func TestObservability_ErrorRateMetrics(t *testing.T) {
 	_, err := bundle.EngineClient.CreateMock(context.Background(), errorMock)
 	require.NoError(t, err)
 
-	// Get initial metrics
+	// Get initial metrics - match on unique path to avoid pollution from other tests
 	initialMetrics := getMetrics(t, bundle.AdminPort)
 	initialParsed := parsePrometheusMetrics(initialMetrics)
-	initial500Count, _ := getMetricValue(initialParsed, "mockd_requests_total", `status="500"`)
+	initial500Count, _ := getMetricValue(initialParsed, "mockd_requests_total", `path="/api/error-rate-test"`)
 
 	// Make requests that return 500
 	for i := 0; i < 5; i++ {
-		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/error", bundle.HTTPPort))
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/error-rate-test", bundle.HTTPPort))
 		require.NoError(t, err)
 		resp.Body.Close()
 		assert.Equal(t, 500, resp.StatusCode)
@@ -425,11 +425,11 @@ func TestObservability_ErrorRateMetrics(t *testing.T) {
 	require.Eventually(t, func() bool {
 		updatedMetrics := getMetrics(t, bundle.AdminPort)
 		updatedParsed := parsePrometheusMetrics(updatedMetrics)
-		final500Count, found = getMetricValue(updatedParsed, "mockd_requests_total", `status="500"`)
+		final500Count, found = getMetricValue(updatedParsed, "mockd_requests_total", `path="/api/error-rate-test"`)
 		return found && (final500Count-initial500Count) >= 5
 	}, 2*time.Second, 50*time.Millisecond, "500 error counter should increase by at least 5")
 
-	assert.True(t, found, "should find status=500 metric")
+	assert.True(t, found, "should find error-rate-test metric")
 }
 
 // ============================================================================
