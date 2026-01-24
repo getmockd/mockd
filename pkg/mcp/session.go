@@ -203,8 +203,7 @@ func (m *SessionManager) Delete(id string) {
 	defer m.mu.Unlock()
 
 	if session, ok := m.sessions[id]; ok {
-		// Close the event channel safely
-		session.SetState(SessionStateExpired)
+		session.Close() // Properly closes EventChannel and sets state
 		delete(m.sessions, id)
 	}
 }
@@ -221,7 +220,7 @@ func (m *SessionManager) cleanupLocked() int {
 	removed := 0
 	for id, session := range m.sessions {
 		if session.IsExpired(m.config.SessionTimeout) {
-			session.SetState(SessionStateExpired)
+			session.Close() // Properly closes EventChannel and sets state
 			delete(m.sessions, id)
 			removed++
 		}
@@ -294,7 +293,7 @@ func (m *SessionManager) Close() {
 	defer m.mu.Unlock()
 
 	for id, session := range m.sessions {
-		session.SetState(SessionStateExpired)
+		session.Close() // Properly closes EventChannel and sets state
 		delete(m.sessions, id)
 	}
 }

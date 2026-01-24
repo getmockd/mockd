@@ -208,7 +208,7 @@ Environment Variables:
 	}
 
 	// Create tunnel client with engine handler
-	engineHandler := tunnel.NewEngineHandler(server.Handler())
+	engineHandler := tunnel.NewEngineHandler(server.Handler(), tunnelCfg.Auth)
 	tunnelClient, err := tunnel.NewClient(tunnelCfg, engineHandler)
 	if err != nil {
 		_ = adminAPI.Stop()
