@@ -78,6 +78,7 @@ func (a *AdminAPI) handleGetStateResource(w http.ResponseWriter, r *http.Request
 
 	name := r.PathValue("name")
 	if name == "" {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resource name required"})
 		return
@@ -107,6 +108,7 @@ func (a *AdminAPI) handleClearStateResource(w http.ResponseWriter, r *http.Reque
 
 	name := r.PathValue("name")
 	if name == "" {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resource name required"})
 		return

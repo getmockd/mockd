@@ -70,24 +70,24 @@ type Mock struct {
 // UnmarshalJSON handles both the legacy format (matcher/response at top level)
 // and the new unified format (type field with nested spec).
 func (m *Mock) UnmarshalJSON(data []byte) error {
-	// First, try to detect which format we're dealing with
+	// Probe for format detection using RawMessage for field presence
 	var probe struct {
-		Type    MockType `json:"type"`
-		Matcher *struct {
-			Method string `json:"method"`
-			Path   string `json:"path"`
-		} `json:"matcher"`
+		Type    MockType        `json:"type"`
+		Matcher json.RawMessage `json:"matcher"`
+		HTTP    json.RawMessage `json:"http"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return err
 	}
 
-	// If we have a matcher field but no type, it's legacy HTTP format
-	if probe.Matcher != nil && probe.Type == "" {
+	// Legacy format: has "matcher" at top level, no "type", no "http" spec
+	isLegacyFormat := len(probe.Matcher) > 0 && probe.Type == "" && len(probe.HTTP) == 0
+
+	if isLegacyFormat {
 		return m.unmarshalLegacyHTTP(data)
 	}
 
-	// Otherwise, use standard unmarshaling with an alias to avoid recursion
+	// Use standard unmarshaling with an alias to avoid recursion
 	type MockAlias Mock
 	alias := (*MockAlias)(m)
 	return json.Unmarshal(data, alias)

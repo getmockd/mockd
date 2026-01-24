@@ -180,11 +180,13 @@ func (a *AdminAPI) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 
 // handleRegisterEngine handles POST /engines/register.
 func (a *AdminAPI) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
-	// Check authentication - localhost is allowed without token (dev mode)
-	if !isLocalhost(r) {
+	// Check if localhost bypass is allowed AND request is from localhost
+	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+
+	if !localhostBypass {
 		token := getBearerToken(r)
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token is required for remote registration")
+			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token required")
 			return
 		}
 		if !a.ValidateRegistrationToken(token) {
@@ -274,11 +276,13 @@ func (a *AdminAPI) handleUnregisterEngine(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Check authentication - localhost is allowed without token (dev mode)
-	if !isLocalhost(r) {
+	// Check if localhost bypass is allowed AND request is from localhost
+	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+
+	if !localhostBypass {
 		token := getBearerToken(r)
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token is required")
+			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token required")
 			return
 		}
 		if !a.ValidateEngineToken(id, token) {
@@ -306,11 +310,13 @@ func (a *AdminAPI) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Check authentication - localhost is allowed without token (dev mode)
-	if !isLocalhost(r) {
+	// Check if localhost bypass is allowed AND request is from localhost
+	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+
+	if !localhostBypass {
 		token := getBearerToken(r)
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token is required")
+			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token required")
 			return
 		}
 		if !a.ValidateEngineToken(id, token) {
@@ -360,11 +366,13 @@ func (a *AdminAPI) handleAssignWorkspace(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Check authentication - localhost is allowed without token (dev mode)
-	if !isLocalhost(r) {
+	// Check if localhost bypass is allowed AND request is from localhost
+	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+
+	if !localhostBypass {
 		token := getBearerToken(r)
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token is required")
+			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token required")
 			return
 		}
 		if !a.ValidateEngineToken(id, token) {

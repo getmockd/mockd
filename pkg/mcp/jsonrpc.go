@@ -3,6 +3,8 @@ package mcp
 import (
 	"encoding/json"
 	"io"
+	"strconv"
+	"strings"
 )
 
 // ParseRequest parses a JSON-RPC request from an io.Reader.
@@ -146,38 +148,62 @@ func ToolResultErrorf(format string, args ...interface{}) *ToolResult {
 	return ToolResultError(formatString(format, args...))
 }
 
-// formatString is a simple format function to avoid importing fmt in hot paths.
+// formatString is a simple format function for error messages.
 func formatString(format string, args ...interface{}) string {
 	if len(args) == 0 {
 		return format
 	}
-	// Fall back to using json for complex formatting
-	result := format
-	for i, arg := range args {
-		placeholder := "%v"
-		if i < len(format) {
-			// Simple replacement
-			argStr := ""
-			switch v := arg.(type) {
-			case string:
-				argStr = v
-			case error:
-				argStr = v.Error()
-			default:
-				b, _ := json.Marshal(v)
-				argStr = string(b)
-			}
-			// Replace first occurrence of %v, %s, %d, etc.
-			for j := 0; j < len(result)-1; j++ {
-				if result[j] == '%' && (result[j+1] == 'v' || result[j+1] == 's' || result[j+1] == 'd') {
-					result = result[:j] + argStr + result[j+2:]
-					break
+
+	var result strings.Builder
+	result.Grow(len(format) + len(args)*8)
+
+	argIndex := 0
+	for i := 0; i < len(format); i++ {
+		if format[i] == '%' && i+1 < len(format) {
+			next := format[i+1]
+			switch next {
+			case 'v', 's', 'd':
+				if argIndex < len(args) {
+					result.WriteString(argToString(args[argIndex]))
+					argIndex++
+				} else {
+					result.WriteByte('%')
+					result.WriteByte(next)
 				}
+				i++ // Skip the format specifier
+				continue
+			case '%':
+				result.WriteByte('%')
+				i++
+				continue
 			}
 		}
-		_ = placeholder
+		result.WriteByte(format[i])
 	}
-	return result
+
+	return result.String()
+}
+
+// argToString converts an argument to string.
+func argToString(arg interface{}) string {
+	switch v := arg.(type) {
+	case string:
+		return v
+	case error:
+		return v.Error()
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	default:
+		b, _ := json.Marshal(v)
+		return string(b)
+	}
 }
 
 // BatchRequest represents a batch of JSON-RPC requests.

@@ -115,12 +115,20 @@ func (d *DirectoryLoader) Load() (*LoadResult, error) {
 
 		// Merge mocks with unique IDs
 		for _, mock := range collection.Mocks {
-			// Make IDs unique across files
+			// Make IDs unique across files using relative path to avoid collisions
+			relPath, err := filepath.Rel(d.Path, file)
+			if err != nil {
+				relPath = filepath.Base(file)
+			}
+			// Sanitize: replace path separators with dashes, remove extension
+			pathPrefix := strings.ReplaceAll(relPath, string(filepath.Separator), "-")
+			pathPrefix = strings.TrimSuffix(pathPrefix, filepath.Ext(pathPrefix))
+
 			if mock.ID != "" {
-				mock.ID = fmt.Sprintf("%s-%s", filepath.Base(file), mock.ID)
+				mock.ID = fmt.Sprintf("%s-%s", pathPrefix, mock.ID)
 			} else {
 				idOffset++
-				mock.ID = fmt.Sprintf("%s-mock-%d", filepath.Base(file), idOffset)
+				mock.ID = fmt.Sprintf("%s-mock-%d", pathPrefix, idOffset)
 			}
 			result.Collection.Mocks = append(result.Collection.Mocks, mock)
 		}
@@ -261,6 +269,7 @@ type Watcher struct {
 	loader   *DirectoryLoader
 	interval time.Duration
 	stopCh   chan struct{}
+	doneCh   chan struct{} // signals goroutine exit
 	eventCh  chan WatchEvent
 	mu       sync.Mutex
 	running  bool
@@ -292,10 +301,14 @@ func (w *Watcher) Start() <-chan WatchEvent {
 		return w.eventCh
 	}
 
-	// Recreate stopCh for restart capability
 	w.stopCh = make(chan struct{})
+	w.doneCh = make(chan struct{})
 	w.running = true
-	go w.watchLoop()
+
+	// Pass channels to avoid race on struct fields
+	stopCh := w.stopCh
+	doneCh := w.doneCh
+	go w.watchLoop(stopCh, doneCh)
 
 	return w.eventCh
 }
@@ -303,24 +316,30 @@ func (w *Watcher) Start() <-chan WatchEvent {
 // Stop stops the watcher.
 func (w *Watcher) Stop() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	if !w.running {
+		w.mu.Unlock()
 		return
 	}
 
 	close(w.stopCh)
 	w.running = false
+	doneCh := w.doneCh
+	w.mu.Unlock()
+
+	// Wait outside lock for goroutine to exit
+	<-doneCh
 }
 
 // watchLoop is the main watch loop.
-func (w *Watcher) watchLoop() {
+func (w *Watcher) watchLoop(stopCh <-chan struct{}, doneCh chan<- struct{}) {
+	defer close(doneCh)
+
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-w.stopCh:
+		case <-stopCh:
 			return
 		case <-ticker.C:
 			changed, err := w.loader.HasChanges()

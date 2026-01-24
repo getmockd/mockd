@@ -123,3 +123,12 @@ func WithVersion(version string) Option {
 		a.version = version
 	}
 }
+
+// WithAllowLocalhostBypass enables unauthenticated access from localhost.
+// This is useful for development but should not be used in production.
+// Default is false - authentication is always required.
+func WithAllowLocalhostBypass(allow bool) Option {
+	return func(a *AdminAPI) {
+		a.allowLocalhostBypass = allow
+	}
+}

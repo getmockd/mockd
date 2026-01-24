@@ -126,7 +126,7 @@ func NewWebSocketReplayer(rec *recording.StreamRecording, conn *Connection, conf
 	}
 
 	if config.Mode == recording.ReplayModeSynchronized {
-		r.expectedMsg = make(chan []byte, 1)
+		r.expectedMsg = make(chan []byte, 10)
 	}
 
 	return r, nil
@@ -413,11 +413,11 @@ func (r *WebSocketReplayer) OnClientMessage(data []byte) {
 		return
 	}
 
-	// Non-blocking send to avoid deadlock
+	// Block until we can send or context is cancelled
 	select {
 	case r.expectedMsg <- data:
-	default:
-		// Channel full, drop the message
+	case <-r.ctx.Done():
+		// Replay stopped, discard is acceptable
 	}
 }
 
