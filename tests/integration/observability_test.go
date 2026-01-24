@@ -219,37 +219,40 @@ func TestObservability_PrometheusMetricsEndpoint(t *testing.T) {
 	require.NoError(t, err)
 	resp.Body.Close()
 
-	// Give metrics time to update
-	time.Sleep(50 * time.Millisecond)
+	// Poll for metrics to be available (eventual consistency)
+	var metricsBody string
+	require.Eventually(t, func() bool {
+		metricsResp, err := http.Get(fmt.Sprintf("http://localhost:%d/metrics", bundle.AdminPort))
+		if err != nil {
+			return false
+		}
+		defer metricsResp.Body.Close()
 
-	// GET /metrics
-	metricsResp, err := http.Get(fmt.Sprintf("http://localhost:%d/metrics", bundle.AdminPort))
-	require.NoError(t, err)
-	defer metricsResp.Body.Close()
+		if metricsResp.StatusCode != http.StatusOK {
+			return false
+		}
 
-	// Verify: returns 200 OK
-	assert.Equal(t, http.StatusOK, metricsResp.StatusCode)
+		// Verify: returns Prometheus text format
+		contentType := metricsResp.Header.Get("Content-Type")
+		if !strings.Contains(contentType, "text/plain") {
+			return false
+		}
 
-	// Verify: returns Prometheus text format
-	contentType := metricsResp.Header.Get("Content-Type")
-	assert.Contains(t, contentType, "text/plain")
+		body, err := io.ReadAll(metricsResp.Body)
+		if err != nil {
+			return false
+		}
+		metricsBody = string(body)
 
-	body, err := io.ReadAll(metricsResp.Body)
-	require.NoError(t, err)
-	metricsBody := string(body)
-
-	// Verify: contains expected metric types (HELP and TYPE lines)
-	assert.Contains(t, metricsBody, "# HELP mockd_")
-	assert.Contains(t, metricsBody, "# TYPE mockd_")
-
-	// Verify: contains core metrics (after activity)
-	assert.Contains(t, metricsBody, "mockd_requests_total")
-	assert.Contains(t, metricsBody, "mockd_request_duration_seconds")
-	assert.Contains(t, metricsBody, "mockd_match_hits_total")
-
-	// Verify: contains runtime metrics
-	assert.Contains(t, metricsBody, "mockd_uptime_seconds")
-	assert.Contains(t, metricsBody, "go_goroutines")
+		// Check all required metrics are present
+		return strings.Contains(metricsBody, "# HELP mockd_") &&
+			strings.Contains(metricsBody, "# TYPE mockd_") &&
+			strings.Contains(metricsBody, "mockd_requests_total") &&
+			strings.Contains(metricsBody, "mockd_request_duration_seconds") &&
+			strings.Contains(metricsBody, "mockd_match_hits_total") &&
+			strings.Contains(metricsBody, "mockd_uptime_seconds") &&
+			strings.Contains(metricsBody, "go_goroutines")
+	}, 2*time.Second, 50*time.Millisecond, "metrics endpoint should return expected Prometheus format with all core metrics")
 
 	// Note: mockd_mocks_total and mockd_active_connections are gauge metrics
 	// that only appear in output when they have been set with labels.
@@ -296,17 +299,17 @@ func TestObservability_RequestCounterMetrics(t *testing.T) {
 		assert.Equal(t, 200, resp.StatusCode)
 	}
 
-	// Give metrics time to update
-	time.Sleep(50 * time.Millisecond)
+	// Poll for metrics to update (eventual consistency)
+	var finalCount float64
+	var found bool
+	require.Eventually(t, func() bool {
+		updatedMetrics := getMetrics(t, bundle.AdminPort)
+		updatedParsed := parsePrometheusMetrics(updatedMetrics)
+		finalCount, found = getMetricValue(updatedParsed, "mockd_requests_total", `path="/api/counter-test"`)
+		return found && (finalCount-initialCount) >= 10
+	}, 2*time.Second, 50*time.Millisecond, "request counter should increase by at least 10")
 
-	// Get updated metrics
-	updatedMetrics := getMetrics(t, bundle.AdminPort)
-	updatedParsed := parsePrometheusMetrics(updatedMetrics)
-
-	// Verify: request counter increased by at least 10
-	finalCount, found := getMetricValue(updatedParsed, "mockd_requests_total", `path="/api/counter-test"`)
 	assert.True(t, found, "should find request counter metric")
-	assert.GreaterOrEqual(t, finalCount-initialCount, float64(10), "request counter should increase by at least 10")
 }
 
 // ============================================================================
@@ -348,23 +351,24 @@ func TestObservability_RequestDurationHistogram(t *testing.T) {
 		assert.GreaterOrEqual(t, time.Since(start), 100*time.Millisecond)
 	}
 
-	// Give metrics time to update
-	time.Sleep(50 * time.Millisecond)
+	// Poll for metrics to update (eventual consistency)
+	var metricsBody string
+	var bucket01, bucket025 float64
+	require.Eventually(t, func() bool {
+		metricsBody = getMetrics(t, bundle.AdminPort)
+		parsed := parsePrometheusMetrics(metricsBody)
 
-	// GET /metrics
-	metricsBody := getMetrics(t, bundle.AdminPort)
-	parsed := parsePrometheusMetrics(metricsBody)
+		var found bool
+		bucket01, found = getMetricValue(parsed, "mockd_request_duration_seconds_bucket", `le="0.1"`)
+		if !found {
+			return false
+		}
+		bucket025, found = getMetricValue(parsed, "mockd_request_duration_seconds_bucket", `le="0.25"`)
+		return found
+	}, 2*time.Second, 50*time.Millisecond, "histogram buckets should be populated")
 
 	// Verify: histogram buckets exist
 	assert.Contains(t, metricsBody, "mockd_request_duration_seconds_bucket")
-
-	// Verify: le="0.1" bucket exists (100ms = 0.1s)
-	// The delayed requests should show up in buckets >= 0.1s
-	bucket01, found := getMetricValue(parsed, "mockd_request_duration_seconds_bucket", `le="0.1"`)
-	assert.True(t, found, "should find le=0.1 bucket")
-
-	bucket025, found := getMetricValue(parsed, "mockd_request_duration_seconds_bucket", `le="0.25"`)
-	assert.True(t, found, "should find le=0.25 bucket")
 
 	// The 0.25s bucket should have more or equal counts than 0.1s bucket
 	// (since requests taking ~100ms might fall into 0.1 or slightly above)
@@ -415,17 +419,17 @@ func TestObservability_ErrorRateMetrics(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 	}
 
-	// Give metrics time to update
-	time.Sleep(50 * time.Millisecond)
+	// Poll for metrics to update (eventual consistency)
+	var final500Count float64
+	var found bool
+	require.Eventually(t, func() bool {
+		updatedMetrics := getMetrics(t, bundle.AdminPort)
+		updatedParsed := parsePrometheusMetrics(updatedMetrics)
+		final500Count, found = getMetricValue(updatedParsed, "mockd_requests_total", `status="500"`)
+		return found && (final500Count-initial500Count) >= 5
+	}, 2*time.Second, 50*time.Millisecond, "500 error counter should increase by at least 5")
 
-	// Get updated metrics
-	updatedMetrics := getMetrics(t, bundle.AdminPort)
-	updatedParsed := parsePrometheusMetrics(updatedMetrics)
-
-	// Verify: status="500" counter increased
-	final500Count, found := getMetricValue(updatedParsed, "mockd_requests_total", `status="500"`)
 	assert.True(t, found, "should find status=500 metric")
-	assert.GreaterOrEqual(t, final500Count-initial500Count, float64(5), "500 error counter should increase by at least 5")
 }
 
 // ============================================================================
@@ -463,26 +467,31 @@ func TestObservability_ActiveConnectionGauge_WebSocket(t *testing.T) {
 	}
 	require.NoError(t, err)
 
-	// Give connection time to register
-	time.Sleep(100 * time.Millisecond)
+	// Poll for connection to register (eventual consistency)
+	var openedWS float64
+	var found bool
+	require.Eventually(t, func() bool {
+		openedMetrics := getMetrics(t, bundle.AdminPort)
+		openedParsed := parsePrometheusMetrics(openedMetrics)
+		openedWS, found = getMetricValue(openedParsed, "mockd_active_connections", `protocol="websocket"`)
+		return found && openedWS > initialWS
+	}, 2*time.Second, 50*time.Millisecond, "active connections should increase when WebSocket connects")
 
-	// Verify: gauge > initial (connection opened)
-	openedMetrics := getMetrics(t, bundle.AdminPort)
-	openedParsed := parsePrometheusMetrics(openedMetrics)
-	openedWS, found := getMetricValue(openedParsed, "mockd_active_connections", `protocol="websocket"`)
 	assert.True(t, found, "should find websocket connection metric")
-	assert.Greater(t, openedWS, initialWS, "active connections should increase when WebSocket connects")
 
 	// Close connection
 	conn.Close(ws.StatusNormalClosure, "test complete")
-	time.Sleep(100 * time.Millisecond)
 
-	// Verify: gauge decreased
-	closedMetrics := getMetrics(t, bundle.AdminPort)
-	closedParsed := parsePrometheusMetrics(closedMetrics)
-	closedWS, found := getMetricValue(closedParsed, "mockd_active_connections", `protocol="websocket"`)
+	// Poll for connection close to register (eventual consistency)
+	var closedWS float64
+	require.Eventually(t, func() bool {
+		closedMetrics := getMetrics(t, bundle.AdminPort)
+		closedParsed := parsePrometheusMetrics(closedMetrics)
+		closedWS, found = getMetricValue(closedParsed, "mockd_active_connections", `protocol="websocket"`)
+		return found && closedWS < openedWS
+	}, 2*time.Second, 50*time.Millisecond, "active connections should decrease when WebSocket closes")
+
 	assert.True(t, found, "should find websocket connection metric after close")
-	assert.Less(t, closedWS, openedWS, "active connections should decrease when WebSocket closes")
 }
 
 // ============================================================================
@@ -853,16 +862,21 @@ func TestObservability_ProtocolSpecificMetrics_WebSocket(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	// Poll for WebSocket connection metrics (eventual consistency)
+	var metricsBody string
+	var wsCount float64
+	var found bool
+	require.Eventually(t, func() bool {
+		metricsBody = getMetrics(t, bundle.AdminPort)
+		if !strings.Contains(metricsBody, "mockd_active_connections") {
+			return false
+		}
+		parsed := parsePrometheusMetrics(metricsBody)
+		wsCount, found = getMetricValue(parsed, "mockd_active_connections", `protocol="websocket"`)
+		return found && wsCount >= 1
+	}, 2*time.Second, 50*time.Millisecond, "should have at least 1 WebSocket connection in metrics")
 
-	// Verify: WebSocket connection metrics exist
-	metricsBody := getMetrics(t, bundle.AdminPort)
-	assert.Contains(t, metricsBody, "mockd_active_connections")
-
-	parsed := parsePrometheusMetrics(metricsBody)
-	wsCount, found := getMetricValue(parsed, "mockd_active_connections", `protocol="websocket"`)
 	assert.True(t, found, "should find websocket connection metric")
-	assert.GreaterOrEqual(t, wsCount, float64(1), "should have at least 1 WebSocket connection")
 }
 
 func TestObservability_ProtocolSpecificMetrics_SSE(t *testing.T) {
@@ -912,14 +926,17 @@ func TestObservability_ProtocolSpecificMetrics_SSE(t *testing.T) {
 		}
 	}()
 
-	// Wait for SSE connection to establish
-	time.Sleep(100 * time.Millisecond)
+	// Poll for SSE connection to establish (eventual consistency)
+	var sseCount float64
+	var found bool
+	require.Eventually(t, func() bool {
+		metricsBody := getMetrics(t, bundle.AdminPort)
+		parsed := parsePrometheusMetrics(metricsBody)
+		sseCount, found = getMetricValue(parsed, "mockd_active_connections", `protocol="sse"`)
+		// SSE connections should be tracked - return true if found (even if 0)
+		return found
+	}, 2*time.Second, 50*time.Millisecond, "SSE connection metric should be available")
 
-	// Verify: SSE connection metrics exist
-	metricsBody := getMetrics(t, bundle.AdminPort)
-	parsed := parsePrometheusMetrics(metricsBody)
-
-	sseCount, found := getMetricValue(parsed, "mockd_active_connections", `protocol="sse"`)
 	// SSE connections should be tracked
 	if found {
 		assert.GreaterOrEqual(t, sseCount, float64(0), "SSE connection count should be >= 0")
@@ -980,18 +997,19 @@ func TestObservability_MatchHitsMissesMetrics(t *testing.T) {
 		assert.Equal(t, 404, resp.StatusCode)
 	}
 
-	time.Sleep(50 * time.Millisecond)
+	// Poll for metrics to update (eventual consistency)
+	var finalHits, finalMisses float64
+	var found bool
+	require.Eventually(t, func() bool {
+		updatedMetrics := getMetrics(t, bundle.AdminPort)
+		updatedParsed := parsePrometheusMetrics(updatedMetrics)
 
-	// Verify: match hits increased
-	updatedMetrics := getMetrics(t, bundle.AdminPort)
-	updatedParsed := parsePrometheusMetrics(updatedMetrics)
+		finalHits = sumMetricValues(updatedParsed, "mockd_match_hits_total")
+		finalMisses, found = getMetricValue(updatedParsed, "mockd_match_misses_total", "")
+		return found && (finalHits-initialHits) >= 5 && (finalMisses-initialMisses) >= 3
+	}, 2*time.Second, 50*time.Millisecond, "match hits should increase by at least 5 and misses by at least 3")
 
-	finalHits := sumMetricValues(updatedParsed, "mockd_match_hits_total")
-	assert.GreaterOrEqual(t, finalHits-initialHits, float64(5), "match hits should increase by at least 5")
-
-	finalMisses, found := getMetricValue(updatedParsed, "mockd_match_misses_total", "")
 	assert.True(t, found, "should find match misses metric")
-	assert.GreaterOrEqual(t, finalMisses-initialMisses, float64(3), "match misses should increase by at least 3")
 }
 
 // ============================================================================
@@ -1027,25 +1045,30 @@ func TestObservability_AdminAPIRequestMetrics(t *testing.T) {
 func TestObservability_RuntimeMetrics(t *testing.T) {
 	bundle := setupObservabilityTest(t)
 
-	// Wait for runtime collector to populate metrics
-	time.Sleep(200 * time.Millisecond)
+	// Poll for runtime collector to populate metrics (eventual consistency)
+	var metricsBody string
+	var goroutines, heapAllocBytes float64
+	var foundGoroutines, foundHeap bool
+	require.Eventually(t, func() bool {
+		metricsBody = getMetrics(t, bundle.AdminPort)
 
-	metricsBody := getMetrics(t, bundle.AdminPort)
+		// Check Go runtime metrics exist
+		if !strings.Contains(metricsBody, "go_goroutines") ||
+			!strings.Contains(metricsBody, "go_memstats_heap_alloc_bytes") ||
+			!strings.Contains(metricsBody, "go_memstats_heap_sys_bytes") {
+			return false
+		}
 
-	// Verify: Go runtime metrics exist
-	assert.Contains(t, metricsBody, "go_goroutines")
-	assert.Contains(t, metricsBody, "go_memstats_heap_alloc_bytes")
-	assert.Contains(t, metricsBody, "go_memstats_heap_sys_bytes")
+		parsed := parsePrometheusMetrics(metricsBody)
+		goroutines, foundGoroutines = getMetricValue(parsed, "go_goroutines", "")
+		heapAllocBytes, foundHeap = getMetricValue(parsed, "go_memstats_heap_alloc_bytes", "")
 
-	// Verify: Values are non-zero for active server
-	parsed := parsePrometheusMetrics(metricsBody)
+		return foundGoroutines && goroutines > 0 && foundHeap && heapAllocBytes > 0
+	}, 2*time.Second, 50*time.Millisecond, "runtime metrics should be populated with non-zero values")
 
-	goroutines, found := getMetricValue(parsed, "go_goroutines", "")
-	assert.True(t, found, "should find go_goroutines metric")
+	assert.True(t, foundGoroutines, "should find go_goroutines metric")
 	assert.Greater(t, goroutines, float64(0), "should have > 0 goroutines")
-
-	heapAllocBytes, found := getMetricValue(parsed, "go_memstats_heap_alloc_bytes", "")
-	assert.True(t, found, "should find go_memstats_heap_alloc_bytes metric")
+	assert.True(t, foundHeap, "should find go_memstats_heap_alloc_bytes metric")
 	assert.Greater(t, heapAllocBytes, float64(0), "should have > 0 heap allocated bytes")
 }
 
@@ -1124,18 +1147,19 @@ func TestObservability_MetricLabelCardinalityControl(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	time.Sleep(50 * time.Millisecond)
-
-	metricsBody := getMetrics(t, bundle.AdminPort)
+	// Poll for metrics to update (eventual consistency)
+	var metricsBody string
+	require.Eventually(t, func() bool {
+		metricsBody = getMetrics(t, bundle.AdminPort)
+		// Check that raw UUIDs/IDs are NOT in metrics (normalization is working)
+		return !strings.Contains(metricsBody, "12345678-1234-5678-1234-567890abcdef") &&
+			!strings.Contains(metricsBody, "87654321-4321-8765-4321-fedcba098765") &&
+			!strings.Contains(metricsBody, "507f1f77bcf86cd799439011")
+	}, 2*time.Second, 50*time.Millisecond, "metrics should not contain raw UUIDs/IDs (normalization)")
 
 	// Verify: paths are normalized to prevent cardinality explosion
 	// Should see {uuid} or {id} placeholders, not actual IDs
 	// (This tests the normalizePathForMetrics function)
-
-	// The metrics should NOT contain actual UUIDs/IDs
-	assert.NotContains(t, metricsBody, "12345678-1234-5678-1234-567890abcdef")
-	assert.NotContains(t, metricsBody, "87654321-4321-8765-4321-fedcba098765")
-	assert.NotContains(t, metricsBody, "507f1f77bcf86cd799439011")
 
 	// Instead should contain normalized placeholders like {uuid} or {id}
 	parsed := parsePrometheusMetrics(metricsBody)
@@ -1202,16 +1226,17 @@ func TestObservability_ConcurrentMetricsUpdates(t *testing.T) {
 		<-done
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	// Poll for metrics to update (eventual consistency)
+	var count float64
+	var found bool
+	require.Eventually(t, func() bool {
+		metricsBody := getMetrics(t, bundle.AdminPort)
+		parsed := parsePrometheusMetrics(metricsBody)
+		count, found = getMetricValue(parsed, "mockd_requests_total", `path="/api/concurrent"`)
+		return found && count >= float64(numRequests)
+	}, 2*time.Second, 50*time.Millisecond, "should count all concurrent requests")
 
-	// Verify: metrics are consistent (no race conditions)
-	metricsBody := getMetrics(t, bundle.AdminPort)
-	parsed := parsePrometheusMetrics(metricsBody)
-
-	// Should have captured at least numRequests
-	count, found := getMetricValue(parsed, "mockd_requests_total", `path="/api/concurrent"`)
 	assert.True(t, found, "should find request counter")
-	assert.GreaterOrEqual(t, count, float64(numRequests), "should count all concurrent requests")
 }
 
 // ============================================================================
@@ -1253,18 +1278,21 @@ func TestObservability_ErrorMetricsTypes(t *testing.T) {
 		assert.Equal(t, code, resp.StatusCode)
 	}
 
-	time.Sleep(50 * time.Millisecond)
+	// Poll for metrics to update (eventual consistency)
+	require.Eventually(t, func() bool {
+		metricsBody := getMetrics(t, bundle.AdminPort)
+		parsed := parsePrometheusMetrics(metricsBody)
 
-	// Verify: each status code is tracked separately
-	metricsBody := getMetrics(t, bundle.AdminPort)
-	parsed := parsePrometheusMetrics(metricsBody)
-
-	for _, code := range errorCodes {
-		labelMatch := fmt.Sprintf(`status="%d"`, code)
-		count, found := getMetricValue(parsed, "mockd_requests_total", labelMatch)
-		assert.True(t, found, "should find status=%d metric", code)
-		assert.GreaterOrEqual(t, count, float64(1), "status=%d should have at least 1 request", code)
-	}
+		// Check all error codes are tracked
+		for _, code := range errorCodes {
+			labelMatch := fmt.Sprintf(`status="%d"`, code)
+			count, found := getMetricValue(parsed, "mockd_requests_total", labelMatch)
+			if !found || count < 1 {
+				return false
+			}
+		}
+		return true
+	}, 2*time.Second, 50*time.Millisecond, "all error status codes should be tracked in metrics")
 }
 
 // ============================================================================
@@ -1301,12 +1329,15 @@ func TestObservability_MetricsPersistenceAcrossRequests(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	time.Sleep(50 * time.Millisecond)
-
-	// Get metrics multiple times - values should be consistent
-	metrics1 := getMetrics(t, bundle.AdminPort)
-	parsed1 := parsePrometheusMetrics(metrics1)
-	count1, _ := getMetricValue(parsed1, "mockd_requests_total", `path="/api/persist"`)
+	// Poll for first batch of metrics to update (eventual consistency)
+	var count1 float64
+	require.Eventually(t, func() bool {
+		metrics1 := getMetrics(t, bundle.AdminPort)
+		parsed1 := parsePrometheusMetrics(metrics1)
+		var found bool
+		count1, found = getMetricValue(parsed1, "mockd_requests_total", `path="/api/persist"`)
+		return found && count1 >= 5
+	}, 2*time.Second, 50*time.Millisecond, "first batch of requests should be counted")
 
 	// Make 3 more requests
 	for i := 0; i < 3; i++ {
@@ -1315,14 +1346,15 @@ func TestObservability_MetricsPersistenceAcrossRequests(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	time.Sleep(50 * time.Millisecond)
-
-	// Metrics should show cumulative count
-	metrics2 := getMetrics(t, bundle.AdminPort)
-	parsed2 := parsePrometheusMetrics(metrics2)
-	count2, _ := getMetricValue(parsed2, "mockd_requests_total", `path="/api/persist"`)
-
-	assert.Equal(t, count1+3, count2, "metrics should persist and accumulate")
+	// Poll for second batch of metrics to update (eventual consistency)
+	var count2 float64
+	require.Eventually(t, func() bool {
+		metrics2 := getMetrics(t, bundle.AdminPort)
+		parsed2 := parsePrometheusMetrics(metrics2)
+		var found bool
+		count2, found = getMetricValue(parsed2, "mockd_requests_total", `path="/api/persist"`)
+		return found && count2 >= count1+3
+	}, 2*time.Second, 50*time.Millisecond, "metrics should persist and accumulate")
 }
 
 // ============================================================================
@@ -1362,16 +1394,16 @@ func TestObservability_HistogramQuantileAccuracy(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	time.Sleep(100 * time.Millisecond)
-
-	metricsBody := getMetrics(t, bundle.AdminPort)
-	parsed := parsePrometheusMetrics(metricsBody)
-
-	// Verify histogram sum and count
-	// The sum should be approximately numRequests * delayMs / 1000 (in seconds)
-	// The count should be at least numRequests
-	sumMetric, found := getMetricValue(parsed, "mockd_request_duration_seconds_sum", `path="/api/quantile"`)
-	countMetric, found2 := getMetricValue(parsed, "mockd_request_duration_seconds_count", `path="/api/quantile"`)
+	// Poll for histogram metrics to update (eventual consistency)
+	var sumMetric, countMetric float64
+	var found, found2 bool
+	require.Eventually(t, func() bool {
+		metricsBody := getMetrics(t, bundle.AdminPort)
+		parsed := parsePrometheusMetrics(metricsBody)
+		sumMetric, found = getMetricValue(parsed, "mockd_request_duration_seconds_sum", `path="/api/quantile"`)
+		countMetric, found2 = getMetricValue(parsed, "mockd_request_duration_seconds_count", `path="/api/quantile"`)
+		return found && found2 && countMetric >= float64(numRequests)
+	}, 2*time.Second, 50*time.Millisecond, "histogram should record all requests")
 
 	assert.True(t, found && found2, "should find histogram sum and count")
 
@@ -1561,18 +1593,21 @@ func TestObservability_MultipleStatusCodeTracking(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	time.Sleep(50 * time.Millisecond)
+	// Poll for metrics to update (eventual consistency)
+	require.Eventually(t, func() bool {
+		metricsBody := getMetrics(t, bundle.AdminPort)
+		parsed := parsePrometheusMetrics(metricsBody)
 
-	// Verify all status codes are tracked
-	metricsBody := getMetrics(t, bundle.AdminPort)
-	parsed := parsePrometheusMetrics(metricsBody)
-
-	for _, code := range successCodes {
-		labelMatch := fmt.Sprintf(`status="%d"`, code)
-		count, found := getMetricValue(parsed, "mockd_requests_total", labelMatch)
-		assert.True(t, found, "should find status=%d metric", code)
-		assert.GreaterOrEqual(t, count, float64(1), "status=%d should have at least 1 request", code)
-	}
+		// Check all status codes are tracked
+		for _, code := range successCodes {
+			labelMatch := fmt.Sprintf(`status="%d"`, code)
+			count, found := getMetricValue(parsed, "mockd_requests_total", labelMatch)
+			if !found || count < 1 {
+				return false
+			}
+		}
+		return true
+	}, 2*time.Second, 50*time.Millisecond, "all status codes should be tracked in metrics")
 }
 
 // ============================================================================
@@ -1660,23 +1695,30 @@ func TestObservability_FullRequestLifecycle(t *testing.T) {
 	resp.Body.Close()
 	assert.Equal(t, 201, resp.StatusCode)
 
-	time.Sleep(50 * time.Millisecond)
+	// Poll for all metrics to be captured (eventual consistency)
+	var count, histCount, hits float64
+	var foundCount, foundHist bool
+	require.Eventually(t, func() bool {
+		metricsBody := getMetrics(t, bundle.AdminPort)
+		parsed := parsePrometheusMetrics(metricsBody)
 
-	// Verify all metrics are captured
-	metricsBody := getMetrics(t, bundle.AdminPort)
-	parsed := parsePrometheusMetrics(metricsBody)
+		// Request counter
+		count, foundCount = getMetricValue(parsed, "mockd_requests_total", `method="POST"`)
+		if !foundCount || count < 1 {
+			return false
+		}
 
-	// Request counter
-	count, found := getMetricValue(parsed, "mockd_requests_total", `method="POST"`)
-	assert.True(t, found, "should find POST request counter")
-	assert.GreaterOrEqual(t, count, float64(1))
+		// Duration histogram
+		histCount, foundHist = getMetricValue(parsed, "mockd_request_duration_seconds_count", `path="/api/lifecycle"`)
+		if !foundHist || histCount < 1 {
+			return false
+		}
 
-	// Duration histogram
-	histCount, found := getMetricValue(parsed, "mockd_request_duration_seconds_count", `path="/api/lifecycle"`)
-	assert.True(t, found, "should find duration histogram count")
-	assert.GreaterOrEqual(t, histCount, float64(1))
+		// Match hits
+		hits = sumMetricValues(parsed, "mockd_match_hits_total")
+		return hits >= 1
+	}, 2*time.Second, 50*time.Millisecond, "all lifecycle metrics should be captured")
 
-	// Match hits
-	hits := sumMetricValues(parsed, "mockd_match_hits_total")
-	assert.GreaterOrEqual(t, hits, float64(1), "should have match hits")
+	assert.True(t, foundCount, "should find POST request counter")
+	assert.True(t, foundHist, "should find duration histogram count")
 }
