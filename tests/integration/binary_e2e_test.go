@@ -3601,3 +3601,303 @@ func TestBinaryE2E_HTTPPriorityMatching(t *testing.T) {
 		}
 	})
 }
+
+// Note: SOAP protocol tests are in soap_test.go using direct engine setup
+// The admin API mock creation for SOAP has a different config structure
+
+// ============================================================================
+// Test: OAuth/OIDC Protocol
+// ============================================================================
+
+func TestBinaryE2E_OAuthTokenEndpoint(t *testing.T) {
+	binaryPath := buildBinary(t)
+	proc := startServer(t, binaryPath)
+
+	// Create OAuth provider mock
+	oauthMock := map[string]interface{}{
+		"id":      "oauth-test",
+		"name":    "OAuth Test Provider",
+		"type":    "oauth",
+		"enabled": true,
+		"oauth": map[string]interface{}{
+			"path":   "/oauth",
+			"issuer": fmt.Sprintf("http://localhost:%d/oauth", proc.httpPort),
+			"clients": []map[string]interface{}{
+				{
+					"clientId":     "test-client",
+					"clientSecret": "test-secret",
+					"grantTypes":   []string{"client_credentials", "password"},
+				},
+			},
+			"users": []map[string]interface{}{
+				{
+					"username": "testuser",
+					"password": "testpass",
+					"claims": map[string]interface{}{
+						"sub":   "user-123",
+						"name":  "Test User",
+						"email": "test@example.com",
+					},
+				},
+			},
+			"accessTokenLifetime":  3600,
+			"refreshTokenLifetime": 86400,
+		},
+	}
+
+	mockJSON, _ := json.Marshal(oauthMock)
+	resp, err := http.Post(proc.adminURL()+"/mocks", "application/json", bytes.NewReader(mockJSON))
+	if err != nil {
+		t.Fatalf("Failed to create OAuth mock: %v", err)
+	}
+	resp.Body.Close()
+
+	// Test client credentials grant
+	t.Run("ClientCredentialsGrant", func(t *testing.T) {
+		data := "grant_type=client_credentials"
+		req, _ := http.NewRequest("POST", proc.mockURL()+"/oauth/token", strings.NewReader(data))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetBasicAuth("test-client", "test-secret")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Token request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		var tokenResp map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&tokenResp)
+
+		if _, ok := tokenResp["access_token"]; !ok {
+			t.Error("Response should contain access_token")
+		}
+		if tokenResp["token_type"] != "Bearer" {
+			t.Errorf("Token type should be Bearer, got %v", tokenResp["token_type"])
+		}
+	})
+
+	// Test password grant
+	t.Run("PasswordGrant", func(t *testing.T) {
+		data := "grant_type=password&username=testuser&password=testpass"
+		req, _ := http.NewRequest("POST", proc.mockURL()+"/oauth/token", strings.NewReader(data))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetBasicAuth("test-client", "test-secret")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Token request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		var tokenResp map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&tokenResp)
+
+		if _, ok := tokenResp["access_token"]; !ok {
+			t.Error("Response should contain access_token")
+		}
+	})
+
+	// Test invalid credentials
+	t.Run("InvalidCredentials", func(t *testing.T) {
+		data := "grant_type=client_credentials"
+		req, _ := http.NewRequest("POST", proc.mockURL()+"/oauth/token", strings.NewReader(data))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetBasicAuth("wrong-client", "wrong-secret")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Token request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Expected 401, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestBinaryE2E_OAuthOIDCDiscovery(t *testing.T) {
+	binaryPath := buildBinary(t)
+	proc := startServer(t, binaryPath)
+
+	// Create OAuth provider mock
+	oauthMock := map[string]interface{}{
+		"id":      "oauth-oidc-test",
+		"name":    "OIDC Test Provider",
+		"type":    "oauth",
+		"enabled": true,
+		"oauth": map[string]interface{}{
+			"path":   "/oidc",
+			"issuer": fmt.Sprintf("http://localhost:%d/oidc", proc.httpPort),
+			"clients": []map[string]interface{}{
+				{"clientId": "oidc-client", "clientSecret": "oidc-secret"},
+			},
+		},
+	}
+
+	mockJSON, _ := json.Marshal(oauthMock)
+	resp, err := http.Post(proc.adminURL()+"/mocks", "application/json", bytes.NewReader(mockJSON))
+	if err != nil {
+		t.Fatalf("Failed to create OAuth mock: %v", err)
+	}
+	resp.Body.Close()
+
+	// Test OIDC discovery endpoint
+	resp, err = http.Get(proc.mockURL() + "/oidc/.well-known/openid-configuration")
+	if err != nil {
+		t.Fatalf("Discovery request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected 200, got %d", resp.StatusCode)
+	}
+
+	var discovery map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&discovery)
+
+	// Verify discovery document has required fields
+	if _, ok := discovery["issuer"]; !ok {
+		t.Error("Discovery should contain issuer")
+	}
+	if _, ok := discovery["token_endpoint"]; !ok {
+		t.Error("Discovery should contain token_endpoint")
+	}
+	if _, ok := discovery["jwks_uri"]; !ok {
+		t.Error("Discovery should contain jwks_uri")
+	}
+}
+
+// ============================================================================
+// Test: Chaos Engineering
+// ============================================================================
+
+func TestBinaryE2E_ChaosLatencyInjection(t *testing.T) {
+	binaryPath := buildBinary(t)
+	proc := startServer(t, binaryPath)
+
+	// Create a simple mock
+	httpMock := map[string]interface{}{
+		"id":      "chaos-latency-test",
+		"name":    "Chaos Latency Test",
+		"type":    "http",
+		"enabled": true,
+		"http": map[string]interface{}{
+			"matcher":  map[string]interface{}{"method": "GET", "path": "/api/chaos-latency"},
+			"response": map[string]interface{}{"statusCode": 200, "body": `{"ok": true}`},
+		},
+	}
+
+	mockJSON, _ := json.Marshal(httpMock)
+	resp, err := http.Post(proc.adminURL()+"/mocks", "application/json", bytes.NewReader(mockJSON))
+	if err != nil {
+		t.Fatalf("Failed to create mock: %v", err)
+	}
+	resp.Body.Close()
+
+	// Measure baseline latency
+	start := time.Now()
+	resp, _ = http.Get(proc.mockURL() + "/api/chaos-latency")
+	resp.Body.Close()
+	baseline := time.Since(start)
+
+	// Enable chaos with 200ms latency
+	chaosConfig := map[string]interface{}{
+		"enabled": true,
+		"latency": map[string]interface{}{
+			"min":         "200ms",
+			"max":         "200ms",
+			"probability": 1.0,
+		},
+	}
+
+	chaosJSON, _ := json.Marshal(chaosConfig)
+	req, _ := http.NewRequest("PUT", proc.adminURL()+"/chaos", bytes.NewReader(chaosJSON))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to enable chaos: %v", err)
+	}
+	resp.Body.Close()
+
+	// Measure latency with chaos enabled
+	start = time.Now()
+	resp, _ = http.Get(proc.mockURL() + "/api/chaos-latency")
+	resp.Body.Close()
+	withChaos := time.Since(start)
+
+	// Chaos latency should be significantly higher
+	if withChaos < 200*time.Millisecond {
+		t.Errorf("Expected latency >= 200ms with chaos, got %v (baseline: %v)", withChaos, baseline)
+	}
+}
+
+func TestBinaryE2E_ChaosErrorRateInjection(t *testing.T) {
+	binaryPath := buildBinary(t)
+	proc := startServer(t, binaryPath)
+
+	// Create a simple mock
+	httpMock := map[string]interface{}{
+		"id":      "chaos-error-test",
+		"name":    "Chaos Error Test",
+		"type":    "http",
+		"enabled": true,
+		"http": map[string]interface{}{
+			"matcher":  map[string]interface{}{"method": "GET", "path": "/api/chaos-error"},
+			"response": map[string]interface{}{"statusCode": 200, "body": `{"ok": true}`},
+		},
+	}
+
+	mockJSON, _ := json.Marshal(httpMock)
+	resp, err := http.Post(proc.adminURL()+"/mocks", "application/json", bytes.NewReader(mockJSON))
+	if err != nil {
+		t.Fatalf("Failed to create mock: %v", err)
+	}
+	resp.Body.Close()
+
+	// Enable chaos with 50% error rate
+	chaosConfig := map[string]interface{}{
+		"enabled": true,
+		"errorRate": map[string]interface{}{
+			"probability": 0.5,
+			"defaultCode": 500,
+		},
+	}
+
+	chaosJSON, _ := json.Marshal(chaosConfig)
+	req, _ := http.NewRequest("PUT", proc.adminURL()+"/chaos", bytes.NewReader(chaosJSON))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to enable chaos: %v", err)
+	}
+	resp.Body.Close()
+
+	// Make 50 requests and count errors
+	errors := 0
+	for i := 0; i < 50; i++ {
+		resp, _ := http.Get(proc.mockURL() + "/api/chaos-error")
+		if resp.StatusCode == 500 {
+			errors++
+		}
+		resp.Body.Close()
+	}
+
+	// With 50% error rate, expect roughly 15-35 errors (allowing variance)
+	if errors < 10 || errors > 40 {
+		t.Errorf("Expected ~25 errors with 50%% rate, got %d", errors)
+	}
+}
+
+// Note: Stateful mocking tests are in stateful_test.go using direct engine setup
+// The admin API doesn't support stateful resource configuration via mock creation
