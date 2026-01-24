@@ -1,6 +1,7 @@
 package sse
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -276,5 +277,406 @@ func TestSSEStream_Properties(t *testing.T) {
 	}
 	if stream.Status != StreamStatusActive {
 		t.Errorf("expected status Active, got %v", stream.Status)
+	}
+}
+
+// ============================================================================
+// Rate Limiting Integration Tests
+// ============================================================================
+
+func TestSSEHandler_RateLimitConfigFromMock(t *testing.T) {
+	handler := NewSSEHandler(100)
+
+	t.Run("copies rate limit config when present", func(t *testing.T) {
+		mockCfg := &mock.SSEConfig{
+			Events: []mock.SSEEventDef{
+				{Data: "test"},
+			},
+			RateLimit: &mock.SSERateLimitConfig{
+				EventsPerSecond: 5.0,
+				BurstSize:       10,
+				Strategy:        "wait",
+				Headers:         true,
+			},
+		}
+
+		sseConfig := handler.configFromMock(mockCfg)
+
+		if sseConfig.RateLimit == nil {
+			t.Fatal("expected RateLimit config to be copied")
+		}
+		if sseConfig.RateLimit.EventsPerSecond != 5.0 {
+			t.Errorf("expected EventsPerSecond=5.0, got %v", sseConfig.RateLimit.EventsPerSecond)
+		}
+		if sseConfig.RateLimit.BurstSize != 10 {
+			t.Errorf("expected BurstSize=10, got %v", sseConfig.RateLimit.BurstSize)
+		}
+		if sseConfig.RateLimit.Strategy != "wait" {
+			t.Errorf("expected Strategy=wait, got %v", sseConfig.RateLimit.Strategy)
+		}
+		if !sseConfig.RateLimit.Headers {
+			t.Error("expected Headers=true")
+		}
+	})
+
+	t.Run("rate limit config is nil when not configured", func(t *testing.T) {
+		mockCfg := &mock.SSEConfig{
+			Events: []mock.SSEEventDef{
+				{Data: "test"},
+			},
+		}
+
+		sseConfig := handler.configFromMock(mockCfg)
+
+		if sseConfig.RateLimit != nil {
+			t.Error("expected RateLimit config to be nil")
+		}
+	})
+
+	t.Run("copies all strategy types", func(t *testing.T) {
+		strategies := []string{"wait", "drop", "error"}
+
+		for _, strategy := range strategies {
+			mockCfg := &mock.SSEConfig{
+				Events: []mock.SSEEventDef{{Data: "test"}},
+				RateLimit: &mock.SSERateLimitConfig{
+					EventsPerSecond: 10,
+					Strategy:        strategy,
+				},
+			}
+
+			sseConfig := handler.configFromMock(mockCfg)
+
+			if sseConfig.RateLimit.Strategy != strategy {
+				t.Errorf("expected Strategy=%s, got %v", strategy, sseConfig.RateLimit.Strategy)
+			}
+		}
+	})
+}
+
+func TestSSEHandler_RateLimiterCreation(t *testing.T) {
+	t.Run("rate limiter created when config has positive rate", func(t *testing.T) {
+		config := &RateLimitConfig{
+			EventsPerSecond: 10.0,
+			BurstSize:       20,
+			Strategy:        RateLimitStrategyWait,
+		}
+
+		limiter := NewRateLimiter(config)
+
+		if limiter == nil {
+			t.Fatal("expected rate limiter to be created")
+		}
+
+		stats := limiter.Stats()
+		if stats.Rate != 10.0 {
+			t.Errorf("expected rate=10.0, got %v", stats.Rate)
+		}
+		if stats.MaxTokens != 20.0 {
+			t.Errorf("expected maxTokens=20.0, got %v", stats.MaxTokens)
+		}
+	})
+
+	t.Run("rate limiter nil when config is nil", func(t *testing.T) {
+		limiter := NewRateLimiter(nil)
+
+		if limiter != nil {
+			t.Error("expected rate limiter to be nil")
+		}
+	})
+
+	t.Run("burst size defaults to events per second when not set", func(t *testing.T) {
+		config := &RateLimitConfig{
+			EventsPerSecond: 15.0,
+			BurstSize:       0, // Not set
+			Strategy:        RateLimitStrategyWait,
+		}
+
+		limiter := NewRateLimiter(config)
+		stats := limiter.Stats()
+
+		if stats.MaxTokens != 15.0 {
+			t.Errorf("expected maxTokens to default to rate (15.0), got %v", stats.MaxTokens)
+		}
+	})
+}
+
+func TestSSEHandler_RateLimitStrategies(t *testing.T) {
+	t.Run("wait strategy blocks until token available", func(t *testing.T) {
+		config := &RateLimitConfig{
+			EventsPerSecond: 100, // 100/sec = 10ms per token
+			BurstSize:       1,   // Only 1 token
+			Strategy:        RateLimitStrategyWait,
+		}
+
+		limiter := NewRateLimiter(config)
+		ctx := context.Background()
+
+		// First call should succeed immediately (uses burst token)
+		start := time.Now()
+		err := limiter.Wait(ctx)
+		if err != nil {
+			t.Fatalf("first wait failed: %v", err)
+		}
+		firstDuration := time.Since(start)
+
+		// Second call should block waiting for token refill
+		start = time.Now()
+		err = limiter.Wait(ctx)
+		if err != nil {
+			t.Fatalf("second wait failed: %v", err)
+		}
+		secondDuration := time.Since(start)
+
+		// Second call should have taken longer (waiting for refill)
+		if secondDuration < 5*time.Millisecond {
+			t.Errorf("expected second call to wait for token refill, took only %v", secondDuration)
+		}
+
+		// First call should be fast
+		if firstDuration > 5*time.Millisecond {
+			t.Errorf("expected first call to be immediate, took %v", firstDuration)
+		}
+	})
+
+	t.Run("drop strategy returns error immediately", func(t *testing.T) {
+		config := &RateLimitConfig{
+			EventsPerSecond: 100,
+			BurstSize:       1,
+			Strategy:        RateLimitStrategyDrop,
+		}
+
+		limiter := NewRateLimiter(config)
+		ctx := context.Background()
+
+		// First call consumes the token
+		err := limiter.Wait(ctx)
+		if err != nil {
+			t.Fatalf("first wait failed: %v", err)
+		}
+
+		// Second call should return ErrRateLimited immediately
+		start := time.Now()
+		err = limiter.Wait(ctx)
+		duration := time.Since(start)
+
+		if err != ErrRateLimited {
+			t.Errorf("expected ErrRateLimited, got %v", err)
+		}
+		if duration > 5*time.Millisecond {
+			t.Errorf("expected drop strategy to return immediately, took %v", duration)
+		}
+	})
+
+	t.Run("error strategy returns error immediately", func(t *testing.T) {
+		config := &RateLimitConfig{
+			EventsPerSecond: 100,
+			BurstSize:       1,
+			Strategy:        RateLimitStrategyError,
+		}
+
+		limiter := NewRateLimiter(config)
+		ctx := context.Background()
+
+		// First call consumes the token
+		_ = limiter.Wait(ctx)
+
+		// Second call should return ErrRateLimited
+		err := limiter.Wait(ctx)
+		if err != ErrRateLimited {
+			t.Errorf("expected ErrRateLimited, got %v", err)
+		}
+	})
+
+	t.Run("wait strategy respects context cancellation", func(t *testing.T) {
+		config := &RateLimitConfig{
+			EventsPerSecond: 1, // Very slow - 1 per second
+			BurstSize:       1,
+			Strategy:        RateLimitStrategyWait,
+		}
+
+		limiter := NewRateLimiter(config)
+
+		// Consume the token
+		_ = limiter.Wait(context.Background())
+
+		// Create context that cancels after 50ms
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+
+		// Wait should be cancelled
+		err := limiter.Wait(ctx)
+		if err != context.DeadlineExceeded {
+			t.Errorf("expected context.DeadlineExceeded, got %v", err)
+		}
+	})
+}
+
+func TestSSEHandler_RateLimitHeaders(t *testing.T) {
+	t.Run("returns headers when enabled", func(t *testing.T) {
+		config := &RateLimitConfig{
+			EventsPerSecond: 10.0,
+			BurstSize:       20,
+			Strategy:        RateLimitStrategyWait,
+			Headers:         true,
+		}
+
+		limiter := NewRateLimiter(config)
+		headers := limiter.RateLimitHeaders()
+
+		if headers == nil {
+			t.Fatal("expected headers to be returned")
+		}
+		if _, ok := headers["X-RateLimit-Limit"]; !ok {
+			t.Error("expected X-RateLimit-Limit header")
+		}
+		if _, ok := headers["X-RateLimit-Remaining"]; !ok {
+			t.Error("expected X-RateLimit-Remaining header")
+		}
+		if _, ok := headers["X-RateLimit-Reset"]; !ok {
+			t.Error("expected X-RateLimit-Reset header")
+		}
+	})
+
+	t.Run("returns nil when headers disabled", func(t *testing.T) {
+		config := &RateLimitConfig{
+			EventsPerSecond: 10.0,
+			Headers:         false,
+		}
+
+		limiter := NewRateLimiter(config)
+		headers := limiter.RateLimitHeaders()
+
+		if headers != nil {
+			t.Error("expected nil headers when disabled")
+		}
+	})
+
+	t.Run("limit header matches configured rate", func(t *testing.T) {
+		config := &RateLimitConfig{
+			EventsPerSecond: 42.0,
+			Headers:         true,
+		}
+
+		limiter := NewRateLimiter(config)
+		headers := limiter.RateLimitHeaders()
+
+		if headers["X-RateLimit-Limit"] != "42" {
+			t.Errorf("expected X-RateLimit-Limit=42, got %v", headers["X-RateLimit-Limit"])
+		}
+	})
+
+	t.Run("remaining header decreases after consumption", func(t *testing.T) {
+		config := &RateLimitConfig{
+			EventsPerSecond: 100,
+			BurstSize:       10,
+			Headers:         true,
+		}
+
+		limiter := NewRateLimiter(config)
+
+		// Get initial remaining
+		headers1 := limiter.RateLimitHeaders()
+		remaining1 := headers1["X-RateLimit-Remaining"]
+
+		// Consume a token
+		_ = limiter.Wait(context.Background())
+
+		// Check remaining decreased
+		headers2 := limiter.RateLimitHeaders()
+		remaining2 := headers2["X-RateLimit-Remaining"]
+
+		// remaining2 should be less than remaining1
+		// (they're strings so we compare as numbers would be more robust,
+		// but for this test we just check they're different)
+		if remaining1 == remaining2 {
+			t.Error("expected remaining to decrease after consumption")
+		}
+	})
+}
+
+func TestSSEHandler_RateLimiterReset(t *testing.T) {
+	config := &RateLimitConfig{
+		EventsPerSecond: 100,
+		BurstSize:       10,
+		Strategy:        RateLimitStrategyDrop,
+	}
+
+	limiter := NewRateLimiter(config)
+	ctx := context.Background()
+
+	// Consume all tokens
+	for i := 0; i < 10; i++ {
+		_ = limiter.Wait(ctx)
+	}
+
+	// Should be rate limited now
+	err := limiter.Wait(ctx)
+	if err != ErrRateLimited {
+		t.Fatal("expected to be rate limited")
+	}
+
+	// Reset the limiter
+	limiter.Reset()
+
+	// Should have tokens again
+	err = limiter.Wait(ctx)
+	if err != nil {
+		t.Errorf("expected success after reset, got %v", err)
+	}
+}
+
+func TestSSEHandler_RateLimiterTryAcquire(t *testing.T) {
+	config := &RateLimitConfig{
+		EventsPerSecond: 100,
+		BurstSize:       2,
+	}
+
+	limiter := NewRateLimiter(config)
+
+	// First two should succeed
+	if !limiter.TryAcquire() {
+		t.Error("expected first TryAcquire to succeed")
+	}
+	if !limiter.TryAcquire() {
+		t.Error("expected second TryAcquire to succeed")
+	}
+
+	// Third should fail (no tokens left)
+	if limiter.TryAcquire() {
+		t.Error("expected third TryAcquire to fail")
+	}
+
+	// Wait for token refill
+	time.Sleep(15 * time.Millisecond)
+
+	// Should succeed again
+	if !limiter.TryAcquire() {
+		t.Error("expected TryAcquire to succeed after refill")
+	}
+}
+
+func TestSSEHandler_RateLimiterStats(t *testing.T) {
+	config := &RateLimitConfig{
+		EventsPerSecond: 25.0,
+		BurstSize:       50,
+		Strategy:        RateLimitStrategyWait,
+	}
+
+	limiter := NewRateLimiter(config)
+
+	stats := limiter.Stats()
+
+	if stats.Rate != 25.0 {
+		t.Errorf("expected Rate=25.0, got %v", stats.Rate)
+	}
+	if stats.MaxTokens != 50.0 {
+		t.Errorf("expected MaxTokens=50.0, got %v", stats.MaxTokens)
+	}
+	if stats.Strategy != RateLimitStrategyWait {
+		t.Errorf("expected Strategy=wait, got %v", stats.Strategy)
+	}
+	if stats.TokensAvailable != 50.0 {
+		t.Errorf("expected TokensAvailable=50.0 initially, got %v", stats.TokensAvailable)
 	}
 }
