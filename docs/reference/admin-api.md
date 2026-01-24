@@ -513,7 +513,7 @@ Convert recordings to mocks.
 
 #### POST /recordings/export
 
-Export recordings to JSON.
+Export recordings to JSON or YAML.
 
 **Request:**
 
@@ -523,6 +523,23 @@ Export recordings to JSON.
   "sessionId": "session-123"
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `format` | string | Output format: `"json"` (default) or `"yaml"` |
+| `sessionId` | string | Optional: filter by session |
+| `recordingIds` | string[] | Optional: export specific recordings |
+
+**YAML Export Example:**
+
+```json
+{
+  "format": "yaml",
+  "sessionId": "session-123"
+}
+```
+
+Returns `Content-Type: application/x-yaml` for YAML format.
 
 ---
 
