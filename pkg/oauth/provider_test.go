@@ -1058,3 +1058,289 @@ func TestProvider_CleanupExpiredTokens(t *testing.T) {
 		t.Error("expected expired refresh token to be cleaned up")
 	}
 }
+
+// ============================================================================
+// Token Introspection Tests (RFC 7662)
+// ============================================================================
+
+func TestHandleIntrospect(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	t.Run("returns active=true for valid token with all claims", func(t *testing.T) {
+		// Generate a token with various claims
+		token, _ := provider.GenerateToken(map[string]interface{}{
+			"sub":       "user-123",
+			"scope":     "openid profile email",
+			"client_id": "test-client",
+		})
+
+		form := url.Values{}
+		form.Set("token", token)
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "test-secret")
+
+		req := httptest.NewRequest(http.MethodPost, "/introspect", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleIntrospect(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var response IntrospectionResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		if !response.Active {
+			t.Error("expected active=true for valid token")
+		}
+		if response.Subject != "user-123" {
+			t.Errorf("expected sub=user-123, got %v", response.Subject)
+		}
+		if response.Scope != "openid profile email" {
+			t.Errorf("expected scope='openid profile email', got %v", response.Scope)
+		}
+		if response.ClientID != "test-client" {
+			t.Errorf("expected client_id=test-client, got %v", response.ClientID)
+		}
+		if response.TokenType != "Bearer" {
+			t.Errorf("expected token_type=Bearer, got %v", response.TokenType)
+		}
+		if response.Issuer != "https://mock.example.com" {
+			t.Errorf("expected iss=https://mock.example.com, got %v", response.Issuer)
+		}
+		if response.ExpiresAt == 0 {
+			t.Error("expected exp to be set")
+		}
+		if response.IssuedAt == 0 {
+			t.Error("expected iat to be set")
+		}
+	})
+
+	t.Run("returns active=false for invalid token", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("token", "invalid-token-string")
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "test-secret")
+
+		req := httptest.NewRequest(http.MethodPost, "/introspect", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleIntrospect(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var response IntrospectionResponse
+		json.Unmarshal(rec.Body.Bytes(), &response)
+
+		if response.Active {
+			t.Error("expected active=false for invalid token")
+		}
+	})
+
+	t.Run("returns active=false for revoked token", func(t *testing.T) {
+		token, _ := provider.GenerateToken(map[string]interface{}{"sub": "user-123"})
+		provider.RevokeToken(token)
+
+		form := url.Values{}
+		form.Set("token", token)
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "test-secret")
+
+		req := httptest.NewRequest(http.MethodPost, "/introspect", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleIntrospect(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+
+		var response IntrospectionResponse
+		json.Unmarshal(rec.Body.Bytes(), &response)
+
+		if response.Active {
+			t.Error("expected active=false for revoked token")
+		}
+	})
+
+	t.Run("accepts Basic Auth for client credentials", func(t *testing.T) {
+		token, _ := provider.GenerateToken(map[string]interface{}{"sub": "user-123"})
+
+		form := url.Values{}
+		form.Set("token", token)
+
+		req := httptest.NewRequest(http.MethodPost, "/introspect", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetBasicAuth("test-client", "test-secret")
+		rec := httptest.NewRecorder()
+
+		handler.HandleIntrospect(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var response IntrospectionResponse
+		json.Unmarshal(rec.Body.Bytes(), &response)
+
+		if !response.Active {
+			t.Error("expected active=true when using Basic Auth")
+		}
+	})
+
+	t.Run("rejects missing token parameter", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "test-secret")
+
+		req := httptest.NewRequest(http.MethodPost, "/introspect", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleIntrospect(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected status 400, got %d", rec.Code)
+		}
+	})
+
+	t.Run("rejects missing client authentication", func(t *testing.T) {
+		token, _ := provider.GenerateToken(map[string]interface{}{"sub": "user-123"})
+
+		form := url.Values{}
+		form.Set("token", token)
+
+		req := httptest.NewRequest(http.MethodPost, "/introspect", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleIntrospect(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected status 401, got %d", rec.Code)
+		}
+	})
+
+	t.Run("rejects invalid client credentials", func(t *testing.T) {
+		token, _ := provider.GenerateToken(map[string]interface{}{"sub": "user-123"})
+
+		form := url.Values{}
+		form.Set("token", token)
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "wrong-secret")
+
+		req := httptest.NewRequest(http.MethodPost, "/introspect", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleIntrospect(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected status 401, got %d", rec.Code)
+		}
+	})
+
+	t.Run("rejects GET method", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/introspect", nil)
+		rec := httptest.NewRecorder()
+
+		handler.HandleIntrospect(rec, req)
+
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("expected status 405, got %d", rec.Code)
+		}
+	})
+
+	t.Run("handles token with array audience claim", func(t *testing.T) {
+		// This tests the audience extraction for array format
+		token, _ := provider.GenerateToken(map[string]interface{}{
+			"sub": "user-123",
+			"aud": []string{"client1", "client2"},
+		})
+
+		form := url.Values{}
+		form.Set("token", token)
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "test-secret")
+
+		req := httptest.NewRequest(http.MethodPost, "/introspect", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleIntrospect(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+
+		var response IntrospectionResponse
+		json.Unmarshal(rec.Body.Bytes(), &response)
+
+		if !response.Active {
+			t.Error("expected active=true")
+		}
+		// Audience extraction takes first element from array
+		if response.Audience != "client1" {
+			t.Errorf("expected audience=client1, got %v", response.Audience)
+		}
+	})
+
+	t.Run("introspection includes default claims from config", func(t *testing.T) {
+		// The test config has default claims including "aud": "test-audience"
+		token, _ := provider.GenerateToken(map[string]interface{}{
+			"sub": "user-123",
+		})
+
+		form := url.Values{}
+		form.Set("token", token)
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "test-secret")
+
+		req := httptest.NewRequest(http.MethodPost, "/introspect", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleIntrospect(rec, req)
+
+		var response IntrospectionResponse
+		json.Unmarshal(rec.Body.Bytes(), &response)
+
+		if !response.Active {
+			t.Fatal("expected active=true")
+		}
+		// Should include the default audience from config
+		if response.Audience != "test-audience" {
+			t.Errorf("expected audience=test-audience (from config defaults), got %v", response.Audience)
+		}
+	})
+}
+
+func TestHandleOpenIDConfig_IncludesIntrospection(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleOpenIDConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var config OpenIDConfiguration
+	json.Unmarshal(rec.Body.Bytes(), &config)
+
+	if config.IntrospectionEndpoint != "https://mock.example.com/introspect" {
+		t.Errorf("expected introspection_endpoint=https://mock.example.com/introspect, got %v", config.IntrospectionEndpoint)
+	}
+}
