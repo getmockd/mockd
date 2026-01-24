@@ -58,6 +58,7 @@
 //	mux.HandleFunc("GET /userinfo", handler.HandleUserInfo)
 //	mux.HandleFunc("GET /.well-known/jwks.json", handler.HandleJWKS)
 //	mux.HandleFunc("GET /.well-known/openid-configuration", handler.HandleOpenIDConfig)
+//	mux.HandleFunc("POST /introspect", handler.HandleIntrospect)
 //	mux.HandleFunc("POST /revoke", handler.HandleRevoke)
 //
 // # Token Generation

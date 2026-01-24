@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **OAuth token introspection endpoint** (`POST /introspect`) - RFC 7662 compliant endpoint for validating access tokens
+- **YAML export for proxy recordings** - Export recordings in YAML format via `format: "yaml"` option
+- **SSE rate limiting** - Rate limiter now integrated into SSE streaming (configurable events per second)
 - Sharing mocks guide with third-party tunnel support (localtunnel, ngrok, Cloudflare)
 - Protocol support table documenting tunnel compatibility (HTTP, WebSocket, SSE supported; gRPC, MQTT deferred)
 - Auto-initialization of stream recording manager on server start
@@ -17,15 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Chaos API `ErrorRateConfig` now uses `statusCodes` array and `defaultCode` (was single `statusCode`)
 - `/engines` endpoint now includes local engine in response (was returning empty)
+- OAuth OpenID configuration now includes `introspection_endpoint`
 
 ### Removed
 
 - **gRPC recording functionality** - Only recorded traffic from mockd's own server, providing no value. gRPC mocking (with proto files) remains fully supported. External service recording deferred pending community demand.
+- Unused SSE stream channels (internal cleanup)
 
 ### Fixed
 
 - Chaos latency documentation now shows correct format (`"min": "100ms"` not `"minMs": 100`)
 - Stream recording documentation updated to use Admin API workflow (removed non-existent `--record-streams` flag)
+- OAuth ID token generation now uses consistent helper method across all grant types
+- Admin rate limiter now uses stdlib `strings.IndexByte`/`strings.TrimSpace` instead of custom implementations
+- CLI verbose log printing no longer duplicates code between single entry and batch functions
 
 ## [0.2.0] - 2026-01-21
 
