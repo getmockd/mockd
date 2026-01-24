@@ -1051,3 +1051,527 @@ func TestGRPC_US17_ServerStreamingWithDelay(t *testing.T) {
 	// Should have at least 100ms delay between messages (only 1 delay for 2 messages)
 	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(80), "Should have stream delay")
 }
+
+// ============================================================================
+// User Story 18: Client Streaming
+// ============================================================================
+
+func TestGRPC_US18_ClientStreaming(t *testing.T) {
+	port := getFreeGRPCPort(t)
+
+	cfg := &grpc.GRPCConfig{
+		ID:        "test-client-streaming",
+		Port:      port,
+		ProtoFile: testProtoFile,
+		Enabled:   true,
+		Services: map[string]grpc.ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]grpc.MethodConfig{
+					"CreateUsers": {
+						Response: map[string]interface{}{
+							"created_count": 5,
+							"ids":           []string{"id-1", "id-2", "id-3", "id-4", "id-5"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_ = setupGRPCServer(t, cfg)
+	files := getJhumpDescriptors(t)
+	stub := createDynamicStub(t, port)
+
+	methodDesc := getJhumpMethodDesc(t, files, "test.UserService", "CreateUsers")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Start client streaming call
+	stream, err := stub.InvokeRpcClientStream(ctx, methodDesc)
+	require.NoError(t, err)
+
+	// Send multiple requests
+	for i := 1; i <= 5; i++ {
+		reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
+		reqMsg.SetFieldByName("name", fmt.Sprintf("User %d", i))
+		reqMsg.SetFieldByName("email", fmt.Sprintf("user%d@example.com", i))
+		err = stream.SendMsg(reqMsg)
+		require.NoError(t, err)
+	}
+
+	// Close and receive response
+	resp, err := stream.CloseAndReceive()
+	require.NoError(t, err)
+
+	respMsg := resp.(*dynamic.Message)
+	assert.Equal(t, int32(5), respMsg.GetFieldByName("created_count"))
+
+	ids := respMsg.GetFieldByName("ids").([]interface{})
+	assert.Len(t, ids, 5)
+	assert.Contains(t, ids, "id-1")
+	assert.Contains(t, ids, "id-5")
+}
+
+func TestGRPC_US18_ClientStreamingWithDelay(t *testing.T) {
+	port := getFreeGRPCPort(t)
+
+	cfg := &grpc.GRPCConfig{
+		ID:        "test-client-streaming-delay",
+		Port:      port,
+		ProtoFile: testProtoFile,
+		Enabled:   true,
+		Services: map[string]grpc.ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]grpc.MethodConfig{
+					"CreateUsers": {
+						Response: map[string]interface{}{
+							"created_count": 2,
+							"ids":           []string{"delayed-1", "delayed-2"},
+						},
+						Delay: "150ms",
+					},
+				},
+			},
+		},
+	}
+
+	_ = setupGRPCServer(t, cfg)
+	files := getJhumpDescriptors(t)
+	stub := createDynamicStub(t, port)
+
+	methodDesc := getJhumpMethodDesc(t, files, "test.UserService", "CreateUsers")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := stub.InvokeRpcClientStream(ctx, methodDesc)
+	require.NoError(t, err)
+
+	// Send requests
+	for i := 1; i <= 2; i++ {
+		reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
+		reqMsg.SetFieldByName("name", fmt.Sprintf("User %d", i))
+		reqMsg.SetFieldByName("email", fmt.Sprintf("user%d@example.com", i))
+		err = stream.SendMsg(reqMsg)
+		require.NoError(t, err)
+	}
+
+	start := time.Now()
+	resp, err := stream.CloseAndReceive()
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(130), "Should have response delay")
+
+	respMsg := resp.(*dynamic.Message)
+	assert.Equal(t, int32(2), respMsg.GetFieldByName("created_count"))
+}
+
+func TestGRPC_US18_ClientStreamingError(t *testing.T) {
+	port := getFreeGRPCPort(t)
+
+	cfg := &grpc.GRPCConfig{
+		ID:        "test-client-streaming-error",
+		Port:      port,
+		ProtoFile: testProtoFile,
+		Enabled:   true,
+		Services: map[string]grpc.ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]grpc.MethodConfig{
+					"CreateUsers": {
+						Error: &grpc.GRPCErrorConfig{
+							Code:    "RESOURCE_EXHAUSTED",
+							Message: "Too many users to create",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_ = setupGRPCServer(t, cfg)
+	files := getJhumpDescriptors(t)
+	stub := createDynamicStub(t, port)
+
+	methodDesc := getJhumpMethodDesc(t, files, "test.UserService", "CreateUsers")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := stub.InvokeRpcClientStream(ctx, methodDesc)
+	require.NoError(t, err)
+
+	// Send a request
+	reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
+	reqMsg.SetFieldByName("name", "Test User")
+	reqMsg.SetFieldByName("email", "test@example.com")
+	err = stream.SendMsg(reqMsg)
+	require.NoError(t, err)
+
+	// Should get error on close
+	_, err = stream.CloseAndReceive()
+	assert.Error(t, err)
+
+	st, ok := status.FromError(err)
+	assert.True(t, ok)
+	assert.Equal(t, codes.ResourceExhausted, st.Code())
+	assert.Equal(t, "Too many users to create", st.Message())
+}
+
+// ============================================================================
+// User Story 19: Bidirectional Streaming
+// ============================================================================
+
+func TestGRPC_US19_BidirectionalStreaming(t *testing.T) {
+	port := getFreeGRPCPort(t)
+
+	cfg := &grpc.GRPCConfig{
+		ID:        "test-bidi-streaming",
+		Port:      port,
+		ProtoFile: testProtoFile,
+		Enabled:   true,
+		Services: map[string]grpc.ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]grpc.MethodConfig{
+					"Chat": {
+						Responses: []interface{}{
+							map[string]interface{}{"user_id": "bot", "content": "Hello!", "timestamp": int64(1000)},
+							map[string]interface{}{"user_id": "bot", "content": "How can I help?", "timestamp": int64(2000)},
+							map[string]interface{}{"user_id": "bot", "content": "Goodbye!", "timestamp": int64(3000)},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_ = setupGRPCServer(t, cfg)
+	files := getJhumpDescriptors(t)
+	stub := createDynamicStub(t, port)
+
+	methodDesc := getJhumpMethodDesc(t, files, "test.UserService", "Chat")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := stub.InvokeRpcBidiStream(ctx, methodDesc)
+	require.NoError(t, err)
+
+	// Send messages and receive responses
+	var responses []*dynamic.Message
+	messages := []string{"Hi there", "I need help", "Thanks, bye"}
+
+	for i, msg := range messages {
+		reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
+		reqMsg.SetFieldByName("user_id", "user-1")
+		reqMsg.SetFieldByName("content", msg)
+		reqMsg.SetFieldByName("timestamp", int64(i*1000))
+
+		err = stream.SendMsg(reqMsg)
+		require.NoError(t, err)
+
+		resp, err := stream.RecvMsg()
+		require.NoError(t, err)
+		responses = append(responses, resp.(*dynamic.Message))
+	}
+
+	err = stream.CloseSend()
+	require.NoError(t, err)
+
+	require.Len(t, responses, 3)
+	assert.Equal(t, "bot", responses[0].GetFieldByName("user_id"))
+	assert.Equal(t, "Hello!", responses[0].GetFieldByName("content"))
+	assert.Equal(t, "How can I help?", responses[1].GetFieldByName("content"))
+	assert.Equal(t, "Goodbye!", responses[2].GetFieldByName("content"))
+}
+
+func TestGRPC_US19_BidirectionalStreamingWithDelay(t *testing.T) {
+	port := getFreeGRPCPort(t)
+
+	cfg := &grpc.GRPCConfig{
+		ID:        "test-bidi-streaming-delay",
+		Port:      port,
+		ProtoFile: testProtoFile,
+		Enabled:   true,
+		Services: map[string]grpc.ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]grpc.MethodConfig{
+					"Chat": {
+						Responses: []interface{}{
+							map[string]interface{}{"user_id": "bot", "content": "Response 1"},
+							map[string]interface{}{"user_id": "bot", "content": "Response 2"},
+						},
+						StreamDelay: "100ms",
+					},
+				},
+			},
+		},
+	}
+
+	_ = setupGRPCServer(t, cfg)
+	files := getJhumpDescriptors(t)
+	stub := createDynamicStub(t, port)
+
+	methodDesc := getJhumpMethodDesc(t, files, "test.UserService", "Chat")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := stub.InvokeRpcBidiStream(ctx, methodDesc)
+	require.NoError(t, err)
+
+	start := time.Now()
+
+	// Send 2 messages and measure response delay
+	for i := 0; i < 2; i++ {
+		reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
+		reqMsg.SetFieldByName("user_id", "user-1")
+		reqMsg.SetFieldByName("content", fmt.Sprintf("Message %d", i))
+
+		err = stream.SendMsg(reqMsg)
+		require.NoError(t, err)
+
+		_, err := stream.RecvMsg()
+		require.NoError(t, err)
+	}
+
+	elapsed := time.Since(start)
+
+	err = stream.CloseSend()
+	require.NoError(t, err)
+
+	// Should have delay between responses
+	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(80), "Should have stream delay")
+}
+
+func TestGRPC_US19_BidirectionalStreamingError(t *testing.T) {
+	port := getFreeGRPCPort(t)
+
+	cfg := &grpc.GRPCConfig{
+		ID:        "test-bidi-streaming-error",
+		Port:      port,
+		ProtoFile: testProtoFile,
+		Enabled:   true,
+		Services: map[string]grpc.ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]grpc.MethodConfig{
+					"Chat": {
+						Error: &grpc.GRPCErrorConfig{
+							Code:    "UNAVAILABLE",
+							Message: "Chat service is temporarily unavailable",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_ = setupGRPCServer(t, cfg)
+	files := getJhumpDescriptors(t)
+	stub := createDynamicStub(t, port)
+
+	methodDesc := getJhumpMethodDesc(t, files, "test.UserService", "Chat")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := stub.InvokeRpcBidiStream(ctx, methodDesc)
+	require.NoError(t, err)
+
+	// Send a message
+	reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
+	reqMsg.SetFieldByName("user_id", "user-1")
+	reqMsg.SetFieldByName("content", "Hello")
+
+	err = stream.SendMsg(reqMsg)
+	require.NoError(t, err)
+
+	// Should get error on receive
+	_, err = stream.RecvMsg()
+	assert.Error(t, err)
+
+	st, ok := status.FromError(err)
+	assert.True(t, ok)
+	assert.Equal(t, codes.Unavailable, st.Code())
+	assert.Equal(t, "Chat service is temporarily unavailable", st.Message())
+}
+
+// ============================================================================
+// User Story 20: Server Streaming Error
+// ============================================================================
+
+func TestGRPC_US20_ServerStreamingError(t *testing.T) {
+	port := getFreeGRPCPort(t)
+
+	cfg := &grpc.GRPCConfig{
+		ID:        "test-server-streaming-error",
+		Port:      port,
+		ProtoFile: testProtoFile,
+		Enabled:   true,
+		Services: map[string]grpc.ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]grpc.MethodConfig{
+					"ListUsers": {
+						Error: &grpc.GRPCErrorConfig{
+							Code:    "INTERNAL",
+							Message: "Failed to list users",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_ = setupGRPCServer(t, cfg)
+	files := getJhumpDescriptors(t)
+	stub := createDynamicStub(t, port)
+
+	methodDesc := getJhumpMethodDesc(t, files, "test.UserService", "ListUsers")
+
+	inputDesc := methodDesc.GetInputType()
+	reqMsg := dynamic.NewMessage(inputDesc)
+	reqMsg.SetFieldByName("page_size", int32(10))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := stub.InvokeRpcServerStream(ctx, methodDesc, reqMsg)
+	require.NoError(t, err)
+
+	// Should get error on first receive
+	_, err = stream.RecvMsg()
+	assert.Error(t, err)
+
+	st, ok := status.FromError(err)
+	assert.True(t, ok)
+	assert.Equal(t, codes.Internal, st.Code())
+	assert.Equal(t, "Failed to list users", st.Message())
+}
+
+func TestGRPC_US20_ServerStreamingEmptyResponse(t *testing.T) {
+	port := getFreeGRPCPort(t)
+
+	cfg := &grpc.GRPCConfig{
+		ID:        "test-server-streaming-empty",
+		Port:      port,
+		ProtoFile: testProtoFile,
+		Enabled:   true,
+		Services: map[string]grpc.ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]grpc.MethodConfig{
+					"ListUsers": {
+						Responses: []interface{}{},
+					},
+				},
+			},
+		},
+	}
+
+	_ = setupGRPCServer(t, cfg)
+	files := getJhumpDescriptors(t)
+	stub := createDynamicStub(t, port)
+
+	methodDesc := getJhumpMethodDesc(t, files, "test.UserService", "ListUsers")
+
+	inputDesc := methodDesc.GetInputType()
+	reqMsg := dynamic.NewMessage(inputDesc)
+	reqMsg.SetFieldByName("page_size", int32(10))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := stub.InvokeRpcServerStream(ctx, methodDesc, reqMsg)
+	require.NoError(t, err)
+
+	// Should immediately get EOF (no messages)
+	_, err = stream.RecvMsg()
+	assert.Equal(t, io.EOF, err)
+}
+
+// ============================================================================
+// User Story 21: Multiple Streams Concurrently
+// ============================================================================
+
+func TestGRPC_US21_ConcurrentStreams(t *testing.T) {
+	port := getFreeGRPCPort(t)
+
+	cfg := &grpc.GRPCConfig{
+		ID:        "test-concurrent-streams",
+		Port:      port,
+		ProtoFile: testProtoFile,
+		Enabled:   true,
+		Services: map[string]grpc.ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]grpc.MethodConfig{
+					"ListUsers": {
+						Responses: []interface{}{
+							map[string]interface{}{"id": "user-1", "name": "User 1", "email": "user1@example.com"},
+							map[string]interface{}{"id": "user-2", "name": "User 2", "email": "user2@example.com"},
+						},
+					},
+					"Chat": {
+						Responses: []interface{}{
+							map[string]interface{}{"user_id": "bot", "content": "Hello from chat"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_ = setupGRPCServer(t, cfg)
+	files := getJhumpDescriptors(t)
+
+	// Create multiple connections to simulate concurrent clients
+	conn1 := createGRPCConnection(t, port)
+	conn2 := createGRPCConnection(t, port)
+
+	stub1 := grpcdynamic.NewStub(conn1)
+	stub2 := grpcdynamic.NewStub(conn2)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Start server streaming on connection 1
+	listMethodDesc := getJhumpMethodDesc(t, files, "test.UserService", "ListUsers")
+	listReq := dynamic.NewMessage(listMethodDesc.GetInputType())
+	listReq.SetFieldByName("page_size", int32(10))
+
+	serverStream, err := stub1.InvokeRpcServerStream(ctx, listMethodDesc, listReq)
+	require.NoError(t, err)
+
+	// Start bidi streaming on connection 2
+	chatMethodDesc := getJhumpMethodDesc(t, files, "test.UserService", "Chat")
+	bidiStream, err := stub2.InvokeRpcBidiStream(ctx, chatMethodDesc)
+	require.NoError(t, err)
+
+	// Read from server stream
+	var serverResponses []string
+	for {
+		resp, err := serverStream.RecvMsg()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		serverResponses = append(serverResponses, resp.(*dynamic.Message).GetFieldByName("id").(string))
+	}
+
+	// Interact with bidi stream
+	chatReq := dynamic.NewMessage(chatMethodDesc.GetInputType())
+	chatReq.SetFieldByName("user_id", "user-1")
+	chatReq.SetFieldByName("content", "Hello")
+	err = bidiStream.SendMsg(chatReq)
+	require.NoError(t, err)
+
+	chatResp, err := bidiStream.RecvMsg()
+	require.NoError(t, err)
+	err = bidiStream.CloseSend()
+	require.NoError(t, err)
+
+	// Verify results
+	assert.Len(t, serverResponses, 2)
+	assert.Contains(t, serverResponses, "user-1")
+	assert.Contains(t, serverResponses, "user-2")
+	assert.Equal(t, "bot", chatResp.(*dynamic.Message).GetFieldByName("user_id"))
+}
