@@ -99,9 +99,6 @@ type SSEStream struct {
 	flusher  http.Flusher        `json:"-"`
 	config   *SSEConfig          `json:"-"`
 	mu       sync.Mutex          `json:"-"`
-	eventCh  chan *SSEEventDef   `json:"-"`
-	errCh    chan error          `json:"-"`
-	doneCh   chan struct{}       `json:"-"`
 	recorder *StreamRecorder     `json:"-"`
 }
 

@@ -206,9 +206,6 @@ func (h *SSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, m *config
 		writer:    w,
 		flusher:   flusher,
 		config:    h.configFromMock(m.HTTP.SSE),
-		eventCh:   make(chan *SSEEventDef, 100),
-		errCh:     make(chan error, 1),
-		doneCh:    make(chan struct{}),
 	}
 
 	// Check for Last-Event-ID header for resumption
@@ -392,6 +389,12 @@ func (h *SSEHandler) runStream(stream *SSEStream, cfg *mock.SSEConfig) {
 	ctx := stream.ctx
 	timing := NewTimingScheduler(&stream.config.Timing)
 
+	// Initialize rate limiter if configured
+	var rateLimiter *RateLimiter
+	if stream.config.RateLimit != nil && stream.config.RateLimit.EventsPerSecond > 0 {
+		rateLimiter = NewRateLimiter(stream.config.RateLimit)
+	}
+
 	// Apply initial delay
 	if stream.config.Timing.InitialDelay > 0 {
 		select {
@@ -486,6 +489,20 @@ func (h *SSEHandler) runStream(stream *SSEStream, cfg *mock.SSEConfig) {
 			}
 
 		case <-time.After(delay):
+			// Apply rate limiting if configured
+			if rateLimiter != nil {
+				if err := rateLimiter.Wait(ctx); err != nil {
+					if err == ErrRateLimited {
+						// Drop strategy - skip this event
+						eventIndex++
+						continue
+					}
+					// Context cancelled or error strategy
+					stream.Status = StreamStatusClosed
+					return
+				}
+			}
+
 			// Send event
 			if err := h.sendEvent(stream, &event, eventCount); err != nil {
 				stream.Status = StreamStatusClosed
