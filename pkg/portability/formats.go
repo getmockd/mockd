@@ -93,53 +93,53 @@ func DetectFormat(data []byte, filename string) Format {
 
 // detectFormatFromJSON detects format from JSON content.
 func detectFormatFromJSON(data []byte) Format {
-	// Try to parse as JSON to get key indicators
+	// Try to parse as JSON object to get key indicators
 	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(data, &raw); err == nil {
+		// Check for Mockd native format indicators
+		if _, hasVersion := raw["version"]; hasVersion {
+			if _, hasKind := raw["kind"]; hasKind {
+				return FormatMockd
+			}
+			// Version + mocks is also Mockd format
+			if _, hasMocks := raw["mocks"]; hasMocks {
+				return FormatMockd
+			}
+		}
+
+		// Check for OpenAPI 3.x indicator
+		if _, hasOpenAPI := raw["openapi"]; hasOpenAPI {
+			return FormatOpenAPI
+		}
+
+		// Check for Swagger 2.0 indicator
+		if _, hasSwagger := raw["swagger"]; hasSwagger {
+			return FormatOpenAPI
+		}
+
+		// Check for HAR format indicator
+		if _, hasLog := raw["log"]; hasLog {
+			return FormatHAR
+		}
+
+		// Check for Postman Collection indicator
+		if _, hasInfo := raw["info"]; hasInfo {
+			if _, hasItem := raw["item"]; hasItem {
+				return FormatPostman
+			}
+		}
+
+		// Check for WireMock indicators (single mapping)
+		if _, hasRequest := raw["request"]; hasRequest {
+			if _, hasResponse := raw["response"]; hasResponse {
+				return FormatWireMock
+			}
+		}
+
 		return FormatUnknown
 	}
 
-	// Check for Mockd native format indicators
-	if _, hasVersion := raw["version"]; hasVersion {
-		if _, hasKind := raw["kind"]; hasKind {
-			return FormatMockd
-		}
-		// Version + mocks is also Mockd format
-		if _, hasMocks := raw["mocks"]; hasMocks {
-			return FormatMockd
-		}
-	}
-
-	// Check for OpenAPI 3.x indicator
-	if _, hasOpenAPI := raw["openapi"]; hasOpenAPI {
-		return FormatOpenAPI
-	}
-
-	// Check for Swagger 2.0 indicator
-	if _, hasSwagger := raw["swagger"]; hasSwagger {
-		return FormatOpenAPI
-	}
-
-	// Check for HAR format indicator
-	if _, hasLog := raw["log"]; hasLog {
-		return FormatHAR
-	}
-
-	// Check for Postman Collection indicator
-	if _, hasInfo := raw["info"]; hasInfo {
-		if _, hasItem := raw["item"]; hasItem {
-			return FormatPostman
-		}
-	}
-
-	// Check for WireMock indicators
-	if _, hasRequest := raw["request"]; hasRequest {
-		if _, hasResponse := raw["response"]; hasResponse {
-			return FormatWireMock
-		}
-	}
-
-	// WireMock can also be an array of mappings
+	// If not a JSON object, try parsing as an array (e.g., WireMock array of mappings)
 	var arr []json.RawMessage
 	if err := json.Unmarshal(data, &arr); err == nil && len(arr) > 0 {
 		var firstMapping map[string]json.RawMessage
