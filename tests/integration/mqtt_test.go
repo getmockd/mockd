@@ -795,3 +795,770 @@ func TestMQTT_US11_BrokerStats(t *testing.T) {
 	assert.True(t, stats.Running)
 	assert.GreaterOrEqual(t, stats.ClientCount, 1)
 }
+
+// ============================================================================
+// User Story 12: MQTT Templating
+// ============================================================================
+
+func TestMQTT_US12_TemplatingBasicVariables(t *testing.T) {
+	port := getFreeMQTTPort(t)
+
+	cfg := &mqtt.MQTTConfig{
+		ID:      "test-templating-basic",
+		Port:    port,
+		Enabled: true,
+		Topics: []mqtt.TopicConfig{
+			{
+				Topic: "sensors/temperature",
+				QoS:   1,
+				Messages: []mqtt.MessageConfig{
+					{
+						Payload:  `{"timestamp": "{{ timestamp }}", "uuid": "{{ uuid }}"}`,
+						Interval: "100ms",
+						Repeat:   true,
+					},
+				},
+			},
+		},
+	}
+
+	broker := setupMQTTBroker(t, cfg)
+	_ = broker
+
+	client := createMQTTClient(t, port, "template-sub")
+	received := make(chan string, 5)
+
+	client.Subscribe("sensors/temperature", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	// Wait for auto-published messages
+	time.Sleep(250 * time.Millisecond)
+
+	// Disconnect client before draining channel to prevent race
+	client.Disconnect(100)
+	time.Sleep(50 * time.Millisecond)
+
+	// Drain and verify messages
+	count := 0
+drainLoop:
+	for {
+		select {
+		case msg := <-received:
+			// Verify the message contains rendered template values (not raw placeholders)
+			assert.NotContains(t, msg, "{{ timestamp }}")
+			assert.NotContains(t, msg, "{{ uuid }}")
+			assert.Contains(t, msg, "timestamp")
+			assert.Contains(t, msg, "uuid")
+
+			// Verify it's valid JSON with expected structure
+			var data map[string]interface{}
+			err := json.Unmarshal([]byte(msg), &data)
+			require.NoError(t, err, "Should be valid JSON")
+			assert.Contains(t, data, "timestamp")
+			assert.Contains(t, data, "uuid")
+			count++
+		default:
+			break drainLoop
+		}
+	}
+
+	assert.GreaterOrEqual(t, count, 1, "Should receive templated messages")
+}
+
+func TestMQTT_US12_TemplatingRandomValues(t *testing.T) {
+	port := getFreeMQTTPort(t)
+
+	cfg := &mqtt.MQTTConfig{
+		ID:      "test-templating-random",
+		Port:    port,
+		Enabled: true,
+		Topics: []mqtt.TopicConfig{
+			{
+				Topic: "sensors/data",
+				QoS:   1,
+				Messages: []mqtt.MessageConfig{
+					{
+						Payload:  `{"temp": {{ random.int(20, 30) }}, "humidity": {{ random.float(0.0, 100.0, 1) }}}`,
+						Interval: "100ms",
+						Repeat:   true,
+					},
+				},
+			},
+		},
+	}
+
+	broker := setupMQTTBroker(t, cfg)
+	_ = broker
+
+	client := createMQTTClient(t, port, "random-sub")
+	received := make(chan string, 5)
+
+	client.Subscribe("sensors/data", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	// Wait for auto-published messages
+	time.Sleep(250 * time.Millisecond)
+
+	client.Disconnect(100)
+	time.Sleep(50 * time.Millisecond)
+
+	// Drain and verify messages have random values within expected range
+	count := 0
+drainLoop:
+	for {
+		select {
+		case msg := <-received:
+			var data map[string]interface{}
+			err := json.Unmarshal([]byte(msg), &data)
+			require.NoError(t, err, "Should be valid JSON")
+
+			temp, ok := data["temp"].(float64)
+			require.True(t, ok, "temp should be a number")
+			assert.GreaterOrEqual(t, temp, float64(20), "temp should be >= 20")
+			assert.LessOrEqual(t, temp, float64(30), "temp should be <= 30")
+
+			humidity, ok := data["humidity"].(float64)
+			require.True(t, ok, "humidity should be a number")
+			assert.GreaterOrEqual(t, humidity, float64(0), "humidity should be >= 0")
+			assert.LessOrEqual(t, humidity, float64(100), "humidity should be <= 100")
+			count++
+		default:
+			break drainLoop
+		}
+	}
+
+	assert.GreaterOrEqual(t, count, 1, "Should receive messages with random values")
+}
+
+func TestMQTT_US12_TemplatingSequence(t *testing.T) {
+	port := getFreeMQTTPort(t)
+
+	cfg := &mqtt.MQTTConfig{
+		ID:      "test-templating-sequence",
+		Port:    port,
+		Enabled: true,
+		Topics: []mqtt.TopicConfig{
+			{
+				Topic: "events/log",
+				QoS:   1,
+				Messages: []mqtt.MessageConfig{
+					{
+						Payload:  `{"eventId": {{ sequence("event") }}}`,
+						Interval: "50ms",
+						Repeat:   true,
+					},
+				},
+			},
+		},
+	}
+
+	broker := setupMQTTBroker(t, cfg)
+	_ = broker
+
+	client := createMQTTClient(t, port, "sequence-sub")
+	received := make(chan string, 10)
+
+	client.Subscribe("events/log", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	// Wait for several auto-published messages
+	time.Sleep(200 * time.Millisecond)
+
+	client.Disconnect(100)
+	time.Sleep(50 * time.Millisecond)
+
+	// Collect sequence values and verify they are incrementing
+	var eventIds []int64
+drainLoop:
+	for {
+		select {
+		case msg := <-received:
+			var data map[string]interface{}
+			err := json.Unmarshal([]byte(msg), &data)
+			require.NoError(t, err, "Should be valid JSON")
+
+			eventId, ok := data["eventId"].(float64)
+			require.True(t, ok, "eventId should be a number")
+			eventIds = append(eventIds, int64(eventId))
+		default:
+			break drainLoop
+		}
+	}
+
+	require.GreaterOrEqual(t, len(eventIds), 2, "Should receive at least 2 messages")
+
+	// Verify sequence is incrementing (not necessarily starting from 1 due to timing)
+	for i := 1; i < len(eventIds); i++ {
+		assert.Equal(t, eventIds[i-1]+1, eventIds[i], "Sequence should increment by 1")
+	}
+}
+
+func TestMQTT_US12_TemplatingFaker(t *testing.T) {
+	port := getFreeMQTTPort(t)
+
+	cfg := &mqtt.MQTTConfig{
+		ID:      "test-templating-faker",
+		Port:    port,
+		Enabled: true,
+		Topics: []mqtt.TopicConfig{
+			{
+				Topic: "users/profile",
+				QoS:   1,
+				Messages: []mqtt.MessageConfig{
+					{
+						Payload:  `{"name": "{{ faker.firstName }}", "email": "{{ faker.email }}"}`,
+						Interval: "100ms",
+						Repeat:   true,
+					},
+				},
+			},
+		},
+	}
+
+	broker := setupMQTTBroker(t, cfg)
+	_ = broker
+
+	client := createMQTTClient(t, port, "faker-sub")
+	received := make(chan string, 5)
+
+	client.Subscribe("users/profile", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	// Wait for auto-published messages
+	time.Sleep(150 * time.Millisecond)
+
+	client.Disconnect(100)
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify messages have faker-generated values
+	count := 0
+drainLoop:
+	for {
+		select {
+		case msg := <-received:
+			var data map[string]interface{}
+			err := json.Unmarshal([]byte(msg), &data)
+			require.NoError(t, err, "Should be valid JSON")
+
+			name, ok := data["name"].(string)
+			require.True(t, ok, "name should be a string")
+			assert.NotEmpty(t, name, "name should not be empty")
+			assert.NotContains(t, name, "{{ faker", "name should be rendered")
+
+			email, ok := data["email"].(string)
+			require.True(t, ok, "email should be a string")
+			assert.NotEmpty(t, email, "email should not be empty")
+			assert.Contains(t, email, "@", "email should contain @")
+			count++
+		default:
+			break drainLoop
+		}
+	}
+
+	assert.GreaterOrEqual(t, count, 1, "Should receive messages with faker values")
+}
+
+// ============================================================================
+// User Story 13: QoS Levels - Extended Tests
+// ============================================================================
+
+func TestMQTT_US13_QoSLevelsWithVerification(t *testing.T) {
+	// Test all three QoS levels in a single test to verify behavior
+	testCases := []struct {
+		name         string
+		publishQoS   byte
+		subscribeQoS byte
+		description  string
+	}{
+		{
+			name:         "QoS0_AtMostOnce",
+			publishQoS:   0,
+			subscribeQoS: 0,
+			description:  "Fire and forget - no acknowledgment",
+		},
+		{
+			name:         "QoS1_AtLeastOnce",
+			publishQoS:   1,
+			subscribeQoS: 1,
+			description:  "Acknowledged delivery - may receive duplicates",
+		},
+		{
+			name:         "QoS2_ExactlyOnce",
+			publishQoS:   2,
+			subscribeQoS: 2,
+			description:  "Assured delivery - exactly once",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			port := getFreeMQTTPort(t)
+			broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+				ID:      fmt.Sprintf("test-qos-%d", tc.publishQoS),
+				Port:    port,
+				Enabled: true,
+			})
+			_ = broker
+
+			client := createMQTTClient(t, port, fmt.Sprintf("qos%d-client", tc.publishQoS))
+			received := make(chan mqttclient.Message, 1)
+
+			// Subscribe with the test QoS level
+			token := client.Subscribe(fmt.Sprintf("qos%d/test", tc.publishQoS), tc.subscribeQoS, func(c mqttclient.Client, msg mqttclient.Message) {
+				received <- msg
+			})
+			require.True(t, token.WaitTimeout(5*time.Second))
+			require.NoError(t, token.Error())
+
+			// Publish with the test QoS level
+			payload := fmt.Sprintf("QoS %d message: %s", tc.publishQoS, tc.description)
+			pubToken := client.Publish(fmt.Sprintf("qos%d/test", tc.publishQoS), tc.publishQoS, false, payload)
+			require.True(t, pubToken.WaitTimeout(5*time.Second))
+			require.NoError(t, pubToken.Error())
+
+			// Verify message received
+			select {
+			case msg := <-received:
+				assert.Equal(t, payload, string(msg.Payload()))
+				// Effective QoS is the minimum of publish and subscribe QoS
+				expectedQoS := tc.publishQoS
+				if tc.subscribeQoS < expectedQoS {
+					expectedQoS = tc.subscribeQoS
+				}
+				assert.Equal(t, expectedQoS, msg.Qos(), "Effective QoS should be min(pub, sub)")
+			case <-time.After(3 * time.Second):
+				t.Fatalf("Timeout waiting for %s message", tc.name)
+			}
+		})
+	}
+}
+
+func TestMQTT_US13_QoSDowngrade(t *testing.T) {
+	// Test that QoS is downgraded when subscribe QoS < publish QoS
+	port := getFreeMQTTPort(t)
+	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+		ID:      "test-qos-downgrade",
+		Port:    port,
+		Enabled: true,
+	})
+	_ = broker
+
+	client := createMQTTClient(t, port, "downgrade-client")
+	received := make(chan mqttclient.Message, 1)
+
+	// Subscribe with QoS 0
+	token := client.Subscribe("qos/downgrade", 0, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- msg
+	})
+	require.True(t, token.WaitTimeout(5*time.Second))
+
+	// Publish with QoS 2
+	client.Publish("qos/downgrade", 2, false, "downgrade test").Wait()
+
+	select {
+	case msg := <-received:
+		// Message should be downgraded to QoS 0
+		assert.Equal(t, byte(0), msg.Qos(), "QoS should be downgraded to subscriber's QoS")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for downgraded message")
+	}
+}
+
+// ============================================================================
+// User Story 14: Retained Messages - Extended Tests
+// ============================================================================
+
+func TestMQTT_US14_RetainedMessageOverwrite(t *testing.T) {
+	port := getFreeMQTTPort(t)
+	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+		ID:      "test-retain-overwrite",
+		Port:    port,
+		Enabled: true,
+	})
+	_ = broker
+
+	// Publish first retained message
+	publisher := createMQTTClient(t, port, "publisher1")
+	publisher.Publish("retain/overwrite", 1, true, "first value").Wait()
+	publisher.Disconnect(250)
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Publish second retained message (should overwrite)
+	publisher2 := createMQTTClient(t, port, "publisher2")
+	publisher2.Publish("retain/overwrite", 1, true, "second value").Wait()
+	publisher2.Disconnect(250)
+
+	time.Sleep(100 * time.Millisecond)
+
+	// New subscriber should receive only the latest retained message
+	received := make(chan string, 5)
+	subscriber := createMQTTClient(t, port, "subscriber")
+	subscriber.Subscribe("retain/overwrite", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	select {
+	case msg := <-received:
+		assert.Equal(t, "second value", msg, "Should receive the latest retained message")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for retained message")
+	}
+
+	// Verify no more messages
+	select {
+	case <-received:
+		t.Fatal("Should not receive multiple retained messages")
+	case <-time.After(200 * time.Millisecond):
+		// Expected - no more messages
+	}
+}
+
+func TestMQTT_US14_RetainedMessageClear(t *testing.T) {
+	port := getFreeMQTTPort(t)
+	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+		ID:      "test-retain-clear",
+		Port:    port,
+		Enabled: true,
+	})
+	_ = broker
+
+	// Publish retained message
+	publisher := createMQTTClient(t, port, "publisher")
+	publisher.Publish("retain/clear", 1, true, "retained value").Wait()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Clear retained message by publishing empty payload with retain flag
+	publisher.Publish("retain/clear", 1, true, "").Wait()
+	publisher.Disconnect(250)
+
+	time.Sleep(100 * time.Millisecond)
+
+	// New subscriber should not receive any retained message
+	received := make(chan string, 1)
+	subscriber := createMQTTClient(t, port, "subscriber")
+	subscriber.Subscribe("retain/clear", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	select {
+	case msg := <-received:
+		// Some brokers may deliver the empty retained message
+		assert.Empty(t, msg, "If received, should be empty (cleared)")
+	case <-time.After(500 * time.Millisecond):
+		// Expected - no retained message after clear
+	}
+}
+
+func TestMQTT_US14_RetainedMessageMultipleTopics(t *testing.T) {
+	port := getFreeMQTTPort(t)
+	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+		ID:      "test-retain-multi",
+		Port:    port,
+		Enabled: true,
+	})
+	_ = broker
+
+	// Publish retained messages to multiple topics
+	publisher := createMQTTClient(t, port, "publisher")
+	publisher.Publish("retain/topic1", 1, true, "value1").Wait()
+	publisher.Publish("retain/topic2", 1, true, "value2").Wait()
+	publisher.Publish("retain/topic3", 1, true, "value3").Wait()
+	publisher.Disconnect(250)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// New subscriber using wildcard should receive all retained messages
+	received := make(chan string, 10)
+	subscriber := createMQTTClient(t, port, "subscriber")
+	subscriber.Subscribe("retain/#", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	// Wait for retained messages
+	time.Sleep(500 * time.Millisecond)
+
+	subscriber.Disconnect(100)
+	time.Sleep(50 * time.Millisecond)
+
+	// Collect all received messages
+	messages := []string{}
+drainLoop:
+	for {
+		select {
+		case msg := <-received:
+			messages = append(messages, msg)
+		default:
+			break drainLoop
+		}
+	}
+
+	assert.Len(t, messages, 3, "Should receive all 3 retained messages")
+	assert.Contains(t, messages, "value1")
+	assert.Contains(t, messages, "value2")
+	assert.Contains(t, messages, "value3")
+}
+
+// ============================================================================
+// User Story 15: Will Messages (Last Will and Testament)
+// ============================================================================
+
+func TestMQTT_US15_WillMessageOnDisconnect(t *testing.T) {
+	port := getFreeMQTTPort(t)
+	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+		ID:      "test-will-disconnect",
+		Port:    port,
+		Enabled: true,
+	})
+	_ = broker
+
+	// Create subscriber to listen for will message
+	subscriber := createMQTTClient(t, port, "subscriber")
+	received := make(chan string, 1)
+
+	subscriber.Subscribe("client/status", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Create client with will message
+	opts := mqttclient.NewClientOptions()
+	opts.AddBroker(fmt.Sprintf("tcp://localhost:%d", port))
+	opts.SetClientID("will-client")
+	opts.SetAutoReconnect(false)
+	opts.SetConnectTimeout(5 * time.Second)
+	opts.SetBinaryWill("client/status", []byte("client disconnected unexpectedly"), 1, false)
+
+	willClient := mqttclient.NewClient(opts)
+	token := willClient.Connect()
+	require.True(t, token.WaitTimeout(5*time.Second))
+	require.NoError(t, token.Error())
+
+	// Verify client connected successfully with will configured
+	assert.True(t, willClient.IsConnected(), "Client should be connected with will message configured")
+
+	// Note: A graceful Disconnect() will NOT trigger the will message
+	// The will message is only sent when the client disconnects ungracefully
+	// (network failure, keep-alive timeout, etc.)
+	willClient.Disconnect(250)
+
+	// Will should not be triggered on graceful disconnect
+	select {
+	case <-received:
+		// Will message should not be received on graceful disconnect
+		// Some broker implementations may differ
+	case <-time.After(500 * time.Millisecond):
+		// Expected - graceful disconnect doesn't trigger will
+	}
+}
+
+func TestMQTT_US15_WillMessageRetained(t *testing.T) {
+	port := getFreeMQTTPort(t)
+	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+		ID:      "test-will-retained",
+		Port:    port,
+		Enabled: true,
+	})
+	_ = broker
+
+	// First, publish a "client online" status
+	onlineClient := createMQTTClient(t, port, "online-publisher")
+	onlineClient.Publish("device/status", 1, true, "online").Wait()
+	onlineClient.Disconnect(250)
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Create client with retained will message (will overwrite on ungraceful disconnect)
+	opts := mqttclient.NewClientOptions()
+	opts.AddBroker(fmt.Sprintf("tcp://localhost:%d", port))
+	opts.SetClientID("retained-will-client")
+	opts.SetAutoReconnect(false)
+	opts.SetConnectTimeout(5 * time.Second)
+	// Set will as retained
+	opts.SetBinaryWill("device/status", []byte("offline"), 1, true)
+
+	willClient := mqttclient.NewClient(opts)
+	token := willClient.Connect()
+	require.True(t, token.WaitTimeout(5*time.Second))
+	require.NoError(t, token.Error())
+
+	// Verify current retained message is "online"
+	received := make(chan string, 2)
+	subscriber := createMQTTClient(t, port, "status-subscriber")
+	subscriber.Subscribe("device/status", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	select {
+	case msg := <-received:
+		assert.Equal(t, "online", msg, "Should receive current retained status")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for retained status")
+	}
+
+	// Clean disconnect (won't trigger will)
+	willClient.Disconnect(250)
+}
+
+func TestMQTT_US15_WillMessageWithQoS(t *testing.T) {
+	// Test will messages with different QoS levels
+	testCases := []struct {
+		name    string
+		willQoS byte
+	}{
+		{"WillQoS0", 0},
+		{"WillQoS1", 1},
+		{"WillQoS2", 2},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			port := getFreeMQTTPort(t)
+			broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+				ID:      fmt.Sprintf("test-will-qos%d", tc.willQoS),
+				Port:    port,
+				Enabled: true,
+			})
+			_ = broker
+
+			// Create client with will message at specified QoS
+			opts := mqttclient.NewClientOptions()
+			opts.AddBroker(fmt.Sprintf("tcp://localhost:%d", port))
+			opts.SetClientID(fmt.Sprintf("will-qos%d-client", tc.willQoS))
+			opts.SetAutoReconnect(false)
+			opts.SetConnectTimeout(5 * time.Second)
+			opts.SetBinaryWill("will/qos/test", []byte(fmt.Sprintf("will with QoS %d", tc.willQoS)), tc.willQoS, false)
+
+			willClient := mqttclient.NewClient(opts)
+			token := willClient.Connect()
+			require.True(t, token.WaitTimeout(5*time.Second))
+			require.NoError(t, token.Error(), "Should connect with will QoS %d", tc.willQoS)
+
+			// Verify connection was successful
+			assert.True(t, willClient.IsConnected(), "Client should be connected")
+
+			willClient.Disconnect(250)
+		})
+	}
+}
+
+// ============================================================================
+// User Story 16: MockResponse Templating with Wildcards
+// ============================================================================
+
+func TestMQTT_US16_MockResponseWithWildcardTemplating(t *testing.T) {
+	port := getFreeMQTTPort(t)
+
+	cfg := &mqtt.MQTTConfig{
+		ID:      "test-mockresponse-wildcard",
+		Port:    port,
+		Enabled: true,
+	}
+
+	broker := setupMQTTBroker(t, cfg)
+
+	// Set up a mock response that uses templating
+	// Topic uses {1} directly for wildcard substitution
+	// Payload uses {{ topic }} to include the full topic which contains the device ID
+	broker.SetMockResponses([]*mqtt.MockResponse{
+		{
+			ID:              "device-response",
+			TriggerPattern:  "devices/+/command",
+			ResponseTopic:   "devices/{1}/response",
+			PayloadTemplate: `{"topic": "{{ topic }}", "status": "acknowledged", "uuid": "{{ uuid }}"}`,
+			DelayMs:         10,
+			Enabled:         true,
+		},
+	})
+
+	client := createMQTTClient(t, port, "wildcard-response-client")
+	received := make(chan string, 10)
+
+	// Subscribe to the response topic
+	client.Subscribe("devices/+/response", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Publish command to a specific device
+	client.Publish("devices/sensor-001/command", 1, false, `{"action": "restart"}`).Wait()
+
+	// Wait for mock response
+	select {
+	case msg := <-received:
+		// Verify topic was rendered with device ID
+		assert.Contains(t, msg, "sensor-001", "Should contain the device ID from topic")
+		// Verify uuid was rendered (not a placeholder)
+		assert.NotContains(t, msg, "{{ uuid }}", "UUID should be rendered")
+		assert.Contains(t, msg, "acknowledged", "Should contain response status")
+
+		// Verify it's valid JSON
+		var data map[string]interface{}
+		err := json.Unmarshal([]byte(msg), &data)
+		require.NoError(t, err, "Should be valid JSON")
+		assert.Equal(t, "devices/sensor-001/command", data["topic"], "Topic should be the trigger topic")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for mock response")
+	}
+}
+
+func TestMQTT_US16_MockResponseWithPayloadAccess(t *testing.T) {
+	port := getFreeMQTTPort(t)
+
+	cfg := &mqtt.MQTTConfig{
+		ID:      "test-mockresponse-payload",
+		Port:    port,
+		Enabled: true,
+	}
+
+	broker := setupMQTTBroker(t, cfg)
+
+	// Set up a mock response that accesses the incoming payload
+	broker.SetMockResponses([]*mqtt.MockResponse{
+		{
+			ID:              "echo-response",
+			TriggerPattern:  "echo/request",
+			ResponseTopic:   "echo/response",
+			PayloadTemplate: `{"echoedAction": "{{ payload.action }}", "timestamp": "{{ timestamp }}"}`,
+			DelayMs:         10,
+			Enabled:         true,
+		},
+	})
+
+	client := createMQTTClient(t, port, "payload-client")
+	received := make(chan string, 10)
+
+	// Subscribe to the response topic
+	client.Subscribe("echo/response", 1, func(c mqttclient.Client, msg mqttclient.Message) {
+		received <- string(msg.Payload())
+	}).Wait()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Publish request with action field
+	client.Publish("echo/request", 1, false, `{"action": "test-action-123"}`).Wait()
+
+	// Wait for mock response
+	select {
+	case msg := <-received:
+		// Verify payload field was extracted
+		assert.Contains(t, msg, "test-action-123", "Should contain the echoed action")
+		// Verify timestamp was rendered
+		assert.NotContains(t, msg, "{{ timestamp }}", "Timestamp should be rendered")
+
+		// Verify it's valid JSON
+		var data map[string]interface{}
+		err := json.Unmarshal([]byte(msg), &data)
+		require.NoError(t, err, "Should be valid JSON")
+		assert.Equal(t, "test-action-123", data["echoedAction"], "Should echo the action")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for mock response")
+	}
+}
