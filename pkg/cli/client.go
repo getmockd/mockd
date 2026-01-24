@@ -210,7 +210,7 @@ func (c *adminClient) ListMocks() ([]*config.MockConfiguration, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -248,7 +248,7 @@ func (c *adminClient) GetMock(id string) (*config.MockConfiguration, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, &APIError{
@@ -279,7 +279,7 @@ func (c *adminClient) CreateMock(mock *config.MockConfiguration) (*CreateMockRes
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Accept both 200 (merged) and 201 (created)
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
@@ -345,7 +345,7 @@ func (c *adminClient) UpdateMock(id string, mock *config.MockConfiguration) (*co
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, &APIError{
@@ -371,7 +371,7 @@ func (c *adminClient) DeleteMock(id string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return &APIError{
@@ -405,7 +405,7 @@ func (c *adminClient) ImportConfig(collection *config.MockCollection, replace bo
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -437,7 +437,7 @@ func (c *adminClient) ExportConfig(name string) (*config.MockCollection, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -484,7 +484,7 @@ func (c *adminClient) GetLogs(filter *LogFilter) (*LogResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -511,7 +511,7 @@ func (c *adminClient) ClearLogs() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, c.parseError(resp)
@@ -532,7 +532,7 @@ func (c *adminClient) Health() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
@@ -546,7 +546,7 @@ func (c *adminClient) GetChaosConfig() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -570,7 +570,7 @@ func (c *adminClient) SetChaosConfig(chaosConfig map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
@@ -584,7 +584,7 @@ func (c *adminClient) GetMQTTStatus() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -603,7 +603,7 @@ func (c *adminClient) GetStats() (*StatsResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -622,7 +622,7 @@ func (c *adminClient) GetPorts() ([]PortInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)

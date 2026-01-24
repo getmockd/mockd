@@ -50,7 +50,7 @@ func LoadFromFile(path string) (*MockCollection, error) {
 		}
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	data, err := io.ReadAll(file)
 	if err != nil {
@@ -112,7 +112,7 @@ func SaveToFile(path string, collection *MockCollection) error {
 	// Atomic rename
 	if err := os.Rename(tmpPath, path); err != nil {
 		// Clean up temp file on failure
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename temporary file: %w", err)
 	}
 

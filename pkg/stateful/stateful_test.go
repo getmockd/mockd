@@ -405,7 +405,7 @@ func TestStatefulResource_CRUD(t *testing.T) {
 	// Get
 	got := resource.Get(item.ID)
 	if got == nil {
-		t.Error("Get returned nil for existing item")
+		t.Fatal("Get returned nil for existing item")
 	}
 	if got.Data["name"] != "John Doe" {
 		t.Errorf("name = %v, want %q", got.Data["name"], "John Doe")
@@ -945,7 +945,7 @@ func TestNoopObserver(t *testing.T) {
 }
 
 func TestMetricsObserver(t *testing.T) {
-	obs := &MetricsObserver{}
+	obs := NewMetricsObserver()
 
 	obs.OnCreate("users", "1", time.Millisecond)
 	obs.OnCreate("users", "2", time.Millisecond)
@@ -987,6 +987,227 @@ func TestMetricsObserver(t *testing.T) {
 	if total != 6 {
 		t.Errorf("TotalOperations = %d, want 6", total)
 	}
+}
+
+func TestMetricsObserver_Reset(t *testing.T) {
+	obs := NewMetricsObserver()
+
+	// Add some metrics
+	obs.OnCreate("users", "1", time.Millisecond)
+	obs.OnRead("users", "1", time.Millisecond)
+	obs.OnError("users", "create", nil)
+
+	// Verify they were recorded
+	snapshot := obs.Snapshot()
+	if snapshot.CreateCount != 1 || snapshot.ReadCount != 1 || snapshot.ErrorCount != 1 {
+		t.Error("Metrics not recorded before reset")
+	}
+
+	// Reset all metrics
+	obs.Reset()
+
+	// Verify all counters are zero
+	snapshot = obs.Snapshot()
+	if snapshot.CreateCount != 0 {
+		t.Errorf("CreateCount after reset = %d, want 0", snapshot.CreateCount)
+	}
+	if snapshot.ReadCount != 0 {
+		t.Errorf("ReadCount after reset = %d, want 0", snapshot.ReadCount)
+	}
+	if snapshot.ListCount != 0 {
+		t.Errorf("ListCount after reset = %d, want 0", snapshot.ListCount)
+	}
+	if snapshot.UpdateCount != 0 {
+		t.Errorf("UpdateCount after reset = %d, want 0", snapshot.UpdateCount)
+	}
+	if snapshot.DeleteCount != 0 {
+		t.Errorf("DeleteCount after reset = %d, want 0", snapshot.DeleteCount)
+	}
+	if snapshot.ErrorCount != 0 {
+		t.Errorf("ErrorCount after reset = %d, want 0", snapshot.ErrorCount)
+	}
+	if snapshot.ResetCount != 0 {
+		t.Errorf("ResetCount after reset = %d, want 0", snapshot.ResetCount)
+	}
+	if snapshot.TotalLatency != 0 {
+		t.Errorf("TotalLatency after reset = %v, want 0", snapshot.TotalLatency)
+	}
+}
+
+func TestMetricsObserver_Concurrent(t *testing.T) {
+	// This test verifies that MetricsObserver is safe for concurrent use.
+	// Run with -race flag to detect race conditions: go test -race
+	obs := NewMetricsObserver()
+
+	const numGoroutines = 100
+	const opsPerGoroutine = 1000
+
+	done := make(chan bool, numGoroutines)
+
+	// Launch many goroutines that all update metrics concurrently
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			for j := 0; j < opsPerGoroutine; j++ {
+				switch j % 7 {
+				case 0:
+					obs.OnCreate("resource", "id", time.Microsecond)
+				case 1:
+					obs.OnRead("resource", "id", time.Microsecond)
+				case 2:
+					obs.OnList("resource", 10, time.Microsecond)
+				case 3:
+					obs.OnUpdate("resource", "id", time.Microsecond)
+				case 4:
+					obs.OnDelete("resource", "id", time.Microsecond)
+				case 5:
+					obs.OnError("resource", "op", nil)
+				case 6:
+					obs.OnReset([]string{"resource"}, time.Microsecond)
+				}
+			}
+			done <- true
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+
+	// Verify total counts are correct
+	snapshot := obs.Snapshot()
+	totalExpected := int64(numGoroutines * opsPerGoroutine)
+
+	// Each operation type should occur approximately totalExpected/7 times
+	// Due to integer division, we check that the sum equals the total
+	totalOps := snapshot.CreateCount + snapshot.ReadCount + snapshot.ListCount +
+		snapshot.UpdateCount + snapshot.DeleteCount + snapshot.ErrorCount + snapshot.ResetCount
+
+	if totalOps != totalExpected {
+		t.Errorf("Total operations = %d, want %d", totalOps, totalExpected)
+	}
+
+	// Verify each counter is reasonable (should be roughly totalExpected/7)
+	expectedPerOp := totalExpected / 7
+	tolerance := int64(numGoroutines) // Allow small variance
+
+	counters := []struct {
+		name  string
+		value int64
+	}{
+		{"CreateCount", snapshot.CreateCount},
+		{"ReadCount", snapshot.ReadCount},
+		{"ListCount", snapshot.ListCount},
+		{"UpdateCount", snapshot.UpdateCount},
+		{"DeleteCount", snapshot.DeleteCount},
+		{"ErrorCount", snapshot.ErrorCount},
+		{"ResetCount", snapshot.ResetCount},
+	}
+
+	for _, c := range counters {
+		diff := c.value - expectedPerOp
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff > tolerance {
+			t.Errorf("%s = %d, expected approximately %d (tolerance %d)",
+				c.name, c.value, expectedPerOp, tolerance)
+		}
+	}
+}
+
+func TestMetricsObserver_ConcurrentSnapshotAndUpdate(t *testing.T) {
+	// Test that taking snapshots while updates are happening is safe
+	obs := NewMetricsObserver()
+
+	const numUpdaters = 50
+	const numSnapshots = 50
+	const opsPerGoroutine = 500
+
+	done := make(chan bool, numUpdaters+numSnapshots)
+
+	// Launch updater goroutines
+	for i := 0; i < numUpdaters; i++ {
+		go func() {
+			for j := 0; j < opsPerGoroutine; j++ {
+				obs.OnCreate("resource", "id", time.Microsecond)
+				obs.OnRead("resource", "id", time.Microsecond)
+			}
+			done <- true
+		}()
+	}
+
+	// Launch snapshot goroutines
+	for i := 0; i < numSnapshots; i++ {
+		go func() {
+			for j := 0; j < opsPerGoroutine; j++ {
+				snapshot := obs.Snapshot()
+				// Verify snapshot is internally consistent
+				// (all values should be non-negative)
+				if snapshot.CreateCount < 0 || snapshot.ReadCount < 0 {
+					t.Errorf("Snapshot has negative count: %+v", snapshot)
+				}
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < numUpdaters+numSnapshots; i++ {
+		<-done
+	}
+
+	// Final verification
+	snapshot := obs.Snapshot()
+	expectedCreates := int64(numUpdaters * opsPerGoroutine)
+	expectedReads := int64(numUpdaters * opsPerGoroutine)
+
+	if snapshot.CreateCount != expectedCreates {
+		t.Errorf("Final CreateCount = %d, want %d", snapshot.CreateCount, expectedCreates)
+	}
+	if snapshot.ReadCount != expectedReads {
+		t.Errorf("Final ReadCount = %d, want %d", snapshot.ReadCount, expectedReads)
+	}
+}
+
+func TestMetricsObserver_ConcurrentResetAndUpdate(t *testing.T) {
+	// Test that resetting while updates are happening is safe
+	obs := NewMetricsObserver()
+
+	const numUpdaters = 20
+	const numResetters = 5
+	const opsPerGoroutine = 200
+
+	done := make(chan bool, numUpdaters+numResetters)
+
+	// Launch updater goroutines
+	for i := 0; i < numUpdaters; i++ {
+		go func() {
+			for j := 0; j < opsPerGoroutine; j++ {
+				obs.OnCreate("resource", "id", time.Microsecond)
+			}
+			done <- true
+		}()
+	}
+
+	// Launch reset goroutines
+	for i := 0; i < numResetters; i++ {
+		go func() {
+			for j := 0; j < opsPerGoroutine; j++ {
+				obs.Reset()
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines - this should not panic or deadlock
+	for i := 0; i < numUpdaters+numResetters; i++ {
+		<-done
+	}
+
+	// Just verify we can still take a snapshot (no panic)
+	snapshot := obs.Snapshot()
+	_ = snapshot.TotalOperations()
 }
 
 // =============================================================================

@@ -4,11 +4,23 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/beevik/etree"
 )
+
+// mustNewHandler creates a new handler and fails the test if it errors.
+func mustNewHandler(t *testing.T, config *SOAPConfig) *Handler {
+	t.Helper()
+	handler, err := NewHandler(config)
+	if err != nil {
+		t.Fatalf("NewHandler failed: %v", err)
+	}
+	return handler
+}
 
 func TestNewHandler(t *testing.T) {
 	config := &SOAPConfig{
@@ -22,12 +34,63 @@ func TestNewHandler(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler, err := NewHandler(config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if handler == nil {
 		t.Fatal("expected handler to be created")
 	}
 	if handler.config != config {
 		t.Error("expected config to be set")
+	}
+}
+
+func TestNewHandler_WSDLFileNotFound(t *testing.T) {
+	config := &SOAPConfig{
+		ID:       "test-service",
+		Path:     "/service",
+		WSDLFile: "/non/existent/file.wsdl",
+		Enabled:  true,
+	}
+
+	handler, err := NewHandler(config)
+	if err == nil {
+		t.Fatal("expected error for non-existent WSDL file")
+	}
+	if handler != nil {
+		t.Error("expected nil handler when WSDL file not found")
+	}
+	if !strings.Contains(err.Error(), "failed to load WSDL file") {
+		t.Errorf("expected error message about WSDL file, got: %v", err)
+	}
+}
+
+func TestNewHandler_WSDLFileSuccess(t *testing.T) {
+	// Create a temporary WSDL file
+	tmpDir := t.TempDir()
+	wsdlPath := filepath.Join(tmpDir, "test.wsdl")
+	wsdlContent := `<?xml version="1.0"?><definitions name="TestService"></definitions>`
+	if err := os.WriteFile(wsdlPath, []byte(wsdlContent), 0644); err != nil {
+		t.Fatalf("failed to write temp WSDL: %v", err)
+	}
+
+	config := &SOAPConfig{
+		ID:       "test-service",
+		Path:     "/service",
+		WSDLFile: wsdlPath,
+		Enabled:  true,
+	}
+
+	handler, err := NewHandler(config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if handler == nil {
+		t.Fatal("expected handler to be created")
+	}
+	if string(handler.wsdlData) != wsdlContent {
+		t.Errorf("expected WSDL content %q, got %q", wsdlContent, string(handler.wsdlData))
 	}
 }
 
@@ -40,7 +103,7 @@ func TestHandler_ServeHTTP_WSDL(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	req := httptest.NewRequest(http.MethodGet, "/service?wsdl", nil)
 	w := httptest.NewRecorder()
@@ -70,7 +133,7 @@ func TestHandler_ServeHTTP_MethodNotAllowed(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	req := httptest.NewRequest(http.MethodGet, "/service", nil)
 	w := httptest.NewRecorder()
@@ -96,7 +159,7 @@ func TestHandler_ServeHTTP_SOAP11Request(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
@@ -142,7 +205,7 @@ func TestHandler_ServeHTTP_SOAP12Request(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
@@ -188,7 +251,7 @@ func TestHandler_ServeHTTP_WithXPathTemplate(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
@@ -229,7 +292,7 @@ func TestHandler_ServeHTTP_FaultResponse(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
@@ -276,7 +339,7 @@ func TestHandler_ServeHTTP_SOAP12Fault(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
@@ -314,7 +377,7 @@ func TestHandler_ServeHTTP_UnknownOperation(t *testing.T) {
 		Enabled:    true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
@@ -347,7 +410,7 @@ func TestHandler_ServeHTTP_InvalidXML(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	req := httptest.NewRequest(http.MethodPost, "/service", strings.NewReader("not xml"))
 	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
@@ -381,7 +444,7 @@ func TestHandler_ServeHTTP_XPathMatching(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	// Request with b=0 should match and return fault
 	soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
@@ -428,7 +491,7 @@ func TestHandler_ServeHTTP_XPathMatchingNoMatch(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	// Request with b=5 should NOT match
 	soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
@@ -469,7 +532,7 @@ func TestHandler_ServeHTTP_Delay(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
@@ -503,7 +566,7 @@ func TestHandler_SOAP12ActionInContentType(t *testing.T) {
 		Enabled: true,
 	}
 
-	handler := NewHandler(config)
+	handler := mustNewHandler(t, config)
 
 	soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">

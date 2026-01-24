@@ -22,9 +22,8 @@ type FileStore struct {
 	sessions map[string]*StreamRecordingSession
 
 	// Cache of recording summaries for faster listing
-	summaryCache     map[string]*RecordingSummary
-	summaryCacheTime time.Time
-	cacheTTL         time.Duration
+	summaryCache map[string]*RecordingSummary
+	cacheTTL     time.Duration
 }
 
 // StreamRecordingSession represents an active stream recording session.
@@ -230,9 +229,9 @@ func (s *FileStore) CompleteRecording(sessionID string) (*StreamRecording, error
 	s.mu.Unlock()
 
 	session.mu.Lock()
-	defer session.mu.Unlock()
 
 	if session.closed {
+		session.mu.Unlock()
 		return nil, ErrNoActiveSession
 	}
 
@@ -242,18 +241,23 @@ func (s *FileStore) CompleteRecording(sessionID string) (*StreamRecording, error
 	if err := s.saveRecording(session.recording); err != nil {
 		// Recording failed to save - don't mark as closed so it can be retried
 		session.recording.Status = RecordingStatusRecording // Revert status
+		session.mu.Unlock()
 		return nil, fmt.Errorf("failed to save recording: %w", err)
 	}
 
-	// Only mark closed and remove from map after successful save
+	// Only mark closed after successful save
 	session.closed = true
+	// Capture recording before releasing lock
+	recording := session.recording
+	session.mu.Unlock()
 
+	// Now safe to acquire store lock (not holding session lock)
 	s.mu.Lock()
 	delete(s.sessions, sessionID)
 	s.summaryCache = make(map[string]*RecordingSummary)
 	s.mu.Unlock()
 
-	return session.recording, nil
+	return recording, nil
 }
 
 // CancelRecording cancels a recording session without saving.
@@ -286,9 +290,9 @@ func (s *FileStore) MarkIncomplete(sessionID string) (*StreamRecording, error) {
 	s.mu.Unlock()
 
 	session.mu.Lock()
-	defer session.mu.Unlock()
 
 	if session.closed {
+		session.mu.Unlock()
 		return nil, ErrNoActiveSession
 	}
 
@@ -298,18 +302,23 @@ func (s *FileStore) MarkIncomplete(sessionID string) (*StreamRecording, error) {
 	if err := s.saveRecording(session.recording); err != nil {
 		// Recording failed to save - revert status so it can be retried
 		session.recording.Status = RecordingStatusRecording
+		session.mu.Unlock()
 		return nil, fmt.Errorf("failed to save recording: %w", err)
 	}
 
-	// Only mark closed and remove from map after successful save
+	// Only mark closed after successful save
 	session.closed = true
+	// Capture recording before releasing lock
+	recording := session.recording
+	session.mu.Unlock()
 
+	// Now safe to acquire store lock (not holding session lock)
 	s.mu.Lock()
 	delete(s.sessions, sessionID)
 	s.summaryCache = make(map[string]*RecordingSummary)
 	s.mu.Unlock()
 
-	return session.recording, nil
+	return recording, nil
 }
 
 // saveRecording saves a recording to disk.
@@ -598,7 +607,8 @@ func (s *FileStore) getStatsLocked() (*StorageStats, error) {
 
 	err := filepath.WalkDir(s.config.DataDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil // Skip errors
+			//nolint:nilerr // intentionally skip inaccessible files during directory walk
+			return nil
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".json") {
 			return nil
@@ -606,6 +616,7 @@ func (s *FileStore) getStatsLocked() (*StorageStats, error) {
 
 		info, err := d.Info()
 		if err != nil {
+			//nolint:nilerr // intentionally skip files where info cannot be retrieved
 			return nil
 		}
 
@@ -701,7 +712,7 @@ func (s *FileStore) GetActiveSessions() []*StreamRecordingSessionInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var sessions []*StreamRecordingSessionInfo
+	sessions := make([]*StreamRecordingSessionInfo, 0, len(s.sessions))
 	for id, session := range s.sessions {
 		session.mu.Lock()
 		info := &StreamRecordingSessionInfo{
@@ -717,6 +728,23 @@ func (s *FileStore) GetActiveSessions() []*StreamRecordingSessionInfo {
 	}
 
 	return sessions
+}
+
+// GetActiveSessionForPath returns an active recording session ID for a given path and protocol.
+// Returns empty string if no active session exists for that path.
+func (s *FileStore) GetActiveSessionForPath(path string, protocol Protocol) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for id, session := range s.sessions {
+		session.mu.Lock()
+		matches := session.recording.Metadata.Path == path && session.recording.Protocol == protocol && !session.closed
+		session.mu.Unlock()
+		if matches {
+			return id
+		}
+	}
+	return ""
 }
 
 // StreamRecordingSessionInfo is the API view of an active session.

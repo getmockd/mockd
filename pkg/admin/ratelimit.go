@@ -29,12 +29,14 @@ type tokenBucket struct {
 
 // RateLimiter implements per-IP rate limiting using the token bucket algorithm.
 type RateLimiter struct {
-	rps       float64 // tokens added per second
-	burst     int     // maximum bucket capacity
-	buckets   map[string]*tokenBucket
-	mu        sync.RWMutex
-	stopCh    chan struct{}
-	stoppedCh chan struct{}
+	rps            float64 // tokens added per second
+	burst          int     // maximum bucket capacity
+	buckets        map[string]*tokenBucket
+	mu             sync.RWMutex
+	stopCh         chan struct{}
+	stoppedCh      chan struct{}
+	trustedProxies []*net.IPNet // CIDR ranges of trusted proxies
+	trustProxy     bool         // whether to trust X-Forwarded-For/X-Real-IP
 }
 
 // NewRateLimiter creates a new rate limiter with the specified requests per second
@@ -184,48 +186,82 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 }
 
 // getClientIP extracts the client IP from the request.
-// It checks X-Forwarded-For and X-Real-IP headers first, then falls back to RemoteAddr.
+// It checks X-Forwarded-For and X-Real-IP headers only if the request comes from a
+// trusted proxy, then falls back to RemoteAddr.
 //
-// SECURITY WARNING: X-Forwarded-For and X-Real-IP headers are client-controlled and can be
-// spoofed by malicious actors. These headers should only be trusted when the application
-// is deployed behind a trusted reverse proxy (e.g., nginx, AWS ALB, Cloudflare) that
-// properly sets these headers. Without a trusted proxy, attackers can bypass rate limiting
-// by setting arbitrary IP addresses in these headers.
-//
-// For production deployments:
-// - Ensure the application is behind a trusted reverse proxy
-// - Configure the proxy to overwrite (not append to) these headers
-// - Consider using a configurable trusted proxy list
+// By default, proxy headers are NOT trusted to prevent IP spoofing attacks.
+// Use WithTrustedProxies or WithTrustAllProxies to enable proxy header processing.
 func (rl *RateLimiter) getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header (may contain multiple IPs)
-	// WARNING: This header can be spoofed if not behind a trusted proxy
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// Take the first IP (original client)
-		if idx := indexByte(xff, ','); idx != -1 {
-			xff = xff[:idx]
-		}
-		ip := trimSpaces(xff)
-		if ip != "" {
-			return ip
-		}
-	}
+	// First, extract the direct connection IP (RemoteAddr)
+	remoteIP := rl.extractRemoteIP(r.RemoteAddr)
 
-	// Check X-Real-IP header
-	// WARNING: This header can be spoofed if not behind a trusted proxy
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		ip := trimSpaces(xri)
-		if ip != "" {
-			return ip
+	// Only check proxy headers if we trust the source
+	if rl.isTrustedProxy(remoteIP) {
+		// Check X-Forwarded-For header (may contain multiple IPs)
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			// Take the first IP (original client)
+			if idx := indexByte(xff, ','); idx != -1 {
+				xff = xff[:idx]
+			}
+			ip := trimSpaces(xff)
+			if ip != "" && isValidIP(ip) {
+				return ip
+			}
+		}
+
+		// Check X-Real-IP header
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			ip := trimSpaces(xri)
+			if ip != "" && isValidIP(ip) {
+				return ip
+			}
 		}
 	}
 
 	// Fall back to RemoteAddr (most secure - set by the TCP connection)
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	return remoteIP
+}
+
+// extractRemoteIP extracts the IP address from RemoteAddr (strips port if present).
+func (rl *RateLimiter) extractRemoteIP(remoteAddr string) string {
+	ip, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
 		// RemoteAddr might not have a port
-		return r.RemoteAddr
+		return remoteAddr
 	}
 	return ip
+}
+
+// isTrustedProxy checks if the given IP is from a trusted proxy.
+func (rl *RateLimiter) isTrustedProxy(ip string) bool {
+	// If trust is not enabled, never trust proxy headers
+	if !rl.trustProxy {
+		return false
+	}
+
+	// If trustedProxies is nil but trustProxy is true, trust all (WithTrustAllProxies)
+	if rl.trustedProxies == nil {
+		return true
+	}
+
+	// Check if IP is in any trusted CIDR range
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return false
+	}
+
+	for _, network := range rl.trustedProxies {
+		if network.Contains(parsedIP) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isValidIP checks if the string is a valid IP address.
+func isValidIP(s string) bool {
+	return net.ParseIP(s) != nil
 }
 
 // indexByte returns the index of the first occurrence of c in s, or -1.
@@ -269,5 +305,47 @@ func WithBurst(burst int) RateLimiterOption {
 		if burst > 0 {
 			rl.burst = burst
 		}
+	}
+}
+
+// WithTrustedProxies sets the list of trusted proxy CIDR ranges.
+// When set, X-Forwarded-For and X-Real-IP headers are only trusted
+// if the request comes from an IP within one of these ranges.
+// Common values include:
+//   - "127.0.0.1/32" for localhost
+//   - "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16" for private networks
+//   - Cloud provider load balancer IP ranges
+func WithTrustedProxies(cidrs []string) RateLimiterOption {
+	return func(rl *RateLimiter) {
+		for _, cidr := range cidrs {
+			_, network, err := net.ParseCIDR(cidr)
+			if err != nil {
+				// Try parsing as a single IP
+				ip := net.ParseIP(cidr)
+				if ip != nil {
+					// Convert to /32 or /128 CIDR
+					if ip.To4() != nil {
+						_, network, _ = net.ParseCIDR(cidr + "/32")
+					} else {
+						_, network, _ = net.ParseCIDR(cidr + "/128")
+					}
+				}
+			}
+			if network != nil {
+				rl.trustedProxies = append(rl.trustedProxies, network)
+				rl.trustProxy = true
+			}
+		}
+	}
+}
+
+// WithTrustAllProxies configures the rate limiter to trust proxy headers
+// from any source. This is INSECURE and should only be used in controlled
+// environments (e.g., development) where you're certain all traffic comes
+// through a trusted proxy.
+func WithTrustAllProxies() RateLimiterOption {
+	return func(rl *RateLimiter) {
+		rl.trustProxy = true
+		rl.trustedProxies = nil // nil means trust all
 	}
 }

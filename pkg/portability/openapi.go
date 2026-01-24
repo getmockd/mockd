@@ -630,7 +630,7 @@ func convertMockdPath(path string) string {
 
 // findBestResponse finds the best response to use from OpenAPI responses.
 func findBestResponse(responses map[string]Response) (int, *Response) {
-	if responses == nil || len(responses) == 0 {
+	if len(responses) == 0 {
 		return 200, nil
 	}
 
@@ -662,7 +662,7 @@ func findBestResponse(responses map[string]Response) (int, *Response) {
 
 // findBestSwaggerResponse finds the best response from Swagger 2.0 responses.
 func findBestSwaggerResponse(responses map[string]SwaggerResponse) (int, *SwaggerResponse) {
-	if responses == nil || len(responses) == 0 {
+	if len(responses) == 0 {
 		return 200, nil
 	}
 

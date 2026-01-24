@@ -51,7 +51,7 @@ func newMockChaosEngineServer() *mockChaosEngineServer {
 }
 
 func (mces *mockChaosEngineServer) client() *engineclient.Client {
-	return engineclient.New(mces.Server.URL)
+	return engineclient.New(mces.URL)
 }
 
 // TestHandleGetChaos tests the GET /chaos handler.

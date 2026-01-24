@@ -79,14 +79,14 @@ mocks:
             password: secret123
             acl:
               - topic: "sensors/#"
-                access: publish
+                access: write
               - topic: "commands/#"
-                access: subscribe
+                access: read
           - username: admin
             password: admin123
             acl:
               - topic: "#"
-                access: all
+                access: readwrite
 
       # Topic configurations
       topics:
@@ -139,7 +139,7 @@ topics:
             "deviceId": "temp_001",
             "value": 22.5,
             "unit": "celsius",
-            "timestamp": "{{now}}"
+            "timestamp": "{{ now }}"
           }
         interval: "5s"
         repeat: true
@@ -205,9 +205,9 @@ messages:
   - payload: |
       {
         "deviceId": "sensor_001",
-        "temperature": {{randomInt 18 28}},
-        "humidity": {{randomInt 40 80}},
-        "timestamp": "{{now}}"
+        "temperature": {{ random.int(18, 28) }},
+        "humidity": {{ random.int(40, 80) }},
+        "timestamp": "{{ now }}"
       }
     interval: "5s"
     repeat: true
@@ -217,10 +217,10 @@ Available templates:
 
 | Template | Description |
 |----------|-------------|
-| `{{now}}` | Current ISO timestamp |
-| `{{uuid}}` | Random UUID |
-| `{{timestamp}}` | Unix timestamp |
-| `{{randomInt min max}}` | Random integer in range |
+| `{{ now }}` | Current ISO timestamp |
+| `{{ uuid }}` | Random UUID |
+| `{{ timestamp }}` | Unix timestamp |
+| `{{ random.int(min, max) }}` | Random integer in range |
 
 ### Retained Messages
 
@@ -304,7 +304,7 @@ topics:
     qos: 1
     onPublish:
       response:
-        payload: '{"status": "acknowledged", "timestamp": "{{now}}"}'
+        payload: '{"status": "acknowledged", "timestamp": "{{ now }}"}'
         delay: "100ms"
 ```
 
@@ -344,8 +344,8 @@ topics:
         payload: |
           {
             "status": "executed",
-            "command": "{{message.payload}}",
-            "executedAt": "{{now}}"
+            "command": "{{ message.payload }}",
+            "executedAt": "{{ now }}"
           }
 ```
 
@@ -371,8 +371,6 @@ mqtt:
         acl:
           - topic: "sensors/#"
             access: read
-          - topic: "commands/#"
-            access: deny
 ```
 
 ### User Configuration
@@ -397,8 +395,6 @@ Access levels:
 | `read` | Subscribe only |
 | `write` | Publish only |
 | `readwrite` | Both subscribe and publish |
-| `all` | Full access (same as readwrite) |
-| `deny` | No access |
 
 ### Role-Based Access Example
 
@@ -503,8 +499,8 @@ topics:
       - payload: |
           {
             "deviceId": "{{deviceId}}",
-            "temperature": {{randomInt 15 35}},
-            "timestamp": "{{now}}"
+            "temperature": {{ random.int(15, 35) }},
+            "timestamp": "{{ now }}"
           }
         interval: "10s"
         repeat: true
@@ -557,9 +553,9 @@ mocks:
                 {
                   "deviceId": "temp_001",
                   "type": "temperature",
-                  "value": {{randomInt 18 28}},
+                  "value": {{ random.int(18, 28) }},
                   "unit": "celsius",
-                  "timestamp": "{{now}}"
+                  "timestamp": "{{ now }}"
                 }
               interval: "5s"
               repeat: true
@@ -573,9 +569,9 @@ mocks:
                 {
                   "deviceId": "humid_001",
                   "type": "humidity",
-                  "value": {{randomInt 40 80}},
+                  "value": {{ random.int(40, 80) }},
                   "unit": "percent",
-                  "timestamp": "{{now}}"
+                  "timestamp": "{{ now }}"
                 }
               interval: "5s"
               repeat: true
@@ -590,7 +586,7 @@ mocks:
                   "type": "motion",
                   "detected": true,
                   "zone": "entrance",
-                  "timestamp": "{{now}}"
+                  "timestamp": "{{ now }}"
                 }
               interval: "30s"
               repeat: true
@@ -604,9 +600,9 @@ mocks:
                 {
                   "deviceId": "gateway_001",
                   "status": "online",
-                  "uptime": {{randomInt 1000 50000}},
+                  "uptime": {{ random.int(1000, 50000) }},
                   "firmware": "1.2.3",
-                  "timestamp": "{{now}}"
+                  "timestamp": "{{ now }}"
                 }
               delay: "1s"
 ```
@@ -633,9 +629,9 @@ mocks:
               payload: |
                 {
                   "status": "acknowledged",
-                  "command": "{{message.payload}}",
-                  "executedAt": "{{now}}",
-                  "id": "{{uuid}}"
+                  "command": "{{ message.payload }}",
+                  "executedAt": "{{ now }}",
+                  "id": "{{ uuid }}"
                 }
               delay: "50ms"
             forward: responses/device
@@ -700,7 +696,7 @@ mocks:
                 {
                   "on": true,
                   "brightness": 80,
-                  "updated": "{{now}}"
+                  "updated": "{{ now }}"
                 }
             forward: home/lights/living_room/state
 
@@ -711,10 +707,10 @@ mocks:
           messages:
             - payload: |
                 {
-                  "current_temp": {{randomInt 18 24}},
+                  "current_temp": {{ random.int(18, 24) }},
                   "target_temp": 21,
                   "mode": "heat",
-                  "humidity": {{randomInt 40 60}}
+                  "humidity": {{ random.int(40, 60) }}
                 }
               interval: "30s"
               repeat: true
@@ -733,7 +729,7 @@ mocks:
             - payload: |
                 {
                   "motion": true,
-                  "timestamp": "{{now}}"
+                  "timestamp": "{{ now }}"
                 }
               interval: "60s"
               repeat: true
@@ -759,11 +755,11 @@ mocks:
           messages:
             - payload: |
                 {
-                  "id": "{{uuid}}",
+                  "id": "{{ uuid }}",
                   "type": "info",
                   "title": "System Update",
                   "body": "New features are available",
-                  "timestamp": "{{now}}"
+                  "timestamp": "{{ now }}"
                 }
               interval: "30s"
               repeat: true
@@ -775,7 +771,7 @@ mocks:
           messages:
             - payload: |
                 {
-                  "id": "{{uuid}}",
+                  "id": "{{ uuid }}",
                   "type": "announcement",
                   "title": "Maintenance Notice",
                   "body": "Scheduled maintenance at midnight",
@@ -788,7 +784,7 @@ mocks:
           qos: 1
           onPublish:
             response:
-              payload: '{"status": "received", "timestamp": "{{now}}"}'
+              payload: '{"status": "received", "timestamp": "{{ now }}"}'
 ```
 
 ## CLI Commands

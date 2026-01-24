@@ -76,7 +76,7 @@ func (e *StdoutExporter) Export(spans []*Span) error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal span: %w", err)
 		}
-		fmt.Fprintln(e.writer, string(data))
+		_, _ = fmt.Fprintln(e.writer, string(data))
 	}
 	return nil
 }
@@ -238,7 +238,7 @@ func (e *OTLPExporter) send(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
@@ -329,7 +329,7 @@ func convertToOTLP(spans []*Span) otlpTraceRequest {
 		serviceSpans[svc] = append(serviceSpans[svc], span)
 	}
 
-	var resourceSpans []otlpResourceSpans
+	resourceSpans := make([]otlpResourceSpans, 0, len(serviceSpans))
 	for serviceName, spans := range serviceSpans {
 		otlpSpans := make([]otlpSpan, 0, len(spans))
 		for _, span := range spans {
@@ -356,7 +356,7 @@ func convertToOTLP(spans []*Span) otlpTraceRequest {
 
 func convertSpan(span *Span) otlpSpan {
 	// Convert attributes (excluding service.name which is on resource)
-	var attrs []otlpKeyValue
+	attrs := make([]otlpKeyValue, 0, len(span.Attributes))
 	for k, v := range span.Attributes {
 		if k != "service.name" {
 			attrs = append(attrs, otlpKeyValue{Key: k, Value: otlpValue{StringValue: v}})
@@ -364,9 +364,9 @@ func convertSpan(span *Span) otlpSpan {
 	}
 
 	// Convert events
-	var events []otlpEvent
+	events := make([]otlpEvent, 0, len(span.Events))
 	for _, e := range span.Events {
-		var eventAttrs []otlpKeyValue
+		eventAttrs := make([]otlpKeyValue, 0, len(e.Attrs))
 		for k, v := range e.Attrs {
 			eventAttrs = append(eventAttrs, otlpKeyValue{Key: k, Value: otlpValue{StringValue: v}})
 		}

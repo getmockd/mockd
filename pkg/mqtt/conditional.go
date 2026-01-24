@@ -120,6 +120,8 @@ func (e *ConditionEvaluator) ParseCondition(condition string) (*ParsedCondition,
 }
 
 // parseConditionValue parses a value string into its appropriate type
+//
+//nolint:unparam // error is always nil but kept for future validation
 func parseConditionValue(valueStr string) (any, error) {
 	// Check for quoted string
 	if (strings.HasPrefix(valueStr, "'") && strings.HasSuffix(valueStr, "'")) ||
@@ -469,11 +471,19 @@ func (h *ConditionalResponseHandler) executeConditionalResponse(resp *Conditiona
 	return false
 }
 
-// executeRule sends a response for a matched rule
-func (h *ConditionalResponseHandler) executeRule(rule *ConditionalRule, triggerTopic string, payload []byte, clientID string, triggerPattern string, conditionalRespID string) {
+// responseConfig holds the common fields needed to execute a response.
+type responseConfig struct {
+	responseTopic   string
+	payloadTemplate string
+	delayMs         int
+}
+
+// executeResponse is the common logic for sending a mock response.
+// It handles delay, template rendering, publishing, and notifications.
+func (h *ConditionalResponseHandler) executeResponse(cfg responseConfig, triggerTopic string, payload []byte, clientID string, triggerPattern string, responseID string) {
 	// Apply delay if configured
-	if rule.DelayMs > 0 {
-		time.Sleep(time.Duration(rule.DelayMs) * time.Millisecond)
+	if cfg.delayMs > 0 {
+		time.Sleep(time.Duration(cfg.delayMs) * time.Millisecond)
 	}
 
 	// Extract wildcard values from the trigger topic
@@ -492,7 +502,7 @@ func (h *ConditionalResponseHandler) executeRule(rule *ConditionalRule, triggerT
 	}
 
 	// Render response topic
-	responseTopic := rule.ResponseTopic
+	responseTopic := cfg.responseTopic
 	if responseTopic == "" {
 		responseTopic = triggerTopic + "/response"
 	} else {
@@ -500,55 +510,37 @@ func (h *ConditionalResponseHandler) executeRule(rule *ConditionalRule, triggerT
 	}
 
 	// Render payload template
-	template := NewTemplate(rule.PayloadTemplate, h.sequences)
+	template := NewTemplate(cfg.payloadTemplate, h.sequences)
 	responsePayload := template.Render(ctx)
 
-	// Publish the response
-	_ = h.broker.Publish(responseTopic, []byte(responsePayload), 0, false)
+	// Publish the response and log any errors
+	if err := h.broker.Publish(responseTopic, []byte(responsePayload), 0, false); err != nil {
+		h.broker.log.Error("failed to publish mock response",
+			"topic", responseTopic,
+			"responseID", responseID,
+			"error", err)
+	}
 
 	// Notify test panel sessions
-	h.broker.notifyMockResponse(responseTopic, []byte(responsePayload), conditionalRespID+":"+rule.ID)
+	h.broker.notifyMockResponse(responseTopic, []byte(responsePayload), responseID)
+}
+
+// executeRule sends a response for a matched rule
+func (h *ConditionalResponseHandler) executeRule(rule *ConditionalRule, triggerTopic string, payload []byte, clientID string, triggerPattern string, conditionalRespID string) {
+	h.executeResponse(responseConfig{
+		responseTopic:   rule.ResponseTopic,
+		payloadTemplate: rule.PayloadTemplate,
+		delayMs:         rule.DelayMs,
+	}, triggerTopic, payload, clientID, triggerPattern, conditionalRespID+":"+rule.ID)
 }
 
 // executeDefaultResponse sends the default response when no rules match
 func (h *ConditionalResponseHandler) executeDefaultResponse(resp *MockResponse, triggerTopic string, payload []byte, clientID string, triggerPattern string, conditionalRespID string) {
-	// Apply delay if configured
-	if resp.DelayMs > 0 {
-		time.Sleep(time.Duration(resp.DelayMs) * time.Millisecond)
-	}
-
-	// Extract wildcard values from the trigger topic
-	wildcards := ExtractWildcardValues(triggerPattern, triggerTopic)
-
-	// Parse payload as JSON if possible
-	var payloadMap map[string]any
-	_ = json.Unmarshal(payload, &payloadMap)
-
-	// Build template context
-	ctx := &TemplateContext{
-		Topic:        triggerTopic,
-		WildcardVals: wildcards,
-		ClientID:     clientID,
-		Payload:      payloadMap,
-	}
-
-	// Render response topic
-	responseTopic := resp.ResponseTopic
-	if responseTopic == "" {
-		responseTopic = triggerTopic + "/response"
-	} else {
-		responseTopic = RenderTopicTemplate(responseTopic, wildcards)
-	}
-
-	// Render payload template
-	template := NewTemplate(resp.PayloadTemplate, h.sequences)
-	responsePayload := template.Render(ctx)
-
-	// Publish the response
-	_ = h.broker.Publish(responseTopic, []byte(responsePayload), 0, false)
-
-	// Notify test panel sessions
-	h.broker.notifyMockResponse(responseTopic, []byte(responsePayload), conditionalRespID+":default")
+	h.executeResponse(responseConfig{
+		responseTopic:   resp.ResponseTopic,
+		payloadTemplate: resp.PayloadTemplate,
+		delayMs:         resp.DelayMs,
+	}, triggerTopic, payload, clientID, triggerPattern, conditionalRespID+":default")
 }
 
 // ValidateCondition validates a condition string and returns any errors

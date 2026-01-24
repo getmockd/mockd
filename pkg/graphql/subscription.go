@@ -14,6 +14,15 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/getmockd/mockd/pkg/template"
+)
+
+// Pre-compiled regex patterns for performance.
+var (
+	// subscriptionFieldPattern matches the first field in a subscription query.
+	subscriptionFieldPattern = regexp.MustCompile(`subscription\s*(?:\w+)?\s*(?:\([^)]*\))?\s*\{\s*(\w+)`)
+	// varsPattern matches {{vars.fieldName}} patterns.
+	varsPattern = regexp.MustCompile(`\{\{vars\.([a-zA-Z_][a-zA-Z0-9_]*)\}\}`)
 )
 
 // SubscriptionConfig configures a subscription resolver.
@@ -80,12 +89,13 @@ type subscribePayload struct {
 
 // SubscriptionHandler handles GraphQL subscriptions over WebSocket.
 type SubscriptionHandler struct {
-	schema   *Schema
-	config   *GraphQLConfig
-	upgrader websocket.AcceptOptions
-	conns    map[string]*subscriptionConn
-	mu       sync.RWMutex
-	connID   atomic.Uint64
+	schema         *Schema
+	config         *GraphQLConfig
+	upgrader       websocket.AcceptOptions
+	conns          map[string]*subscriptionConn
+	mu             sync.RWMutex
+	connID         atomic.Uint64
+	templateEngine *template.Engine
 }
 
 // subscriptionConn represents an active WebSocket connection.
@@ -106,7 +116,8 @@ func NewSubscriptionHandler(schema *Schema, config *GraphQLConfig) *Subscription
 			Subprotocols:       []string{"graphql-transport-ws", "graphql-ws"},
 			InsecureSkipVerify: true,
 		},
-		conns: make(map[string]*subscriptionConn),
+		conns:          make(map[string]*subscriptionConn),
+		templateEngine: template.New(),
 	}
 }
 
@@ -156,7 +167,7 @@ func (h *SubscriptionHandler) handleConnection(conn *websocket.Conn, r *http.Req
 		delete(h.conns, id)
 		h.mu.Unlock()
 
-		conn.Close(websocket.StatusNormalClosure, "connection closed")
+		_ = conn.Close(websocket.StatusNormalClosure, "connection closed")
 	}()
 
 	// Handle messages
@@ -205,15 +216,15 @@ func (h *SubscriptionHandler) handleMessage(ctx context.Context, sc *subscriptio
 }
 
 // handleConnectionInit handles connection_init message.
-func (h *SubscriptionHandler) handleConnectionInit(sc *subscriptionConn, msg *wsMessage) {
+func (h *SubscriptionHandler) handleConnectionInit(sc *subscriptionConn, _ *wsMessage) {
 	// Send connection_ack
 	ack := wsMessage{Type: msgTypeConnectionAck}
-	h.sendMessage(sc, &ack)
+	_ = h.sendMessage(sc, &ack)
 
 	// For legacy protocol, also send keep-alive
 	if sc.protocol == "graphql-ws" {
 		ka := wsMessage{Type: msgTypeConnectionKeepAlive}
-		h.sendMessage(sc, &ka)
+		_ = h.sendMessage(sc, &ka)
 	}
 }
 
@@ -223,7 +234,7 @@ func (h *SubscriptionHandler) handlePing(sc *subscriptionConn, msg *wsMessage) {
 		Type:    msgTypePong,
 		Payload: msg.Payload, // Echo back any payload
 	}
-	h.sendMessage(sc, &pong)
+	_ = h.sendMessage(sc, &pong)
 }
 
 // handleSubscribe handles a subscription request.
@@ -296,7 +307,7 @@ func (h *SubscriptionHandler) handleConnectionTerminate(sc *subscriptionConn) {
 	sc.mu.Unlock()
 
 	// Close the connection
-	sc.conn.Close(websocket.StatusNormalClosure, "connection terminated")
+	_ = sc.conn.Close(websocket.StatusNormalClosure, "connection terminated")
 }
 
 // streamEvents streams subscription events to the client.
@@ -412,10 +423,9 @@ func (h *SubscriptionHandler) parseRandomDelay(rangeStr string) time.Duration {
 
 // parseSubscriptionQuery parses a GraphQL subscription query and returns the subscription field name.
 func (h *SubscriptionHandler) parseSubscriptionQuery(query string, inputVars map[string]interface{}) (string, map[string]interface{}, error) {
-	// Simple regex to extract subscription field name
+	// Use pre-compiled regex to extract subscription field name
 	// Matches patterns like: subscription { fieldName } or subscription Name { fieldName }
-	re := regexp.MustCompile(`subscription\s*(?:\w+)?\s*(?:\([^)]*\))?\s*\{\s*(\w+)`)
-	matches := re.FindStringSubmatch(query)
+	matches := subscriptionFieldPattern.FindStringSubmatch(query)
 	if len(matches) < 2 {
 		return "", nil, fmt.Errorf("could not parse subscription query")
 	}
@@ -429,6 +439,7 @@ func (h *SubscriptionHandler) parseSubscriptionQuery(query string, inputVars map
 	}
 
 	// Try to extract inline arguments like subscription { messages(channel: "test") }
+	// This pattern is dynamic based on field name, so we compile it here
 	argRe := regexp.MustCompile(fieldName + `\s*\(\s*([^)]+)\s*\)`)
 	argMatches := argRe.FindStringSubmatch(query)
 	if len(argMatches) >= 2 {
@@ -500,6 +511,8 @@ func (h *SubscriptionHandler) findSubscriptionConfig(fieldName string) *Subscrip
 }
 
 // applyVariables substitutes template variables in data.
+// It handles {{args.fieldName}}, {{vars.fieldName}}, and general template
+// variables like {{uuid}}, {{now}}, etc.
 func (h *SubscriptionHandler) applyVariables(data interface{}, vars map[string]interface{}) interface{} {
 	if data == nil {
 		return nil
@@ -507,13 +520,12 @@ func (h *SubscriptionHandler) applyVariables(data interface{}, vars map[string]i
 
 	switch v := data.(type) {
 	case string:
-		// Replace {{variable}} patterns
+		// Replace {{args.fieldName}} patterns
 		result := templatePattern.ReplaceAllStringFunc(v, func(match string) string {
 			parts := templatePattern.FindStringSubmatch(match)
 			if len(parts) < 2 {
 				return match
 			}
-			// Check both "args.X" and just "X"
 			fieldName := parts[1]
 			if val, ok := vars[fieldName]; ok {
 				return fmt.Sprintf("%v", val)
@@ -521,8 +533,7 @@ func (h *SubscriptionHandler) applyVariables(data interface{}, vars map[string]i
 			return match
 		})
 
-		// Also replace {{vars.X}} patterns
-		varsPattern := regexp.MustCompile(`\{\{vars\.([a-zA-Z_][a-zA-Z0-9_]*)\}\}`)
+		// Replace {{vars.X}} patterns
 		result = varsPattern.ReplaceAllStringFunc(result, func(match string) string {
 			parts := varsPattern.FindStringSubmatch(match)
 			if len(parts) < 2 {
@@ -534,7 +545,10 @@ func (h *SubscriptionHandler) applyVariables(data interface{}, vars map[string]i
 			return match
 		})
 
-		return result
+		// Process general template variables ({{uuid}}, {{now}}, etc.)
+		ctx := template.NewContextFromMap(vars, nil)
+		processed, _ := h.templateEngine.Process(result, ctx)
+		return processed
 
 	case map[string]interface{}:
 		result := make(map[string]interface{})
@@ -593,7 +607,7 @@ func (h *SubscriptionHandler) sendNext(sc *subscriptionConn, id string, data int
 		Type:    msgType,
 		Payload: payloadBytes,
 	}
-	h.sendMessage(sc, &msg)
+	_ = h.sendMessage(sc, &msg)
 }
 
 // sendError sends an error message.
@@ -609,7 +623,7 @@ func (h *SubscriptionHandler) sendError(sc *subscriptionConn, id string, message
 		Type:    msgType,
 		Payload: payloadBytes,
 	}
-	h.sendMessage(sc, &msg)
+	_ = h.sendMessage(sc, &msg)
 }
 
 // sendComplete sends a complete message.
@@ -618,7 +632,7 @@ func (h *SubscriptionHandler) sendComplete(sc *subscriptionConn, id string) {
 		ID:   id,
 		Type: msgTypeComplete,
 	}
-	h.sendMessage(sc, &msg)
+	_ = h.sendMessage(sc, &msg)
 }
 
 // ConnectionCount returns the number of active connections.
@@ -657,6 +671,6 @@ func (h *SubscriptionHandler) CloseAll(reason string) {
 			cancel()
 		}
 		sc.mu.Unlock()
-		sc.conn.Close(websocket.StatusGoingAway, reason)
+		_ = sc.conn.Close(websocket.StatusGoingAway, reason)
 	}
 }

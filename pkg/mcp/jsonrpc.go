@@ -80,7 +80,7 @@ func ResourceUpdatedNotification(uri string) *JSONRPCNotification {
 
 // UnmarshalParams unmarshals request params into a typed struct.
 func UnmarshalParams[T any](params json.RawMessage) (*T, *JSONRPCError) {
-	if params == nil || len(params) == 0 {
+	if len(params) == 0 {
 		// Return zero value for optional params
 		var result T
 		return &result, nil
@@ -95,7 +95,7 @@ func UnmarshalParams[T any](params json.RawMessage) (*T, *JSONRPCError) {
 
 // UnmarshalParamsRequired unmarshals required request params.
 func UnmarshalParamsRequired[T any](params json.RawMessage) (*T, *JSONRPCError) {
-	if params == nil || len(params) == 0 {
+	if len(params) == 0 {
 		return nil, InvalidParamsError("params required")
 	}
 

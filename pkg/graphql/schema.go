@@ -307,9 +307,7 @@ func (s *Schema) GetUnionMembers(name string) []string {
 	}
 
 	members := make([]string, 0, len(def.Types))
-	for _, t := range def.Types {
-		members = append(members, t)
-	}
+	members = append(members, def.Types...)
 	sort.Strings(members)
 	return members
 }

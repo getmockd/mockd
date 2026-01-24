@@ -10,7 +10,7 @@ import (
 	"github.com/getmockd/mockd/internal/id"
 )
 
-// TemplateGenerator is a function that generates events from template parameters.
+// TemplateGeneratorFunc is a function that generates events from template parameters.
 type TemplateGeneratorFunc func(params map[string]interface{}) []SSEEventDef
 
 // TemplateRegistry manages built-in SSE templates.

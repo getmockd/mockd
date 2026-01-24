@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -92,7 +93,11 @@ func (c *Connection) LastMessageAt() time.Time {
 	if v == nil {
 		return c.connectedAt
 	}
-	return v.(time.Time)
+	t, ok := v.(time.Time)
+	if !ok {
+		return c.connectedAt
+	}
+	return t
 }
 
 // MessagesSent returns the total messages sent.
@@ -224,8 +229,11 @@ func (c *Connection) SendText(text string) error {
 
 // SendJSON sends a JSON message.
 func (c *Connection) SendJSON(v interface{}) error {
-	// Import encoding/json if needed
-	return nil // Will be implemented with json.Marshal
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return c.Send(MessageText, data)
 }
 
 // Read reads the next message from the connection.
@@ -298,37 +306,56 @@ func (c *Connection) CloseNormal() error {
 	return c.Close(CloseNormalClosure, "")
 }
 
-// JoinGroup adds the connection to a group.
-func (c *Connection) JoinGroup(group string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// MaxGroupsPerConnection limits the number of groups a connection can join
+// to prevent unbounded memory growth.
+const MaxGroupsPerConnection = 100
 
+// JoinGroup adds the connection to a group.
+// This method is safe to call concurrently with ConnectionManager.JoinGroup.
+// Returns ErrTooManyGroups if the connection is already in MaxGroupsPerConnection groups.
+func (c *Connection) JoinGroup(group string) error {
+	// Check and update connection state first
+	c.mu.Lock()
 	if _, exists := c.groups[group]; exists {
+		c.mu.Unlock()
 		return ErrAlreadyInGroup
 	}
+	if len(c.groups) >= MaxGroupsPerConnection {
+		c.mu.Unlock()
+		return ErrTooManyGroups
+	}
 	c.groups[group] = struct{}{}
+	manager := c.manager
+	connID := c.id
+	c.mu.Unlock()
 
-	// Notify manager if present
-	if c.manager != nil {
-		c.manager.addToGroup(c.id, group)
+	// Notify manager outside of connection lock to avoid deadlock.
+	// Lock ordering: always release connection lock before acquiring manager lock.
+	if manager != nil {
+		manager.addToGroup(connID, group)
 	}
 
 	return nil
 }
 
 // LeaveGroup removes the connection from a group.
+// This method is safe to call concurrently with ConnectionManager.LeaveGroup.
 func (c *Connection) LeaveGroup(group string) error {
+	// Check and update connection state first
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if _, exists := c.groups[group]; !exists {
+		c.mu.Unlock()
 		return ErrNotInGroup
 	}
 	delete(c.groups, group)
+	manager := c.manager
+	connID := c.id
+	c.mu.Unlock()
 
-	// Notify manager if present
-	if c.manager != nil {
-		c.manager.removeFromGroup(c.id, group)
+	// Notify manager outside of connection lock to avoid deadlock.
+	// Lock ordering: always release connection lock before acquiring manager lock.
+	if manager != nil {
+		manager.removeFromGroup(connID, group)
 	}
 
 	return nil

@@ -8,9 +8,18 @@ import (
 
 	"github.com/getmockd/mockd/pkg/metrics"
 	"github.com/getmockd/mockd/pkg/protocol"
+	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/util"
 )
+
+// RecordingHookFactory creates recording hooks for new WebSocket connections.
+// It is called when a new connection is established to check if recording should be enabled.
+type RecordingHookFactory interface {
+	// CreateHook creates a recording hook for the given path.
+	// Returns nil if no recording is active for this path.
+	CreateHook(path string) recording.WebSocketRecordingHook
+}
 
 // ConnectionManager manages all WebSocket connections across endpoints.
 type ConnectionManager struct {
@@ -20,10 +29,11 @@ type ConnectionManager struct {
 	byGroup     map[string]map[string]bool // group name -> set of connection IDs
 	endpoints   map[string]*Endpoint       // path -> Endpoint
 
-	totalMsgSent  atomic.Int64
-	totalMsgRecv  atomic.Int64
-	startTime     time.Time
-	requestLogger requestlog.Logger
+	totalMsgSent     atomic.Int64
+	totalMsgRecv     atomic.Int64
+	startTime        time.Time
+	requestLogger    requestlog.Logger
+	recordingFactory RecordingHookFactory // optional: creates recording hooks for new connections
 
 	mu sync.RWMutex
 }
@@ -61,6 +71,21 @@ func (m *ConnectionManager) GetRequestLogger() requestlog.Logger {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.requestLogger
+}
+
+// SetRecordingHookFactory sets the factory for creating recording hooks.
+// When set, new connections will check for active recording sessions.
+func (m *ConnectionManager) SetRecordingHookFactory(factory RecordingHookFactory) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.recordingFactory = factory
+}
+
+// GetRecordingHookFactory returns the current recording hook factory.
+func (m *ConnectionManager) GetRecordingHookFactory() RecordingHookFactory {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.recordingFactory
 }
 
 // RegisterEndpoint registers an endpoint with the manager.
@@ -285,59 +310,66 @@ func (m *ConnectionManager) BroadcastToGroupRaw(group string, msgType MessageTyp
 }
 
 // JoinGroup adds a connection to a group.
+// This method is safe to call concurrently - it avoids deadlock by acquiring
+// locks in a consistent order (manager lock first, then connection lock).
 func (m *ConnectionManager) JoinGroup(connID, group string) error {
+	// Get connection reference while holding manager lock
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	conn, exists := m.connections[connID]
 	if !exists {
+		m.mu.Unlock()
 		return ErrConnectionNotFound
 	}
 
-	// Add to connection's groups
-	conn.mu.Lock()
-	if _, exists := conn.groups[group]; exists {
-		conn.mu.Unlock()
-		return ErrAlreadyInGroup
-	}
-	conn.groups[group] = struct{}{}
-	conn.mu.Unlock()
-
-	// Add to manager's group mapping
+	// Update manager's group mapping while still holding manager lock
 	if m.byGroup[group] == nil {
 		m.byGroup[group] = make(map[string]bool)
 	}
+
+	// Check if already tracked in manager
+	if m.byGroup[group][connID] {
+		m.mu.Unlock()
+		return ErrAlreadyInGroup
+	}
 	m.byGroup[group][connID] = true
+	m.mu.Unlock()
+
+	// Now update connection's groups (outside manager lock)
+	conn.mu.Lock()
+	conn.groups[group] = struct{}{}
+	conn.mu.Unlock()
 
 	return nil
 }
 
 // LeaveGroup removes a connection from a group.
+// This method is safe to call concurrently - it avoids deadlock by acquiring
+// locks in a consistent order (manager lock first, then connection lock).
 func (m *ConnectionManager) LeaveGroup(connID, group string) error {
+	// Get connection reference while holding manager lock
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	conn, exists := m.connections[connID]
 	if !exists {
+		m.mu.Unlock()
 		return ErrConnectionNotFound
 	}
 
-	// Remove from connection's groups
-	conn.mu.Lock()
-	if _, exists := conn.groups[group]; !exists {
-		conn.mu.Unlock()
+	// Check if in group and remove from manager's mapping
+	grp, ok := m.byGroup[group]
+	if !ok || !grp[connID] {
+		m.mu.Unlock()
 		return ErrNotInGroup
 	}
+	delete(grp, connID)
+	if len(grp) == 0 {
+		delete(m.byGroup, group)
+	}
+	m.mu.Unlock()
+
+	// Now update connection's groups (outside manager lock)
+	conn.mu.Lock()
 	delete(conn.groups, group)
 	conn.mu.Unlock()
-
-	// Remove from manager's group mapping
-	if grp, ok := m.byGroup[group]; ok {
-		delete(grp, connID)
-		if len(grp) == 0 {
-			delete(m.byGroup, group)
-		}
-	}
 
 	return nil
 }
@@ -409,7 +441,7 @@ func (m *ConnectionManager) Close() {
 
 	// Close all connections
 	for _, conn := range conns {
-		conn.Close(CloseGoingAway, "server shutdown")
+		_ = conn.Close(CloseGoingAway, "server shutdown")
 	}
 
 	m.mu.Lock()
@@ -564,7 +596,7 @@ func (m *ConnectionManager) LogMessageReceived(conn *Connection, msgType Message
 	// Record message metric
 	if metrics.RequestsTotal != nil {
 		if vec, err := metrics.RequestsTotal.WithLabels("websocket", conn.EndpointPath(), "inbound"); err == nil {
-			vec.Inc()
+			_ = vec.Inc()
 		}
 	}
 
@@ -600,7 +632,7 @@ func (m *ConnectionManager) LogMessageSent(conn *Connection, msgType MessageType
 	// Record message metric
 	if metrics.RequestsTotal != nil {
 		if vec, err := metrics.RequestsTotal.WithLabels("websocket", conn.EndpointPath(), "outbound"); err == nil {
-			vec.Inc()
+			_ = vec.Inc()
 		}
 	}
 
@@ -682,7 +714,7 @@ func (m *ConnectionManager) Stop(ctx context.Context, timeout time.Duration) err
 	defer m.mu.Unlock()
 	// Close all connections
 	for _, conn := range m.connections {
-		conn.Close(CloseGoingAway, "server shutdown")
+		_ = conn.Close(CloseGoingAway, "server shutdown")
 	}
 	return nil
 }
@@ -832,7 +864,7 @@ func (m *ConnectionManager) ListGroupConnections(group string) []string {
 // Broadcast sends a message to all connections (protocol.Broadcaster).
 func (m *ConnectionManager) Broadcast(msg protocol.Message) (sent int, err error) {
 	m.mu.RLock()
-	var ids []string
+	ids := make([]string, 0, len(m.connections))
 	for id := range m.connections {
 		ids = append(ids, id)
 	}

@@ -31,13 +31,13 @@ type MatchCriteria struct {
 
 // Matcher is a compiled message matcher.
 type Matcher struct {
-	matchType    string
-	value        string
-	jsonPath     string
+	matchType     string
+	value         string
+	jsonPath      string
 	msgTypeFilter MessageType
-	regex        *regexp.Regexp
-	response     *MessageResponse
-	noResponse   bool
+	regex         *regexp.Regexp
+	response      *MessageResponse
+	noResponse    bool
 }
 
 // NewMatcher creates a new Matcher from configuration.
@@ -159,10 +159,7 @@ func (m *Matcher) matchJSON(data []byte) bool {
 	}
 
 	// Simple JSON path support: "$.field" or "field" or "$.field.subfield"
-	path := m.jsonPath
-	if strings.HasPrefix(path, "$.") {
-		path = path[2:]
-	}
+	path := strings.TrimPrefix(m.jsonPath, "$.")
 
 	// Get the value at path
 	value := getJSONValue(obj, path)

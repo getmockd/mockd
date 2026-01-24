@@ -456,7 +456,7 @@ func TestMatchJSONPath_MatchedValues(t *testing.T) {
 					t.Errorf("MatchJSONPath() Matched[%q] = %v, want %v", tt.wantKey, val, tt.wantValue)
 				}
 			} else {
-				if result.Matched != nil && len(result.Matched) > 0 {
+				if len(result.Matched) > 0 {
 					t.Errorf("MatchJSONPath() Matched should be empty on mismatch, got: %v", result.Matched)
 				}
 			}

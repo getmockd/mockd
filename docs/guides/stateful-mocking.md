@@ -7,8 +7,8 @@ Stateful mocking allows mockd to simulate real CRUD APIs where resources persist
 Traditional mocks return static responses. Stateful mocking maintains an in-memory store that:
 
 - **POST** creates new resources
-- **GET** retrieves current resources
-- **PUT/PATCH** updates existing resources
+- **GET** retrieves current resources  
+- **PUT** replaces existing resources
 - **DELETE** removes resources
 
 Changes persist for the lifetime of the server session.
@@ -19,16 +19,13 @@ Enable stateful mocking in your configuration:
 
 ```json
 {
-  "stateful": {
-    "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}",
-        "idField": "id",
-        "autoId": true
-      }
+  "statefulResources": [
+    {
+      "name": "users",
+      "basePath": "/api/users",
+      "idField": "id"
     }
-  }
+  ]
 }
 ```
 
@@ -70,44 +67,42 @@ curl http://localhost:4280/api/users/1
 
 ```json
 {
-  "stateful": {
-    "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}"
-      }
+  "statefulResources": [
+    {
+      "name": "users",
+      "basePath": "/api/users"
     }
-  }
+  ]
 }
 ```
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `collection` | Path for list/create operations | Required |
-| `item` | Path for single item operations | Required |
+| `name` | Unique resource name | Required |
+| `basePath` | URL path prefix for the resource | Required |
 | `idField` | Field name for resource ID | `"id"` |
-| `autoId` | Auto-generate IDs on create | `true` |
+| `parentField` | Parent FK field for nested resources | - |
+| `seedData` | Initial data array | `[]` |
 
 ### Multiple Resources
 
 ```json
 {
-  "stateful": {
-    "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}"
-      },
-      "posts": {
-        "collection": "/api/posts",
-        "item": "/api/posts/{id}"
-      },
-      "comments": {
-        "collection": "/api/posts/{postId}/comments",
-        "item": "/api/posts/{postId}/comments/{id}"
-      }
+  "statefulResources": [
+    {
+      "name": "users",
+      "basePath": "/api/users"
+    },
+    {
+      "name": "posts",
+      "basePath": "/api/posts"
+    },
+    {
+      "name": "comments",
+      "basePath": "/api/posts/:postId/comments",
+      "parentField": "postId"
     }
-  }
+  ]
 }
 ```
 
@@ -117,34 +112,16 @@ Pre-populate resources:
 
 ```json
 {
-  "stateful": {
-    "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}",
-        "seed": [
-          {"id": 1, "name": "Alice", "email": "alice@example.com"},
-          {"id": 2, "name": "Bob", "email": "bob@example.com"}
-        ]
-      }
+  "statefulResources": [
+    {
+      "name": "users",
+      "basePath": "/api/users",
+      "seedData": [
+        {"id": "1", "name": "Alice", "email": "alice@example.com"},
+        {"id": "2", "name": "Bob", "email": "bob@example.com"}
+      ]
     }
-  }
-}
-```
-
-### Seed from File
-
-```json
-{
-  "stateful": {
-    "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}",
-        "seedFile": "./data/users.json"
-      }
-    }
-  }
+  ]
 }
 ```
 
@@ -218,22 +195,6 @@ Response:
 {"id": 2, "name": "Robert", "email": "robert@example.com"}
 ```
 
-### Partial Update (PATCH)
-
-Update specific fields:
-
-```bash
-PATCH /api/users/2
-Content-Type: application/json
-
-{"email": "bob.new@example.com"}
-```
-
-Response:
-```json
-{"id": 2, "name": "Bob", "email": "bob.new@example.com"}
-```
-
 ### Delete (DELETE)
 
 ```bash
@@ -248,19 +209,17 @@ Handle parent-child relationships:
 
 ```json
 {
-  "stateful": {
-    "resources": {
-      "posts": {
-        "collection": "/api/posts",
-        "item": "/api/posts/{id}"
-      },
-      "comments": {
-        "collection": "/api/posts/{postId}/comments",
-        "item": "/api/posts/{postId}/comments/{id}",
-        "parentRef": "postId"
-      }
+  "statefulResources": [
+    {
+      "name": "posts",
+      "basePath": "/api/posts"
+    },
+    {
+      "name": "comments",
+      "basePath": "/api/posts/:postId/comments",
+      "parentField": "postId"
     }
-  }
+  ]
 }
 ```
 
@@ -279,106 +238,70 @@ POST /api/posts/1/comments
 
 ### Query Filtering
 
+Filter by any field using query parameters:
+
 ```bash
 GET /api/users?name=Alice
 GET /api/users?status=active
 ```
 
-Enable filtering:
-
-```json
-{
-  "stateful": {
-    "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}",
-        "filtering": true
-      }
-    }
-  }
-}
-```
+Filtering is always enabled.
 
 ### Pagination
 
+Use offset-based pagination:
+
 ```bash
-GET /api/users?page=2&limit=10
+GET /api/users?limit=10&offset=20
+GET /api/users?sort=name&order=asc
 ```
 
-Enable pagination:
+Query parameters:
 
-```json
-{
-  "stateful": {
-    "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}",
-        "pagination": {
-          "pageParam": "page",
-          "limitParam": "limit",
-          "defaultLimit": 20
-        }
-      }
-    }
-  }
-}
-```
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `limit` | Maximum items to return | 100 |
+| `offset` | Items to skip | 0 |
+| `sort` | Field to sort by | `createdAt` |
+| `order` | Sort direction: "asc" or "desc" | `desc` |
 
 Response includes pagination metadata:
 
 ```json
 {
   "data": [...],
-  "pagination": {
-    "page": 2,
-    "limit": 10,
+  "meta": {
     "total": 45,
-    "totalPages": 5
+    "limit": 10,
+    "offset": 20,
+    "count": 10
   }
 }
 ```
 
-## State Persistence
+## State Lifetime
 
-By default, state exists only in memory and resets when the server stops.
-
-### File Persistence
-
-Save state to disk:
-
-```json
-{
-  "stateful": {
-    "persistence": {
-      "enabled": true,
-      "file": "./mockd-state.json",
-      "saveInterval": "30s"
-    }
-  }
-}
-```
-
-State is loaded on startup and saved periodically.
+State exists only in memory and resets when the server stops. Use seed data to pre-populate resources on startup.
 
 ## Admin API
 
 Manage state via the admin API:
 
 ```bash
-# Get current state
+# Get state overview
 GET /state
 
-# Reset all state
-DELETE /state
+# Reset all state to seed data
+POST /state/reset
 
-# Reset specific resource
-DELETE /state/users
+# List all resources
+GET /state/resources
 
-# Import state
-POST /state
-{"users": [...], "posts": [...]}
+# Get specific resource info
+GET /state/resources/users
+
+# Clear specific resource (remove all items)
+DELETE /state/resources/users
 ```
 
 ## Combined with Static Mocks
@@ -395,12 +318,12 @@ Stateful resources work alongside traditional mocks:
   ],
   "stateful": {
     "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}"
-      }
+  "statefulResources": [
+    {
+      "name": "users",
+      "basePath": "/api/users"
     }
-  }
+  ]
 }
 ```
 
@@ -413,31 +336,20 @@ Static mocks take priority when matched.
   "server": {
     "port": 4280
   },
-  "stateful": {
-    "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}",
-        "idField": "id",
-        "autoId": true,
-        "seed": [
-          {"id": 1, "name": "Admin", "role": "admin"}
-        ]
-      },
-      "posts": {
-        "collection": "/api/posts",
-        "item": "/api/posts/{id}",
-        "filtering": true,
-        "pagination": {
-          "defaultLimit": 10
-        }
-      }
+  "statefulResources": [
+    {
+      "name": "users",
+      "basePath": "/api/users",
+      "idField": "id",
+      "seedData": [
+        {"id": "1", "name": "Admin", "role": "admin"}
+      ]
     },
-    "persistence": {
-      "enabled": true,
-      "file": "./state.json"
+    {
+      "name": "posts",
+      "basePath": "/api/posts"
     }
-  }
+  ]
 }
 ```
 

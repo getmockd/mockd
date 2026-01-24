@@ -1,6 +1,13 @@
 // Package config provides proxy configuration types.
 package config
 
+import (
+	"fmt"
+	"regexp"
+
+	"github.com/getmockd/mockd/pkg/mock"
+)
+
 // ProxyConfiguration defines settings for proxy server operation.
 type ProxyConfiguration struct {
 	// Port is the proxy listen port (default: 8888)
@@ -54,4 +61,96 @@ func DefaultCAConfiguration(configDir string) *CAConfiguration {
 		Organization: "mockd Local CA",
 		ValidityDays: 3650, // 10 years
 	}
+}
+
+// validProxyModes are the allowed proxy operating modes.
+var validProxyModes = map[string]bool{
+	"record":      true,
+	"passthrough": true,
+}
+
+// Validate checks if the ProxyConfiguration is valid.
+func (p *ProxyConfiguration) Validate() error {
+	if p.Port <= 0 || p.Port > 65535 {
+		return &mock.ValidationError{Field: "port", Message: "port must be between 1 and 65535"}
+	}
+
+	if p.Mode != "" && !validProxyModes[p.Mode] {
+		return &mock.ValidationError{
+			Field:   "mode",
+			Message: fmt.Sprintf("invalid mode: %s (must be 'record' or 'passthrough')", p.Mode),
+		}
+	}
+
+	if p.MaxBodySize < 0 {
+		return &mock.ValidationError{Field: "maxBodySize", Message: "maxBodySize must be >= 0"}
+	}
+
+	// Validate filters if present
+	if p.Filters != nil {
+		if err := p.Filters.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Validate checks if the ProxyFilterConfig is valid.
+func (f *ProxyFilterConfig) Validate() error {
+	// Validate path patterns are valid regex
+	for i, pattern := range f.IncludePaths {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return &mock.ValidationError{
+				Field:   fmt.Sprintf("filters.includePaths[%d]", i),
+				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+			}
+		}
+	}
+
+	for i, pattern := range f.ExcludePaths {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return &mock.ValidationError{
+				Field:   fmt.Sprintf("filters.excludePaths[%d]", i),
+				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+			}
+		}
+	}
+
+	for i, pattern := range f.IncludeHosts {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return &mock.ValidationError{
+				Field:   fmt.Sprintf("filters.includeHosts[%d]", i),
+				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+			}
+		}
+	}
+
+	for i, pattern := range f.ExcludeHosts {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return &mock.ValidationError{
+				Field:   fmt.Sprintf("filters.excludeHosts[%d]", i),
+				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+			}
+		}
+	}
+
+	return nil
+}
+
+// Validate checks if the CAConfiguration is valid.
+func (c *CAConfiguration) Validate() error {
+	if c.CertPath == "" {
+		return &mock.ValidationError{Field: "certPath", Message: "certPath is required"}
+	}
+
+	if c.KeyPath == "" {
+		return &mock.ValidationError{Field: "keyPath", Message: "keyPath is required"}
+	}
+
+	if c.ValidityDays < 0 {
+		return &mock.ValidationError{Field: "validityDays", Message: "validityDays must be >= 0"}
+	}
+
+	return nil
 }

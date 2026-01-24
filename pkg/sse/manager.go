@@ -282,7 +282,7 @@ type StreamIterator struct {
 	mu      sync.RWMutex
 }
 
-// NewStreamIterator creates an iterator over connections.
+// NewIterator creates an iterator over connections.
 func (m *SSEConnectionManager) NewIterator() *StreamIterator {
 	return &StreamIterator{
 		streams: m.GetConnections(),

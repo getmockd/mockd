@@ -108,7 +108,7 @@ func (c *EngineClient) Register(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to register with admin: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
@@ -204,7 +204,7 @@ func (c *EngineClient) sendHeartbeat(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("heartbeat failed with status %d", resp.StatusCode)
@@ -242,7 +242,7 @@ func (c *EngineClient) syncWorkspaces(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to fetch engine (status %d)", resp.StatusCode)
@@ -285,7 +285,7 @@ func (c *EngineClient) syncWorkspaces(ctx context.Context) error {
 	for _, server := range c.manager.ListWorkspaces() {
 		if !currentWorkspaces[server.WorkspaceID] {
 			c.log.Info("stopping workspace (no longer assigned)", "workspace", server.WorkspaceName)
-			c.manager.StopWorkspace(server.WorkspaceID)
+			_ = c.manager.StopWorkspace(server.WorkspaceID)
 		}
 	}
 
@@ -316,7 +316,7 @@ func (c *EngineClient) fetchMocks(ctx context.Context, workspaceID string) ([]*c
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch mocks (status %d)", resp.StatusCode)

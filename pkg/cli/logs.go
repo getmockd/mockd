@@ -152,7 +152,7 @@ Examples:
 
 func printTableLogs(requests []*requestlog.Entry) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "TIMESTAMP\tPROTOCOL\tMETHOD\tPATH\tMATCHED\tDURATION")
+	_, _ = fmt.Fprintln(w, "TIMESTAMP\tPROTOCOL\tMETHOD\tPATH\tMATCHED\tDURATION")
 
 	for _, req := range requests {
 		timestamp := req.Timestamp.Format("2006-01-02 15:04:05")
@@ -170,7 +170,7 @@ func printTableLogs(requests []*requestlog.Entry) error {
 		} else if len(matched) > 12 {
 			matched = matched[:12] + "..."
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%dms\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%dms\n",
 			timestamp, protocol, req.Method, path, matched, req.DurationMs)
 	}
 
@@ -219,7 +219,7 @@ func streamLogs(adminURL string, jsonOutput, verbose bool) error {
 			Message:    fmt.Sprintf("cannot connect to admin API at %s: %v", adminURL, err),
 		}))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)

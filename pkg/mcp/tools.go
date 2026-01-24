@@ -1,9 +1,5 @@
 package mcp
 
-import (
-	"encoding/json"
-)
-
 // ToolHandler is the signature for tool execution functions.
 type ToolHandler func(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error)
 
@@ -501,10 +497,4 @@ func getMap(args map[string]interface{}, key string) map[string]interface{} {
 		}
 	}
 	return nil
-}
-
-// toJSON converts a value to JSON string.
-func toJSON(v interface{}) string {
-	b, _ := json.Marshal(v)
-	return string(b)
 }

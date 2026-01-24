@@ -52,6 +52,16 @@ func (e *Endpoint) HandleUpgrade(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	// Track whether setup completed successfully.
+	// If not, we must close the WebSocket connection to avoid leaks.
+	setupComplete := false
+	defer func() {
+		if !setupComplete {
+			// Setup failed after Accept() - close the raw connection
+			_ = wsConn.Close(ws.StatusInternalError, "connection setup failed")
+		}
+	}()
+
 	// Set message size limit
 	wsConn.SetReadLimit(e.maxMessageSize)
 
@@ -66,17 +76,28 @@ func (e *Endpoint) HandleUpgrade(w http.ResponseWriter, r *http.Request) error {
 		e.manager.Add(conn)
 		// Log connection open
 		e.manager.LogConnect(conn, r.RemoteAddr)
+
+		// Check for active recording session and set up recording hook
+		if factory := e.manager.GetRecordingHookFactory(); factory != nil {
+			if hook := factory.CreateHook(e.path); hook != nil {
+				conn.SetRecordingHook(hook)
+				hook.OnConnect(negotiatedProtocol)
+			}
+		}
 	}
 
 	// Start connection handling in a goroutine
 	go e.handleConnection(conn)
+
+	// Mark setup as complete - connection is now managed by handleConnection
+	setupComplete = true
 
 	return nil
 }
 
 // handleConnection handles the lifecycle of a WebSocket connection.
 func (e *Endpoint) handleConnection(conn *Connection) {
-	var closeCode CloseCode = CloseNormalClosure
+	closeCode := CloseNormalClosure
 
 	defer func() {
 		// Log disconnect before cleanup
@@ -93,7 +114,7 @@ func (e *Endpoint) handleConnection(conn *Connection) {
 		if e.manager != nil {
 			e.manager.Remove(conn.ID())
 		}
-		conn.CloseNormal()
+		_ = conn.CloseNormal()
 	}()
 
 	// Start scenario executor if configured
@@ -176,7 +197,7 @@ func (e *Endpoint) handleMessage(conn *Connection, msgType MessageType, data []b
 
 	// Echo mode - send back the same message
 	if e.echoMode {
-		conn.Send(msgType, data)
+		_ = conn.Send(msgType, data)
 		return
 	}
 
@@ -185,9 +206,16 @@ func (e *Endpoint) handleMessage(conn *Connection, msgType MessageType, data []b
 
 // sendResponse sends a MessageResponse to the connection.
 func (e *Endpoint) sendResponse(conn *Connection, response *MessageResponse) {
-	// Apply delay if specified
+	// Apply delay if specified, respecting context cancellation
 	if response.Delay > 0 {
-		time.Sleep(response.Delay.Duration())
+		timer := time.NewTimer(response.Delay.Duration())
+		select {
+		case <-timer.C:
+			// Delay completed
+		case <-conn.Context().Done():
+			timer.Stop()
+			return // Connection closed, don't send
+		}
 	}
 
 	data, msgType, err := response.GetData()
@@ -195,7 +223,7 @@ func (e *Endpoint) sendResponse(conn *Connection, response *MessageResponse) {
 		return
 	}
 
-	conn.Send(msgType, data)
+	_ = conn.Send(msgType, data)
 }
 
 // runHeartbeat sends periodic pings to keep the connection alive.
@@ -225,7 +253,7 @@ func (e *Endpoint) runHeartbeat(ctx context.Context, conn *Connection) {
 
 			if err != nil {
 				// Ping failed - close connection
-				conn.Close(CloseGoingAway, "ping timeout")
+				_ = conn.Close(CloseGoingAway, "ping timeout")
 				return
 			}
 		}
@@ -244,7 +272,7 @@ func (e *Endpoint) watchIdleTimeout(ctx context.Context, conn *Connection) {
 		case <-ticker.C:
 			idleTime := time.Since(conn.LastMessageAt())
 			if idleTime > e.idleTimeout {
-				conn.Close(CloseGoingAway, "idle timeout")
+				_ = conn.Close(CloseGoingAway, "idle timeout")
 				return
 			}
 		}
@@ -301,11 +329,7 @@ func isWebSocketUpgrade(r *http.Request) bool {
 
 	// Check Upgrade header
 	upgrade := r.Header.Get("Upgrade")
-	if strings.ToLower(upgrade) != "websocket" {
-		return false
-	}
-
-	return true
+	return strings.ToLower(upgrade) == "websocket"
 }
 
 // IsWebSocketRequest returns true if the request is a WebSocket upgrade request.

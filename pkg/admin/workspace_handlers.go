@@ -42,22 +42,6 @@ func (a *AdminAPI) getWorkspaceStore() store.WorkspaceStore {
 // GET /workspaces
 func (a *AdminAPI) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	wsStore := a.getWorkspaceStore()
-	if wsStore == nil {
-		// Fallback to default workspace only
-		defaultWS := &WorkspaceDTO{
-			ID:        store.DefaultWorkspaceID,
-			Name:      "Default",
-			Type:      string(store.WorkspaceTypeLocal),
-			CreatedAt: time.Now().Format(time.RFC3339),
-			UpdatedAt: time.Now().Format(time.RFC3339),
-		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"workspaces": []*WorkspaceDTO{defaultWS},
-			"count":      1,
-		})
-		return
-	}
-
 	ctx := r.Context()
 	workspaces, err := wsStore.List(ctx)
 	if err != nil {
@@ -87,22 +71,6 @@ func (a *AdminAPI) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	wsStore := a.getWorkspaceStore()
-	if wsStore == nil {
-		// No store - only "local" workspace exists
-		if id == store.DefaultWorkspaceID {
-			writeJSON(w, http.StatusOK, &WorkspaceDTO{
-				ID:        store.DefaultWorkspaceID,
-				Name:      "Default",
-				Type:      string(store.WorkspaceTypeLocal),
-				CreatedAt: time.Now().Format(time.RFC3339),
-				UpdatedAt: time.Now().Format(time.RFC3339),
-			})
-			return
-		}
-		writeError(w, http.StatusNotFound, "not_found", "Workspace not found")
-		return
-	}
-
 	ctx := r.Context()
 	ws, err := wsStore.Get(ctx, id)
 	if err != nil {
@@ -199,10 +167,6 @@ func (a *AdminAPI) handleCreateWorkspace(w http.ResponseWriter, r *http.Request)
 
 	// Get workspace store
 	wsStore := a.getWorkspaceStore()
-	if wsStore == nil {
-		writeError(w, http.StatusInternalServerError, "store_error", "workspace store not initialized")
-		return
-	}
 
 	// Persist workspace
 	ctx := r.Context()
@@ -234,10 +198,6 @@ func (a *AdminAPI) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request)
 	}
 
 	wsStore := a.getWorkspaceStore()
-	if wsStore == nil {
-		writeError(w, http.StatusInternalServerError, "store_error", "workspace store not initialized")
-		return
-	}
 
 	ctx := r.Context()
 
@@ -332,10 +292,6 @@ func (a *AdminAPI) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request)
 	}
 
 	wsStore := a.getWorkspaceStore()
-	if wsStore == nil {
-		writeError(w, http.StatusInternalServerError, "store_error", "workspace store not initialized")
-		return
-	}
 
 	ctx := r.Context()
 

@@ -48,7 +48,7 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Error reading request", http.StatusBadGateway)
 			return
 		}
-		r.Body.Close()
+		_ = r.Body.Close()
 		// Replace body for forwarding
 		r.Body = io.NopCloser(bytes.NewReader(reqBody))
 	}
@@ -57,13 +57,13 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	p.log("[%s] %s %s", r.Method, r.Host, r.URL.Path)
 
 	// Forward the request
-	resp, err := forwardRequest(r)
+	resp, err := p.forwardRequest(r)
 	if err != nil {
 		p.log("Error forwarding request: %v", err)
 		http.Error(w, "Error forwarding request: "+err.Error(), http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read and buffer the response body
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, DefaultMaxBodySize))
@@ -105,21 +105,13 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	// Copy response to client
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	w.Write(respBody)
+	_, _ = w.Write(respBody)
 
 	p.log("Response: %d %s [%v]", resp.StatusCode, resp.Status, duration)
 }
 
 // forwardRequest forwards an HTTP request to the target server and returns the response.
-func forwardRequest(r *http.Request) (*http.Response, error) {
-	// Create a new request to the target
-	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse // Don't follow redirects
-		},
-		Timeout: 30 * time.Second,
-	}
-
+func (p *Proxy) forwardRequest(r *http.Request) (*http.Response, error) {
 	// Construct the target URL
 	targetURL := r.URL.String()
 	if r.URL.Host == "" {
@@ -142,7 +134,7 @@ func forwardRequest(r *http.Request) (*http.Response, error) {
 	outReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
 	outReq.Header.Set("X-Forwarded-Host", r.Host)
 
-	return client.Do(outReq)
+	return p.client.Do(outReq)
 }
 
 // copyHeaders copies headers from src to dst.

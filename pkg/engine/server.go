@@ -32,17 +32,22 @@ func findFreePort(startPort int) int {
 	for port := startPort; port < startPort+100; port++ {
 		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err == nil {
-			listener.Close()
+			_ = listener.Close()
 			return port
 		}
 	}
 	// Fallback to a random port if no port in range is available
+	//nolint:gosec // G102: binding to all interfaces is intentional for mock server
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		return startPort // Return start port as last resort
 	}
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port
+	defer func() { _ = listener.Close() }()
+	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		return startPort
+	}
+	return tcpAddr.Port
 }
 
 // Server is the main mock server engine.

@@ -93,7 +93,7 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 		// Record match hits/misses
 		if mrw.statusCode == http.StatusNotFound {
 			if metrics.MatchMissesTotal != nil {
-				metrics.MatchMissesTotal.Inc()
+				_ = metrics.MatchMissesTotal.Inc()
 			}
 		}
 	})

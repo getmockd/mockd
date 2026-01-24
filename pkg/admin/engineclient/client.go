@@ -57,7 +57,7 @@ func (c *Client) Health(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("engine unhealthy: status %d", resp.StatusCode)
@@ -71,7 +71,7 @@ func (c *Client) Status(ctx context.Context) (*StatusResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -90,7 +90,7 @@ func (c *Client) Deploy(ctx context.Context, req *DeployRequest) (*DeployRespons
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -109,7 +109,7 @@ func (c *Client) Undeploy(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
@@ -123,7 +123,7 @@ func (c *Client) ListMocks(ctx context.Context) ([]*config.MockConfiguration, er
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -142,7 +142,7 @@ func (c *Client) GetMock(ctx context.Context, id string) (*config.MockConfigurat
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
@@ -164,7 +164,7 @@ func (c *Client) DeleteMock(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return ErrNotFound
@@ -207,7 +207,7 @@ func (c *Client) ListRequests(ctx context.Context, filter *RequestFilter) (*Requ
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -226,7 +226,7 @@ func (c *Client) ClearRequests(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, c.parseError(resp)
@@ -235,7 +235,9 @@ func (c *Client) ClearRequests(ctx context.Context) (int, error) {
 	var result struct {
 		Cleared int `json:"cleared"`
 	}
-	json.NewDecoder(resp.Body).Decode(&result)
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("failed to decode response: %w", err)
+	}
 	return result.Cleared, nil
 }
 
@@ -245,7 +247,7 @@ func (c *Client) GetProtocols(ctx context.Context) (map[string]ProtocolStatus, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -264,7 +266,7 @@ func (c *Client) CreateMock(ctx context.Context, mock *config.MockConfiguration)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusConflict {
 		return nil, ErrDuplicate
@@ -286,7 +288,7 @@ func (c *Client) UpdateMock(ctx context.Context, id string, mock *config.MockCon
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
@@ -309,7 +311,7 @@ func (c *Client) ToggleMock(ctx context.Context, id string, enabled bool) (*conf
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
@@ -335,7 +337,7 @@ func (c *Client) ExportConfig(ctx context.Context, name string) (*config.MockCol
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -358,7 +360,7 @@ func (c *Client) ImportConfig(ctx context.Context, collection *config.MockCollec
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
@@ -372,7 +374,7 @@ func (c *Client) GetRequest(ctx context.Context, id string) (*RequestLogEntry, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
@@ -394,7 +396,7 @@ func (c *Client) GetChaos(ctx context.Context) (*ChaosConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -413,7 +415,7 @@ func (c *Client) SetChaos(ctx context.Context, cfg *ChaosConfig) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
@@ -427,7 +429,7 @@ func (c *Client) GetStateOverview(ctx context.Context) (*StateOverview, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -451,7 +453,7 @@ func (c *Client) ResetState(ctx context.Context, resourceName string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
@@ -465,7 +467,7 @@ func (c *Client) GetStateResource(ctx context.Context, name string) (interface{}
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
@@ -487,7 +489,7 @@ func (c *Client) ClearStateResource(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return ErrNotFound
@@ -504,7 +506,7 @@ func (c *Client) ListHandlers(ctx context.Context) ([]*ProtocolHandler, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -526,7 +528,7 @@ func (c *Client) GetHandler(ctx context.Context, id string) (*ProtocolHandler, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
@@ -548,7 +550,7 @@ func (c *Client) ListSSEConnections(ctx context.Context) ([]*SSEConnection, erro
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
@@ -567,7 +569,7 @@ func (c *Client) GetSSEConnection(ctx context.Context, id string) (*SSEConnectio
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
@@ -589,7 +591,7 @@ func (c *Client) CloseSSEConnection(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return ErrNotFound
@@ -606,7 +608,7 @@ func (c *Client) GetSSEStats(ctx context.Context) (*SSEStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)

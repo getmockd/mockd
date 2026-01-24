@@ -135,7 +135,7 @@ func formatTraceparent(traceID, spanID string, sampled bool) string {
 // isValidHex returns true if the string contains only valid hex characters.
 func isValidHex(s string) bool {
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}

@@ -3,6 +3,7 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"io"
 	"net"
@@ -57,7 +58,7 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	_, err = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 	if err != nil {
 		p.log("Error sending CONNECT response: %v", err)
-		clientConn.Close()
+		_ = clientConn.Close()
 		return
 	}
 
@@ -67,6 +68,7 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		PrivateKey:  certPair.Key,
 	}
 
+	//nolint:gosec // G402: TLS MinVersion not set because proxy needs to support various client TLS versions
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{tlsCert},
 	}
@@ -75,7 +77,7 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	tlsClientConn := tls.Server(clientConn, tlsConfig)
 	if err := tlsClientConn.Handshake(); err != nil {
 		p.log("TLS handshake with client failed: %v", err)
-		clientConn.Close()
+		_ = clientConn.Close()
 		return
 	}
 
@@ -87,7 +89,7 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 // handleTLSConnection handles HTTP requests over an established TLS connection.
 func (p *Proxy) handleTLSConnection(clientConn *tls.Conn, hostOnly, fullHost string) {
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	reader := bufio.NewReader(clientConn)
 
@@ -125,7 +127,7 @@ func (p *Proxy) handleHTTPSRequest(clientConn net.Conn, r *http.Request, fullHos
 			writeHTTPError(clientConn, http.StatusBadGateway, "Error reading request")
 			return
 		}
-		r.Body.Close()
+		_ = r.Body.Close()
 	}
 
 	// Log the request
@@ -137,6 +139,7 @@ func (p *Proxy) handleHTTPSRequest(clientConn net.Conn, r *http.Request, fullHos
 		targetHost = targetHost + ":443"
 	}
 
+	//nolint:gosec // G402: proxy intentionally accepts any certificate
 	targetConn, err := tls.Dial("tcp", targetHost, &tls.Config{
 		InsecureSkipVerify: true, // We're a proxy, we accept any cert
 	})
@@ -145,7 +148,7 @@ func (p *Proxy) handleHTTPSRequest(clientConn net.Conn, r *http.Request, fullHos
 		writeHTTPError(clientConn, http.StatusBadGateway, "Error connecting to target")
 		return
 	}
-	defer targetConn.Close()
+	defer func() { _ = targetConn.Close() }()
 
 	// Send the request to the target
 	if err := r.Write(targetConn); err != nil {
@@ -161,7 +164,7 @@ func (p *Proxy) handleHTTPSRequest(clientConn net.Conn, r *http.Request, fullHos
 		writeHTTPError(clientConn, http.StatusBadGateway, "Error reading response")
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read and buffer the response body
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, DefaultMaxBodySize))
@@ -200,17 +203,11 @@ func (p *Proxy) handleHTTPSRequest(clientConn net.Conn, r *http.Request, fullHos
 		}
 	}
 
-	// Write response back to client
-	resp.Body = io.NopCloser(io.LimitReader(io.NopCloser(nil), 0)) // Clear the body, we'll write manually
+	// Write response back to client with body restored
+	resp.Body = io.NopCloser(bytes.NewReader(respBody))
+	resp.ContentLength = int64(len(respBody))
 	if err := resp.Write(clientConn); err != nil {
-		// Try writing just headers failed, can't recover
-		p.log("Error writing response headers: %v", err)
-		return
-	}
-
-	// Write the response body
-	if _, err := clientConn.Write(respBody); err != nil {
-		p.log("Error writing response body: %v", err)
+		p.log("Error writing response: %v", err)
 		return
 	}
 
@@ -218,7 +215,7 @@ func (p *Proxy) handleHTTPSRequest(clientConn net.Conn, r *http.Request, fullHos
 }
 
 // tunnelConnect creates a direct TCP tunnel for HTTPS without MITM.
-func (p *Proxy) tunnelConnect(w http.ResponseWriter, r *http.Request, host string) {
+func (p *Proxy) tunnelConnect(w http.ResponseWriter, _ *http.Request, host string) {
 	// Connect to target
 	targetConn, err := net.DialTimeout("tcp", host, 30*time.Second)
 	if err != nil {
@@ -231,7 +228,7 @@ func (p *Proxy) tunnelConnect(w http.ResponseWriter, r *http.Request, host strin
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
 		p.log("HTTP server does not support hijacking")
-		targetConn.Close()
+		_ = targetConn.Close()
 		http.Error(w, "HTTP server does not support hijacking", http.StatusInternalServerError)
 		return
 	}
@@ -239,7 +236,7 @@ func (p *Proxy) tunnelConnect(w http.ResponseWriter, r *http.Request, host strin
 	clientConn, _, err := hijacker.Hijack()
 	if err != nil {
 		p.log("Error hijacking connection: %v", err)
-		targetConn.Close()
+		_ = targetConn.Close()
 		return
 	}
 
@@ -247,8 +244,8 @@ func (p *Proxy) tunnelConnect(w http.ResponseWriter, r *http.Request, host strin
 	_, err = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 	if err != nil {
 		p.log("Error sending CONNECT response: %v", err)
-		clientConn.Close()
-		targetConn.Close()
+		_ = clientConn.Close()
+		_ = targetConn.Close()
 		return
 	}
 
@@ -260,20 +257,22 @@ func (p *Proxy) tunnelConnect(w http.ResponseWriter, r *http.Request, host strin
 
 	go func() {
 		defer wg.Done()
-		io.Copy(targetConn, clientConn)
-		targetConn.Close()
+		_, _ = io.Copy(targetConn, clientConn)
+		_ = targetConn.Close()
 	}()
 
 	go func() {
 		defer wg.Done()
-		io.Copy(clientConn, targetConn)
-		clientConn.Close()
+		_, _ = io.Copy(clientConn, targetConn)
+		_ = clientConn.Close()
 	}()
 
 	wg.Wait()
 }
 
 // writeHTTPError writes an HTTP error response to a raw connection.
+//
+//nolint:unparam // statusCode is always the same value but function is intentionally generic
 func writeHTTPError(conn net.Conn, statusCode int, message string) {
 	resp := &http.Response{
 		StatusCode: statusCode,
@@ -284,6 +283,6 @@ func writeHTTPError(conn net.Conn, statusCode int, message string) {
 		Header:     make(http.Header),
 	}
 	resp.Header.Set("Content-Type", "text/plain")
-	resp.Write(conn)
-	conn.Write([]byte(message))
+	_ = resp.Write(conn)
+	_, _ = conn.Write([]byte(message))
 }

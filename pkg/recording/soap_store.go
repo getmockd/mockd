@@ -65,7 +65,7 @@ func (s *SOAPStore) Add(r *SOAPRecording) error {
 
 		// Remove from disk if persistent
 		if s.dataDir != "" {
-			os.Remove(s.recordingFilename(oldest))
+			_ = os.Remove(s.recordingFilename(oldest))
 		}
 	}
 
@@ -157,7 +157,7 @@ func (s *SOAPStore) Delete(id string) error {
 
 	// Remove from disk if persistent
 	if s.dataDir != "" {
-		os.Remove(s.recordingFilename(id))
+		_ = os.Remove(s.recordingFilename(id))
 	}
 
 	return nil
@@ -178,7 +178,7 @@ func (s *SOAPStore) Clear() int {
 		if err == nil {
 			for _, entry := range entries {
 				if strings.HasPrefix(entry.Name(), "soap_") && strings.HasSuffix(entry.Name(), ".json") {
-					os.Remove(filepath.Join(s.dataDir, entry.Name()))
+					_ = os.Remove(filepath.Join(s.dataDir, entry.Name()))
 				}
 			}
 		}
@@ -287,7 +287,7 @@ func (s *SOAPStore) loadFromDisk() error {
 		oldest := s.order[0]
 		delete(s.recordings, oldest)
 		s.order = s.order[1:]
-		os.Remove(s.recordingFilename(oldest))
+		_ = os.Remove(s.recordingFilename(oldest))
 	}
 
 	return nil

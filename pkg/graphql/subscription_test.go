@@ -71,7 +71,10 @@ func connectWS(t *testing.T, url string, subprotocol string) *websocket.Conn {
 		}
 	}
 
-	conn, _, err := websocket.Dial(ctx, wsURL, opts)
+	conn, resp, err := websocket.Dial(ctx, wsURL, opts)
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+	}
 	if err != nil {
 		t.Fatalf("websocket.Dial() error = %v", err)
 	}

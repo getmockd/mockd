@@ -39,10 +39,10 @@ func TestConnectionManager_Deregister(t *testing.T) {
 	defer cancel()
 
 	stream := &SSEStream{
-		ID:        "test-1",
-		MockID:    "mock-1",
-		ctx:       ctx,
-		cancel:    cancel,
+		ID:     "test-1",
+		MockID: "mock-1",
+		ctx:    ctx,
+		cancel: cancel,
 	}
 
 	_ = manager.Register(stream)
@@ -60,10 +60,10 @@ func TestConnectionManager_Get(t *testing.T) {
 	defer cancel()
 
 	stream := &SSEStream{
-		ID:        "test-1",
-		MockID:    "mock-1",
-		ctx:       ctx,
-		cancel:    cancel,
+		ID:     "test-1",
+		MockID: "mock-1",
+		ctx:    ctx,
+		cancel: cancel,
 	}
 
 	_ = manager.Register(stream)
@@ -71,7 +71,7 @@ func TestConnectionManager_Get(t *testing.T) {
 	// Get existing
 	found := manager.Get("test-1")
 	if found == nil {
-		t.Error("expected to find stream")
+		t.Fatal("expected to find stream")
 	}
 	if found.ID != "test-1" {
 		t.Errorf("expected ID 'test-1', got %q", found.ID)

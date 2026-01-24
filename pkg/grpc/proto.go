@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/linker"
@@ -290,8 +289,3 @@ func (p *ProtoSchema) MethodCount() int {
 
 // Ensure linker.File satisfies protoreflect.FileDescriptor at compile time.
 var _ protoreflect.FileDescriptor = (linker.File)(nil)
-
-// Helper to check if path contains well-known types
-func isWellKnownType(path string) bool {
-	return strings.HasPrefix(path, "google/protobuf/")
-}

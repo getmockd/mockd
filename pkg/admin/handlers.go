@@ -100,6 +100,11 @@ func (a *AdminAPI) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	version := a.version
+	if version == "" {
+		version = "dev"
+	}
+
 	writeJSON(w, http.StatusOK, ServerStatus{
 		Status:       engineStatus.Status,
 		HTTPPort:     0, // TODO: Get from engine config when available via HTTP
@@ -110,7 +115,7 @@ func (a *AdminAPI) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		ActiveMocks:  activeMocks,
 		RequestCount: engineStatus.RequestCount,
 		TLSEnabled:   false,
-		Version:      "0.2.0",
+		Version:      version,
 	})
 }
 
@@ -528,7 +533,11 @@ func (a *AdminAPI) handleStreamRequests(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// Use configured CORS settings instead of hardcoded "*"
+	origin := r.Header.Get("Origin")
+	if allowOrigin := a.corsConfig.getAllowOriginValue(origin); allowOrigin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+	}
 
 	// Get the flusher
 	flusher, ok := w.(http.Flusher)
@@ -538,7 +547,7 @@ func (a *AdminAPI) handleStreamRequests(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Send initial connection message
-	fmt.Fprintf(w, "event: connected\ndata: {\"message\": \"Connected to request stream\"}\n\n")
+	_, _ = fmt.Fprintf(w, "event: connected\ndata: {\"message\": \"Connected to request stream\"}\n\n")
 	flusher.Flush()
 
 	// Poll for request log updates
@@ -571,7 +580,7 @@ func (a *AdminAPI) handleStreamRequests(w http.ResponseWriter, r *http.Request) 
 				}
 
 				data, _ := json.Marshal(entry)
-				fmt.Fprintf(w, "event: request\ndata: %s\n\n", data)
+				_, _ = fmt.Fprintf(w, "event: request\ndata: %s\n\n", data)
 				flusher.Flush()
 
 				if i == 0 {

@@ -477,6 +477,93 @@ func TestBackpressureHandler_DefaultBufferSize(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_Concurrent_WaitStrategy(t *testing.T) {
+	// This test specifically exercises the Wait path with blocking to catch
+	// race conditions in the lock/unlock pattern.
+	config := &RateLimitConfig{
+		EventsPerSecond: 50,
+		BurstSize:       5, // Small burst to force waiting
+		Strategy:        RateLimitStrategyWait,
+	}
+
+	limiter := NewRateLimiter(config)
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var successCount int64
+	var mu sync.Mutex
+
+	// Launch many goroutines to trigger concurrent Wait calls
+	for i := 0; i < 30; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := limiter.Wait(ctx)
+			if err == nil {
+				mu.Lock()
+				successCount++
+				mu.Unlock()
+			}
+		}()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All goroutines completed successfully - no deadlock or panic
+		mu.Lock()
+		t.Logf("All %d goroutines completed, successes: %d", 30, successCount)
+		mu.Unlock()
+	case <-time.After(6 * time.Second):
+		t.Fatal("Test timed out - possible deadlock in Wait()")
+	}
+}
+
+func TestRateLimiter_Wait_ConcurrentMixedStrategies(t *testing.T) {
+	// Test that switching between wait and non-wait paths doesn't cause issues
+	config := &RateLimitConfig{
+		EventsPerSecond: 100,
+		BurstSize:       10,
+		Strategy:        RateLimitStrategyWait,
+	}
+
+	limiter := NewRateLimiter(config)
+	var wg sync.WaitGroup
+	ctx := context.Background()
+
+	// Run TryAcquire and Wait concurrently
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			limiter.TryAcquire()
+		}()
+		go func() {
+			defer wg.Done()
+			limiter.Wait(ctx)
+		}()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success - no race/panic
+	case <-time.After(5 * time.Second):
+		t.Fatal("Test timed out - possible deadlock")
+	}
+}
+
 func TestFormatFloat64(t *testing.T) {
 	tests := []struct {
 		input    float64

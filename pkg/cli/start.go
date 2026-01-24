@@ -171,7 +171,7 @@ Examples:
 		} else {
 			server.SetStore(persistentStore)
 			// Ensure store is closed on shutdown
-			defer persistentStore.Close()
+			defer func() { _ = persistentStore.Close() }()
 		}
 	}
 
@@ -194,7 +194,7 @@ Examples:
 	// Wait for engine management API to be healthy before loading mocks
 	ctx := context.Background()
 	if err := waitForEngineHealth(ctx, engClient, 10*time.Second); err != nil {
-		server.Stop()
+		_ = server.Stop()
 		return fmt.Errorf("engine management API did not become healthy: %w", err)
 	}
 
@@ -260,7 +260,7 @@ Examples:
 	}
 	adminAPI := admin.NewAdminAPI(sf.AdminPort, adminOpts...)
 	if err := adminAPI.Start(); err != nil {
-		server.Stop()
+		_ = server.Stop()
 		return fmt.Errorf("failed to start admin API: %w", err)
 	}
 
@@ -291,7 +291,7 @@ Examples:
 
 		// Ensure cleanup on shutdown
 		defer engineClient.Stop()
-		defer wsManager.StopAll()
+		defer func() { _ = wsManager.StopAll() }()
 
 		fmt.Printf("Engine mode: connected to admin at %s\n", *adminURL)
 	}
@@ -306,7 +306,7 @@ Examples:
 }
 
 // formatPortError formats a port conflict error with suggestions.
-func formatPortError(port int, err error) error {
+func formatPortError(port int, _ error) error {
 	return fmt.Errorf(`port %d already in use
 
 Suggestions:

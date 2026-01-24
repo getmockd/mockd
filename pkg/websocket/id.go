@@ -30,7 +30,7 @@ func GenerateConnectionID() string {
 
 	// Get random bytes (4 chars)
 	randomBytes := make([]byte, 4)
-	rand.Read(randomBytes)
+	_, _ = rand.Read(randomBytes)
 
 	return "conn-" + hex.EncodeToString(tsHex) + "-" + hex.EncodeToString(counterHex) + "-" + hex.EncodeToString(randomBytes)
 }

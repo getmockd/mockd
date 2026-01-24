@@ -185,6 +185,7 @@ Examples:
 	case "grpc-service":
 		fmt.Println("  grpcurl -plaintext localhost:50051 list")
 	case "mqtt-iot":
+		//nolint:misspell // mosquitto is the correct name of the MQTT broker software
 		fmt.Println("  mosquitto_sub -h localhost -p 1883 -t 'sensors/#'")
 	default:
 		fmt.Println("  curl http://localhost:4280/hello")

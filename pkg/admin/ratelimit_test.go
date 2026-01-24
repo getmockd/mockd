@@ -201,70 +201,154 @@ func TestRateLimiter_Middleware(t *testing.T) {
 }
 
 func TestRateLimiter_GetClientIP(t *testing.T) {
-	rl := NewRateLimiter(10, 10)
-	defer rl.Stop()
+	t.Run("without trusted proxies", func(t *testing.T) {
+		// By default, proxy headers are NOT trusted (secure default)
+		rl := NewRateLimiter(10, 10)
+		defer rl.Stop()
 
-	tests := []struct {
-		name       string
-		remoteAddr string
-		xff        string
-		xri        string
-		expected   string
-	}{
-		{
-			name:       "uses RemoteAddr when no proxy headers",
-			remoteAddr: "192.168.1.1:12345",
-			expected:   "192.168.1.1",
-		},
-		{
-			name:       "uses X-Forwarded-For when present",
-			remoteAddr: "10.0.0.1:12345",
-			xff:        "203.0.113.195",
-			expected:   "203.0.113.195",
-		},
-		{
-			name:       "uses first IP from X-Forwarded-For chain",
-			remoteAddr: "10.0.0.1:12345",
-			xff:        "203.0.113.195, 70.41.3.18, 150.172.238.178",
-			expected:   "203.0.113.195",
-		},
-		{
-			name:       "uses X-Real-IP when present",
-			remoteAddr: "10.0.0.1:12345",
-			xri:        "203.0.113.195",
-			expected:   "203.0.113.195",
-		},
-		{
-			name:       "prefers X-Forwarded-For over X-Real-IP",
-			remoteAddr: "10.0.0.1:12345",
-			xff:        "203.0.113.195",
-			xri:        "70.41.3.18",
-			expected:   "203.0.113.195",
-		},
-		{
-			name:       "handles RemoteAddr without port",
-			remoteAddr: "192.168.1.1",
-			expected:   "192.168.1.1",
-		},
-	}
+		tests := []struct {
+			name       string
+			remoteAddr string
+			xff        string
+			xri        string
+			expected   string
+		}{
+			{
+				name:       "uses RemoteAddr when no proxy headers",
+				remoteAddr: "192.168.1.1:12345",
+				expected:   "192.168.1.1",
+			},
+			{
+				name:       "ignores X-Forwarded-For without trusted proxy",
+				remoteAddr: "10.0.0.1:12345",
+				xff:        "203.0.113.195",
+				expected:   "10.0.0.1", // Should NOT trust XFF
+			},
+			{
+				name:       "ignores X-Real-IP without trusted proxy",
+				remoteAddr: "10.0.0.1:12345",
+				xri:        "203.0.113.195",
+				expected:   "10.0.0.1", // Should NOT trust XRI
+			},
+			{
+				name:       "handles RemoteAddr without port",
+				remoteAddr: "192.168.1.1",
+				expected:   "192.168.1.1",
+			},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/", nil)
-			req.RemoteAddr = tt.remoteAddr
-			if tt.xff != "" {
-				req.Header.Set("X-Forwarded-For", tt.xff)
-			}
-			if tt.xri != "" {
-				req.Header.Set("X-Real-IP", tt.xri)
-			}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				req := httptest.NewRequest("GET", "/", nil)
+				req.RemoteAddr = tt.remoteAddr
+				if tt.xff != "" {
+					req.Header.Set("X-Forwarded-For", tt.xff)
+				}
+				if tt.xri != "" {
+					req.Header.Set("X-Real-IP", tt.xri)
+				}
 
-			got := rl.getClientIP(req)
-			if got != tt.expected {
-				t.Errorf("getClientIP() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
+				got := rl.getClientIP(req)
+				if got != tt.expected {
+					t.Errorf("getClientIP() = %v, want %v", got, tt.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("with trusted proxies configured", func(t *testing.T) {
+		// Create rate limiter with trusted proxy CIDR
+		rl := &RateLimiter{
+			rps:       10,
+			burst:     10,
+			buckets:   make(map[string]*tokenBucket),
+			stopCh:    make(chan struct{}),
+			stoppedCh: make(chan struct{}),
+		}
+		WithTrustedProxies([]string{"10.0.0.0/8"})(rl)
+		go rl.cleanup()
+		defer rl.Stop()
+
+		tests := []struct {
+			name       string
+			remoteAddr string
+			xff        string
+			xri        string
+			expected   string
+		}{
+			{
+				name:       "uses X-Forwarded-For from trusted proxy",
+				remoteAddr: "10.0.0.1:12345", // In trusted range
+				xff:        "203.0.113.195",
+				expected:   "203.0.113.195",
+			},
+			{
+				name:       "uses first IP from X-Forwarded-For chain",
+				remoteAddr: "10.0.0.1:12345",
+				xff:        "203.0.113.195, 70.41.3.18, 150.172.238.178",
+				expected:   "203.0.113.195",
+			},
+			{
+				name:       "uses X-Real-IP from trusted proxy",
+				remoteAddr: "10.0.0.1:12345",
+				xri:        "203.0.113.195",
+				expected:   "203.0.113.195",
+			},
+			{
+				name:       "prefers X-Forwarded-For over X-Real-IP",
+				remoteAddr: "10.0.0.1:12345",
+				xff:        "203.0.113.195",
+				xri:        "70.41.3.18",
+				expected:   "203.0.113.195",
+			},
+			{
+				name:       "ignores headers from untrusted source",
+				remoteAddr: "192.168.1.1:12345", // NOT in trusted range
+				xff:        "203.0.113.195",
+				expected:   "192.168.1.1",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				req := httptest.NewRequest("GET", "/", nil)
+				req.RemoteAddr = tt.remoteAddr
+				if tt.xff != "" {
+					req.Header.Set("X-Forwarded-For", tt.xff)
+				}
+				if tt.xri != "" {
+					req.Header.Set("X-Real-IP", tt.xri)
+				}
+
+				got := rl.getClientIP(req)
+				if got != tt.expected {
+					t.Errorf("getClientIP() = %v, want %v", got, tt.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("with trust all proxies", func(t *testing.T) {
+		rl := &RateLimiter{
+			rps:       10,
+			burst:     10,
+			buckets:   make(map[string]*tokenBucket),
+			stopCh:    make(chan struct{}),
+			stoppedCh: make(chan struct{}),
+		}
+		WithTrustAllProxies()(rl)
+		go rl.cleanup()
+		defer rl.Stop()
+
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = "192.168.1.1:12345"
+		req.Header.Set("X-Forwarded-For", "203.0.113.195")
+
+		got := rl.getClientIP(req)
+		if got != "203.0.113.195" {
+			t.Errorf("getClientIP() = %v, want 203.0.113.195", got)
+		}
+	})
 }
 
 func TestRateLimiter_Cleanup(t *testing.T) {

@@ -22,7 +22,7 @@ func (a *AdminAPI) handleStateOverview(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(overview)
+	_ = json.NewEncoder(w).Encode(overview)
 }
 
 // handleStateReset resets stateful resources to their seed data.
@@ -44,7 +44,7 @@ func (a *AdminAPI) handleStateReset(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "reset"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "reset"})
 }
 
 // handleListStateResources returns a list of all registered stateful resources.
@@ -64,7 +64,7 @@ func (a *AdminAPI) handleListStateResources(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(overview.Resources)
+	_ = json.NewEncoder(w).Encode(overview.Resources)
 }
 
 // handleGetStateResource returns details about a specific stateful resource.
@@ -79,7 +79,7 @@ func (a *AdminAPI) handleGetStateResource(w http.ResponseWriter, r *http.Request
 	name := r.PathValue("name")
 	if name == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "resource name required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resource name required"})
 		return
 	}
 
@@ -87,13 +87,13 @@ func (a *AdminAPI) handleGetStateResource(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "resource": name})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "resource": name})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resource)
+	_ = json.NewEncoder(w).Encode(resource)
 }
 
 // handleClearStateResource clears all items from a specific resource (does not restore seed data).
@@ -108,18 +108,18 @@ func (a *AdminAPI) handleClearStateResource(w http.ResponseWriter, r *http.Reque
 	name := r.PathValue("name")
 	if name == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "resource name required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resource name required"})
 		return
 	}
 
 	if err := a.localEngine.ClearStateResource(ctx, name); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "resource": name})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "resource": name})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{"cleared": true})
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"cleared": true})
 }

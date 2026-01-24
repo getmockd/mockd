@@ -1,3 +1,4 @@
+// Package integration provides integration tests for the mockd server.
 package integration
 
 import (

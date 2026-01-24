@@ -72,7 +72,7 @@ func WritePIDFile(path string, info *PIDFile) error {
 
 	// Rename to final path
 	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename PID file: %w", err)
 	}
 

@@ -225,16 +225,24 @@ func (h *MessageHook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Pac
 		if matchTopic(tc.Topic, topic) && tc.OnPublish != nil {
 			// Handle forwarding
 			if tc.OnPublish.Forward != "" {
-				go func(forwardTopic string, data []byte) {
-					_ = h.broker.Publish(forwardTopic, data, byte(tc.QoS), tc.Retain)
-				}(tc.OnPublish.Forward, payload)
+				go func(forwardTopic string, data []byte, qos byte, retain bool) {
+					if err := h.broker.Publish(forwardTopic, data, qos, retain); err != nil {
+						h.broker.log.Error("failed to forward message",
+							"topic", forwardTopic,
+							"error", err)
+					}
+				}(tc.OnPublish.Forward, payload, byte(tc.QoS), tc.Retain)
 			}
 
 			// Handle response
 			if tc.OnPublish.Response != nil {
-				go func(resp *MessageConfig) {
-					_ = h.broker.Publish(topic, []byte(resp.Payload), byte(tc.QoS), tc.Retain)
-				}(tc.OnPublish.Response)
+				go func(respTopic string, resp *MessageConfig, qos byte, retain bool) {
+					if err := h.broker.Publish(respTopic, []byte(resp.Payload), qos, retain); err != nil {
+						h.broker.log.Error("failed to publish response",
+							"topic", respTopic,
+							"error", err)
+					}
+				}(topic, tc.OnPublish.Response, byte(tc.QoS), tc.Retain)
 			}
 		}
 	}
@@ -387,10 +395,10 @@ func (h *MessageHook) OnUnsubscribed(cl *mqtt.Client, pk packets.Packet) {
 }
 
 // recordMQTTMetrics records MQTT message metrics.
-func recordMQTTMetrics(method, topic string, duration time.Duration) {
+func recordMQTTMetrics(_, topic string, duration time.Duration) {
 	if metrics.RequestsTotal != nil {
 		if vec, err := metrics.RequestsTotal.WithLabels("mqtt", topic, "ok"); err == nil {
-			vec.Inc()
+			_ = vec.Inc()
 		}
 	}
 	if metrics.RequestDuration != nil {

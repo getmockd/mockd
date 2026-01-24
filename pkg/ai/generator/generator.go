@@ -52,7 +52,7 @@ func (g *Generator) EnhanceOpenAPISchema(ctx context.Context, schema *openapi3.S
 
 	resp, err := g.provider.Generate(ctx, req)
 	if err != nil {
-		// Fall back to basic generation if AI fails
+		// nolint:nilerr // intentionally returning fallback value when AI generation fails
 		return g.generateFallbackValue(schema), nil
 	}
 
@@ -75,7 +75,8 @@ func (g *Generator) EnhanceOpenAPISchemaRecursive(ctx context.Context, schema *o
 	}
 }
 
-func (g *Generator) enhanceObject(ctx context.Context, schema *openapi3.Schema, fieldName string) (map[string]interface{}, error) {
+//nolint:unparam // error return kept for API consistency with other enhance methods
+func (g *Generator) enhanceObject(ctx context.Context, schema *openapi3.Schema, _ string) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
 	for propName, propRef := range schema.Properties {
@@ -94,6 +95,7 @@ func (g *Generator) enhanceObject(ctx context.Context, schema *openapi3.Schema, 
 	return result, nil
 }
 
+//nolint:unparam // error is always nil but kept for consistency with interface
 func (g *Generator) enhanceArray(ctx context.Context, schema *openapi3.Schema, fieldName string) ([]interface{}, error) {
 	if schema.Items == nil || schema.Items.Value == nil {
 		return []interface{}{}, nil

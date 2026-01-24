@@ -33,11 +33,8 @@ func validateFilePath(path, fieldName string) error {
 		return nil
 	}
 
-	// Check if path is absolute or relative
-	if !filepath.IsAbs(path) {
-		// Relative paths are allowed, but we check if the file exists
-		// from the current working directory
-	}
+	// Both absolute and relative paths are allowed
+	// Relative paths are resolved from the current working directory
 
 	// Check if file exists
 	info, err := os.Stat(path)

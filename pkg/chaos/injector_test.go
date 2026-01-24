@@ -642,7 +642,7 @@ func TestCorruptingWriter(t *testing.T) {
 	}
 
 	// Data should be corrupted (different from original)
-	if string(w.Body.Bytes()) == string(data) {
+	if w.Body.String() == string(data) {
 		t.Error("Write() with 100% corruption rate should corrupt data")
 	}
 }

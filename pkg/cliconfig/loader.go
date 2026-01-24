@@ -33,7 +33,8 @@ func FindLocalConfig() (string, error) {
 func FindGlobalConfig() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return "", nil // No config dir available
+		//nolint:nilerr // intentionally returning empty string when no config dir is available
+		return "", nil
 	}
 	path := filepath.Join(configDir, GlobalConfigDir, GlobalConfigFileName)
 	if _, err := os.Stat(path); err == nil {

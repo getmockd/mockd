@@ -154,7 +154,8 @@ func (d *DirectoryLoader) findConfigFiles() ([]string, error) {
 
 	walkFn := func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // Skip files we can't access
+			//nolint:nilerr // intentionally skipping files we cannot access during directory walk
+			return nil
 		}
 
 		// Skip directories (but recurse into them)

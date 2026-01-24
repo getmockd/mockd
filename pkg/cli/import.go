@@ -184,7 +184,7 @@ Suggestions:
 }
 
 // formatImportError formats import errors with helpful suggestions.
-func formatImportError(err error, format portability.Format, source string) error {
+func formatImportError(err error, format portability.Format, _ string) error {
 	errStr := err.Error()
 
 	// Check for common validation errors
@@ -228,9 +228,7 @@ Or for SSE streaming:
 	}
 
 	if strings.Contains(errStr, "duplicate mock ID") {
-		return fmt.Errorf(`import failed: %w
-
-Each mock must have a unique 'id'. Check for duplicates.`, err)
+		return fmt.Errorf(`import failed: %w - each mock must have a unique 'id', check for duplicates`, err)
 	}
 
 	if strings.Contains(errStr, "failed to parse") {

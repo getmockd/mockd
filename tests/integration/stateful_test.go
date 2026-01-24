@@ -30,10 +30,12 @@ type statefulResourceConfig struct {
 
 // Test helpers
 
+//nolint:unused // kept for future tests
 func createTestStore() *stateful.StateStore {
 	return stateful.NewStateStore()
 }
 
+//nolint:unused // kept for future tests
 func createTestResource(store *stateful.StateStore, name, basePath string, seedData []map[string]interface{}) error {
 	cfg := &stateful.ResourceConfig{
 		Name:     name,
@@ -43,6 +45,7 @@ func createTestResource(store *stateful.StateStore, name, basePath string, seedD
 	return store.Register(cfg)
 }
 
+//nolint:unused // kept for future tests
 func makeJSONRequest(t *testing.T, handler http.Handler, method, path string, body interface{}) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -65,6 +68,7 @@ func makeJSONRequest(t *testing.T, handler http.Handler, method, path string, bo
 	return rec
 }
 
+//nolint:unused // kept for future tests
 func parseJSONResponse(t *testing.T, rec *httptest.ResponseRecorder, v interface{}) {
 	t.Helper()
 	if err := json.NewDecoder(rec.Body).Decode(v); err != nil {

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -26,6 +25,7 @@ import (
 	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/mqtt"
 	"github.com/getmockd/mockd/pkg/oauth"
+	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/store/file"
 	"github.com/getmockd/mockd/pkg/tracing"
@@ -205,7 +205,7 @@ func RunServe(args []string) error {
 		return err
 	}
 	if sctx.store != nil {
-		defer sctx.store.Close()
+		defer func() { _ = sctx.store.Close() }()
 	}
 
 	// Configure protocol handlers (MQTT, chaos injection)
@@ -482,6 +482,8 @@ func checkPortConflicts(f *serveFlags) error {
 }
 
 // buildServerConfiguration creates the server configuration from parsed flags.
+//
+//nolint:unparam // error is always nil but kept for future validation
 func buildServerConfiguration(f *serveFlags) (*config.ServerConfiguration, error) {
 	serverCfg := &config.ServerConfiguration{
 		HTTPPort:      f.port,
@@ -568,19 +570,9 @@ func buildServerConfiguration(f *serveFlags) (*config.ServerConfiguration, error
 	return serverCfg, nil
 }
 
-// setupTLSConfig creates TLS configuration from server settings.
-// Returns nil if TLS is not enabled.
-func setupTLSConfig(cfg *config.ServerConfiguration) (*tls.Config, error) {
-	if cfg.TLS == nil || !cfg.TLS.Enabled {
-		return nil, nil
-	}
-
-	// TLS configuration is handled by the engine server itself
-	// This function is a placeholder for future custom TLS setup
-	return nil, nil
-}
-
 // initializePersistentStore sets up the file store for endpoint persistence.
+//
+//nolint:unparam // error is always nil but kept for future validation
 func initializePersistentStore(sctx *serveContext) error {
 	f := sctx.flags
 
@@ -766,33 +758,56 @@ func startServers(sctx *serveContext) error {
 	sctx.adminAPI = admin.NewAdminAPI(f.adminPort, adminOpts...)
 	sctx.adminAPI.SetLogger(sctx.log.With("component", "admin"))
 	if err := sctx.adminAPI.Start(); err != nil {
-		sctx.server.Stop()
+		_ = sctx.server.Stop()
 		return fmt.Errorf("failed to start admin API: %w", err)
+	}
+
+	// Wire stream recording to WebSocket and SSE handlers
+	// This allows recording sessions started via the admin API to capture frames/events
+	if recMgr := sctx.adminAPI.StreamRecordingManager(); recMgr != nil {
+		if recStore := recMgr.Store(); recStore != nil {
+			hookFactory := recording.NewFileStoreHookFactory(recStore)
+
+			// Wire WebSocket recording
+			wsManager := sctx.server.Handler().WebSocketManager()
+			wsManager.SetRecordingHookFactory(hookFactory)
+
+			// Wire SSE recording
+			sseHandler := sctx.server.Handler().SSEHandler()
+			sseHandler.SetRecordingHookFactory(hookFactory.CreateSSEHookFactory())
+		}
 	}
 
 	// Create engine client and wait for health
 	engClient := engineclient.New(engineURL)
 	if err := waitForEngineHealth(sctx.ctx, engClient, 10*time.Second); err != nil {
-		sctx.server.Stop()
-		sctx.adminAPI.Stop()
+		_ = sctx.server.Stop()
+		_ = sctx.adminAPI.Stop()
 		return fmt.Errorf("engine control API did not become healthy: %w", err)
 	}
 
 	// Write PID file if in detach mode
 	if f.detach {
-		mocks, _ := engClient.ListMocks(sctx.ctx)
-		mocksLoaded := len(mocks)
-		if err := writePIDFileForServe(f.pidFile, "dev", f.port, f.httpsPort, f.adminPort, f.configFile, mocksLoaded); err != nil {
-			sctx.server.Stop()
-			sctx.adminAPI.Stop()
+		mocksCount, _ := engClient.ListMocks(sctx.ctx)
+		pidMocksLoaded := len(mocksCount)
+		if stateOverview, err := engClient.GetStateOverview(sctx.ctx); err == nil {
+			pidMocksLoaded += stateOverview.Total
+		}
+		if err := writePIDFileForServe(f.pidFile, "dev", f.port, f.httpsPort, f.adminPort, f.configFile, pidMocksLoaded); err != nil {
+			_ = sctx.server.Stop()
+			_ = sctx.adminAPI.Stop()
 			return fmt.Errorf("failed to write PID file: %w", err)
 		}
 	}
 
-	// Print startup message
+	// Print startup message - count mocks and stateful resources
 	mocks, _ := engClient.ListMocks(sctx.ctx)
 	mocksLoaded := len(mocks)
-	printServeStartupMessage(f.port, f.adminPort, f.httpsPort, f.register, f.pull, mocksLoaded)
+	statefulCount := 0
+	if stateOverview, err := engClient.GetStateOverview(sctx.ctx); err == nil {
+		statefulCount = stateOverview.Total
+	}
+	printServeStartupMessage(f.port, f.adminPort, f.httpsPort, f.register, f.pull, mocksLoaded, statefulCount)
 
 	return nil
 }
@@ -892,13 +907,23 @@ func cachePulledContent(cacheDir, uri string, content []byte) error {
 }
 
 // printServeStartupMessage prints the server startup information.
-func printServeStartupMessage(httpPort, adminPort, httpsPort int, isRuntime bool, pullURI string, mocksLoaded int) {
-	if mocksLoaded == 0 && !isRuntime && pullURI == "" {
+func printServeStartupMessage(httpPort, adminPort, httpsPort int, isRuntime bool, pullURI string, mocksLoaded, statefulCount int) {
+	if mocksLoaded == 0 && statefulCount == 0 && !isRuntime && pullURI == "" {
 		// No mocks configured - show welcome message
 		printWelcomeMessage(httpPort, adminPort)
 	} else {
 		// Normal startup message
-		fmt.Printf("mockd server started (%d mocks loaded)\n", mocksLoaded)
+		parts := []string{}
+		if mocksLoaded > 0 {
+			parts = append(parts, fmt.Sprintf("%d mocks", mocksLoaded))
+		}
+		if statefulCount > 0 {
+			parts = append(parts, fmt.Sprintf("%d stateful resources", statefulCount))
+		}
+		if len(parts) == 0 {
+			parts = append(parts, "no mocks")
+		}
+		fmt.Printf("mockd server started (%s)\n", strings.Join(parts, ", "))
 		fmt.Println()
 		fmt.Printf("  Mock server: http://localhost:%d\n", httpPort)
 		if httpsPort > 0 {
@@ -938,7 +963,7 @@ func printWelcomeMessage(mockPort, adminPort int) {
 }
 
 // daemonize re-executes the current process as a background daemon.
-func daemonize(args []string, pidFilePath string, httpPort, adminPort int) error {
+func daemonize(_ []string, pidFilePath string, httpPort, adminPort int) error {
 	// Build the command with same arguments
 	cmd := exec.Command(os.Args[0], os.Args[1:]...)
 	cmd.Env = append(os.Environ(), "MOCKD_CHILD=1")

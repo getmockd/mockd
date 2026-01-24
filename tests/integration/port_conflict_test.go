@@ -88,7 +88,7 @@ func setupPortConflictServer(t *testing.T) *portConflictTestBundle {
 }
 
 // createMQTTMock helper to create an MQTT mock via the admin API
-func createMQTTMock(t *testing.T, adminPort int, name string, mqttPort int, workspaceID string) (*http.Response, map[string]interface{}) {
+func createMQTTMock(t *testing.T, adminPort int, name string, mqttPort int, workspaceID string) (int, map[string]interface{}) {
 	mockData := map[string]interface{}{
 		"type":        "mqtt",
 		"name":        name,
@@ -106,18 +106,18 @@ func createMQTTMock(t *testing.T, adminPort int, name string, mqttPort int, work
 		bytes.NewReader(body),
 	)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
 
 	var respData map[string]interface{}
 	json.Unmarshal(respBody, &respData)
 
-	return resp, respData
+	return resp.StatusCode, respData
 }
 
 // createGRPCMock helper to create a gRPC mock via the admin API
-func createGRPCMock(t *testing.T, adminPort int, name string, grpcPort int, workspaceID string) (*http.Response, map[string]interface{}) {
+func createGRPCMock(t *testing.T, adminPort int, name string, grpcPort int, workspaceID string) (int, map[string]interface{}) {
 	mockData := map[string]interface{}{
 		"type":        "grpc",
 		"name":        name,
@@ -136,18 +136,18 @@ func createGRPCMock(t *testing.T, adminPort int, name string, grpcPort int, work
 		bytes.NewReader(body),
 	)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
 
 	var respData map[string]interface{}
 	json.Unmarshal(respBody, &respData)
 
-	return resp, respData
+	return resp.StatusCode, respData
 }
 
 // updateMock helper to update a mock via the admin API
-func updateMock(t *testing.T, adminPort int, mockID string, mockData map[string]interface{}) (*http.Response, map[string]interface{}) {
+func updateMock(t *testing.T, adminPort int, mockID string, mockData map[string]interface{}) (int, map[string]interface{}) {
 	body, _ := json.Marshal(mockData)
 
 	req, err := http.NewRequest("PUT", fmt.Sprintf("http://localhost:%d/mocks/%s", adminPort, mockID), bytes.NewReader(body))
@@ -156,14 +156,14 @@ func updateMock(t *testing.T, adminPort int, mockID string, mockData map[string]
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
 
 	var respData map[string]interface{}
 	json.Unmarshal(respBody, &respData)
 
-	return resp, respData
+	return resp.StatusCode, respData
 }
 
 // ============================================================================
@@ -177,15 +177,15 @@ func TestPortConflict_CreateMQTT_SamePort_SameWorkspace(t *testing.T) {
 	mqttPort := getUniquePort()
 
 	// Create first MQTT mock
-	resp1, data1 := createMQTTMock(t, bundle.AdminPort, "IoT Sensor Broker", mqttPort, "local")
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode)
+	status1, data1 := createMQTTMock(t, bundle.AdminPort, "IoT Sensor Broker", mqttPort, "local")
+	assert.Equal(t, http.StatusCreated, status1)
 	assert.NotEmpty(t, data1["id"])
 	firstMockID := data1["id"].(string)
 
 	// Create second MQTT mock on same port - should MERGE into the first mock
 	// gRPC/MQTT mocks on the same port (same protocol, same workspace) get merged
-	resp2, data2 := createMQTTMock(t, bundle.AdminPort, "Second Sensor Broker", mqttPort, "local")
-	assert.Equal(t, http.StatusOK, resp2.StatusCode, "Second MQTT mock on same port should be merged")
+	status2, data2 := createMQTTMock(t, bundle.AdminPort, "Second Sensor Broker", mqttPort, "local")
+	assert.Equal(t, http.StatusOK, status2, "Second MQTT mock on same port should be merged")
 	assert.Equal(t, "merged", data2["action"])
 	assert.Equal(t, firstMockID, data2["targetMockId"], "Should merge into first mock")
 	assert.Contains(t, data2["message"].(string), "Merged into existing MQTT broker")
@@ -198,20 +198,20 @@ func TestPortConflict_CreateMQTT_SamePort_DifferentWorkspace(t *testing.T) {
 	mqttPort := getUniquePort()
 
 	// Create first MQTT mock in workspace-1
-	resp1, data1 := createMQTTMock(t, bundle.AdminPort, "Workspace 1 Broker", mqttPort, "workspace-1")
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode)
+	status1, data1 := createMQTTMock(t, bundle.AdminPort, "Workspace 1 Broker", mqttPort, "workspace-1")
+	assert.Equal(t, http.StatusCreated, status1)
 	assert.NotEmpty(t, data1["id"])
 
 	// Create second MQTT mock on same port in a different workspace
 	// Different workspaces don't share an engine by default, so no conflict at admin level.
 	// But the engine will fail to bind if the port is actually in use.
 	// In local-engine mode with isolated workspaces, this succeeds at admin layer.
-	resp2, data2 := createMQTTMock(t, bundle.AdminPort, "Workspace 2 Broker", mqttPort, "workspace-2")
+	status2, data2 := createMQTTMock(t, bundle.AdminPort, "Workspace 2 Broker", mqttPort, "workspace-2")
 	// The admin-level check only looks at same-workspace or sibling workspaces on same engine.
 	// Different workspaces = different scope, so admin allows it.
 	// But the engine will fail to start the second broker (port already bound).
 	// This results in port_unavailable error from the engine.
-	assert.Equal(t, http.StatusConflict, resp2.StatusCode, "Engine should fail to bind same port twice")
+	assert.Equal(t, http.StatusConflict, status2, "Engine should fail to bind same port twice")
 	assert.Equal(t, "port_unavailable", data2["error"])
 }
 
@@ -227,13 +227,13 @@ func TestPortConflict_CreateMQTT_DifferentPort_SameWorkspace(t *testing.T) {
 	}
 
 	// Create first MQTT mock
-	resp1, data1 := createMQTTMock(t, bundle.AdminPort, "Broker 1", mqttPort1, "local")
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode)
+	status1, data1 := createMQTTMock(t, bundle.AdminPort, "Broker 1", mqttPort1, "local")
+	assert.Equal(t, http.StatusCreated, status1)
 	assert.NotEmpty(t, data1["id"])
 
 	// Create second MQTT mock on different port - should succeed
-	resp2, data2 := createMQTTMock(t, bundle.AdminPort, "Broker 2", mqttPort2, "local")
-	assert.Equal(t, http.StatusCreated, resp2.StatusCode)
+	status2, data2 := createMQTTMock(t, bundle.AdminPort, "Broker 2", mqttPort2, "local")
+	assert.Equal(t, http.StatusCreated, status2)
 	assert.NotEmpty(t, data2["id"])
 }
 
@@ -244,13 +244,13 @@ func TestPortConflict_CreateGRPC_ConflictsWithMQTT(t *testing.T) {
 	port := getUniquePort()
 
 	// Create MQTT mock first
-	resp1, data1 := createMQTTMock(t, bundle.AdminPort, "MQTT Broker", port, "local")
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode)
+	status1, data1 := createMQTTMock(t, bundle.AdminPort, "MQTT Broker", port, "local")
+	assert.Equal(t, http.StatusCreated, status1)
 	assert.NotEmpty(t, data1["id"])
 
 	// Try to create gRPC mock on same port - should fail (cross-protocol conflict)
-	resp2, data2 := createGRPCMock(t, bundle.AdminPort, "gRPC Server", port, "local")
-	assert.Equal(t, http.StatusConflict, resp2.StatusCode)
+	status2, data2 := createGRPCMock(t, bundle.AdminPort, "gRPC Server", port, "local")
+	assert.Equal(t, http.StatusConflict, status2)
 	assert.Equal(t, "port_conflict", data2["error"])
 	// Error message now says protocol mismatch
 	assert.Contains(t, data2["message"].(string), "mqtt")
@@ -268,19 +268,19 @@ func TestPortConflict_CreateMQTT_ConflictsWithGRPC(t *testing.T) {
 	// won't actually start. The mock will be stored but non-functional.
 	// The Admin-level port conflict check queries from the engine, not the dataStore,
 	// so it won't see this non-running gRPC mock.
-	resp1, data1 := createGRPCMock(t, bundle.AdminPort, "gRPC Server", port, "local")
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode)
+	status1, data1 := createGRPCMock(t, bundle.AdminPort, "gRPC Server", port, "local")
+	assert.Equal(t, http.StatusCreated, status1)
 	assert.NotEmpty(t, data1["id"])
 
 	// Since the gRPC mock couldn't actually bind the port (invalid proto),
 	// the MQTT mock CAN successfully bind to it.
 	// This test documents the current behavior - for true cross-protocol conflict
 	// detection, the admin layer would need to query the dataStore as fallback.
-	resp2, data2 := createMQTTMock(t, bundle.AdminPort, "MQTT Broker", port, "local")
+	status2, data2 := createMQTTMock(t, bundle.AdminPort, "MQTT Broker", port, "local")
 
 	// In current implementation: MQTT succeeds because gRPC didn't actually bind the port
 	// This is expected behavior for gRPC mocks with invalid proto files
-	assert.Equal(t, http.StatusCreated, resp2.StatusCode, "MQTT can bind port when gRPC mock failed to start (invalid proto)")
+	assert.Equal(t, http.StatusCreated, status2, "MQTT can bind port when gRPC mock failed to start (invalid proto)")
 	assert.NotEmpty(t, data2["id"])
 
 	// If we wanted true cross-protocol conflict detection, we'd need to also check dataStore
@@ -298,11 +298,11 @@ func TestPortConflict_UpdateMock_ToConflictingPort(t *testing.T) {
 	}
 
 	// Create two MQTT mocks on different ports
-	resp1, _ := createMQTTMock(t, bundle.AdminPort, "Broker 1", port1, "local")
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode)
+	status1, _ := createMQTTMock(t, bundle.AdminPort, "Broker 1", port1, "local")
+	assert.Equal(t, http.StatusCreated, status1)
 
-	resp2, data2 := createMQTTMock(t, bundle.AdminPort, "Broker 2", port2, "local")
-	assert.Equal(t, http.StatusCreated, resp2.StatusCode)
+	status2, data2 := createMQTTMock(t, bundle.AdminPort, "Broker 2", port2, "local")
+	assert.Equal(t, http.StatusCreated, status2)
 	mockID2 := data2["id"].(string)
 
 	// Update Broker 2 to use port1 - should FAIL
@@ -318,8 +318,8 @@ func TestPortConflict_UpdateMock_ToConflictingPort(t *testing.T) {
 			"port": port1, // Try to use Broker 1's port
 		},
 	}
-	resp3, data3 := updateMock(t, bundle.AdminPort, mockID2, updateData)
-	assert.Equal(t, http.StatusConflict, resp3.StatusCode, "Updating to conflicting port should fail")
+	status3, data3 := updateMock(t, bundle.AdminPort, mockID2, updateData)
+	assert.Equal(t, http.StatusConflict, status3, "Updating to conflicting port should fail")
 	assert.Equal(t, "port_conflict", data3["error"])
 	// Error message mentions either the name or the ID of the conflicting mock
 	assert.Contains(t, data3["message"].(string), "Broker 1")
@@ -332,8 +332,8 @@ func TestPortConflict_UpdateMock_KeepsSamePort(t *testing.T) {
 	mqttPort := getUniquePort()
 
 	// Create MQTT mock
-	resp1, data1 := createMQTTMock(t, bundle.AdminPort, "My Broker", mqttPort, "local")
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode)
+	status1, data1 := createMQTTMock(t, bundle.AdminPort, "My Broker", mqttPort, "local")
+	assert.Equal(t, http.StatusCreated, status1)
 	mockID := data1["id"].(string)
 
 	// Update the mock but keep the same port - should succeed
@@ -346,8 +346,8 @@ func TestPortConflict_UpdateMock_KeepsSamePort(t *testing.T) {
 			"port": mqttPort, // Same port is OK
 		},
 	}
-	resp2, data2 := updateMock(t, bundle.AdminPort, mockID, updateData)
-	assert.Equal(t, http.StatusOK, resp2.StatusCode)
+	status2, data2 := updateMock(t, bundle.AdminPort, mockID, updateData)
+	assert.Equal(t, http.StatusOK, status2)
 	assert.Equal(t, "My Broker Renamed", data2["name"])
 }
 
@@ -362,8 +362,8 @@ func TestPortConflict_UpdateMock_ToNewUnusedPort(t *testing.T) {
 	}
 
 	// Create MQTT mock on port1
-	resp1, data1 := createMQTTMock(t, bundle.AdminPort, "My Broker", port1, "local")
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode)
+	status1, data1 := createMQTTMock(t, bundle.AdminPort, "My Broker", port1, "local")
+	assert.Equal(t, http.StatusCreated, status1)
 	mockID := data1["id"].(string)
 
 	// Update to port2 (unused) - should succeed
@@ -376,8 +376,8 @@ func TestPortConflict_UpdateMock_ToNewUnusedPort(t *testing.T) {
 			"port": port2, // New port
 		},
 	}
-	resp2, data2 := updateMock(t, bundle.AdminPort, mockID, updateData)
-	assert.Equal(t, http.StatusOK, resp2.StatusCode)
+	status2, data2 := updateMock(t, bundle.AdminPort, mockID, updateData)
+	assert.Equal(t, http.StatusOK, status2)
 	assert.NotNil(t, data2["mqtt"])
 }
 
@@ -438,8 +438,8 @@ func TestPortConflict_MultipleGRPCMocks_DifferentPorts(t *testing.T) {
 	// Create three gRPC mocks on different ports - all should succeed
 	for i, port := range ports {
 		name := fmt.Sprintf("gRPC Server %d", i+1)
-		resp, data := createGRPCMock(t, bundle.AdminPort, name, port, "local")
-		assert.Equal(t, http.StatusCreated, resp.StatusCode, "Failed to create %s", name)
+		status, data := createGRPCMock(t, bundle.AdminPort, name, port, "local")
+		assert.Equal(t, http.StatusCreated, status, "Failed to create %s", name)
 		assert.NotEmpty(t, data["id"])
 	}
 }
@@ -449,7 +449,7 @@ func TestPortConflict_MultipleGRPCMocks_DifferentPorts(t *testing.T) {
 // ============================================================================
 
 // bulkCreateMocks helper to bulk create mocks via the admin API
-func bulkCreateMocks(t *testing.T, adminPort int, mocks []map[string]interface{}) (*http.Response, map[string]interface{}) {
+func bulkCreateMocks(t *testing.T, adminPort int, mocks []map[string]interface{}) (int, map[string]interface{}) {
 	body, _ := json.Marshal(mocks)
 
 	resp, err := http.Post(
@@ -458,14 +458,14 @@ func bulkCreateMocks(t *testing.T, adminPort int, mocks []map[string]interface{}
 		bytes.NewReader(body),
 	)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
 
 	var respData map[string]interface{}
 	json.Unmarshal(respBody, &respData)
 
-	return resp, respData
+	return resp.StatusCode, respData
 }
 
 func TestPortConflict_BulkCreate_SamePortWithinBatch_Fails(t *testing.T) {
@@ -497,8 +497,8 @@ func TestPortConflict_BulkCreate_SamePortWithinBatch_Fails(t *testing.T) {
 		},
 	}
 
-	resp, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
-	assert.Equal(t, http.StatusConflict, resp.StatusCode, "Two mocks on same port should conflict")
+	status, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
+	assert.Equal(t, http.StatusConflict, status, "Two mocks on same port should conflict")
 	assert.Equal(t, "port_conflict", data["error"])
 
 	conflicts, ok := data["conflicts"].([]interface{})
@@ -511,8 +511,8 @@ func TestPortConflict_BulkCreate_ConflictWithExisting(t *testing.T) {
 
 	// First create an existing MQTT mock
 	mqttPort := getUniquePort()
-	resp1, data1 := createMQTTMock(t, bundle.AdminPort, "Existing Broker", mqttPort, "local")
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode)
+	status1, data1 := createMQTTMock(t, bundle.AdminPort, "Existing Broker", mqttPort, "local")
+	assert.Equal(t, http.StatusCreated, status1)
 	assert.NotEmpty(t, data1["id"])
 
 	// Now bulk create with a mock using the same port - should FAIL
@@ -543,8 +543,8 @@ func TestPortConflict_BulkCreate_ConflictWithExisting(t *testing.T) {
 		},
 	}
 
-	resp, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
-	assert.Equal(t, http.StatusConflict, resp.StatusCode, "MQTT mock on existing port should conflict")
+	status, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
+	assert.Equal(t, http.StatusConflict, status, "MQTT mock on existing port should conflict")
 	assert.Equal(t, "port_conflict", data["error"])
 
 	conflicts, ok := data["conflicts"].([]interface{})
@@ -576,8 +576,8 @@ func TestPortConflict_BulkCreate_CrossProtocolConflict(t *testing.T) {
 		},
 	}
 
-	resp, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
-	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	status, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
+	assert.Equal(t, http.StatusConflict, status)
 	assert.Equal(t, "port_conflict", data["error"])
 
 	conflicts, ok := data["conflicts"].([]interface{})
@@ -617,8 +617,8 @@ func TestPortConflict_BulkCreate_SameProtocol_SamePort_Fails(t *testing.T) {
 		},
 	}
 
-	resp, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
-	assert.Equal(t, http.StatusConflict, resp.StatusCode, "Multiple mocks on same port should conflict")
+	status, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
+	assert.Equal(t, http.StatusConflict, status, "Multiple mocks on same port should conflict")
 	assert.Equal(t, "port_conflict", data["error"])
 
 	// Should have 2 conflicts (Broker 2 and Broker 3 conflict with Broker 1)
@@ -656,8 +656,8 @@ func TestPortConflict_BulkCreate_DifferentWorkspaces_SamePort(t *testing.T) {
 		},
 	}
 
-	resp, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
-	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+	status, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
+	assert.Equal(t, http.StatusCreated, status)
 	assert.Equal(t, float64(2), data["created"])
 }
 
@@ -688,8 +688,8 @@ func TestPortConflict_BulkCreate_NoDedicatedPorts_NoConflict(t *testing.T) {
 		},
 	}
 
-	resp, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
-	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+	status, data := bulkCreateMocks(t, bundle.AdminPort, mocks)
+	assert.Equal(t, http.StatusCreated, status)
 	assert.Equal(t, float64(2), data["created"])
 }
 
@@ -763,8 +763,8 @@ func TestPortConflict_PATCH_DoesNotChangePort(t *testing.T) {
 
 	// Create an MQTT mock
 	mqttPort := getUniquePort()
-	resp1, data1 := createMQTTMock(t, bundle.AdminPort, "Original Broker", mqttPort, "local")
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode)
+	status1, data1 := createMQTTMock(t, bundle.AdminPort, "Original Broker", mqttPort, "local")
+	assert.Equal(t, http.StatusCreated, status1)
 	mockID := data1["id"].(string)
 
 	// Try to PATCH with a different port - should be ignored (PATCH only does metadata)

@@ -115,3 +115,11 @@ func WithDataDir(dir string) Option {
 		a.dataDir = dir
 	}
 }
+
+// WithVersion sets the version string returned by the status endpoint.
+// If not set, defaults to "dev".
+func WithVersion(version string) Option {
+	return func(a *AdminAPI) {
+		a.version = version
+	}
+}

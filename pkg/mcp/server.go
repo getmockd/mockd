@@ -406,7 +406,8 @@ func (s *Server) handleToolsCall(session *MCPSession, params json.RawMessage) (i
 
 	result, toolErr := s.tools.Execute(callParams.Name, callParams.Arguments, session)
 	if toolErr != nil {
-		return result, nil // Tool errors are returned in the result, not as JSON-RPC errors
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+		return result, nil
 	}
 
 	return result, nil
@@ -527,9 +528,9 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			eventID++
 			data, _ := json.Marshal(notif)
 
-			fmt.Fprintf(w, "id: %d\n", eventID)
-			fmt.Fprintf(w, "event: message\n")
-			fmt.Fprintf(w, "data: %s\n\n", data)
+			_, _ = fmt.Fprintf(w, "id: %d\n", eventID)
+			_, _ = fmt.Fprintf(w, "event: message\n")
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 			flusher.Flush()
 		}
 	}
@@ -552,14 +553,14 @@ func (s *Server) writeError(w http.ResponseWriter, id interface{}, err *JSONRPCE
 	resp := ErrorResponse(id, err)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK) // JSON-RPC errors are returned with 200 OK
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // writeSuccess writes a JSON-RPC success response.
 func (s *Server) writeSuccess(w http.ResponseWriter, id interface{}, result interface{}) {
 	resp := SuccessResponse(id, result)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // NotifyResourceListChanged broadcasts a resource list changed notification.

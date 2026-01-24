@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/template"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/validator"
@@ -14,17 +15,19 @@ import (
 
 // Executor executes GraphQL operations against configured resolvers.
 type Executor struct {
-	schema    *Schema
-	config    *GraphQLConfig
-	resolvers map[string][]ResolverConfig // "Query.user" -> resolvers (multiple for conditional matching)
+	schema         *Schema
+	config         *GraphQLConfig
+	resolvers      map[string][]ResolverConfig // "Query.user" -> resolvers (multiple for conditional matching)
+	templateEngine *template.Engine
 }
 
 // NewExecutor creates a new GraphQL executor with the given schema and configuration.
 func NewExecutor(schema *Schema, config *GraphQLConfig) *Executor {
 	e := &Executor{
-		schema:    schema,
-		config:    config,
-		resolvers: make(map[string][]ResolverConfig),
+		schema:         schema,
+		config:         config,
+		resolvers:      make(map[string][]ResolverConfig),
+		templateEngine: template.New(),
 	}
 
 	// Index resolvers by path for efficient lookup
@@ -150,7 +153,7 @@ func (e *Executor) isIntrospectionQuery(selections ast.SelectionSet) bool {
 }
 
 // executeIntrospection handles introspection queries.
-func (e *Executor) executeIntrospection(ctx context.Context, doc *ast.QueryDocument, selections ast.SelectionSet, variables map[string]interface{}) (interface{}, []*GraphQLError) {
+func (e *Executor) executeIntrospection(_ context.Context, doc *ast.QueryDocument, selections ast.SelectionSet, variables map[string]interface{}) (interface{}, []*GraphQLError) {
 	result := make(map[string]interface{})
 
 	for _, sel := range selections {
@@ -339,7 +342,7 @@ func (e *Executor) expandSelections(doc *ast.QueryDocument, selections ast.Selec
 
 // buildDirectivesIntrospection builds directives introspection data.
 func (e *Executor) buildDirectivesIntrospection(doc *ast.QueryDocument, selections ast.SelectionSet) []interface{} {
-	result := make([]interface{}, 0)
+	result := make([]interface{}, 0, len(e.schema.AST().Directives))
 
 	expandedSelections := e.expandSelections(doc, selections)
 
@@ -441,7 +444,7 @@ func (e *Executor) buildFieldsIntrospection(doc *ast.QueryDocument, fields ast.F
 // buildArgsIntrospection builds argument introspection data.
 func (e *Executor) buildArgsIntrospection(doc *ast.QueryDocument, args ast.ArgumentDefinitionList, selections ast.SelectionSet) []interface{} {
 	// Initialize as empty slice (not nil) so JSON marshals to [] instead of null
-	result := make([]interface{}, 0)
+	result := make([]interface{}, 0, len(args))
 
 	expandedSelections := e.expandSelections(doc, selections)
 
@@ -538,7 +541,7 @@ func (e *Executor) buildTypeRefIntrospection(doc *ast.QueryDocument, t *ast.Type
 
 // buildInputFieldsIntrospection builds input field introspection data.
 func (e *Executor) buildInputFieldsIntrospection(doc *ast.QueryDocument, fields ast.FieldList, selections ast.SelectionSet) []interface{} {
-	result := make([]interface{}, 0)
+	result := make([]interface{}, 0, len(fields))
 
 	expandedSelections := e.expandSelections(doc, selections)
 
@@ -579,7 +582,7 @@ func (e *Executor) buildInputFieldsIntrospection(doc *ast.QueryDocument, fields 
 
 // buildEnumValuesIntrospection builds enum values introspection data.
 func (e *Executor) buildEnumValuesIntrospection(doc *ast.QueryDocument, values ast.EnumValueList, selections ast.SelectionSet) []interface{} {
-	result := make([]interface{}, 0)
+	result := make([]interface{}, 0, len(values))
 
 	expandedSelections := e.expandSelections(doc, selections)
 
@@ -612,7 +615,7 @@ func (e *Executor) buildEnumValuesIntrospection(doc *ast.QueryDocument, values a
 
 // buildInterfacesIntrospection builds interfaces introspection data.
 func (e *Executor) buildInterfacesIntrospection(doc *ast.QueryDocument, interfaces []string, selections ast.SelectionSet) []interface{} {
-	result := make([]interface{}, 0)
+	result := make([]interface{}, 0, len(interfaces))
 	for _, iface := range interfaces {
 		result = append(result, e.buildTypeIntrospection(doc, iface, selections))
 	}
@@ -621,15 +624,16 @@ func (e *Executor) buildInterfacesIntrospection(doc *ast.QueryDocument, interfac
 
 // buildPossibleTypesIntrospection builds possible types introspection data.
 func (e *Executor) buildPossibleTypesIntrospection(doc *ast.QueryDocument, def *ast.Definition, selections ast.SelectionSet) []interface{} {
-	result := make([]interface{}, 0)
 	var typeNames []string
 
-	if def.Kind == ast.Union {
+	switch def.Kind {
+	case ast.Union:
 		typeNames = def.Types
-	} else if def.Kind == ast.Interface {
+	case ast.Interface:
 		typeNames = e.schema.GetInterfaceImplementors(def.Name)
 	}
 
+	result := make([]interface{}, 0, len(typeNames))
 	for _, name := range typeNames {
 		result = append(result, e.buildTypeIntrospection(doc, name, selections))
 	}
@@ -713,11 +717,11 @@ func (e *Executor) resolveValue(value *ast.Value, variables map[string]interface
 	case ast.IntValue:
 		// Parse as int
 		var n int64
-		fmt.Sscanf(value.Raw, "%d", &n)
+		_, _ = fmt.Sscanf(value.Raw, "%d", &n)
 		return n
 	case ast.FloatValue:
 		var f float64
-		fmt.Sscanf(value.Raw, "%f", &f)
+		_, _ = fmt.Sscanf(value.Raw, "%f", &f)
 		return f
 	case ast.StringValue, ast.BlockValue:
 		return value.Raw
@@ -857,7 +861,8 @@ func (e *Executor) resolveField(ctx context.Context, field *ast.Field, resolver 
 // templatePattern matches {{args.fieldName}} patterns.
 var templatePattern = regexp.MustCompile(`\{\{args\.([a-zA-Z_][a-zA-Z0-9_]*)\}\}`)
 
-// applyVariables substitutes {{args.fieldName}} templates in response data.
+// applyVariables substitutes {{args.fieldName}} templates and general template
+// variables (like {{uuid}}, {{now}}, etc.) in response data.
 func (e *Executor) applyVariables(data interface{}, args map[string]interface{}) interface{} {
 	if data == nil {
 		return nil
@@ -865,7 +870,7 @@ func (e *Executor) applyVariables(data interface{}, args map[string]interface{})
 
 	switch v := data.(type) {
 	case string:
-		// Replace template variables
+		// First, replace {{args.fieldName}} variables
 		result := templatePattern.ReplaceAllStringFunc(v, func(match string) string {
 			// Extract the field name from {{args.fieldName}}
 			parts := templatePattern.FindStringSubmatch(match)
@@ -878,7 +883,12 @@ func (e *Executor) applyVariables(data interface{}, args map[string]interface{})
 			}
 			return match
 		})
-		return result
+
+		// Then process general template variables ({{uuid}}, {{now}}, etc.)
+		// Create a template context with args as the body for request.body.* access
+		ctx := template.NewContextFromMap(args, nil)
+		processed, _ := e.templateEngine.Process(result, ctx)
+		return processed
 
 	case map[string]interface{}:
 		result := make(map[string]interface{})

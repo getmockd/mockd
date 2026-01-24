@@ -42,9 +42,12 @@ func BenchmarkWS_EchoLatency(b *testing.B) {
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/echo"
 
 	ctx := context.Background()
-	conn, _, err := ws.Dial(ctx, wsURL, nil)
+	conn, resp, err := ws.Dial(ctx, wsURL, nil)
 	if err != nil {
 		b.Fatalf("failed to connect: %v", err)
+	}
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
 	}
 	defer conn.Close(ws.StatusNormalClosure, "")
 
@@ -74,9 +77,12 @@ func BenchmarkWS_ConnectionEstablishment(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ctx := context.Background()
-		conn, _, err := ws.Dial(ctx, wsURL, nil)
+		conn, resp, err := ws.Dial(ctx, wsURL, nil)
 		if err != nil {
 			b.Fatalf("failed to connect: %v", err)
+		}
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
 		}
 		conn.Close(ws.StatusNormalClosure, "")
 	}
@@ -105,7 +111,10 @@ func BenchmarkWS_ConcurrentConnections(b *testing.B) {
 				defer wg.Done()
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				conn, _, err := ws.Dial(ctx, wsURL, nil)
+				conn, resp, err := ws.Dial(ctx, wsURL, nil)
+				if resp != nil && resp.Body != nil {
+					resp.Body.Close()
+				}
 				if err != nil {
 					return
 				}
@@ -150,9 +159,12 @@ func BenchmarkWS_MatcherPerformance(b *testing.B) {
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/matcher"
 
 	ctx := context.Background()
-	conn, _, err := ws.Dial(ctx, wsURL, nil)
+	conn, resp, err := ws.Dial(ctx, wsURL, nil)
 	if err != nil {
 		b.Fatalf("failed to connect: %v", err)
+	}
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
 	}
 	defer conn.Close(ws.StatusNormalClosure, "")
 
@@ -193,9 +205,12 @@ func BenchmarkWS_MessageThroughput(b *testing.B) {
 
 	b.Run("small_64B", func(b *testing.B) {
 		ctx := context.Background()
-		conn, _, err := ws.Dial(ctx, wsURL, nil)
+		conn, resp, err := ws.Dial(ctx, wsURL, nil)
 		if err != nil {
 			b.Fatalf("failed to connect: %v", err)
+		}
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
 		}
 		defer conn.Close(ws.StatusNormalClosure, "")
 
@@ -212,9 +227,12 @@ func BenchmarkWS_MessageThroughput(b *testing.B) {
 
 	b.Run("medium_1KB", func(b *testing.B) {
 		ctx := context.Background()
-		conn, _, err := ws.Dial(ctx, wsURL, nil)
+		conn, resp, err := ws.Dial(ctx, wsURL, nil)
 		if err != nil {
 			b.Fatalf("failed to connect: %v", err)
+		}
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
 		}
 		defer conn.Close(ws.StatusNormalClosure, "")
 
@@ -231,9 +249,12 @@ func BenchmarkWS_MessageThroughput(b *testing.B) {
 
 	b.Run("large_64KB", func(b *testing.B) {
 		ctx := context.Background()
-		conn, _, err := ws.Dial(ctx, wsURL, nil)
+		conn, resp, err := ws.Dial(ctx, wsURL, nil)
 		if err != nil {
 			b.Fatalf("failed to connect: %v", err)
+		}
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
 		}
 		defer conn.Close(ws.StatusNormalClosure, "")
 

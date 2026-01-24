@@ -84,9 +84,12 @@ func (c *Client) Connect(ctx context.Context) error {
 	headers.Set("X-Client-Version", c.cfg.ClientVersion)
 
 	// Connect to relay
-	conn, _, err := websocket.Dial(ctx, c.cfg.RelayURL, &websocket.DialOptions{
+	conn, resp, err := websocket.Dial(ctx, c.cfg.RelayURL, &websocket.DialOptions{
 		HTTPHeader: headers,
 	})
+	if resp != nil && resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		return fmt.Errorf("failed to connect to relay: %w", err)
 	}
@@ -94,13 +97,13 @@ func (c *Client) Connect(ctx context.Context) error {
 	// Read connected message
 	_, data, err := conn.Read(ctx)
 	if err != nil {
-		conn.Close(websocket.StatusInternalError, "failed to read connected message")
+		_ = conn.Close(websocket.StatusInternalError, "failed to read connected message")
 		return fmt.Errorf("failed to read connected message: %w", err)
 	}
 
 	connMsg, err := DecodeConnectedMessage(data)
 	if err != nil {
-		conn.Close(websocket.StatusInternalError, "invalid connected message")
+		_ = conn.Close(websocket.StatusInternalError, "invalid connected message")
 		return fmt.Errorf("invalid connected message: %w", err)
 	}
 
@@ -133,7 +136,7 @@ func (c *Client) Disconnect() {
 
 		c.mu.Lock()
 		if c.conn != nil {
-			c.conn.Close(websocket.StatusNormalClosure, "client disconnect")
+			_ = c.conn.Close(websocket.StatusNormalClosure, "client disconnect")
 			c.conn = nil
 		}
 		c.mu.Unlock()
@@ -356,7 +359,7 @@ func (c *Client) recordLatency(d time.Duration) {
 // sendPong sends a pong message.
 func (c *Client) sendPong(ctx context.Context, pingID string) {
 	msg := NewPongMessage(pingID)
-	c.sendMessage(ctx, msg)
+	_ = c.sendMessage(ctx, msg)
 }
 
 // sendMessage sends a message to the relay.

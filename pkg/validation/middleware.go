@@ -140,7 +140,7 @@ func (m *Middleware) handleError(w http.ResponseWriter, result *ValidationResult
 		Details: result.Errors,
 	}
 
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 // ValidationErrorResponse is the error response format
@@ -191,7 +191,7 @@ func ValidateRequestOnly(validator *OpenAPIValidator, r *http.Request) (*Validat
 func MustValidateRequest(validator *OpenAPIValidator, r *http.Request) error {
 	result := validator.ValidateRequest(r)
 	if !result.Valid {
-		var messages []string
+		messages := make([]string, 0, len(result.Errors))
 		for _, err := range result.Errors {
 			messages = append(messages, err.Message)
 		}

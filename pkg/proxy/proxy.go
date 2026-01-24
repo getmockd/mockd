@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/getmockd/mockd/pkg/recording"
 )
@@ -35,13 +36,13 @@ type Options struct {
 
 // Proxy is an HTTP/HTTPS MITM proxy server.
 type Proxy struct {
-	mu      sync.RWMutex
-	mode    Mode
-	filter  *FilterConfig
-	store   *recording.Store
-	ca      *CAManager
-	logger  *log.Logger
-	running bool
+	mu     sync.RWMutex
+	mode   Mode
+	filter *FilterConfig
+	store  *recording.Store
+	ca     *CAManager
+	logger *log.Logger
+	client *http.Client // Shared HTTP client for connection pooling
 }
 
 // New creates a new Proxy with the given options.
@@ -67,6 +68,17 @@ func New(opts Options) *Proxy {
 		store:  store,
 		ca:     opts.CAManager,
 		logger: opts.Logger,
+		client: &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse // Don't follow redirects
+			},
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
 	}
 }
 

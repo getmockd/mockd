@@ -371,6 +371,8 @@ Run 'mockd add --help' for more options`)
 }
 
 // buildSSEConfig creates an SSE configuration from CLI flags.
+//
+//nolint:unparam // error is always nil but kept for future validation
 func buildSSEConfig(events flags.StringSlice, delayMs int, template string, repeat, keepaliveMs int) (*mock.SSEConfig, error) {
 	cfg := &mock.SSEConfig{
 		Timing: mock.SSETimingConfig{
@@ -549,7 +551,7 @@ Run 'mockd add --help' for more options`)
 }
 
 // generateMinimalGraphQLSchema creates a minimal schema for CLI-created GraphQL mocks.
-func generateMinimalGraphQLSchema(operation, opType, response string) string {
+func generateMinimalGraphQLSchema(operation, opType, _ string) string {
 	// Generate a simple schema that supports the operation
 	// The response type is JSON (dynamic), so we use a scalar
 	var sb strings.Builder

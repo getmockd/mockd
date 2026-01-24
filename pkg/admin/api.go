@@ -70,6 +70,9 @@ type AdminAPI struct {
 
 	// Custom data directory (for test isolation)
 	dataDir string
+
+	// Version string for status endpoint
+	version string
 }
 
 // NewAdminAPI creates a new AdminAPI.
@@ -226,7 +229,7 @@ func (a *AdminAPI) withMiddleware(handler http.Handler) http.Handler {
 	rateLimited := a.rateLimiter.Middleware(handler)
 
 	// API key authentication wraps rate limiting
-	var authenticated http.Handler = rateLimited
+	authenticated := rateLimited
 	if a.apiKeyAuth != nil {
 		authenticated = a.apiKeyAuth.middleware(rateLimited)
 	}

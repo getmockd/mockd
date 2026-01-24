@@ -85,7 +85,7 @@ func NewLokiHandler(url string, opts ...LokiOption) *LokiHandler {
 
 	// Start a background flush timer
 	h.flushTimer = time.AfterFunc(5*time.Second, func() {
-		h.Flush()
+		_ = h.Flush()
 		h.resetTimer()
 	})
 
@@ -116,7 +116,7 @@ func (h *LokiHandler) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Unlock()
 
 	if shouldFlush {
-		go h.Flush()
+		go func() { _ = h.Flush() }()
 	}
 
 	return nil
@@ -219,7 +219,7 @@ func (h *LokiHandler) Flush() error {
 	if err != nil {
 		return fmt.Errorf("failed to send logs to loki: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("loki returned status %d", resp.StatusCode)

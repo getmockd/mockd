@@ -6,7 +6,7 @@ gRPC mocking enables you to create mock gRPC services for testing gRPC clients. 
 
 mockd's gRPC support includes:
 
-- **Protobuf support** - Use `.proto` files or inline definitions
+- **Protobuf support** - Use `.proto` files to define your service schema
 - **All RPC types** - Unary, server streaming, client streaming, and bidirectional
 - **Request matching** - Conditional responses based on metadata and request fields
 - **Server reflection** - Enable tooling discovery with `grpcurl` and gRPC UI
@@ -15,7 +15,26 @@ mockd's gRPC support includes:
 
 ## Quick Start
 
-Create a minimal gRPC mock:
+Create a minimal gRPC mock. First, create your proto file `protos/greeter.proto`:
+
+```protobuf
+syntax = "proto3";
+package helloworld;
+
+service Greeter {
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
+}
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloReply {
+  string message = 1;
+}
+```
+
+Then create your mockd configuration:
 
 ```yaml
 version: "1.0"
@@ -27,22 +46,7 @@ mocks:
     enabled: true
     grpc:
       port: 50051
-      protoFile: |
-        syntax = "proto3";
-        package helloworld;
-
-        service Greeter {
-          rpc SayHello (HelloRequest) returns (HelloReply) {}
-        }
-
-        message HelloRequest {
-          string name = 1;
-        }
-
-        message HelloReply {
-          string message = 1;
-        }
-
+      protoFile: ./protos/greeter.proto
       reflection: true
       services:
         helloworld.Greeter:
@@ -85,14 +89,10 @@ mocks:
       # gRPC server port (required)
       port: 50051
 
-      # Proto file - inline or file path
-      protoFile: |
-        syntax = "proto3";
-        # Schema definition here
-      # OR
+      # Proto file path (required)
       protoFile: ./protos/service.proto
 
-      # Multiple proto files
+      # Multiple proto files (alternative to protoFile)
       protoFiles:
         - ./protos/service.proto
         - ./protos/messages.proto
@@ -129,56 +129,17 @@ mocks:
 | Field | Type | Description |
 |-------|------|-------------|
 | `port` | int | gRPC server port |
-| `protoFile` | string | Single proto file path or inline definition |
-| `protoFiles` | []string | Multiple proto file paths |
+| `protoFile` | string | Path to a single `.proto` file |
+| `protoFiles` | []string | Paths to multiple `.proto` files |
 | `importPaths` | []string | Additional proto import paths |
 | `reflection` | boolean | Enable gRPC server reflection |
 | `services` | map | Service and method configurations |
 
 ## Proto File Configuration
 
-mockd requires protobuf definitions to validate and parse messages. You can provide definitions inline or reference external files.
+mockd requires protobuf definitions to validate and parse messages. Proto files must be provided as file paths.
 
-### Inline Proto Definition
-
-```yaml
-grpc:
-  protoFile: |
-    syntax = "proto3";
-
-    package users;
-
-    option go_package = "github.com/example/users";
-
-    service UserService {
-      rpc GetUser (GetUserRequest) returns (User) {}
-      rpc ListUsers (ListUsersRequest) returns (stream User) {}
-      rpc CreateUser (CreateUserRequest) returns (User) {}
-    }
-
-    message GetUserRequest {
-      string id = 1;
-    }
-
-    message ListUsersRequest {
-      int32 page_size = 1;
-      string page_token = 2;
-    }
-
-    message CreateUserRequest {
-      string name = 1;
-      string email = 2;
-    }
-
-    message User {
-      string id = 1;
-      string name = 2;
-      string email = 3;
-      string created_at = 4;
-    }
-```
-
-### External Proto File
+### Single Proto File
 
 ```yaml
 grpc:
@@ -668,6 +629,39 @@ Without reflection, clients need proto files to make requests.
 
 ### User Service
 
+Create `protos/users.proto`:
+
+```protobuf
+syntax = "proto3";
+
+package users;
+
+service UserService {
+  rpc GetUser (GetUserRequest) returns (User) {}
+  rpc ListUsers (ListUsersRequest) returns (stream User) {}
+  rpc CreateUser (CreateUserRequest) returns (User) {}
+  rpc UpdateUser (UpdateUserRequest) returns (User) {}
+  rpc DeleteUser (DeleteUserRequest) returns (DeleteUserResponse) {}
+}
+
+message GetUserRequest { string id = 1; }
+message ListUsersRequest { int32 page_size = 1; string page_token = 2; }
+message CreateUserRequest { string name = 1; string email = 2; string role = 3; }
+message UpdateUserRequest { string id = 1; string name = 2; string email = 3; }
+message DeleteUserRequest { string id = 1; }
+message DeleteUserResponse { bool success = 1; }
+message User {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+  string role = 4;
+  string created_at = 5;
+  string updated_at = 6;
+}
+```
+
+Then configure in `mockd.yaml`:
+
 ```yaml
 version: "1.0"
 
@@ -678,58 +672,7 @@ mocks:
     enabled: true
     grpc:
       port: 50051
-      protoFile: |
-        syntax = "proto3";
-
-        package users;
-
-        service UserService {
-          rpc GetUser (GetUserRequest) returns (User) {}
-          rpc ListUsers (ListUsersRequest) returns (stream User) {}
-          rpc CreateUser (CreateUserRequest) returns (User) {}
-          rpc UpdateUser (UpdateUserRequest) returns (User) {}
-          rpc DeleteUser (DeleteUserRequest) returns (DeleteUserResponse) {}
-        }
-
-        message GetUserRequest {
-          string id = 1;
-        }
-
-        message ListUsersRequest {
-          int32 page_size = 1;
-          string page_token = 2;
-          string filter = 3;
-        }
-
-        message CreateUserRequest {
-          string name = 1;
-          string email = 2;
-          string role = 3;
-        }
-
-        message UpdateUserRequest {
-          string id = 1;
-          string name = 2;
-          string email = 3;
-        }
-
-        message DeleteUserRequest {
-          string id = 1;
-        }
-
-        message DeleteUserResponse {
-          bool success = 1;
-        }
-
-        message User {
-          string id = 1;
-          string name = 2;
-          string email = 3;
-          string role = 4;
-          string created_at = 5;
-          string updated_at = 6;
-        }
-
+      protoFile: ./protos/users.proto
       reflection: true
       services:
         users.UserService:
@@ -753,10 +696,6 @@ mocks:
                   name: "Bob Johnson"
                   email: "bob@example.com"
                   role: "USER"
-                - id: "user_003"
-                  name: "Carol Williams"
-                  email: "carol@example.com"
-                  role: "USER"
               streamDelay: "100ms"
 
             CreateUser:
@@ -767,19 +706,38 @@ mocks:
                 role: "USER"
                 created_at: "{{now}}"
 
-            UpdateUser:
-              response:
-                id: "user_001"
-                name: "Updated User"
-                email: "updated@example.com"
-                updated_at: "{{now}}"
-
             DeleteUser:
               response:
                 success: true
 ```
 
 ### Chat Service with Bidirectional Streaming
+
+Create `protos/chat.proto`:
+
+```protobuf
+syntax = "proto3";
+
+package chat;
+
+service ChatService {
+  rpc SendMessage (ChatMessage) returns (ChatAck) {}
+  rpc StreamMessages (ChatRoom) returns (stream ChatMessage) {}
+  rpc Chat (stream ChatMessage) returns (stream ChatMessage) {}
+}
+
+message ChatRoom { string room_id = 1; }
+message ChatMessage {
+  string id = 1;
+  string room_id = 2;
+  string sender = 3;
+  string text = 4;
+  string timestamp = 5;
+}
+message ChatAck { string message_id = 1; bool delivered = 2; }
+```
+
+Then configure:
 
 ```yaml
 version: "1.0"
@@ -791,34 +749,7 @@ mocks:
     enabled: true
     grpc:
       port: 50052
-      protoFile: |
-        syntax = "proto3";
-
-        package chat;
-
-        service ChatService {
-          rpc SendMessage (ChatMessage) returns (ChatAck) {}
-          rpc StreamMessages (ChatRoom) returns (stream ChatMessage) {}
-          rpc Chat (stream ChatMessage) returns (stream ChatMessage) {}
-        }
-
-        message ChatRoom {
-          string room_id = 1;
-        }
-
-        message ChatMessage {
-          string id = 1;
-          string room_id = 2;
-          string sender = 3;
-          string text = 4;
-          string timestamp = 5;
-        }
-
-        message ChatAck {
-          string message_id = 1;
-          bool delivered = 2;
-        }
-
+      protoFile: ./protos/chat.proto
       reflection: true
       services:
         chat.ChatService:
@@ -835,17 +766,10 @@ mocks:
                   room_id: "general"
                   sender: "system"
                   text: "Welcome to the chat!"
-                  timestamp: "2024-01-15T10:00:00Z"
                 - id: "msg_002"
                   room_id: "general"
                   sender: "alice"
                   text: "Hello everyone!"
-                  timestamp: "2024-01-15T10:00:05Z"
-                - id: "msg_003"
-                  room_id: "general"
-                  sender: "bob"
-                  text: "Hey Alice!"
-                  timestamp: "2024-01-15T10:00:10Z"
               streamDelay: "500ms"
 
             Chat:
@@ -853,13 +777,40 @@ mocks:
                 - id: "echo_001"
                   sender: "bot"
                   text: "Message received"
-                - id: "echo_002"
-                  sender: "bot"
-                  text: "Processing..."
               streamDelay: "100ms"
 ```
 
 ### Order Service with Error Handling
+
+Create `protos/orders.proto`:
+
+```protobuf
+syntax = "proto3";
+
+package orders;
+
+service OrderService {
+  rpc GetOrder (GetOrderRequest) returns (Order) {}
+  rpc CreateOrder (CreateOrderRequest) returns (Order) {}
+  rpc CancelOrder (CancelOrderRequest) returns (CancelOrderResponse) {}
+}
+
+message GetOrderRequest { string order_id = 1; }
+message CreateOrderRequest { string customer_id = 1; repeated OrderItem items = 2; }
+message OrderItem { string product_id = 1; int32 quantity = 2; }
+message CancelOrderRequest { string order_id = 1; string reason = 2; }
+message CancelOrderResponse { bool success = 1; string message = 2; }
+message Order {
+  string id = 1;
+  string customer_id = 2;
+  repeated OrderItem items = 3;
+  string status = 4;
+  double total = 5;
+  string created_at = 6;
+}
+```
+
+Then configure with multiple match conditions:
 
 ```yaml
 version: "1.0"
@@ -872,50 +823,7 @@ mocks:
     enabled: true
     grpc:
       port: 50053
-      protoFile: |
-        syntax = "proto3";
-
-        package orders;
-
-        service OrderService {
-          rpc GetOrder (GetOrderRequest) returns (Order) {}
-          rpc CreateOrder (CreateOrderRequest) returns (Order) {}
-          rpc CancelOrder (CancelOrderRequest) returns (CancelOrderResponse) {}
-        }
-
-        message GetOrderRequest {
-          string order_id = 1;
-        }
-
-        message CreateOrderRequest {
-          string customer_id = 1;
-          repeated OrderItem items = 2;
-        }
-
-        message OrderItem {
-          string product_id = 1;
-          int32 quantity = 2;
-        }
-
-        message CancelOrderRequest {
-          string order_id = 1;
-          string reason = 2;
-        }
-
-        message CancelOrderResponse {
-          bool success = 1;
-          string message = 2;
-        }
-
-        message Order {
-          string id = 1;
-          string customer_id = 2;
-          repeated OrderItem items = 3;
-          string status = 4;
-          double total = 5;
-          string created_at = 6;
-        }
-
+      protoFile: ./protos/orders.proto
       reflection: true
       services:
         orders.OrderService:
@@ -929,14 +837,12 @@ mocks:
                 customer_id: "cust_001"
                 status: "CONFIRMED"
                 total: 99.99
-                created_at: "2024-01-15T10:00:00Z"
 
             CreateOrder:
               response:
                 id: "{{uuid}}"
                 customer_id: "cust_001"
                 status: "PENDING"
-                total: 149.99
                 created_at: "{{now}}"
               delay: "200ms"
 
@@ -947,7 +853,7 @@ mocks:
     enabled: true
     grpc:
       port: 50053
-      protoFile: ./orders.proto
+      protoFile: ./protos/orders.proto
       services:
         orders.OrderService:
           methods:
@@ -958,8 +864,6 @@ mocks:
               error:
                 code: NOT_FOUND
                 message: "Order not found"
-                details:
-                  order_id: "nonexistent"
 
   # Cancel order - permission denied
   - id: order-grpc-permission-denied
@@ -968,7 +872,7 @@ mocks:
     enabled: true
     grpc:
       port: 50053
-      protoFile: ./orders.proto
+      protoFile: ./protos/orders.proto
       services:
         orders.OrderService:
           methods:

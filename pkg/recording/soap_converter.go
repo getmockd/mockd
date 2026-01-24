@@ -93,16 +93,19 @@ func extractXPathMatch(requestBody string) *soap.SOAPMatch {
 
 	// Use regex to find simple element patterns like <ElementName>value</ElementName>
 	// This handles common cases without full XPath parsing
-	re := regexp.MustCompile(`<([a-zA-Z][a-zA-Z0-9_]*?)(?:\s[^>]*)?>([^<]+)</\1>`)
+	// Note: Go's RE2 doesn't support backreferences, so we capture opening tag and verify closing tag manually
+	re := regexp.MustCompile(`<([a-zA-Z][a-zA-Z0-9_]*?)(?:\s[^>]*)?>([^<]+)</([a-zA-Z][a-zA-Z0-9_]*?)>`)
 	matches := re.FindAllStringSubmatch(env.Body.Content, -1)
 
 	for _, match := range matches {
-		if len(match) == 3 {
-			elementName := match[1]
+		if len(match) == 4 {
+			openTag := match[1]
 			value := strings.TrimSpace(match[2])
-			if value != "" {
+			closeTag := match[3]
+			// Verify opening and closing tags match
+			if openTag == closeTag && value != "" {
 				// Create a simple XPath expression
-				xpath := "//" + elementName
+				xpath := "//" + openTag
 				xpathMap[xpath] = value
 			}
 		}

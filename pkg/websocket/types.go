@@ -136,6 +136,7 @@ func (r *MessageResponse) GetData() ([]byte, MessageType, error) {
 		if err != nil {
 			// Fall back to raw bytes for backward compatibility
 			// (allows non-base64 strings if they were stored that way)
+			//nolint:nilerr // intentional fallback to raw bytes when base64 decode fails
 			return []byte(s), MessageBinary, nil
 		}
 		return decoded, MessageBinary, nil
