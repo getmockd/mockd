@@ -24,11 +24,44 @@ Base URL: `http://localhost:4290` (or your configured `--admin-port`)
 
 ## Authentication
 
-The admin API has no authentication by default. In production, consider:
+The admin API requires API key authentication by default. The API key is auto-generated on first start and stored at `~/.local/share/mockd/admin-api-key`.
 
-- Binding to localhost only (`--host localhost`)
-- Using a firewall
-- Running admin port on internal network only
+### Using the API Key
+
+```bash
+# Get your API key
+cat ~/.local/share/mockd/admin-api-key
+
+# Use with X-API-Key header
+curl -H "X-API-Key: YOUR_KEY" http://localhost:4290/mocks
+
+# Or use Bearer token
+curl -H "Authorization: Bearer YOUR_KEY" http://localhost:4290/mocks
+
+# Or use query parameter
+curl "http://localhost:4290/mocks?api_key=YOUR_KEY"
+```
+
+### Disabling Authentication
+
+For local development or CI, you can disable authentication:
+
+```bash
+mockd serve --no-auth
+```
+
+### Unauthenticated Endpoints
+
+These endpoints work without authentication:
+- `GET /health` - Health check
+- `GET /metrics` - Prometheus metrics
+
+### Production Recommendations
+
+- Keep authentication enabled
+- Bind to localhost only (`--host localhost`)
+- Use a firewall to restrict access
+- Run admin port on internal network only
 
 ---
 
@@ -47,6 +80,46 @@ Check server health.
   "status": "ok",
   "uptime": 3600
 }
+```
+
+---
+
+### Metrics
+
+#### GET /metrics
+
+Prometheus-compatible metrics endpoint. No authentication required.
+
+**Response:** Prometheus text format
+
+```
+# HELP mockd_uptime_seconds Server uptime in seconds
+# TYPE mockd_uptime_seconds gauge
+mockd_uptime_seconds 3600
+
+# HELP mockd_http_requests_total Total HTTP requests processed
+# TYPE mockd_http_requests_total counter
+mockd_http_requests_total{method="GET",path="/api/users",status="200"} 42
+
+# HELP mockd_http_request_duration_seconds HTTP request latency
+# TYPE mockd_http_request_duration_seconds histogram
+mockd_http_request_duration_seconds_bucket{le="0.01"} 100
+mockd_http_request_duration_seconds_bucket{le="0.1"} 150
+mockd_http_request_duration_seconds_bucket{le="+Inf"} 155
+
+# Go runtime metrics
+go_goroutines 12
+go_memstats_heap_alloc_bytes 4194304
+```
+
+**Prometheus Configuration:**
+
+```yaml
+scrape_configs:
+  - job_name: 'mockd'
+    static_configs:
+      - targets: ['localhost:4290']
+    metrics_path: /metrics
 ```
 
 ---
