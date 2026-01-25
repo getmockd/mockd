@@ -24,11 +24,16 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
+	v1reflectiongrpc "google.golang.org/grpc/reflection/grpc_reflection_v1"
+	v1reflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
+	v1alphareflectiongrpc "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+	v1alphareflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/protoadapt"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -141,7 +146,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Enable reflection if configured
 	if s.config.Reflection {
-		reflection.Register(s.grpcServer)
+		s.registerReflectionService()
 	}
 
 	// Start serving in a goroutine
@@ -251,6 +256,308 @@ func (s *Server) registerServices() {
 			Metadata:    nil,
 		}, struct{}{})
 	}
+}
+
+// registerReflectionService registers the gRPC reflection service with a custom
+// descriptor resolver that includes our dynamically parsed proto files.
+// This is necessary because the standard reflection.Register() uses
+// protoregistry.GlobalFiles which doesn't contain our dynamically loaded protos.
+func (s *Server) registerReflectionService() {
+	// Create a custom descriptor resolver that includes our schema's files
+	resolver := newSchemaDescriptorResolver(s.schema)
+
+	// Create reflection server with custom resolver
+	reflectionServer := reflection.NewServerV1(reflection.ServerOptions{
+		Services:           s.grpcServer,
+		DescriptorResolver: resolver,
+	})
+
+	// Register both v1 and v1alpha reflection services for maximum compatibility
+	// Some clients (like Insomnia) use v1alpha, others use v1
+	v1reflectiongrpc.RegisterServerReflectionServer(s.grpcServer, reflectionServer)
+	v1alphareflectiongrpc.RegisterServerReflectionServer(s.grpcServer, asV1Alpha(reflectionServer))
+}
+
+// v1AlphaServerImpl adapts a v1 reflection server to the v1alpha interface.
+// This is needed because some clients (like Insomnia) still use the older v1alpha API.
+type v1AlphaServerImpl struct {
+	v1alphareflectiongrpc.UnimplementedServerReflectionServer
+	svr v1reflectiongrpc.ServerReflectionServer
+}
+
+// asV1Alpha wraps a v1 server to implement the v1alpha interface.
+func asV1Alpha(svr v1reflectiongrpc.ServerReflectionServer) v1alphareflectiongrpc.ServerReflectionServer {
+	return &v1AlphaServerImpl{svr: svr}
+}
+
+// ServerReflectionInfo implements the v1alpha streaming RPC by delegating to v1.
+func (s *v1AlphaServerImpl) ServerReflectionInfo(stream v1alphareflectiongrpc.ServerReflection_ServerReflectionInfoServer) error {
+	return s.svr.ServerReflectionInfo(&v1AlphaStreamAdapter{stream: stream})
+}
+
+// v1AlphaStreamAdapter adapts v1alpha stream to v1 stream interface.
+type v1AlphaStreamAdapter struct {
+	stream v1alphareflectiongrpc.ServerReflection_ServerReflectionInfoServer
+}
+
+func (a *v1AlphaStreamAdapter) Send(resp *v1reflectionpb.ServerReflectionResponse) error {
+	return a.stream.Send(v1ToV1AlphaResponse(resp))
+}
+
+func (a *v1AlphaStreamAdapter) Recv() (*v1reflectionpb.ServerReflectionRequest, error) {
+	req, err := a.stream.Recv()
+	if err != nil {
+		return nil, err
+	}
+	return v1AlphaToV1Request(req), nil
+}
+
+func (a *v1AlphaStreamAdapter) SetHeader(md metadata.MD) error {
+	return a.stream.SetHeader(md)
+}
+
+func (a *v1AlphaStreamAdapter) SendHeader(md metadata.MD) error {
+	return a.stream.SendHeader(md)
+}
+
+func (a *v1AlphaStreamAdapter) SetTrailer(md metadata.MD) {
+	a.stream.SetTrailer(md)
+}
+
+func (a *v1AlphaStreamAdapter) Context() context.Context {
+	return a.stream.Context()
+}
+
+func (a *v1AlphaStreamAdapter) SendMsg(m interface{}) error {
+	return a.stream.SendMsg(m)
+}
+
+func (a *v1AlphaStreamAdapter) RecvMsg(m interface{}) error {
+	return a.stream.RecvMsg(m)
+}
+
+// v1AlphaToV1Request converts a v1alpha request to v1.
+func v1AlphaToV1Request(v1alpha *v1alphareflectionpb.ServerReflectionRequest) *v1reflectionpb.ServerReflectionRequest {
+	v1req := &v1reflectionpb.ServerReflectionRequest{
+		Host: v1alpha.Host,
+	}
+	switch mr := v1alpha.MessageRequest.(type) {
+	case *v1alphareflectionpb.ServerReflectionRequest_FileByFilename:
+		v1req.MessageRequest = &v1reflectionpb.ServerReflectionRequest_FileByFilename{FileByFilename: mr.FileByFilename}
+	case *v1alphareflectionpb.ServerReflectionRequest_FileContainingSymbol:
+		v1req.MessageRequest = &v1reflectionpb.ServerReflectionRequest_FileContainingSymbol{FileContainingSymbol: mr.FileContainingSymbol}
+	case *v1alphareflectionpb.ServerReflectionRequest_FileContainingExtension:
+		v1req.MessageRequest = &v1reflectionpb.ServerReflectionRequest_FileContainingExtension{
+			FileContainingExtension: &v1reflectionpb.ExtensionRequest{
+				ContainingType:  mr.FileContainingExtension.ContainingType,
+				ExtensionNumber: mr.FileContainingExtension.ExtensionNumber,
+			},
+		}
+	case *v1alphareflectionpb.ServerReflectionRequest_AllExtensionNumbersOfType:
+		v1req.MessageRequest = &v1reflectionpb.ServerReflectionRequest_AllExtensionNumbersOfType{AllExtensionNumbersOfType: mr.AllExtensionNumbersOfType}
+	case *v1alphareflectionpb.ServerReflectionRequest_ListServices:
+		v1req.MessageRequest = &v1reflectionpb.ServerReflectionRequest_ListServices{ListServices: mr.ListServices}
+	}
+	return v1req
+}
+
+// v1ToV1AlphaResponse converts a v1 response to v1alpha.
+func v1ToV1AlphaResponse(v1resp *v1reflectionpb.ServerReflectionResponse) *v1alphareflectionpb.ServerReflectionResponse {
+	v1alpha := &v1alphareflectionpb.ServerReflectionResponse{
+		ValidHost: v1resp.ValidHost,
+	}
+	if v1resp.OriginalRequest != nil {
+		v1alpha.OriginalRequest = v1ToV1AlphaRequest(v1resp.OriginalRequest)
+	}
+	switch mr := v1resp.MessageResponse.(type) {
+	case *v1reflectionpb.ServerReflectionResponse_FileDescriptorResponse:
+		v1alpha.MessageResponse = &v1alphareflectionpb.ServerReflectionResponse_FileDescriptorResponse{
+			FileDescriptorResponse: &v1alphareflectionpb.FileDescriptorResponse{
+				FileDescriptorProto: mr.FileDescriptorResponse.FileDescriptorProto,
+			},
+		}
+	case *v1reflectionpb.ServerReflectionResponse_AllExtensionNumbersResponse:
+		v1alpha.MessageResponse = &v1alphareflectionpb.ServerReflectionResponse_AllExtensionNumbersResponse{
+			AllExtensionNumbersResponse: &v1alphareflectionpb.ExtensionNumberResponse{
+				BaseTypeName:    mr.AllExtensionNumbersResponse.BaseTypeName,
+				ExtensionNumber: mr.AllExtensionNumbersResponse.ExtensionNumber,
+			},
+		}
+	case *v1reflectionpb.ServerReflectionResponse_ListServicesResponse:
+		svcs := make([]*v1alphareflectionpb.ServiceResponse, len(mr.ListServicesResponse.GetService()))
+		for i, svc := range mr.ListServicesResponse.GetService() {
+			svcs[i] = &v1alphareflectionpb.ServiceResponse{Name: svc.GetName()}
+		}
+		v1alpha.MessageResponse = &v1alphareflectionpb.ServerReflectionResponse_ListServicesResponse{
+			ListServicesResponse: &v1alphareflectionpb.ListServiceResponse{Service: svcs},
+		}
+	case *v1reflectionpb.ServerReflectionResponse_ErrorResponse:
+		v1alpha.MessageResponse = &v1alphareflectionpb.ServerReflectionResponse_ErrorResponse{
+			ErrorResponse: &v1alphareflectionpb.ErrorResponse{
+				ErrorCode:    mr.ErrorResponse.ErrorCode,
+				ErrorMessage: mr.ErrorResponse.ErrorMessage,
+			},
+		}
+	}
+	return v1alpha
+}
+
+// v1ToV1AlphaRequest converts a v1 request to v1alpha (for OriginalRequest field).
+func v1ToV1AlphaRequest(v1req *v1reflectionpb.ServerReflectionRequest) *v1alphareflectionpb.ServerReflectionRequest {
+	v1alpha := &v1alphareflectionpb.ServerReflectionRequest{
+		Host: v1req.Host,
+	}
+	switch mr := v1req.MessageRequest.(type) {
+	case *v1reflectionpb.ServerReflectionRequest_FileByFilename:
+		v1alpha.MessageRequest = &v1alphareflectionpb.ServerReflectionRequest_FileByFilename{FileByFilename: mr.FileByFilename}
+	case *v1reflectionpb.ServerReflectionRequest_FileContainingSymbol:
+		v1alpha.MessageRequest = &v1alphareflectionpb.ServerReflectionRequest_FileContainingSymbol{FileContainingSymbol: mr.FileContainingSymbol}
+	case *v1reflectionpb.ServerReflectionRequest_FileContainingExtension:
+		v1alpha.MessageRequest = &v1alphareflectionpb.ServerReflectionRequest_FileContainingExtension{
+			FileContainingExtension: &v1alphareflectionpb.ExtensionRequest{
+				ContainingType:  mr.FileContainingExtension.ContainingType,
+				ExtensionNumber: mr.FileContainingExtension.ExtensionNumber,
+			},
+		}
+	case *v1reflectionpb.ServerReflectionRequest_AllExtensionNumbersOfType:
+		v1alpha.MessageRequest = &v1alphareflectionpb.ServerReflectionRequest_AllExtensionNumbersOfType{AllExtensionNumbersOfType: mr.AllExtensionNumbersOfType}
+	case *v1reflectionpb.ServerReflectionRequest_ListServices:
+		v1alpha.MessageRequest = &v1alphareflectionpb.ServerReflectionRequest_ListServices{ListServices: mr.ListServices}
+	}
+	return v1alpha
+}
+
+// schemaDescriptorResolver implements protodesc.Resolver interface using
+// our ProtoSchema's file descriptors. This allows the reflection service
+// to find descriptors for our dynamically loaded proto definitions.
+type schemaDescriptorResolver struct {
+	files      []protoreflect.FileDescriptor
+	fileByPath map[string]protoreflect.FileDescriptor
+	descByName map[protoreflect.FullName]protoreflect.Descriptor
+}
+
+// newSchemaDescriptorResolver creates a resolver from a ProtoSchema.
+func newSchemaDescriptorResolver(schema *ProtoSchema) *schemaDescriptorResolver {
+	r := &schemaDescriptorResolver{
+		files:      schema.Files(),
+		fileByPath: make(map[string]protoreflect.FileDescriptor),
+		descByName: make(map[protoreflect.FullName]protoreflect.Descriptor),
+	}
+
+	// Build indexes for fast lookups
+	for _, file := range r.files {
+		r.indexFile(file)
+	}
+
+	return r
+}
+
+// indexFile recursively indexes all descriptors in a file.
+func (r *schemaDescriptorResolver) indexFile(file protoreflect.FileDescriptor) {
+	r.fileByPath[file.Path()] = file
+
+	// Index messages
+	msgs := file.Messages()
+	for i := 0; i < msgs.Len(); i++ {
+		r.indexMessage(msgs.Get(i))
+	}
+
+	// Index enums
+	enums := file.Enums()
+	for i := 0; i < enums.Len(); i++ {
+		r.indexEnum(enums.Get(i))
+	}
+
+	// Index services
+	services := file.Services()
+	for i := 0; i < services.Len(); i++ {
+		r.indexService(services.Get(i))
+	}
+
+	// Index extensions
+	exts := file.Extensions()
+	for i := 0; i < exts.Len(); i++ {
+		ext := exts.Get(i)
+		r.descByName[ext.FullName()] = ext
+	}
+}
+
+// indexMessage indexes a message and its nested types.
+func (r *schemaDescriptorResolver) indexMessage(msg protoreflect.MessageDescriptor) {
+	r.descByName[msg.FullName()] = msg
+
+	// Index fields
+	fields := msg.Fields()
+	for i := 0; i < fields.Len(); i++ {
+		field := fields.Get(i)
+		r.descByName[field.FullName()] = field
+	}
+
+	// Index oneofs
+	oneofs := msg.Oneofs()
+	for i := 0; i < oneofs.Len(); i++ {
+		oneof := oneofs.Get(i)
+		r.descByName[oneof.FullName()] = oneof
+	}
+
+	// Index nested messages
+	nestedMsgs := msg.Messages()
+	for i := 0; i < nestedMsgs.Len(); i++ {
+		r.indexMessage(nestedMsgs.Get(i))
+	}
+
+	// Index nested enums
+	nestedEnums := msg.Enums()
+	for i := 0; i < nestedEnums.Len(); i++ {
+		r.indexEnum(nestedEnums.Get(i))
+	}
+
+	// Index extensions
+	exts := msg.Extensions()
+	for i := 0; i < exts.Len(); i++ {
+		ext := exts.Get(i)
+		r.descByName[ext.FullName()] = ext
+	}
+}
+
+// indexEnum indexes an enum and its values.
+func (r *schemaDescriptorResolver) indexEnum(enum protoreflect.EnumDescriptor) {
+	r.descByName[enum.FullName()] = enum
+
+	values := enum.Values()
+	for i := 0; i < values.Len(); i++ {
+		value := values.Get(i)
+		r.descByName[value.FullName()] = value
+	}
+}
+
+// indexService indexes a service and its methods.
+func (r *schemaDescriptorResolver) indexService(svc protoreflect.ServiceDescriptor) {
+	r.descByName[svc.FullName()] = svc
+
+	methods := svc.Methods()
+	for i := 0; i < methods.Len(); i++ {
+		method := methods.Get(i)
+		r.descByName[method.FullName()] = method
+	}
+}
+
+// FindFileByPath implements protodesc.Resolver.
+func (r *schemaDescriptorResolver) FindFileByPath(path string) (protoreflect.FileDescriptor, error) {
+	if file, ok := r.fileByPath[path]; ok {
+		return file, nil
+	}
+	// Fall back to global registry for well-known types
+	return protoregistry.GlobalFiles.FindFileByPath(path)
+}
+
+// FindDescriptorByName implements protodesc.Resolver.
+func (r *schemaDescriptorResolver) FindDescriptorByName(name protoreflect.FullName) (protoreflect.Descriptor, error) {
+	if desc, ok := r.descByName[name]; ok {
+		return desc, nil
+	}
+	// Fall back to global registry for well-known types
+	return protoregistry.GlobalFiles.FindDescriptorByName(name)
 }
 
 // makeUnaryHandler creates a unary handler for a specific service/method.
