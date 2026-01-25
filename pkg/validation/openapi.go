@@ -35,20 +35,8 @@ type ValidationConfig struct {
 	LogWarnings      bool   `json:"logWarnings" yaml:"logWarnings"` // Log warnings but don't fail
 }
 
-// ValidationResult contains validation results
-type ValidationResult struct {
-	Valid    bool              `json:"valid"`
-	Errors   []ValidationError `json:"errors,omitempty"`
-	Warnings []ValidationError `json:"warnings,omitempty"`
-}
-
-// ValidationError represents a single validation error
-type ValidationError struct {
-	Type     string `json:"type"`               // path, query, header, body, response
-	Field    string `json:"field,omitempty"`    // Field name that failed validation
-	Message  string `json:"message"`            // Human-readable error message
-	Location string `json:"location,omitempty"` // JSONPath for body errors
-}
+// Note: OpenAPI validation now uses the unified Result and FieldError types
+// from errors.go for consistency across all validation methods.
 
 // NewOpenAPIValidator creates a validator from config
 func NewOpenAPIValidator(config *ValidationConfig) (*OpenAPIValidator, error) {
@@ -143,8 +131,8 @@ func LoadSpecFromString(spec string) (*openapi3.T, error) {
 }
 
 // ValidateRequest validates an incoming HTTP request
-func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *ValidationResult {
-	result := &ValidationResult{Valid: true}
+func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *Result {
+	result := &Result{Valid: true}
 
 	// If validation is disabled or no spec loaded, return valid
 	if v.doc == nil || v.router == nil || !v.config.ValidateRequest {
@@ -156,10 +144,10 @@ func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *ValidationResult {
 	// Find the route matching this request
 	route, pathParams, err := v.router.FindRoute(r)
 	if err != nil {
-		result.Valid = false
-		result.Errors = append(result.Errors, ValidationError{
-			Type:    "path",
-			Message: fmt.Sprintf("no matching route found: %s", err.Error()),
+		result.AddError(&FieldError{
+			Location: LocationPath,
+			Code:     "no_route",
+			Message:  fmt.Sprintf("no matching route found: %s", err.Error()),
 		})
 		return result
 	}
@@ -179,10 +167,10 @@ func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *ValidationResult {
 	if r.Body != nil && r.Body != http.NoBody {
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
-			result.Valid = false
-			result.Errors = append(result.Errors, ValidationError{
-				Type:    "body",
-				Message: fmt.Sprintf("failed to read request body: %s", err.Error()),
+			result.AddError(&FieldError{
+				Location: LocationBody,
+				Code:     "read_error",
+				Message:  fmt.Sprintf("failed to read request body: %s", err.Error()),
 			})
 			return result
 		}
@@ -199,8 +187,8 @@ func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *ValidationResult {
 }
 
 // ValidateResponse validates an HTTP response
-func (v *OpenAPIValidator) ValidateResponse(r *http.Request, status int, headers http.Header, body []byte) *ValidationResult {
-	result := &ValidationResult{Valid: true}
+func (v *OpenAPIValidator) ValidateResponse(r *http.Request, status int, headers http.Header, body []byte) *Result {
+	result := &Result{Valid: true}
 
 	// If validation is disabled or no spec loaded, return valid
 	if v.doc == nil || v.router == nil || !v.config.ValidateResponse {
@@ -212,10 +200,10 @@ func (v *OpenAPIValidator) ValidateResponse(r *http.Request, status int, headers
 	// Find the route matching this request
 	route, pathParams, err := v.router.FindRoute(r)
 	if err != nil {
-		result.Valid = false
-		result.Errors = append(result.Errors, ValidationError{
-			Type:    "response",
-			Message: fmt.Sprintf("no matching route found: %s", err.Error()),
+		result.AddError(&FieldError{
+			Location: "response",
+			Code:     "no_route",
+			Message:  fmt.Sprintf("no matching route found: %s", err.Error()),
 		})
 		return result
 	}
@@ -246,10 +234,10 @@ func (v *OpenAPIValidator) ValidateResponse(r *http.Request, status int, headers
 	// Validate the response
 	if err := openapi3filter.ValidateResponse(ctx, responseValidationInput); err != nil {
 		v.parseValidationErrors(err, result)
-		// Mark response errors specifically
-		for i := range result.Errors {
-			if result.Errors[i].Type == "" {
-				result.Errors[i].Type = "response"
+		// Mark response errors with location if not set
+		for _, e := range result.Errors {
+			if e.Location == "" {
+				e.Location = "response"
 			}
 		}
 	}
@@ -257,8 +245,8 @@ func (v *OpenAPIValidator) ValidateResponse(r *http.Request, status int, headers
 	return result
 }
 
-// parseValidationErrors converts kin-openapi errors to ValidationErrors
-func (v *OpenAPIValidator) parseValidationErrors(err error, result *ValidationResult) {
+// parseValidationErrors converts kin-openapi errors to FieldErrors
+func (v *OpenAPIValidator) parseValidationErrors(err error, result *Result) {
 	if err == nil {
 		return
 	}
@@ -277,92 +265,107 @@ func (v *OpenAPIValidator) parseValidationErrors(err error, result *ValidationRe
 
 	// Handle request error
 	if reqErr, ok := err.(*openapi3filter.RequestError); ok {
-		ve := ValidationError{
+		fe := &FieldError{
 			Message: reqErr.Error(),
+			Code:    "openapi_validation",
 		}
 
-		// Determine error type based on parameter location
+		// Determine location based on parameter location
 		if reqErr.Parameter != nil {
-			ve.Field = reqErr.Parameter.Name
+			fe.Field = reqErr.Parameter.Name
 			switch reqErr.Parameter.In {
 			case "path":
-				ve.Type = "path"
+				fe.Location = LocationPath
 			case "query":
-				ve.Type = "query"
+				fe.Location = LocationQuery
 			case "header":
-				ve.Type = "header"
+				fe.Location = LocationHeader
 			case "cookie":
-				ve.Type = "cookie"
+				fe.Location = "cookie"
 			default:
-				ve.Type = "parameter"
+				fe.Location = "parameter"
 			}
 		} else if reqErr.RequestBody != nil {
-			ve.Type = "body"
+			fe.Location = LocationBody
 		} else {
-			ve.Type = "request"
+			fe.Location = "request"
 		}
 
 		// Extract more specific error info if available
 		if reqErr.Err != nil {
-			ve.Message = reqErr.Err.Error()
+			fe.Message = reqErr.Err.Error()
 
 			// Check for schema validation error
 			if schemaErr, ok := reqErr.Err.(*openapi3.SchemaError); ok {
-				ve.Location = formatJSONPath(schemaErr.JSONPointer())
-				ve.Message = schemaErr.Reason
+				jsonPath := formatJSONPath(schemaErr.JSONPointer())
+				if jsonPath != "" && jsonPath != "$" {
+					fe.Field = jsonPath
+				}
+				fe.Message = schemaErr.Reason
+				fe.Code = ErrCodeSchema
 			}
 		}
 
-		result.Errors = append(result.Errors, ve)
+		result.Errors = append(result.Errors, fe)
 		return
 	}
 
 	// Handle response error
 	if respErr, ok := err.(*openapi3filter.ResponseError); ok {
-		ve := ValidationError{
-			Type:    "response",
-			Message: respErr.Error(),
+		fe := &FieldError{
+			Location: "response",
+			Code:     "openapi_validation",
+			Message:  respErr.Error(),
 		}
 
 		if respErr.Err != nil {
-			ve.Message = respErr.Err.Error()
+			fe.Message = respErr.Err.Error()
 
 			// Check for schema validation error
 			if schemaErr, ok := respErr.Err.(*openapi3.SchemaError); ok {
-				ve.Location = formatJSONPath(schemaErr.JSONPointer())
-				ve.Message = schemaErr.Reason
+				jsonPath := formatJSONPath(schemaErr.JSONPointer())
+				if jsonPath != "" && jsonPath != "$" {
+					fe.Field = jsonPath
+				}
+				fe.Message = schemaErr.Reason
+				fe.Code = ErrCodeSchema
 			}
 		}
 
-		result.Errors = append(result.Errors, ve)
+		result.Errors = append(result.Errors, fe)
 		return
 	}
 
 	// Handle security error
 	if secErr, ok := err.(*openapi3filter.SecurityRequirementsError); ok {
-		ve := ValidationError{
-			Type:    "security",
-			Message: secErr.Error(),
-		}
-		result.Errors = append(result.Errors, ve)
+		result.Errors = append(result.Errors, &FieldError{
+			Location: "security",
+			Code:     "security",
+			Message:  secErr.Error(),
+		})
 		return
 	}
 
 	// Handle schema error directly
 	if schemaErr, ok := err.(*openapi3.SchemaError); ok {
-		ve := ValidationError{
-			Type:     "schema",
+		fe := &FieldError{
+			Location: LocationBody,
+			Code:     ErrCodeSchema,
 			Message:  schemaErr.Reason,
-			Location: formatJSONPath(schemaErr.JSONPointer()),
 		}
-		result.Errors = append(result.Errors, ve)
+		jsonPath := formatJSONPath(schemaErr.JSONPointer())
+		if jsonPath != "" && jsonPath != "$" {
+			fe.Field = jsonPath
+		}
+		result.Errors = append(result.Errors, fe)
 		return
 	}
 
 	// Generic error
-	result.Errors = append(result.Errors, ValidationError{
-		Type:    "validation",
-		Message: err.Error(),
+	result.Errors = append(result.Errors, &FieldError{
+		Location: "validation",
+		Code:     "openapi_validation",
+		Message:  err.Error(),
 	})
 }
 

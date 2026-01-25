@@ -72,13 +72,13 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var err error
 		bodyBytes, err = io.ReadAll(r.Body)
 		if err != nil {
-			m.handleError(w, &ValidationResult{
-				Valid: false,
-				Errors: []ValidationError{{
-					Type:    "body",
-					Message: "failed to read request body",
-				}},
+			result := &Result{Valid: false}
+			result.AddError(&FieldError{
+				Location: LocationBody,
+				Code:     "read_error",
+				Message:  "failed to read request body",
 			})
+			m.handleError(w, result)
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
@@ -97,7 +97,7 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if m.config.LogWarnings {
 				for _, err := range result.Errors {
 					log.Printf("[validation] request error: type=%s field=%s message=%s location=%s",
-						err.Type, err.Field, err.Message, err.Location)
+						err.Code, err.Field, err.Message, err.Location)
 				}
 			}
 			if m.config.FailOnError {
@@ -122,7 +122,7 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !result.Valid && m.config.LogWarnings {
 		for _, err := range result.Errors {
 			log.Printf("[validation] response error: type=%s field=%s message=%s location=%s",
-				err.Type, err.Field, err.Message, err.Location)
+				err.Code, err.Field, err.Message, err.Location)
 		}
 	}
 
@@ -131,7 +131,7 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleError writes a validation error response
-func (m *Middleware) handleError(w http.ResponseWriter, result *ValidationResult) {
+func (m *Middleware) handleError(w http.ResponseWriter, result *Result) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 
@@ -145,8 +145,8 @@ func (m *Middleware) handleError(w http.ResponseWriter, result *ValidationResult
 
 // ValidationErrorResponse is the error response format
 type ValidationErrorResponse struct {
-	Error   string            `json:"error"`
-	Details []ValidationError `json:"details,omitempty"`
+	Error   string        `json:"error"`
+	Details []*FieldError `json:"details,omitempty"`
 }
 
 // MiddlewareFunc is an adapter to use Middleware as middleware function
@@ -178,9 +178,9 @@ func WithValidation(handler http.Handler, config *ValidationConfig) (http.Handle
 
 // ValidateRequestOnly validates a request without wrapping a handler
 // Useful for manual validation in handlers
-func ValidateRequestOnly(validator *OpenAPIValidator, r *http.Request) (*ValidationResult, error) {
+func ValidateRequestOnly(validator *OpenAPIValidator, r *http.Request) (*Result, error) {
 	if validator == nil || !validator.IsEnabled() {
-		return &ValidationResult{Valid: true}, nil
+		return &Result{Valid: true}, nil
 	}
 
 	return validator.ValidateRequest(r), nil

@@ -23,6 +23,7 @@ import (
 	"github.com/getmockd/mockd/pkg/sse"
 	"github.com/getmockd/mockd/pkg/stateful"
 	"github.com/getmockd/mockd/pkg/template"
+	"github.com/getmockd/mockd/pkg/validation"
 	"github.com/getmockd/mockd/pkg/websocket"
 )
 
@@ -226,6 +227,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Run per-mock validation if configured
+		if match.HTTP != nil && match.HTTP.Validation != nil && !match.HTTP.Validation.IsEmpty() {
+			validationResult := h.validateHTTPRequest(r, bodyBytes, pathParams, match.HTTP.Validation)
+			if validationResult != nil && !validationResult.Valid {
+				statusCode = h.writeHTTPValidationError(w, validationResult, match.HTTP.Validation)
+				h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+				return
+			}
+		}
+
 		// Standard response
 		if match.HTTP != nil && match.HTTP.Response != nil {
 			statusCode = match.HTTP.Response.StatusCode
@@ -330,4 +341,81 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 		}
 		_, _ = w.Write([]byte(body))
 	}
+}
+
+// validateHTTPRequest validates an HTTP request against validation rules.
+func (h *Handler) validateHTTPRequest(r *http.Request, bodyBytes []byte, pathParams map[string]string, config *validation.RequestValidation) *validation.Result {
+	if config == nil || config.IsEmpty() {
+		return nil
+	}
+
+	validator := validation.NewHTTPValidator(config)
+	if validator == nil {
+		return nil
+	}
+
+	// Parse body as JSON for validation
+	var body map[string]interface{}
+	if len(bodyBytes) > 0 {
+		if err := json.Unmarshal(bodyBytes, &body); err != nil {
+			// If body is not valid JSON, return parsing error
+			result := &validation.Result{Valid: false}
+			result.AddError(validation.NewInvalidJSONError(err.Error()))
+			return result
+		}
+	}
+
+	// Extract query params
+	queryParams := make(map[string]string)
+	for key, values := range r.URL.Query() {
+		if len(values) > 0 {
+			queryParams[key] = values[0]
+		}
+	}
+
+	// Extract headers
+	headers := make(map[string]string)
+	for key, values := range r.Header {
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
+	}
+
+	return validator.Validate(r.Context(), body, pathParams, queryParams, headers)
+}
+
+// writeHTTPValidationError writes a validation error response for HTTP mocks.
+func (h *Handler) writeHTTPValidationError(w http.ResponseWriter, result *validation.Result, config *validation.RequestValidation) int {
+	mode := config.GetMode()
+
+	// In warn mode, log but don't fail
+	if mode == validation.ModeWarn {
+		for _, err := range result.Errors {
+			h.log.Warn("http validation warning", "field", err.Field, "message", err.Message)
+		}
+		return 0 // Continue to response
+	}
+
+	// In permissive mode, only fail on required field errors
+	if mode == validation.ModePermissive {
+		hasRequired := false
+		for _, err := range result.Errors {
+			if err.Code == validation.ErrCodeRequired {
+				hasRequired = true
+				break
+			}
+		}
+		if !hasRequired {
+			for _, err := range result.Errors {
+				h.log.Warn("http validation warning (permissive)", "field", err.Field, "message", err.Message)
+			}
+			return 0 // Continue to response
+		}
+	}
+
+	// Strict mode (default) - return error response
+	status := config.GetFailStatus()
+	resp := validation.NewErrorResponse(result, status)
+	resp.WriteResponse(w)
+	return status
 }

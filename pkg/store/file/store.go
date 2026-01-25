@@ -32,6 +32,7 @@ type FileStore struct {
 	saveDebounce time.Duration
 	saveCh       chan struct{}
 	closeCh      chan struct{}
+	closedCh     chan struct{} // signals when saveLoop has exited
 }
 
 // storeData holds all persisted data.
@@ -61,6 +62,7 @@ func New(cfg store.Config) *FileStore {
 		saveDebounce: 500 * time.Millisecond,
 		saveCh:       make(chan struct{}, 1),
 		closeCh:      make(chan struct{}),
+		closedCh:     make(chan struct{}),
 	}
 	// Start debounced save goroutine
 	go fs.saveLoop()
@@ -74,6 +76,7 @@ func NewWithDefaults() *FileStore {
 
 // saveLoop handles debounced saving to prevent excessive disk writes.
 func (s *FileStore) saveLoop() {
+	defer close(s.closedCh) // Signal that saveLoop has exited
 	var timer *time.Timer
 	for {
 		select {
@@ -140,7 +143,8 @@ func (s *FileStore) Open(ctx context.Context) error {
 // Close saves any pending changes and closes the store.
 func (s *FileStore) Close() error {
 	close(s.closeCh)
-	// Final save is handled by saveLoop
+	// Wait for saveLoop to complete its final save and exit
+	<-s.closedCh
 	return nil
 }
 

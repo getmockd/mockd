@@ -1,47 +1,132 @@
 package stateful
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"sync"
 	"time"
 
 	"github.com/getmockd/mockd/internal/id"
+	"github.com/getmockd/mockd/pkg/validation"
 )
 
 // StatefulResource represents a named collection that maintains state.
 type StatefulResource struct {
-	mu          sync.RWMutex
-	name        string
-	basePath    string
-	idField     string
-	parentField string
-	items       map[string]*ResourceItem
-	seedData    []map[string]interface{}
-	pathRegex   *regexp.Regexp
-	pathParams  []string
+	mu               sync.RWMutex
+	name             string
+	basePath         string
+	idField          string
+	parentField      string
+	items            map[string]*ResourceItem
+	seedData         []map[string]interface{}
+	pathRegex        *regexp.Regexp
+	pathParams       []string
+	validator        *validation.StatefulValidator
+	validationConfig *validation.StatefulValidation
 }
 
 // NewStatefulResource creates a new StatefulResource from config.
 func NewStatefulResource(config *ResourceConfig) *StatefulResource {
+	return NewStatefulResourceWithLogger(config, nil)
+}
+
+// NewStatefulResourceWithLogger creates a new StatefulResource with a custom logger.
+func NewStatefulResourceWithLogger(config *ResourceConfig, logger *slog.Logger) *StatefulResource {
 	idField := config.IDField
 	if idField == "" {
 		idField = "id"
 	}
 
 	r := &StatefulResource{
-		name:        config.Name,
-		basePath:    config.BasePath,
-		idField:     idField,
-		parentField: config.ParentField,
-		items:       make(map[string]*ResourceItem),
-		seedData:    config.SeedData,
+		name:             config.Name,
+		basePath:         config.BasePath,
+		idField:          idField,
+		parentField:      config.ParentField,
+		items:            make(map[string]*ResourceItem),
+		seedData:         config.SeedData,
+		validationConfig: config.Validation,
 	}
 
 	// Build path regex for matching
 	r.buildPathMatcher()
 
+	// Initialize validation
+	r.initValidation(logger)
+
 	return r
+}
+
+// initValidation sets up the validator based on configuration
+func (r *StatefulResource) initValidation(logger *slog.Logger) {
+	if r.validationConfig == nil {
+		return
+	}
+
+	// Auto-infer validation from seed data if enabled
+	if r.validationConfig.Auto && len(r.seedData) > 0 {
+		inferred := validation.InferValidation(r.seedData, r.basePath, logger)
+		if inferred != nil {
+			// Merge inferred with explicit config (explicit takes precedence)
+			r.validationConfig = mergeStatefulValidation(inferred, r.validationConfig)
+		}
+	}
+
+	// Create the validator
+	r.validator = validation.NewStatefulValidator(r.validationConfig)
+}
+
+// mergeStatefulValidation merges two StatefulValidation configs
+func mergeStatefulValidation(base, override *validation.StatefulValidation) *validation.StatefulValidation {
+	if base == nil {
+		return override
+	}
+	if override == nil {
+		return base
+	}
+
+	result := &validation.StatefulValidation{
+		Auto:       override.Auto,
+		Required:   append([]string{}, base.Required...),
+		Fields:     make(map[string]*validation.FieldValidator),
+		PathParams: make(map[string]*validation.FieldValidator),
+		Mode:       base.Mode,
+	}
+
+	// Copy base fields
+	for k, v := range base.Fields {
+		result.Fields[k] = v
+	}
+	for k, v := range base.PathParams {
+		result.PathParams[k] = v
+	}
+
+	// Override with explicit config
+	result.Required = append(result.Required, override.Required...)
+	for k, v := range override.Fields {
+		result.Fields[k] = v
+	}
+	for k, v := range override.PathParams {
+		result.PathParams[k] = v
+	}
+	if override.OnCreate != nil {
+		result.OnCreate = override.OnCreate
+	}
+	if override.OnUpdate != nil {
+		result.OnUpdate = override.OnUpdate
+	}
+	if override.Schema != nil {
+		result.Schema = override.Schema
+	}
+	if override.SchemaRef != "" {
+		result.SchemaRef = override.SchemaRef
+	}
+	if override.Mode != "" {
+		result.Mode = override.Mode
+	}
+
+	return result
 }
 
 // buildPathMatcher creates a regex for matching incoming request paths.
@@ -303,4 +388,44 @@ func (r *StatefulResource) BasePath() string {
 // ParentField returns the parent field name (for nested resources).
 func (r *StatefulResource) ParentField() string {
 	return r.parentField
+}
+
+// HasValidation returns true if validation is configured for this resource.
+func (r *StatefulResource) HasValidation() bool {
+	return r.validator != nil
+}
+
+// ValidateCreate validates data for a create operation.
+// Returns nil if validation passes or is not configured.
+func (r *StatefulResource) ValidateCreate(ctx context.Context, data map[string]interface{}, pathParams map[string]string) *validation.Result {
+	if r.validator == nil {
+		return &validation.Result{Valid: true}
+	}
+	return r.validator.ValidateCreate(ctx, data, pathParams)
+}
+
+// ValidateUpdate validates data for an update operation.
+// Returns nil if validation passes or is not configured.
+func (r *StatefulResource) ValidateUpdate(ctx context.Context, data map[string]interface{}, pathParams map[string]string) *validation.Result {
+	if r.validator == nil {
+		return &validation.Result{Valid: true}
+	}
+	return r.validator.ValidateUpdate(ctx, data, pathParams)
+}
+
+// ValidatePathParams validates only the path parameters.
+// Returns nil if validation passes or is not configured.
+func (r *StatefulResource) ValidatePathParams(ctx context.Context, pathParams map[string]string) *validation.Result {
+	if r.validator == nil {
+		return &validation.Result{Valid: true}
+	}
+	return r.validator.ValidatePathParams(ctx, pathParams)
+}
+
+// GetValidationMode returns the validation mode (strict, warn, permissive).
+func (r *StatefulResource) GetValidationMode() string {
+	if r.validator == nil {
+		return validation.ModeStrict
+	}
+	return r.validator.GetMode()
 }

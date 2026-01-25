@@ -261,8 +261,8 @@ func TestValidateRequest_PathParams(t *testing.T) {
 			if !tt.expectValid && tt.errorType != "" {
 				if len(result.Errors) == 0 {
 					t.Error("expected errors but got none")
-				} else if result.Errors[0].Type != tt.errorType {
-					t.Errorf("expected error type %s, got %s", tt.errorType, result.Errors[0].Type)
+				} else if result.Errors[0].Location != tt.errorType {
+					t.Errorf("expected error location %s, got %s", tt.errorType, result.Errors[0].Location)
 				}
 			}
 		})
@@ -324,8 +324,8 @@ func TestValidateRequest_QueryParams(t *testing.T) {
 			}
 
 			if !tt.expectValid && tt.errorType != "" && len(result.Errors) > 0 {
-				if result.Errors[0].Type != tt.errorType {
-					t.Errorf("expected error type %s, got %s", tt.errorType, result.Errors[0].Type)
+				if result.Errors[0].Location != tt.errorType {
+					t.Errorf("expected error location %s, got %s", tt.errorType, result.Errors[0].Location)
 				}
 			}
 		})
@@ -383,8 +383,8 @@ func TestValidateRequest_Headers(t *testing.T) {
 			}
 
 			if !tt.expectValid && tt.errorType != "" && len(result.Errors) > 0 {
-				if result.Errors[0].Type != tt.errorType {
-					t.Errorf("expected error type %s, got %s", tt.errorType, result.Errors[0].Type)
+				if result.Errors[0].Location != tt.errorType {
+					t.Errorf("expected error location %s, got %s", tt.errorType, result.Errors[0].Location)
 				}
 			}
 		})
@@ -511,8 +511,8 @@ func TestValidateRequest_Body(t *testing.T) {
 			}
 
 			if !tt.expectValid && tt.errorType != "" && len(result.Errors) > 0 {
-				if result.Errors[0].Type != tt.errorType {
-					t.Errorf("expected error type %s, got %s", tt.errorType, result.Errors[0].Type)
+				if result.Errors[0].Location != tt.errorType {
+					t.Errorf("expected error location %s, got %s", tt.errorType, result.Errors[0].Location)
 				}
 			}
 		})

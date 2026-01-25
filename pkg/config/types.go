@@ -206,6 +206,8 @@ type StatefulResourceConfig struct {
 	ParentField string `json:"parentField,omitempty" yaml:"parentField,omitempty"`
 	// SeedData is the initial data to load on startup/reset
 	SeedData []map[string]interface{} `json:"seedData,omitempty" yaml:"seedData,omitempty"`
+	// Validation defines validation rules for CRUD operations
+	Validation *validation.StatefulValidation `json:"validation,omitempty" yaml:"validation,omitempty"`
 }
 
 // DefaultServerConfiguration returns a ServerConfiguration with sensible defaults.

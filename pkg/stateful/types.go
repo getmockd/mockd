@@ -2,6 +2,8 @@ package stateful
 
 import (
 	"time"
+
+	"github.com/getmockd/mockd/pkg/validation"
 )
 
 // ResourceItem represents a single record within a stateful resource.
@@ -66,6 +68,8 @@ type ResourceConfig struct {
 	ParentField string `json:"parentField,omitempty"`
 	// SeedData is the initial data to load on startup/reset
 	SeedData []map[string]interface{} `json:"seedData,omitempty"`
+	// Validation defines validation rules for CRUD operations
+	Validation *validation.StatefulValidation `json:"validation,omitempty"`
 }
 
 // StateOverview provides information about all registered stateful resources.
