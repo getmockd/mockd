@@ -4,8 +4,215 @@
 [tools]
 go = "1.25"
 
-# Documentation tasks (delegates to docs/ directory)
-# Python tooling is isolated in docs/mise.toml so Go users don't need Python
+[env]
+# Ensure ~/.local/bin is in PATH for linked binary
+_.path = ["{{env.HOME}}/.local/bin"]
+
+# Build variables (used by build tasks)
+MOCKD_VERSION = "{{exec(command='git describe --tags --always --dirty 2>/dev/null || echo dev')}}"
+MOCKD_COMMIT = "{{exec(command='git rev-parse --short HEAD 2>/dev/null || echo unknown')}}"
+MOCKD_BUILD_DATE = "{{exec(command='date -u +%Y-%m-%dT%H:%M:%SZ')}}"
+MOCKD_LDFLAGS = "-X main.Version={{env.MOCKD_VERSION}} -X main.Commit={{env.MOCKD_COMMIT}} -X main.BuildDate={{env.MOCKD_BUILD_DATE}}"
+
+# =============================================================================
+# Build Tasks
+# =============================================================================
+
+[tasks.build]
+alias = "b"
+description = "Build mockd binary with version info"
+run = """
+mkdir -p bin
+echo "Building mockd $MOCKD_VERSION..."
+go build -ldflags "$MOCKD_LDFLAGS" -o bin/mockd ./cmd/mockd
+echo "Built bin/mockd"
+./bin/mockd --version
+"""
+
+[tasks.build-fast]
+alias = "bf"
+description = "Fast build without version info (quick iteration)"
+run = """
+mkdir -p bin
+go build -o bin/mockd ./cmd/mockd
+echo "Built bin/mockd"
+"""
+
+[tasks.build-race]
+description = "Build with race detector enabled"
+run = """
+mkdir -p bin
+go build -race -ldflags "$MOCKD_LDFLAGS" -o bin/mockd ./cmd/mockd
+echo "Built bin/mockd (with race detector)"
+"""
+
+# =============================================================================
+# Development Tasks
+# =============================================================================
+
+[tasks.dev]
+description = "Setup dev environment (build + symlink to ~/.local/bin)"
+depends = ["build"]
+run = """
+mkdir -p ~/.local/bin
+rm -f ~/.local/bin/mockd
+ln -sf "$(pwd)/bin/mockd" ~/.local/bin/mockd
+echo "Linked ~/.local/bin/mockd -> $(pwd)/bin/mockd"
+echo ""
+echo "Now just run 'mise run bf' and your mockd command updates!"
+"""
+
+[tasks.link]
+description = "Create symlink for development (without rebuild)"
+run = """
+mkdir -p ~/.local/bin
+rm -f ~/.local/bin/mockd
+ln -sf "$(pwd)/bin/mockd" ~/.local/bin/mockd
+echo "Linked ~/.local/bin/mockd -> $(pwd)/bin/mockd"
+"""
+
+[tasks.unlink]
+description = "Remove development symlink"
+run = """
+rm -f ~/.local/bin/mockd
+echo "Unlinked ~/.local/bin/mockd"
+"""
+
+[tasks.run]
+alias = "r"
+description = "Build and run the server"
+depends = ["build-fast"]
+run = "./bin/mockd serve"
+
+[tasks.serve]
+alias = "s"
+description = "Run mockd serve from source (no build step)"
+run = "go run ./cmd/mockd serve"
+
+[tasks.watch]
+alias = "w"
+description = "Watch for changes and rebuild automatically"
+run = """
+#!/usr/bin/env bash
+if command -v entr >/dev/null 2>&1; then
+    echo "Watching for changes (using entr)..."
+    find . -name '*.go' | entr -c mise run bf
+elif command -v fswatch >/dev/null 2>&1; then
+    echo "Watching for changes (using fswatch)..."
+    fswatch -o -r --include '\\.go$' --exclude '.*' . | xargs -n1 -I{} mise run bf
+else
+    echo "Install 'entr' for file watching:"
+    echo "  Ubuntu/Debian: sudo apt install entr"
+    echo "  macOS: brew install entr"
+    exit 1
+fi
+"""
+
+# =============================================================================
+# Install Tasks
+# =============================================================================
+
+[tasks.install]
+description = "Install to /usr/local/bin (requires sudo)"
+depends = ["build"]
+run = """
+sudo cp bin/mockd /usr/local/bin/mockd
+echo "Installed to /usr/local/bin/mockd"
+"""
+
+[tasks.install-local]
+description = "Install (copy) to ~/.local/bin"
+depends = ["build"]
+run = """
+mkdir -p ~/.local/bin
+cp bin/mockd ~/.local/bin/mockd
+echo "Installed to ~/.local/bin/mockd"
+"""
+
+# =============================================================================
+# Test & Quality Tasks
+# =============================================================================
+
+[tasks.test]
+alias = "t"
+description = "Run tests"
+run = "go test ./..."
+
+[tasks.test-v]
+alias = "tv"
+description = "Run tests with verbose output"
+run = "go test -v ./..."
+
+[tasks.test-coverage]
+alias = "tc"
+description = "Run tests with coverage report"
+run = """
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out -o coverage.html
+echo "Coverage report: coverage.html"
+"""
+
+[tasks.lint]
+alias = "l"
+description = "Run golangci-lint"
+run = "golangci-lint run"
+
+[tasks.fmt]
+description = "Format Go code"
+run = "go fmt ./..."
+
+[tasks.vet]
+description = "Run go vet"
+run = "go vet ./..."
+
+[tasks.check]
+description = "Run fmt, vet, and lint"
+depends = ["fmt", "vet", "lint"]
+
+# =============================================================================
+# Cleanup Tasks
+# =============================================================================
+
+[tasks.clean]
+description = "Remove build artifacts"
+run = """
+rm -rf bin
+rm -f coverage.out coverage.html
+echo "Cleaned build artifacts"
+"""
+
+[tasks.clean-all]
+description = "Remove build artifacts and unlink"
+depends = ["clean", "unlink"]
+
+# =============================================================================
+# Info Tasks
+# =============================================================================
+
+[tasks.version]
+alias = "v"
+description = "Show mockd version"
+run = "./bin/mockd --version 2>/dev/null || go run ./cmd/mockd --version"
+
+[tasks.info]
+description = "Show build configuration"
+run = """
+echo "Build Configuration"
+echo "-------------------"
+echo "Version:     $MOCKD_VERSION"
+echo "Commit:      $MOCKD_COMMIT"
+echo "Build Date:  $MOCKD_BUILD_DATE"
+echo ""
+echo "Go Environment"
+echo "--------------"
+go version
+echo "GOOS:   $(go env GOOS)"
+echo "GOARCH: $(go env GOARCH)"
+"""
+
+# =============================================================================
+# Documentation Tasks (delegates to docs/ directory)
+# =============================================================================
 
 [tasks.docs-install]
 description = "Install documentation dependencies"
@@ -26,11 +233,3 @@ run = "mise run build"
 description = "Clean documentation build artifacts"
 dir = "docs"
 run = "mise run clean"
-
-[tasks.tui]
-description = "Run the TUI (with hot reload from source)"
-run = "go run cmd/mockd/main.go"
-
-[tasks.build]
-description = "Build mockd binary"
-run = "go build -o mockd cmd/mockd/main.go"
