@@ -618,7 +618,12 @@ mocks:
 
 ## Server Configuration
 
-Server settings can be included in the config file:
+Server settings can be included in the config file.
+
+> **Note:** Port settings (`httpPort`, `httpsPort`, `adminPort`) from config files are currently overridden by CLI flags. Use `--port` and `--admin-port` flags to set ports:
+> ```bash
+> mockd serve --config myconfig.yaml --port 8080 --admin-port 8081
+> ```
 
 ```yaml
 version: "1.0"

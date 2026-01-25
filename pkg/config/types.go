@@ -88,28 +88,28 @@ type MTLSConfig struct {
 // ServerConfiguration defines the mock server runtime settings and operational parameters.
 type ServerConfiguration struct {
 	// HTTPPort is the port for the HTTP server (0 = disabled)
-	HTTPPort int `json:"httpPort,omitempty"`
+	HTTPPort int `json:"httpPort,omitempty" yaml:"httpPort,omitempty"`
 	// HTTPSPort is the port for the HTTPS server (0 = disabled)
-	HTTPSPort int `json:"httpsPort,omitempty"`
+	HTTPSPort int `json:"httpsPort,omitempty" yaml:"httpsPort,omitempty"`
 	// AdminPort is the port for the admin API (required)
-	AdminPort int `json:"adminPort"`
+	AdminPort int `json:"adminPort" yaml:"adminPort"`
 	// ManagementPort is the port for the Engine Management API (default: 4281)
 	// This is an internal API used by the Admin server to communicate with the engine.
-	ManagementPort int `json:"managementPort,omitempty"`
+	ManagementPort int `json:"managementPort,omitempty" yaml:"managementPort,omitempty"`
 	// TLS configures TLS/HTTPS settings
 	TLS *TLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
 	// MTLS configures mutual TLS client certificate authentication
 	MTLS *MTLSConfig `json:"mtls,omitempty" yaml:"mtls,omitempty"`
 	// LogRequests enables request logging
-	LogRequests bool `json:"logRequests"`
+	LogRequests bool `json:"logRequests" yaml:"logRequests"`
 	// MaxLogEntries is the maximum number of request log entries to retain
-	MaxLogEntries int `json:"maxLogEntries,omitempty"`
+	MaxLogEntries int `json:"maxLogEntries,omitempty" yaml:"maxLogEntries,omitempty"`
 	// MaxBodySize is the maximum request/response body size in bytes
-	MaxBodySize int `json:"maxBodySize,omitempty"`
+	MaxBodySize int `json:"maxBodySize,omitempty" yaml:"maxBodySize,omitempty"`
 	// ReadTimeout is the HTTP read timeout in seconds
-	ReadTimeout int `json:"readTimeout,omitempty"`
+	ReadTimeout int `json:"readTimeout,omitempty" yaml:"readTimeout,omitempty"`
 	// WriteTimeout is the HTTP write timeout in seconds
-	WriteTimeout int `json:"writeTimeout,omitempty"`
+	WriteTimeout int `json:"writeTimeout,omitempty" yaml:"writeTimeout,omitempty"`
 	// Audit configures audit logging for request/response tracking
 	Audit *audit.AuditConfig `json:"audit,omitempty" yaml:"audit,omitempty"`
 

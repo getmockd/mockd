@@ -309,7 +309,7 @@ Extensions are registered via `init()` functions and automatically discovered wh
 
 ## Requirements
 
-- Go 1.25+
+- Go 1.23+
 
 ## Contributing
 
