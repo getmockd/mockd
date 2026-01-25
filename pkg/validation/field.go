@@ -329,23 +329,112 @@ func ValidateRequired(location string, data map[string]interface{}, required []s
 	return result
 }
 
-// ValidateFields validates all fields in data against field validators
+// ValidateFields validates all fields in data against field validators.
+// Supports dot notation for nested fields (e.g., "user.address.city") and
+// array item validation (e.g., "items.sku" validates sku field in each array item).
 func ValidateFields(location string, data map[string]interface{}, fields map[string]*FieldValidator) *Result {
 	result := &Result{Valid: true}
 
-	for fieldName, validator := range fields {
-		value, exists := data[fieldName]
+	for fieldPath, validator := range fields {
+		// Check if this is a nested field path
+		if strings.Contains(fieldPath, ".") {
+			nestedResult := validateNestedField(location, data, fieldPath, validator)
+			result.Merge(nestedResult)
+			continue
+		}
+
+		// Simple top-level field
+		value, exists := data[fieldPath]
 		if !exists {
 			if validator.Required {
-				result.AddError(NewRequiredError(fieldName, location))
+				result.AddError(NewRequiredError(fieldPath, location))
 			}
 			continue
 		}
 
-		fieldResult := ValidateField(fieldName, location, value, validator)
+		fieldResult := ValidateField(fieldPath, location, value, validator)
 		result.Merge(fieldResult)
 	}
 
+	return result
+}
+
+// validateNestedField validates a nested field using dot notation.
+// For example, "user.address.city" or "items.sku" (array item field).
+func validateNestedField(location string, data map[string]interface{}, fieldPath string, validator *FieldValidator) *Result {
+	result := &Result{Valid: true}
+	parts := strings.SplitN(fieldPath, ".", 2)
+
+	if len(parts) < 2 {
+		// Should not happen, but handle gracefully
+		return result
+	}
+
+	rootField := parts[0]
+	remainingPath := parts[1]
+
+	rootValue, exists := data[rootField]
+	if !exists {
+		if validator.Required {
+			result.AddError(NewRequiredError(fieldPath, location))
+		}
+		return result
+	}
+
+	// Check if root is an array - validate the field in each array item
+	if arr, ok := rootValue.([]interface{}); ok {
+		// This is array item validation (e.g., "items.sku" means validate "sku" in each item)
+		if len(arr) == 0 && validator.Required {
+			result.AddError(NewRequiredError(fieldPath, location))
+			return result
+		}
+
+		for _, item := range arr {
+			if itemMap, ok := item.(map[string]interface{}); ok {
+				// If remaining path has more dots, recurse
+				if strings.Contains(remainingPath, ".") {
+					itemResult := validateNestedField(location, itemMap, remainingPath, validator)
+					result.Merge(itemResult)
+				} else {
+					// Direct field in array item
+					itemValue, itemExists := itemMap[remainingPath]
+					if !itemExists {
+						if validator.Required {
+							result.AddError(NewRequiredError(fieldPath, location))
+						}
+					} else {
+						itemResult := ValidateField(fieldPath, location, itemValue, validator)
+						result.Merge(itemResult)
+					}
+				}
+			}
+		}
+		return result
+	}
+
+	// Check if root is an object - traverse into it
+	if obj, ok := rootValue.(map[string]interface{}); ok {
+		// If remaining path has more dots, recurse
+		if strings.Contains(remainingPath, ".") {
+			return validateNestedField(location, obj, remainingPath, validator)
+		}
+
+		// Direct field in nested object
+		nestedValue, nestedExists := obj[remainingPath]
+		if !nestedExists {
+			if validator.Required {
+				result.AddError(NewRequiredError(fieldPath, location))
+			}
+			return result
+		}
+
+		return ValidateField(fieldPath, location, nestedValue, validator)
+	}
+
+	// Root value is neither array nor object - can't traverse
+	if validator.Required {
+		result.AddError(NewRequiredError(fieldPath, location))
+	}
 	return result
 }
 
