@@ -7,11 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/requestlog"
 )
@@ -19,9 +17,6 @@ import (
 const (
 	// APIKeyHeader is the HTTP header for API key authentication.
 	APIKeyHeader = "X-API-Key"
-
-	// DefaultKeyFileName is the default file name for storing the API key.
-	DefaultKeyFileName = "admin-api-key"
 )
 
 // AdminClient provides methods for communicating with the mockd admin API.
@@ -59,6 +54,8 @@ type AdminClient interface {
 	GetStats() (*StatsResult, error)
 	// GetPorts returns all ports in use by mockd.
 	GetPorts() ([]PortInfo, error)
+	// GetPortsVerbose returns all ports with optional extended info.
+	GetPortsVerbose(verbose bool) ([]PortInfo, error)
 }
 
 // LogFilter specifies filtering criteria for request logs.
@@ -148,33 +145,15 @@ func WithAPIKey(key string) ClientOption {
 // LoadAPIKeyFromFile loads the API key from the default file location.
 // Returns the key and nil error if successful, empty string and nil if file doesn't exist,
 // or empty string and error if there was a read error.
+// Deprecated: Use cliconfig.LoadAPIKeyFromFile() instead.
 func LoadAPIKeyFromFile() (string, error) {
-	path := GetAPIKeyFilePath()
-	return LoadAPIKeyFromPath(path)
-}
-
-// LoadAPIKeyFromPath loads the API key from a specific file path.
-func LoadAPIKeyFromPath(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil // File doesn't exist, not an error
-		}
-		return "", fmt.Errorf("failed to read API key file: %w", err)
-	}
-	key := strings.TrimSpace(string(data))
-	return key, nil
+	return cliconfig.LoadAPIKeyFromFile()
 }
 
 // GetAPIKeyFilePath returns the default path for the API key file.
-// This matches the path used by the Admin API server.
+// Deprecated: Use cliconfig.GetAPIKeyFilePath() instead.
 func GetAPIKeyFilePath() string {
-	dataDir := os.Getenv("XDG_DATA_HOME")
-	if dataDir == "" {
-		home, _ := os.UserHomeDir()
-		dataDir = filepath.Join(home, ".local", "share")
-	}
-	return filepath.Join(dataDir, "mockd", DefaultKeyFileName)
+	return cliconfig.GetAPIKeyFilePath()
 }
 
 // NewAdminClient creates a new admin API client.
@@ -193,15 +172,25 @@ func NewAdminClient(baseURL string, opts ...ClientOption) AdminClient {
 }
 
 // NewAdminClientWithAuth creates a new admin API client that automatically
-// loads the API key from the default file location.
+// loads the API key from all configured sources (env, context, file).
 // This is the recommended way to create a client for CLI commands.
 func NewAdminClientWithAuth(baseURL string, opts ...ClientOption) AdminClient {
-	// Load API key from file (ignore errors - key may not exist if auth is disabled)
-	apiKey, _ := LoadAPIKeyFromFile()
+	// Use centralized API key resolution (env > context > file)
+	apiKey := cliconfig.GetAPIKey()
 	if apiKey != "" {
 		opts = append([]ClientOption{WithAPIKey(apiKey)}, opts...)
 	}
 	return NewAdminClient(baseURL, opts...)
+}
+
+// NewClientFromConfig creates a new admin API client using resolved configuration.
+// This is the preferred way to create a client - it handles URL and auth automatically.
+func NewClientFromConfig(flagAdminURL string, opts ...ClientOption) AdminClient {
+	cfg := cliconfig.ResolveClientConfigSimple(flagAdminURL)
+	if cfg.APIKey != "" {
+		opts = append([]ClientOption{WithAPIKey(cfg.APIKey)}, opts...)
+	}
+	return NewAdminClient(cfg.AdminURL, opts...)
 }
 
 // ListMocks returns all configured mocks.
@@ -618,7 +607,17 @@ func (c *adminClient) GetStats() (*StatsResult, error) {
 
 // GetPorts returns all ports in use by mockd.
 func (c *adminClient) GetPorts() ([]PortInfo, error) {
-	resp, err := c.get("/ports")
+	return c.GetPortsVerbose(false)
+}
+
+// GetPortsVerbose returns all ports with optional extended info (engine ID, name, etc).
+func (c *adminClient) GetPortsVerbose(verbose bool) ([]PortInfo, error) {
+	path := "/ports"
+	if verbose {
+		path += "?verbose=true"
+	}
+
+	resp, err := c.get(path)
 	if err != nil {
 		return nil, err
 	}

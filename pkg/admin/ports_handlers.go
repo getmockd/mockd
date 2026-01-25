@@ -14,6 +14,12 @@ type PortInfo struct {
 	Component string `json:"component"`
 	Status    string `json:"status"`
 	TLS       bool   `json:"tls,omitempty"`
+
+	// Extended info (populated when verbose=true)
+	EngineID   string `json:"engineId,omitempty"`
+	EngineName string `json:"engineName,omitempty"`
+	Workspace  string `json:"workspace,omitempty"`
+	PID        int    `json:"pid,omitempty"`
 }
 
 // PortsResponse is the response for the /ports endpoint.
@@ -23,61 +29,68 @@ type PortsResponse struct {
 
 // handleListPorts handles GET /ports.
 // Returns all ports in use by mockd, grouped by component.
+// Query params:
+//   - verbose=true: include engine ID, name, workspace, PID
 func (a *AdminAPI) handleListPorts(w http.ResponseWriter, r *http.Request) {
+	verbose := r.URL.Query().Get("verbose") == "true"
 	var ports []PortInfo
 
 	// Admin API port (always running if we're handling this request)
-	ports = append(ports, PortInfo{
+	adminPort := PortInfo{
 		Port:      a.port,
 		Protocol:  "HTTP",
 		Component: "Admin API",
 		Status:    "running",
-	})
+	}
+	ports = append(ports, adminPort)
 
 	// Get engine status for HTTP/HTTPS ports
 	if a.localEngine != nil {
 		ctx := r.Context()
 		status, err := a.localEngine.Status(ctx)
+
+		// Engine metadata for verbose output
+		var engineID, engineName string
 		if err == nil {
+			engineID = status.ID
+			engineName = status.Name
+		}
+
+		if err == nil {
+			// Helper to create port info with engine metadata
+			makePortInfo := func(port int, protocol, component, portStatus string, tls bool) PortInfo {
+				p := PortInfo{
+					Port:      port,
+					Protocol:  protocol,
+					Component: component,
+					Status:    portStatus,
+					TLS:       tls,
+				}
+				if verbose {
+					p.EngineID = engineID
+					p.EngineName = engineName
+				}
+				return p
+			}
+
 			// Check for HTTP protocol handler
 			if httpStatus, ok := status.Protocols["http"]; ok && httpStatus.Enabled && httpStatus.Port > 0 {
-				ports = append(ports, PortInfo{
-					Port:      httpStatus.Port,
-					Protocol:  "HTTP",
-					Component: "Mock Engine",
-					Status:    "running",
-				})
+				ports = append(ports, makePortInfo(httpStatus.Port, "HTTP", "Mock Engine", "running", false))
 			}
 
 			// Check for HTTPS protocol handler
 			if httpsStatus, ok := status.Protocols["https"]; ok && httpsStatus.Enabled && httpsStatus.Port > 0 {
-				ports = append(ports, PortInfo{
-					Port:      httpsStatus.Port,
-					Protocol:  "HTTPS",
-					Component: "Mock Engine",
-					Status:    "running",
-					TLS:       true,
-				})
+				ports = append(ports, makePortInfo(httpsStatus.Port, "HTTPS", "Mock Engine", "running", true))
 			}
 
 			// Check for gRPC handler
 			if grpcStatus, ok := status.Protocols["grpc"]; ok && grpcStatus.Enabled && grpcStatus.Port > 0 {
-				ports = append(ports, PortInfo{
-					Port:      grpcStatus.Port,
-					Protocol:  "gRPC",
-					Component: "gRPC Server",
-					Status:    "running",
-				})
+				ports = append(ports, makePortInfo(grpcStatus.Port, "gRPC", "gRPC Server", "running", false))
 			}
 
 			// Check for MQTT handler
 			if mqttStatus, ok := status.Protocols["mqtt"]; ok && mqttStatus.Enabled && mqttStatus.Port > 0 {
-				ports = append(ports, PortInfo{
-					Port:      mqttStatus.Port,
-					Protocol:  "MQTT",
-					Component: "MQTT Broker",
-					Status:    "running",
-				})
+				ports = append(ports, makePortInfo(mqttStatus.Port, "MQTT", "MQTT Broker", "running", false))
 			}
 		}
 
@@ -117,12 +130,17 @@ func (a *AdminAPI) handleListPorts(w http.ResponseWriter, r *http.Request) {
 							protocol = "gRPC"
 							component = "gRPC Server"
 						}
-						ports = append(ports, PortInfo{
+						p := PortInfo{
 							Port:      h.Port,
 							Protocol:  protocol,
 							Component: component,
 							Status:    h.Status,
-						})
+						}
+						if verbose {
+							p.EngineID = engineID
+							p.EngineName = engineName
+						}
+						ports = append(ports, p)
 					}
 				}
 			}

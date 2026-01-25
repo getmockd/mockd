@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 	"sort"
-	"time"
 
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
@@ -19,6 +17,12 @@ type PortInfo struct {
 	Component string `json:"component"`
 	Status    string `json:"status"`
 	TLS       bool   `json:"tls,omitempty"`
+
+	// Extended info (populated with --verbose)
+	EngineID   string `json:"engineId,omitempty"`
+	EngineName string `json:"engineName,omitempty"`
+	Workspace  string `json:"workspace,omitempty"`
+	PID        int    `json:"pid,omitempty"`
 }
 
 // PortsOutput represents the JSON output format for ports command.
@@ -38,7 +42,9 @@ func RunPorts(args []string) error {
 
 	pidFile := fs.String("pid-file", "", "Path to PID file (default: ~/.mockd/mockd.pid)")
 	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-	adminPort := fs.Int("admin-port", cliconfig.DefaultAdminPort, "Admin API port to query")
+	verbose := fs.Bool("verbose", false, "Show extended info (engine ID, name, workspace)")
+	fs.BoolVar(verbose, "v", false, "Show extended info (shorthand)")
+	adminURL := fs.String("admin-url", "", "Admin API URL (default: from context)")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd ports [flags]
@@ -48,17 +54,21 @@ Show all ports in use by the running mockd server.
 Flags:
       --pid-file    Path to PID file (default: ~/.mockd/mockd.pid)
       --json        Output in JSON format
-  -a, --admin-port  Admin API port to query (default: 4290)
+  -v, --verbose     Show extended info (engine ID, name, workspace)
+      --admin-url   Admin API URL (default: from context/config)
 
 Examples:
   # Show all ports
   mockd ports
 
+  # Show with engine details
+  mockd ports --verbose
+
   # Output as JSON
   mockd ports --json
 
-  # Query a different admin port
-  mockd ports --admin-port 8090
+  # Query a specific admin server
+  mockd ports --admin-url http://staging:4290
 `)
 	}
 
@@ -66,96 +76,84 @@ Examples:
 		return err
 	}
 
+	// Resolve config from context/env/flags
+	cfg := cliconfig.ResolveClientConfigSimple(*adminURL)
+
 	// Determine PID file path
 	pidPath := *pidFile
 	if pidPath == "" {
 		pidPath = DefaultPIDPath()
 	}
 
-	// Try to read PID file first for port information
-	info, err := ReadPIDFile(pidPath)
-	if err == nil && info.IsRunning() {
-		// Use admin port from PID file if available
-		if info.Components.Admin.Enabled && info.Components.Admin.Port > 0 {
-			*adminPort = info.Components.Admin.Port
-		}
-	}
+	// Try to read PID file first for port information (fallback only)
+	pidInfo, _ := ReadPIDFile(pidPath)
 
-	// Try to get live port info from admin API
-	adminURL := fmt.Sprintf("http://localhost:%d", *adminPort)
-	ports, err := fetchPortsFromAPI(adminURL)
+	// Try to get live port info from admin API using authenticated client
+	client := NewAdminClientWithAuth(cfg.AdminURL, WithAPIKey(cfg.APIKey))
+	ports, err := client.GetPortsVerbose(*verbose)
 	if err != nil {
 		// Fall back to PID file information
-		if info != nil && info.IsRunning() {
-			return printPortsFromPIDFile(info, *jsonOutput)
+		if pidInfo != nil && pidInfo.IsRunning() {
+			return printPortsFromPIDFile(pidInfo, *jsonOutput, *verbose)
 		}
 		return printNotRunningPorts(*jsonOutput)
 	}
 
-	return printPorts(ports, *jsonOutput)
-}
-
-// fetchPortsFromAPI fetches port information from the admin API.
-func fetchPortsFromAPI(adminURL string) ([]PortInfo, error) {
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(adminURL + "/ports")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("admin API returned status %d", resp.StatusCode)
-	}
-
-	var result PortsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	return result.Ports, nil
+	return printPorts(ports, *jsonOutput, *verbose)
 }
 
 // printPortsFromPIDFile prints port information from the PID file.
-func printPortsFromPIDFile(info *PIDFile, jsonOutput bool) error {
+func printPortsFromPIDFile(info *PIDFile, jsonOutput, verbose bool) error {
 	var ports []PortInfo
 
 	// Add engine HTTP port
 	if info.Components.Engine.Enabled && info.Components.Engine.Port > 0 {
-		ports = append(ports, PortInfo{
+		p := PortInfo{
 			Port:      info.Components.Engine.Port,
 			Protocol:  "HTTP",
 			Component: "Mock Engine",
 			Status:    "running",
-		})
+		}
+		if verbose {
+			p.PID = info.PID
+		}
+		ports = append(ports, p)
 	}
 
 	// Add engine HTTPS port
 	if info.Components.Engine.Enabled && info.Components.Engine.HTTPSPort > 0 {
-		ports = append(ports, PortInfo{
+		p := PortInfo{
 			Port:      info.Components.Engine.HTTPSPort,
 			Protocol:  "HTTPS",
 			Component: "Mock Engine",
 			Status:    "running",
 			TLS:       true,
-		})
+		}
+		if verbose {
+			p.PID = info.PID
+		}
+		ports = append(ports, p)
 	}
 
 	// Add admin API port
 	if info.Components.Admin.Enabled && info.Components.Admin.Port > 0 {
-		ports = append(ports, PortInfo{
+		p := PortInfo{
 			Port:      info.Components.Admin.Port,
 			Protocol:  "HTTP",
 			Component: "Admin API",
 			Status:    "running",
-		})
+		}
+		if verbose {
+			p.PID = info.PID
+		}
+		ports = append(ports, p)
 	}
 
-	return printPorts(ports, jsonOutput)
+	return printPorts(ports, jsonOutput, verbose)
 }
 
 // printPorts prints the port information in the requested format.
-func printPorts(ports []PortInfo, jsonOutput bool) error {
+func printPorts(ports []PortInfo, jsonOutput, verbose bool) error {
 	if jsonOutput {
 		output := PortsOutput{
 			Ports:   ports,
@@ -176,18 +174,44 @@ func printPorts(ports []PortInfo, jsonOutput bool) error {
 		return ports[i].Port < ports[j].Port
 	})
 
-	// Print header
 	fmt.Println()
-	fmt.Printf("%-7s %-10s %-15s %s\n", "PORT", "PROTOCOL", "COMPONENT", "STATUS")
-	fmt.Println("------- ---------- --------------- --------")
 
-	// Print each port
-	for _, p := range ports {
-		status := p.Status
-		if p.TLS {
-			status += " (TLS)"
+	if verbose {
+		// Verbose output with engine info
+		fmt.Printf("%-7s %-10s %-15s %-10s %-20s %s\n", "PORT", "PROTOCOL", "COMPONENT", "STATUS", "ENGINE", "ID")
+		fmt.Println("------- ---------- --------------- ---------- -------------------- --------")
+
+		for _, p := range ports {
+			status := p.Status
+			if p.TLS {
+				status += " (TLS)"
+			}
+			engineName := p.EngineName
+			if engineName == "" {
+				engineName = "-"
+			}
+			engineID := p.EngineID
+			if engineID == "" {
+				engineID = "-"
+			}
+			// Truncate long IDs
+			if len(engineID) > 8 {
+				engineID = engineID[:8]
+			}
+			fmt.Printf("%-7d %-10s %-15s %-10s %-20s %s\n", p.Port, p.Protocol, p.Component, status, engineName, engineID)
 		}
-		fmt.Printf("%-7d %-10s %-15s %s\n", p.Port, p.Protocol, p.Component, status)
+	} else {
+		// Standard output
+		fmt.Printf("%-7s %-10s %-15s %s\n", "PORT", "PROTOCOL", "COMPONENT", "STATUS")
+		fmt.Println("------- ---------- --------------- --------")
+
+		for _, p := range ports {
+			status := p.Status
+			if p.TLS {
+				status += " (TLS)"
+			}
+			fmt.Printf("%-7d %-10s %-15s %s\n", p.Port, p.Protocol, p.Component, status)
+		}
 	}
 	fmt.Println()
 
