@@ -279,6 +279,62 @@ Response includes pagination metadata:
 }
 ```
 
+## Validation
+
+Validate incoming requests before creating or updating resources. Validation ensures data integrity by checking field types, formats, constraints, and required fields.
+
+### Quick Example
+
+```yaml
+statefulResources:
+  - name: users
+    basePath: /api/users
+    validation:
+      mode: strict
+      fields:
+        email:
+          type: string
+          required: true
+          format: email
+        username:
+          type: string
+          required: true
+          minLength: 3
+          maxLength: 30
+          pattern: "^[a-z][a-z0-9_]*$"
+        age:
+          type: integer
+          min: 0
+          max: 150
+        role:
+          type: string
+          enum: [admin, user, guest]
+```
+
+### Validation Modes
+
+| Mode | Behavior |
+|------|----------|
+| `strict` | Reject request on any validation failure (default) |
+| `warn` | Log warnings but allow request through |
+| `permissive` | Only fail on critical errors (missing required fields) |
+
+### Nested Fields
+
+Validate nested object fields using dot notation:
+
+```yaml
+fields:
+  "address.city":
+    type: string
+    required: true
+  "items.sku":
+    type: string
+    pattern: "^SKU-[A-Z0-9]+$"
+```
+
+For nested objects, array validation, formats, patterns, and more, see the [Validation Guide](validation.md).
+
 ## State Lifetime
 
 State exists only in memory and resets when the server stops. Use seed data to pre-populate resources on startup.

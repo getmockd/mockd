@@ -12,6 +12,8 @@ This directory contains comprehensive demo configurations showcasing all mockd f
 | `graphql-features-demo.json` | 20 | GraphQL: schemas, resolvers, mutations, subscriptions, errors, introspection |
 | `grpc-features-demo.json` | 13 | gRPC: unary/streaming RPCs, error codes, metadata matching, delays, reflection |
 | `soap-features-demo.json` | 31 | SOAP 1.1/1.2: operations, faults, XPath matching, WSDL generation |
+| `validation-demo.json` | 10 | HTTP validation: required fields, types, patterns, formats, nested objects, arrays |
+| `stateful-features-demo.json` | 7 | Stateful CRUD with validation: todos, users, products, orders with nested validation |
 
 ## Quick Start
 
@@ -104,6 +106,16 @@ API_KEY=$(cat ~/.local/share/mockd/admin-api-key)
 - WSDL generation
 - Complex nested XML types
 
+### Validation Features
+- Required fields and type checking (string, number, integer, boolean, array, object)
+- String validation: minLength, maxLength, pattern, format (email, uuid, date, datetime, uri, ipv4, ipv6, hostname)
+- Number validation: min, max, exclusiveMin, exclusiveMax
+- Array validation: minItems, maxItems, uniqueItems, item validation
+- Enum values
+- Nested object validation with dot notation (e.g., `address.city`, `items.sku`)
+- Validation modes: strict, warn, permissive
+- RFC 7807 error responses
+
 ## Testing with curl
 
 ### HTTP
@@ -139,6 +151,24 @@ curl -X POST http://localhost:4280/soap/users \
   -d '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
         <soap:Body><GetUser><id>123</id></GetUser></soap:Body>
       </soap:Envelope>'
+```
+
+### Validation
+```bash
+# Test validation failure (missing required fields, invalid format)
+curl -X POST http://localhost:4280/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ab", "email": "not-an-email"}'
+
+# Test validation success
+curl -X POST http://localhost:4280/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "john_doe", "email": "john@example.com", "password": "secret123", "confirmPassword": "secret123", "termsAccepted": true}'
+
+# Test stateful resource validation
+curl -X POST http://localhost:4280/api/todos \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Test task", "completed": false, "priority": "high"}'
 ```
 
 ## Notes

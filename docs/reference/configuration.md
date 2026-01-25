@@ -107,6 +107,7 @@ mocks:
 | `response` | object | Response definition |
 | `sse` | object | Server-Sent Events config (instead of response) |
 | `chunked` | object | Chunked transfer config (instead of response) |
+| `validation` | object | Request validation ([see Validation](#validation)) |
 
 ### HTTP Matcher
 
@@ -723,6 +724,7 @@ mocks: []
 | `idField` | string | `"id"` | Field name for resource ID |
 | `parentField` | string | | Parent FK field for nested resources |
 | `seedData` | array | `[]` | Initial data to load |
+| `validation` | object | | Validation rules ([see Validation](#validation)) |
 
 ### Generated Endpoints
 
@@ -736,6 +738,83 @@ For a resource with `basePath: /api/users`:
 | PUT | `/api/users/{id}` | Replace resource |
 | PATCH | `/api/users/{id}` | Update resource |
 | DELETE | `/api/users/{id}` | Delete resource |
+
+### Validation
+
+Stateful resources and HTTP mocks support field-level request validation.
+
+#### StatefulValidation
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | string | `"strict"` | Validation mode: `strict`, `warn`, `permissive` |
+| `auto` | boolean | `false` | Auto-infer rules from seed data |
+| `required` | array | `[]` | Required field names (shared) |
+| `fields` | map | `{}` | Field validators (shared) |
+| `pathParams` | map | `{}` | Path parameter validators |
+| `onCreate` | object | | Create-specific validation |
+| `onUpdate` | object | | Update-specific validation |
+| `schema` | object | | Inline JSON Schema |
+| `schemaRef` | string | | Path to JSON Schema file |
+
+#### RequestValidation (for HTTP mocks)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | string | `"strict"` | Validation mode: `strict`, `warn`, `permissive` |
+| `failStatus` | integer | `400` | HTTP status code for failures |
+| `required` | array | `[]` | Required field names |
+| `fields` | map | `{}` | Field validators |
+| `pathParams` | map | `{}` | Path parameter validators |
+| `queryParams` | map | `{}` | Query parameter validators |
+| `headers` | map | `{}` | Header validators |
+| `schema` | object | | Inline JSON Schema |
+| `schemaRef` | string | | Path to JSON Schema file |
+
+#### FieldValidator
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Expected type: `string`, `number`, `integer`, `boolean`, `array`, `object` |
+| `required` | boolean | Field must be present |
+| `nullable` | boolean | Allow null values |
+| `minLength` | integer | Minimum string length |
+| `maxLength` | integer | Maximum string length |
+| `pattern` | string | Regex pattern for strings |
+| `format` | string | Format: `email`, `uuid`, `date`, `datetime`, `uri`, `ipv4`, `ipv6`, `hostname` |
+| `min` | number | Minimum value (inclusive) |
+| `max` | number | Maximum value (inclusive) |
+| `exclusiveMin` | number | Minimum value (exclusive) |
+| `exclusiveMax` | number | Maximum value (exclusive) |
+| `minItems` | integer | Minimum array items |
+| `maxItems` | integer | Maximum array items |
+| `uniqueItems` | boolean | Array items must be unique |
+| `items` | object | FieldValidator for array items |
+| `enum` | array | Allowed values |
+| `properties` | map | Nested object validators |
+| `message` | string | Custom error message |
+
+#### Nested Fields
+
+Use dot notation for nested object fields:
+
+```yaml
+fields:
+  "address.city":
+    type: string
+    required: true
+  "address.zipCode":
+    type: string
+    pattern: "^[0-9]{5}$"
+  "items.sku":
+    type: string
+    required: true
+```
+
+For arrays, the field after the dot applies to each array item:
+- `items.sku` validates the `sku` field in each item of the `items` array
+
+See the [Validation Guide](../guides/validation.md) for comprehensive examples.
 
 ---
 

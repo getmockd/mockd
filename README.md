@@ -13,6 +13,7 @@ A high-performance, local-first HTTP/HTTPS mock server with CLI and Go API.
 - **HTTPS Support**: Auto-generated self-signed certificates for secure testing
 - **Admin API**: RESTful API for dynamic mock configuration
 - **Stateful Mocking**: Simulate CRUD operations with persistent state
+- **Request Validation**: Field-level validation with type checking, patterns, formats, and nested field support
 - **Proxy Recording**: Record real API traffic for replay
 - **Request Logging**: Full request inspection for debugging
 - **Shell Completion**: Bash, Zsh, and Fish completion support
