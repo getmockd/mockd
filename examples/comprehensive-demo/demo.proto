@@ -1,0 +1,255 @@
+syntax = "proto3";
+package demo;
+option go_package = "demo/v1;demov1";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+// =============================================================================
+// Enums
+// =============================================================================
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_PENDING = 1;
+  STATUS_ACTIVE = 2;
+  STATUS_COMPLETED = 3;
+  STATUS_FAILED = 4;
+}
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_LOW = 1;
+  PRIORITY_MEDIUM = 2;
+  PRIORITY_HIGH = 3;
+  PRIORITY_CRITICAL = 4;
+}
+// =============================================================================
+// Nested Message Types
+// =============================================================================
+message Address {
+  string street = 1;
+  string city = 2;
+  string state = 3;
+  string zip_code = 4;
+  string country = 5;
+}
+message ContactInfo {
+  string email = 1;
+  string phone = 2;
+  Address address = 3;
+}
+message Metadata {
+  map<string, string> labels = 1;
+  map<string, string> annotations = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+// =============================================================================
+// User Service Messages
+// =============================================================================
+message User {
+  string id = 1;
+  string username = 2;
+  string email = 3;
+  string full_name = 4;
+  ContactInfo contact = 5;
+  repeated string roles = 6;
+  Status status = 7;
+  Metadata metadata = 8;
+}
+message CreateUserRequest {
+  string username = 1;
+  string email = 2;
+  string full_name = 3;
+  ContactInfo contact = 4;
+  repeated string roles = 5;
+}
+message CreateUserResponse {
+  User user = 1;
+}
+message GetUserRequest {
+  string id = 1;
+}
+message GetUserResponse {
+  User user = 1;
+}
+message ListUsersRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string filter = 3;
+}
+message ListUsersResponse {
+  repeated User users = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+message UpdateUserRequest {
+  string id = 1;
+  string email = 2;
+  string full_name = 3;
+  ContactInfo contact = 4;
+}
+message UpdateUserResponse {
+  User user = 1;
+}
+message DeleteUserRequest {
+  string id = 1;
+}
+message DeleteUserResponse {
+  bool success = 1;
+}
+// =============================================================================
+// Streaming Service Messages
+// =============================================================================
+message Event {
+  string id = 1;
+  string type = 2;
+  string source = 3;
+  string data = 4;
+  google.protobuf.Timestamp timestamp = 5;
+  Priority priority = 6;
+}
+message SubscribeRequest {
+  repeated string event_types = 1;
+  string filter = 2;
+}
+message UploadChunk {
+  string file_id = 1;
+  int32 chunk_number = 2;
+  bytes data = 3;
+  bool is_last = 4;
+}
+message UploadResponse {
+  string file_id = 1;
+  int64 total_bytes = 2;
+  int32 chunks_received = 3;
+  string checksum = 4;
+}
+message ChatMessage {
+  string id = 1;
+  string user_id = 2;
+  string content = 3;
+  string room_id = 4;
+  google.protobuf.Timestamp timestamp = 5;
+}
+// =============================================================================
+// Order Service Messages
+// =============================================================================
+message OrderItem {
+  string product_id = 1;
+  string product_name = 2;
+  int32 quantity = 3;
+  double unit_price = 4;
+  double total_price = 5;
+}
+message Order {
+  string id = 1;
+  string customer_id = 2;
+  repeated OrderItem items = 3;
+  double subtotal = 4;
+  double tax = 5;
+  double total = 6;
+  Status status = 7;
+  Address shipping_address = 8;
+  Address billing_address = 9;
+  Metadata metadata = 10;
+}
+message CreateOrderRequest {
+  string customer_id = 1;
+  repeated OrderItem items = 2;
+  Address shipping_address = 3;
+  Address billing_address = 4;
+}
+message CreateOrderResponse {
+  Order order = 1;
+}
+message GetOrderRequest {
+  string id = 1;
+}
+message GetOrderResponse {
+  Order order = 1;
+}
+message TrackOrderRequest {
+  string id = 1;
+}
+message TrackOrderUpdate {
+  string order_id = 1;
+  Status status = 2;
+  string location = 3;
+  string description = 4;
+  google.protobuf.Timestamp timestamp = 5;
+}
+// =============================================================================
+// Analytics Service Messages
+// =============================================================================
+message MetricPoint {
+  string metric_name = 1;
+  double value = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  map<string, string> tags = 4;
+}
+message BatchMetricsRequest {
+  repeated MetricPoint metrics = 1;
+}
+message BatchMetricsResponse {
+  int32 accepted = 1;
+  int32 rejected = 2;
+  repeated string errors = 3;
+}
+message QueryMetricsRequest {
+  string metric_name = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  google.protobuf.Duration aggregation_interval = 4;
+}
+message QueryMetricsResponse {
+  repeated MetricPoint points = 1;
+}
+// =============================================================================
+// Services
+// =============================================================================
+// UserService demonstrates unary RPCs with nested messages
+service UserService {
+  // Unary RPC - Create a new user
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  
+  // Unary RPC - Get user by ID
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  
+  // Unary RPC - List users with pagination
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  
+  // Unary RPC - Update user
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  
+  // Unary RPC - Delete user
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+}
+// StreamingService demonstrates all streaming patterns
+service StreamingService {
+  // Server streaming - Subscribe to events
+  rpc Subscribe(SubscribeRequest) returns (stream Event);
+  
+  // Client streaming - Upload file in chunks
+  rpc Upload(stream UploadChunk) returns (UploadResponse);
+  
+  // Bidirectional streaming - Real-time chat
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage);
+}
+// OrderService demonstrates mixed RPC types
+service OrderService {
+  // Unary RPC - Create order
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+  
+  // Unary RPC - Get order
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+  
+  // Server streaming - Track order status updates
+  rpc TrackOrder(TrackOrderRequest) returns (stream TrackOrderUpdate);
+}
+// AnalyticsService demonstrates client streaming and batch operations
+service AnalyticsService {
+  // Client streaming - Send metrics in batch
+  rpc SendMetrics(stream MetricPoint) returns (BatchMetricsResponse);
+  
+  // Server streaming - Query metrics over time
+  rpc QueryMetrics(QueryMetricsRequest) returns (stream QueryMetricsResponse);
+}
