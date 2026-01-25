@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Field-level validation for stateful resources and HTTP mocks** - Validate request bodies with type checking, string/number constraints, patterns, formats (email, uuid, date, datetime, uri, ipv4, ipv6, hostname), enums, nested object validation, and dot-notation for nested fields
 - **OAuth token introspection endpoint** (`POST /introspect`) - RFC 7662 compliant endpoint for validating access tokens
 - **YAML export for proxy recordings** - Export recordings in YAML format via `format: "yaml"` option
 - **SSE rate limiting** - Rate limiter now integrated into SSE streaming (configurable events per second)
