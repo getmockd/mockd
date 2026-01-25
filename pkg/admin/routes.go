@@ -50,6 +50,12 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /config", a.handleExportConfig)
 	mux.HandleFunc("POST /config", a.handleImportConfig)
 
+	// OpenAPI/Insomnia export (for importing mocks into external tools)
+	mux.HandleFunc("GET /openapi.json", a.handleGetOpenAPISpec)
+	mux.HandleFunc("GET /openapi.yaml", a.handleGetOpenAPISpec)
+	mux.HandleFunc("GET /insomnia.json", a.handleGetInsomniaExport) // v4 JSON format (legacy)
+	mux.HandleFunc("GET /insomnia.yaml", a.handleGetInsomniaExport) // v5 YAML format (recommended)
+
 	// Request logging
 	mux.HandleFunc("GET /requests", a.handleListRequests)
 	mux.HandleFunc("GET /requests/stream", a.handleStreamRequests)
