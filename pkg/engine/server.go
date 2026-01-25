@@ -551,6 +551,7 @@ func (s *Server) registerStatefulResource(cfg *config.StatefulResourceConfig) er
 		IDField:     cfg.IDField,
 		ParentField: cfg.ParentField,
 		SeedData:    cfg.SeedData,
+		Validation:  cfg.Validation,
 	})
 }
 

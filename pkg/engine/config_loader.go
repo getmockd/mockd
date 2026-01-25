@@ -228,5 +228,6 @@ func (cl *ConfigLoader) registerStatefulResource(cfg *config.StatefulResourceCon
 		IDField:     cfg.IDField,
 		ParentField: cfg.ParentField,
 		SeedData:    cfg.SeedData,
+		Validation:  cfg.Validation,
 	})
 }

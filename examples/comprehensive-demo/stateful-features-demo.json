@@ -1,9 +1,35 @@
 {
+  "version": "1.0",
+  "name": "Stateful Features Demo with Validation",
   "statefulResources": [
     {
       "name": "todos",
       "basePath": "/api/todos",
       "idField": "id",
+      "validation": {
+        "mode": "strict",
+        "fields": {
+          "title": {
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "completed": {
+            "type": "boolean",
+            "required": true
+          },
+          "priority": {
+            "type": "string",
+            "required": true,
+            "enum": ["low", "medium", "high"]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      },
       "seedData": [
         {
           "id": "todo-1",
@@ -39,6 +65,50 @@
       "name": "users",
       "basePath": "/api/v2/users",
       "idField": "id",
+      "validation": {
+        "mode": "strict",
+        "fields": {
+          "username": {
+            "type": "string",
+            "required": true,
+            "minLength": 2,
+            "maxLength": 50,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "email": {
+            "type": "string",
+            "required": true,
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "required": true,
+            "enum": ["admin", "user", "moderator", "guest"]
+          },
+          "status": {
+            "type": "string",
+            "required": true,
+            "enum": ["active", "inactive", "pending", "suspended"]
+          },
+          "profile": {
+            "type": "object"
+          },
+          "profile.firstName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "profile.lastName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "profile.avatar": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
       "seedData": [
         {
           "id": "user-1",
@@ -83,6 +153,40 @@
       "basePath": "/api/v2/users/:userId/posts",
       "idField": "id",
       "parentField": "userId",
+      "validation": {
+        "mode": "strict",
+        "fields": {
+          "title": {
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "tags": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 30
+            }
+          },
+          "published": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      },
       "seedData": [
         {
           "id": "post-1",
@@ -118,6 +222,26 @@
       "basePath": "/api/v2/posts/:postId/comments",
       "idField": "id",
       "parentField": "postId",
+      "validation": {
+        "mode": "strict",
+        "fields": {
+          "authorId": {
+            "type": "string",
+            "required": true,
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      },
       "seedData": [
         {
           "id": "comment-1",
@@ -146,6 +270,58 @@
       "name": "products",
       "basePath": "/api/shop/products",
       "idField": "sku",
+      "validation": {
+        "mode": "strict",
+        "fields": {
+          "sku": {
+            "type": "string",
+            "pattern": "^[A-Z]+-[0-9]+$"
+          },
+          "name": {
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "price": {
+            "type": "number",
+            "required": true,
+            "min": 0,
+            "max": 1000000
+          },
+          "currency": {
+            "type": "string",
+            "required": true,
+            "enum": ["USD", "EUR", "GBP", "CAD", "AUD"]
+          },
+          "category": {
+            "type": "string",
+            "required": true,
+            "enum": ["software", "merchandise", "services", "subscriptions"]
+          },
+          "inStock": {
+            "type": "boolean",
+            "required": true
+          },
+          "quantity": {
+            "type": "integer",
+            "required": true,
+            "min": 0,
+            "max": 100000
+          },
+          "sizes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["XS", "S", "M", "L", "XL", "XXL"]
+            }
+          }
+        }
+      },
       "seedData": [
         {
           "sku": "MOCK-001",
@@ -194,6 +370,41 @@
       "name": "cart",
       "basePath": "/api/shop/cart",
       "idField": "id",
+      "validation": {
+        "mode": "strict",
+        "fields": {
+          "userId": {
+            "type": "string",
+            "required": true,
+            "minLength": 1
+          },
+          "items": {
+            "type": "array",
+            "required": true,
+            "minItems": 0,
+            "maxItems": 100
+          },
+          "items.sku": {
+            "type": "string",
+            "required": true,
+            "pattern": "^[A-Z]+-[0-9]+$"
+          },
+          "items.quantity": {
+            "type": "integer",
+            "required": true,
+            "min": 1,
+            "max": 100
+          },
+          "items.size": {
+            "type": "string",
+            "enum": ["XS", "S", "M", "L", "XL", "XXL"]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      },
       "seedData": [
         {
           "id": "cart-user-1",
@@ -210,6 +421,114 @@
       "name": "orders",
       "basePath": "/api/shop/orders",
       "idField": "id",
+      "validation": {
+        "mode": "strict",
+        "fields": {
+          "userId": {
+            "type": "string",
+            "required": true,
+            "minLength": 1
+          },
+          "items": {
+            "type": "array",
+            "required": true,
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "items.sku": {
+            "type": "string",
+            "required": true,
+            "pattern": "^[A-Z]+-[0-9]+$"
+          },
+          "items.quantity": {
+            "type": "integer",
+            "required": true,
+            "min": 1,
+            "max": 100
+          },
+          "items.price": {
+            "type": "number",
+            "required": true,
+            "min": 0
+          },
+          "subtotal": {
+            "type": "number",
+            "required": true,
+            "min": 0
+          },
+          "tax": {
+            "type": "number",
+            "required": true,
+            "min": 0
+          },
+          "total": {
+            "type": "number",
+            "required": true,
+            "min": 0
+          },
+          "status": {
+            "type": "string",
+            "required": true,
+            "enum": ["pending", "confirmed", "processing", "shipped", "delivered", "completed", "cancelled", "refunded"]
+          },
+          "trackingNumber": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "shippingAddress": {
+            "type": "object",
+            "required": true
+          },
+          "shippingAddress.name": {
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "shippingAddress.street": {
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "shippingAddress.city": {
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "shippingAddress.state": {
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "shippingAddress.zip": {
+            "type": "string",
+            "required": true,
+            "minLength": 1,
+            "maxLength": 20
+          },
+          "shippingAddress.country": {
+            "type": "string",
+            "required": true,
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "datetime"
+          },
+          "shippedAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      },
       "seedData": [
         {
           "id": "order-1001",

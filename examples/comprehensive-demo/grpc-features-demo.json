@@ -1,8 +1,12 @@
-[
-  {
-    "id": "grpc-demo-comprehensive",
-    "type": "grpc",
-    "name": "Comprehensive gRPC Demo",
+{
+  "version": "1.0",
+  "name": "gRPC Features Demo",
+  "description": "Comprehensive demonstration of gRPC mocking features including unary, streaming, and bidirectional calls",
+  "mocks": [
+    {
+      "id": "grpc-demo-comprehensive",
+      "type": "grpc",
+      "name": "Comprehensive gRPC Demo",
     "description": "Demonstrates all gRPC features: unary, server streaming, client streaming, bidirectional streaming, multiple services, nested messages, repeated fields, errors, metadata matching, delays, and templated responses",
     "enabled": true,
     "grpc": {
@@ -1035,4 +1039,5 @@
       }
     }
   }
-]
+  ]
+}
