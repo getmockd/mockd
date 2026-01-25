@@ -46,7 +46,7 @@ func TestPrintPorts_JSON(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := printPorts(ports, true)
+	err := printPorts(ports, true, false)
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -86,7 +86,7 @@ func TestPrintPorts_Table(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := printPorts(ports, false)
+	err := printPorts(ports, false, false)
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -131,7 +131,7 @@ func TestPrintPorts_Empty(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := printPorts([]PortInfo{}, false)
+	err := printPorts([]PortInfo{}, false, false)
 
 	w.Close()
 	os.Stdout = oldStdout

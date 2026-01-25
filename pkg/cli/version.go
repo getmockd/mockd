@@ -67,7 +67,12 @@ Examples:
 
 	// Format: mockd v0.1.0 (abc1234, 2025-01-06)
 	//         go1.21.0 linux/amd64
-	fmt.Printf("mockd v%s (%s, %s)\n", out.Version, out.Commit, out.Date)
+	// Note: Version may already include 'v' prefix from git tags
+	version := out.Version
+	if len(version) > 0 && version[0] != 'v' {
+		version = "v" + version
+	}
+	fmt.Printf("mockd %s (%s, %s)\n", version, out.Commit, out.Date)
 	fmt.Printf("%s %s/%s\n", out.Go, out.OS, out.Arch)
 	return nil
 }

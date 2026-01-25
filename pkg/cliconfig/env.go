@@ -10,6 +10,7 @@ const (
 	EnvPort          = "MOCKD_PORT"
 	EnvAdminPort     = "MOCKD_ADMIN_PORT"
 	EnvAdminURL      = "MOCKD_ADMIN_URL"
+	EnvAPIKey        = "MOCKD_API_KEY"
 	EnvWorkspace     = "MOCKD_WORKSPACE"
 	EnvContext       = "MOCKD_CONTEXT"
 	EnvConfig        = "MOCKD_CONFIG"
@@ -117,4 +118,10 @@ func GetWorkspaceFromEnv() string {
 // Returns empty string if not set.
 func GetContextFromEnv() string {
 	return os.Getenv(EnvContext)
+}
+
+// GetAPIKeyFromEnv returns the API key from environment variable.
+// Returns empty string if not set.
+func GetAPIKeyFromEnv() string {
+	return os.Getenv(EnvAPIKey)
 }
