@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/getmockd/mockd/pkg/chaos"
 	"github.com/getmockd/mockd/pkg/config"
@@ -341,6 +342,14 @@ func (a *ControlAPIAdapter) ResetState(resourceName string) (*api.ResetStateResp
 		Resources: resp.Resources,
 		Message:   resp.Message,
 	}, nil
+}
+
+// RegisterStatefulResource implements api.EngineController.
+func (a *ControlAPIAdapter) RegisterStatefulResource(cfg *config.StatefulResourceConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("config cannot be nil")
+	}
+	return a.server.registerStatefulResource(cfg)
 }
 
 // ListProtocolHandlers implements api.EngineController.

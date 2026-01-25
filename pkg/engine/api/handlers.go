@@ -546,10 +546,27 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 		imported++
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	// Import stateful resources
+	statefulCount := 0
+	for _, res := range req.Config.StatefulResources {
+		if res != nil {
+			if err := s.engine.RegisterStatefulResource(res); err != nil {
+				s.log.Warn("failed to import stateful resource", "name", res.Name, "error", err)
+				continue
+			}
+			statefulCount++
+		}
+	}
+
+	response := map[string]any{
 		"imported": imported,
 		"message":  fmt.Sprintf("imported %d mocks", imported),
-	})
+	}
+	if statefulCount > 0 {
+		response["statefulResources"] = statefulCount
+	}
+
+	writeJSON(w, http.StatusOK, response)
 }
 
 // Helpers

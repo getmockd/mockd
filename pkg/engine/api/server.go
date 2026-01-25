@@ -55,6 +55,7 @@ type EngineController interface {
 	GetStateResource(name string) (*StatefulResource, error)
 	ClearStateResource(name string) (int, error)
 	ResetState(resourceName string) (*ResetStateResponse, error)
+	RegisterStatefulResource(cfg *config.StatefulResourceConfig) error
 
 	// Protocol handlers
 	ListProtocolHandlers() []*ProtocolHandler
