@@ -14,6 +14,7 @@ import (
 	"github.com/jhump/protoreflect/desc/protoparse"
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
+	"github.com/jhump/protoreflect/grpcreflect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -1150,6 +1151,130 @@ func TestServerStreamingWithError(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, codes.Internal, st.Code())
 	assert.Equal(t, "database error", st.Message())
+}
+
+// TestReflectionDescribe tests that gRPC reflection can describe services
+// and their methods. This is critical for tools like grpcurl and Insomnia
+// to discover the API schema.
+func TestReflectionDescribe(t *testing.T) {
+	schema := getTestSchema(t)
+	config := &GRPCConfig{
+		Port:       0,
+		Reflection: true,
+		Services: map[string]ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]MethodConfig{
+					"GetUser": {
+						Response: map[string]interface{}{
+							"id":   1,
+							"name": "Test User",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	srv, err := NewServer(config, schema)
+	require.NoError(t, err)
+
+	err = srv.Start(context.Background())
+	require.NoError(t, err)
+	defer srv.Stop(context.Background(), 5*time.Second)
+
+	// Connect using reflection client
+	conn, err := grpc.NewClient(
+		srv.Address(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// Use the gRPC reflection client to list services and describe them
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Create reflection client
+	reflectClient := grpcreflect.NewClientAuto(ctx, conn)
+	defer reflectClient.Reset()
+
+	// List services
+	services, err := reflectClient.ListServices()
+	require.NoError(t, err)
+	assert.Contains(t, services, "test.UserService", "UserService should be listed")
+	assert.Contains(t, services, "test.HealthService", "HealthService should be listed")
+
+	// Describe UserService - this is what was failing before the fix
+	svcDesc, err := reflectClient.ResolveService("test.UserService")
+	require.NoError(t, err, "ResolveService should succeed - this was the bug")
+	assert.NotNil(t, svcDesc)
+	assert.Equal(t, "test.UserService", svcDesc.GetFullyQualifiedName())
+
+	// Verify methods are present
+	methods := svcDesc.GetMethods()
+	methodNames := make([]string, 0, len(methods))
+	for _, m := range methods {
+		methodNames = append(methodNames, m.GetName())
+	}
+	assert.Contains(t, methodNames, "GetUser")
+	assert.Contains(t, methodNames, "ListUsers")
+	assert.Contains(t, methodNames, "CreateUsers")
+	assert.Contains(t, methodNames, "Chat")
+
+	// Verify we can resolve a message type
+	getUserMethod := svcDesc.FindMethodByName("GetUser")
+	require.NotNil(t, getUserMethod)
+	inputType := getUserMethod.GetInputType()
+	require.NotNil(t, inputType)
+	assert.Equal(t, "test.GetUserRequest", inputType.GetFullyQualifiedName())
+
+	// Verify input message has expected field
+	idField := inputType.FindFieldByName("id")
+	assert.NotNil(t, idField, "GetUserRequest should have 'id' field")
+}
+
+// TestReflectionWithNestedTypes tests that reflection properly exposes nested message types
+func TestReflectionWithNestedTypes(t *testing.T) {
+	schema := getTestSchema(t)
+	config := &GRPCConfig{
+		Port:       0,
+		Reflection: true,
+	}
+
+	srv, err := NewServer(config, schema)
+	require.NoError(t, err)
+
+	err = srv.Start(context.Background())
+	require.NoError(t, err)
+	defer srv.Stop(context.Background(), 5*time.Second)
+
+	conn, err := grpc.NewClient(
+		srv.Address(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	reflectClient := grpcreflect.NewClientAuto(ctx, conn)
+	defer reflectClient.Reset()
+
+	// Resolve the User message type
+	userDesc, err := reflectClient.ResolveMessage("test.User")
+	require.NoError(t, err)
+	assert.NotNil(t, userDesc)
+
+	// Check fields
+	fields := userDesc.GetFields()
+	fieldNames := make([]string, 0, len(fields))
+	for _, f := range fields {
+		fieldNames = append(fieldNames, f.GetName())
+	}
+	assert.Contains(t, fieldNames, "id")
+	assert.Contains(t, fieldNames, "name")
+	assert.Contains(t, fieldNames, "email")
 }
 
 // Helper to avoid unused import warning
