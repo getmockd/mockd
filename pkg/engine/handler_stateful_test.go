@@ -121,8 +121,9 @@ func TestHandleStatefulCreate_ConflictError(t *testing.T) {
 	t.Run("duplicate with explicit ID", func(t *testing.T) {
 		body := []byte(`{"id": "existing-user", "name": "Jane"}`)
 		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
 
-		status := h.handleStatefulCreate(w, resource, nil, body)
+		status := h.handleStatefulCreate(w, req, resource, nil, body)
 
 		if status != http.StatusConflict {
 			t.Errorf("Expected status %d, got %d", http.StatusConflict, status)
@@ -145,8 +146,9 @@ func TestHandleStatefulCreate_ConflictError(t *testing.T) {
 	t.Run("create without ID succeeds", func(t *testing.T) {
 		body := []byte(`{"name": "New User"}`)
 		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
 
-		status := h.handleStatefulCreate(w, resource, nil, body)
+		status := h.handleStatefulCreate(w, req, resource, nil, body)
 
 		if status != http.StatusCreated {
 			t.Errorf("Expected status %d, got %d", http.StatusCreated, status)
@@ -166,11 +168,13 @@ func TestHandleStatefulCreate_ConflictError(t *testing.T) {
 		// Create a resource, then try to create another with same ID
 		body := []byte(`{"id": "test-conflict", "name": "First"}`)
 		w := httptest.NewRecorder()
-		h.handleStatefulCreate(w, resource, nil, body)
+		req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
+		h.handleStatefulCreate(w, req, resource, nil, body)
 
 		// Now try duplicate
 		w = httptest.NewRecorder()
-		h.handleStatefulCreate(w, resource, nil, body)
+		req = httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
+		h.handleStatefulCreate(w, req, resource, nil, body)
 
 		// Should get conflict without panic
 		if w.Code != http.StatusConflict {
@@ -192,8 +196,9 @@ func TestHandleStatefulCreate_InvalidJSON(t *testing.T) {
 
 	body := []byte(`{invalid json}`)
 	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/items", bytes.NewReader(body))
 
-	status := h.handleStatefulCreate(w, resource, nil, body)
+	status := h.handleStatefulCreate(w, req, resource, nil, body)
 
 	if status != http.StatusBadRequest {
 		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, status)
@@ -214,8 +219,9 @@ func TestHandleStatefulCreate_BodyTooLarge(t *testing.T) {
 	// Create a body larger than MaxStatefulBodySize
 	largeBody := bytes.Repeat([]byte("x"), MaxStatefulBodySize+1)
 	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/items", bytes.NewReader(largeBody))
 
-	status := h.handleStatefulCreate(w, resource, nil, largeBody)
+	status := h.handleStatefulCreate(w, req, resource, nil, largeBody)
 
 	if status != http.StatusRequestEntityTooLarge {
 		t.Errorf("Expected status %d, got %d", http.StatusRequestEntityTooLarge, status)
@@ -235,8 +241,9 @@ func TestHandleStatefulUpdate_NotFound(t *testing.T) {
 
 	body := []byte(`{"name": "Updated"}`)
 	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/items/nonexistent-id", bytes.NewReader(body))
 
-	status := h.handleStatefulUpdate(w, resource, "nonexistent-id", body)
+	status := h.handleStatefulUpdate(w, req, resource, "nonexistent-id", nil, body)
 
 	if status != http.StatusNotFound {
 		t.Errorf("Expected status %d, got %d", http.StatusNotFound, status)

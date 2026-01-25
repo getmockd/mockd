@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/validation"
 )
 
 // MockType represents the type of mock.
@@ -236,6 +238,9 @@ type HTTPSpec struct {
 
 	// Chunked defines HTTP chunked transfer encoding response configuration
 	Chunked *ChunkedConfig `json:"chunked,omitempty" yaml:"chunked,omitempty"`
+
+	// Validation defines request validation rules (runs after matching, before response)
+	Validation *validation.RequestValidation `json:"validation,omitempty" yaml:"validation,omitempty"`
 }
 
 // HTTPMatcher defines criteria used to match incoming HTTP requests.

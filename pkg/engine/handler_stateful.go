@@ -8,11 +8,24 @@ import (
 	"strconv"
 
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/validation"
 )
 
 // handleStateful handles CRUD operations for stateful resources.
 func (h *Handler) handleStateful(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, itemID string, pathParams map[string]string, bodyBytes []byte) int {
 	w.Header().Set("Content-Type", "application/json")
+
+	// Validate path params for all operations (if validation configured)
+	if resource.HasValidation() && len(pathParams) > 0 {
+		ctx := r.Context()
+		result := resource.ValidatePathParams(ctx, pathParams)
+		if !result.Valid {
+			status := h.writeValidationError(w, result, resource.GetValidationMode())
+			if status != 0 {
+				return status
+			}
+		}
+	}
 
 	switch r.Method {
 	case http.MethodGet:
@@ -22,13 +35,13 @@ func (h *Handler) handleStateful(w http.ResponseWriter, r *http.Request, resourc
 		return h.handleStatefulList(w, r, resource, pathParams)
 
 	case http.MethodPost:
-		return h.handleStatefulCreate(w, resource, pathParams, bodyBytes)
+		return h.handleStatefulCreate(w, r, resource, pathParams, bodyBytes)
 
 	case http.MethodPut:
 		if itemID == "" {
 			return h.writeStatefulError(w, http.StatusBadRequest, "ID required for PUT", resource.Name(), "")
 		}
-		return h.handleStatefulUpdate(w, resource, itemID, bodyBytes)
+		return h.handleStatefulUpdate(w, r, resource, itemID, pathParams, bodyBytes)
 
 	case http.MethodDelete:
 		if itemID == "" {
@@ -68,7 +81,7 @@ func (h *Handler) handleStatefulList(w http.ResponseWriter, r *http.Request, res
 }
 
 // handleStatefulCreate creates a new item.
-func (h *Handler) handleStatefulCreate(w http.ResponseWriter, resource *stateful.StatefulResource, pathParams map[string]string, bodyBytes []byte) int {
+func (h *Handler) handleStatefulCreate(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, pathParams map[string]string, bodyBytes []byte) int {
 	if len(bodyBytes) > MaxStatefulBodySize {
 		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", resource.Name(), "", "Reduce request body size to under 1MB")
 	}
@@ -76,6 +89,15 @@ func (h *Handler) handleStatefulCreate(w http.ResponseWriter, resource *stateful
 	var data map[string]any
 	if err := json.Unmarshal(bodyBytes, &data); err != nil {
 		return h.writeStatefulError(w, http.StatusBadRequest, "invalid request body: "+err.Error(), resource.Name(), "")
+	}
+
+	// Run validation if configured
+	if resource.HasValidation() {
+		ctx := r.Context()
+		result := resource.ValidateCreate(ctx, data, pathParams)
+		if !result.Valid {
+			return h.writeValidationError(w, result, resource.GetValidationMode())
+		}
 	}
 
 	item, err := resource.Create(data, pathParams)
@@ -94,7 +116,7 @@ func (h *Handler) handleStatefulCreate(w http.ResponseWriter, resource *stateful
 }
 
 // handleStatefulUpdate updates an existing item.
-func (h *Handler) handleStatefulUpdate(w http.ResponseWriter, resource *stateful.StatefulResource, itemID string, bodyBytes []byte) int {
+func (h *Handler) handleStatefulUpdate(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, itemID string, pathParams map[string]string, bodyBytes []byte) int {
 	if len(bodyBytes) > MaxStatefulBodySize {
 		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", resource.Name(), itemID, "Reduce request body size to under 1MB")
 	}
@@ -102,6 +124,15 @@ func (h *Handler) handleStatefulUpdate(w http.ResponseWriter, resource *stateful
 	var data map[string]any
 	if err := json.Unmarshal(bodyBytes, &data); err != nil {
 		return h.writeStatefulError(w, http.StatusBadRequest, "invalid request body: "+err.Error(), resource.Name(), itemID)
+	}
+
+	// Run validation if configured
+	if resource.HasValidation() {
+		ctx := r.Context()
+		result := resource.ValidateUpdate(ctx, data, pathParams)
+		if !result.Valid {
+			return h.writeValidationError(w, result, resource.GetValidationMode())
+		}
 	}
 
 	item, err := resource.Update(itemID, data)
@@ -151,6 +182,39 @@ func (h *Handler) writeStatefulErrorWithHint(w http.ResponseWriter, statusCode i
 		h.log.Error("failed to encode stateful error response", "error", err)
 	}
 	return statusCode
+}
+
+// writeValidationError writes a validation error response.
+func (h *Handler) writeValidationError(w http.ResponseWriter, result *validation.Result, mode string) int {
+	// In warn mode, log but don't fail
+	if mode == validation.ModeWarn {
+		for _, err := range result.Errors {
+			h.log.Warn("validation warning", "field", err.Field, "message", err.Message)
+		}
+		return 0 // Continue processing
+	}
+
+	// In permissive mode, only fail on required field errors
+	if mode == validation.ModePermissive {
+		hasRequired := false
+		for _, err := range result.Errors {
+			if err.Code == validation.ErrCodeRequired {
+				hasRequired = true
+				break
+			}
+		}
+		if !hasRequired {
+			for _, err := range result.Errors {
+				h.log.Warn("validation warning (permissive)", "field", err.Field, "message", err.Message)
+			}
+			return 0 // Continue processing
+		}
+	}
+
+	// Strict mode (default) - return error response
+	resp := validation.NewErrorResponse(result, http.StatusBadRequest)
+	resp.WriteResponse(w)
+	return http.StatusBadRequest
 }
 
 // parseQueryFilter extracts filter parameters from query string.

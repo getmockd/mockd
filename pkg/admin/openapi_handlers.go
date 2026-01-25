@@ -100,10 +100,15 @@ func (a *AdminAPI) handleGetInsomniaExport(w http.ResponseWriter, r *http.Reques
 					// Generate a sample ID - use singular form of resource name + "-1"
 					// e.g., "todos" -> "todo-1", "orders" -> "order-1"
 					sampleID := strings.TrimSuffix(res.Name, "s") + "-1"
+
+					// Extract parent path params from basePath (e.g., :postId from /api/posts/:postId/comments)
+					pathParams := extractPathParams(res.BasePath)
+
 					statefulResources = append(statefulResources, statefulResourceInfo{
-						Name:     res.Name,
-						BasePath: res.BasePath,
-						SampleID: sampleID,
+						Name:       res.Name,
+						BasePath:   res.BasePath,
+						SampleID:   sampleID,
+						PathParams: pathParams,
 					})
 				}
 			}
@@ -503,9 +508,46 @@ func mockToInsomniaResource(m *config.MockConfiguration, parentID string, now in
 
 // statefulResourceInfo holds basic info about a stateful resource for export
 type statefulResourceInfo struct {
-	Name     string
-	BasePath string
-	SampleID string // A sample ID to pre-fill in path parameters
+	Name       string
+	BasePath   string
+	SampleID   string            // A sample ID to pre-fill in path parameters
+	PathParams map[string]string // Parent path params (e.g., "postId" -> "post-1")
+}
+
+// extractPathParams extracts path parameter names from a URL path and generates sample values.
+// e.g., "/api/posts/:postId/comments" -> {"postId": "post-1"}
+func extractPathParams(path string) map[string]string {
+	result := make(map[string]string)
+	parts := strings.Split(path, "/")
+
+	for _, part := range parts {
+		if strings.HasPrefix(part, ":") {
+			paramName := strings.TrimPrefix(part, ":")
+			// Generate sample value based on param name
+			// e.g., "postId" -> "post-1", "userId" -> "user-1"
+			sampleValue := generateSampleParamValue(paramName)
+			result[paramName] = sampleValue
+		}
+	}
+
+	return result
+}
+
+// generateSampleParamValue generates a sample value for a path parameter.
+// e.g., "postId" -> "post-1", "userId" -> "user-1", "id" -> "item-1"
+func generateSampleParamValue(paramName string) string {
+	// Remove common suffixes to get the base name
+	baseName := strings.TrimSuffix(paramName, "Id")
+	baseName = strings.TrimSuffix(baseName, "ID")
+	baseName = strings.TrimSuffix(baseName, "_id")
+
+	if baseName == "" || baseName == paramName {
+		// No suffix found, use the param name itself
+		return paramName + "-1"
+	}
+
+	// Convert camelCase to kebab-case for the value
+	return strings.ToLower(baseName) + "-1"
 }
 
 // writeInsomniaSettings writes the common Insomnia request settings block
@@ -1017,10 +1059,20 @@ func writeStatefulResourceRequestsV5(sb *strings.Builder, res statefulResourceIn
 			sb.WriteString("                value: application/json\n")
 		}
 
-		if op.hasID {
+		// Add path parameters (parent params + item ID if needed)
+		hasPathParams := op.hasID || len(res.PathParams) > 0
+		if hasPathParams {
 			sb.WriteString("            pathParameters:\n")
-			sb.WriteString("              - name: id\n")
-			sb.WriteString(fmt.Sprintf("                value: \"%s\"\n", res.SampleID))
+			// Add parent path params first (e.g., postId)
+			for paramName, paramValue := range res.PathParams {
+				sb.WriteString(fmt.Sprintf("              - name: %s\n", paramName))
+				sb.WriteString(fmt.Sprintf("                value: \"%s\"\n", paramValue))
+			}
+			// Add item ID param if this operation uses it
+			if op.hasID {
+				sb.WriteString("              - name: id\n")
+				sb.WriteString(fmt.Sprintf("                value: \"%s\"\n", res.SampleID))
+			}
 		}
 
 		writeInsomniaSettings(sb, "            ")

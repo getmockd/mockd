@@ -169,6 +169,10 @@ func (m *mockEngine) ResetState(resourceName string) (*ResetStateResponse, error
 	return &ResetStateResponse{Reset: true, Resources: []string{}, Message: "state reset"}, nil
 }
 
+func (m *mockEngine) RegisterStatefulResource(cfg *config.StatefulResourceConfig) error {
+	return nil // No-op for mock
+}
+
 func (m *mockEngine) ListProtocolHandlers() []*ProtocolHandler {
 	return m.handlers
 }

@@ -14,6 +14,7 @@ require (
 	github.com/jhump/protoreflect v1.17.0
 	github.com/mochi-mqtt/server/v2 v2.7.9
 	github.com/ohler55/ojg v1.27.0
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/vektah/gqlparser/v2 v2.5.31
 	golang.org/x/sys v0.39.0
