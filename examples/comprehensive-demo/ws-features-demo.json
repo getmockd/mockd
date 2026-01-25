@@ -1,0 +1,1316 @@
+[
+  {
+    "name": "WS Echo - Basic Echo Mode",
+    "description": "Simple WebSocket endpoint that echoes all received messages back to the client",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/echo",
+      "echoMode": true,
+      "maxMessageSize": 65536
+    }
+  },
+  {
+    "name": "WS Exact Match - Ping/Pong Response",
+    "description": "Matches exact 'ping' message and responds with 'pong'",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/ping",
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "exact",
+            "value": "ping"
+          },
+          "response": {
+            "type": "text",
+            "value": "pong"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS JSON Match - Action-based Routing",
+    "description": "Matches messages by JSON path and responds based on action field",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/actions",
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "subscribe"
+          },
+          "response": {
+            "type": "json",
+            "value": {"status": "subscribed", "channel": "updates"}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "unsubscribe"
+          },
+          "response": {
+            "type": "json",
+            "value": {"status": "unsubscribed"}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "action",
+            "value": "getStatus"
+          },
+          "response": {
+            "type": "json",
+            "value": {"status": "online", "connections": 42, "uptime": "1h30m"}
+          }
+        }
+      ],
+      "defaultResponse": {
+        "type": "json",
+        "value": {"error": "unknown_action", "message": "Supported actions: subscribe, unsubscribe, getStatus"}
+      }
+    }
+  },
+  {
+    "name": "WS Regex Match - Pattern-based Responses",
+    "description": "Uses regex patterns to match messages and respond accordingly",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/regex",
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "regex",
+            "value": "^hello\\s+\\w+$"
+          },
+          "response": {
+            "type": "text",
+            "value": "Hello to you too!"
+          }
+        },
+        {
+          "match": {
+            "type": "regex",
+            "value": "^user:\\d+$"
+          },
+          "response": {
+            "type": "json",
+            "value": {"found": true, "user": {"id": 123, "name": "John Doe"}}
+          }
+        },
+        {
+          "match": {
+            "type": "regex",
+            "value": "^(error|fail|exception)"
+          },
+          "response": {
+            "type": "json",
+            "value": {"error": true, "code": "E001", "message": "Something went wrong"}
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS Contains/Prefix/Suffix Matchers",
+    "description": "Demonstrates contains, prefix, and suffix matching types",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/partial-match",
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "prefix",
+            "value": "CMD:"
+          },
+          "response": {
+            "type": "json",
+            "value": {"type": "command_received", "processed": true}
+          }
+        },
+        {
+          "match": {
+            "type": "suffix",
+            "value": ":END"
+          },
+          "response": {
+            "type": "text",
+            "value": "Message received and terminated"
+          }
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "urgent"
+          },
+          "response": {
+            "type": "json",
+            "value": {"priority": "high", "acknowledged": true}
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS Delayed Response",
+    "description": "Responds with configurable delays to simulate network latency or processing time",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/delayed",
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "exact",
+            "value": "slow"
+          },
+          "response": {
+            "type": "text",
+            "value": "This response was delayed by 2 seconds",
+            "delay": "2s"
+          }
+        },
+        {
+          "match": {
+            "type": "exact",
+            "value": "fast"
+          },
+          "response": {
+            "type": "text",
+            "value": "Quick response with 100ms delay",
+            "delay": "100ms"
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "async"
+          },
+          "response": {
+            "type": "json",
+            "value": {"status": "completed", "processingTime": "500ms"},
+            "delay": "500ms"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS Binary Messages",
+    "description": "Handles binary message types with base64-encoded responses",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/binary",
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "exact",
+            "value": "get-image",
+            "messageType": "text"
+          },
+          "response": {
+            "type": "binary",
+            "value": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+          }
+        },
+        {
+          "match": {
+            "type": "exact",
+            "value": "get-bytes",
+            "messageType": "text"
+          },
+          "response": {
+            "type": "binary",
+            "value": "SGVsbG8gV29ybGQh"
+          }
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "binary",
+            "messageType": "binary"
+          },
+          "response": {
+            "type": "text",
+            "value": "Received your binary message"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS Message Type Filter",
+    "description": "Filters responses based on message type (text vs binary)",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/typed",
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "contains",
+            "value": "data",
+            "messageType": "text"
+          },
+          "response": {
+            "type": "json",
+            "value": {"received": "text_message", "format": "utf-8"}
+          }
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": "data",
+            "messageType": "binary"
+          },
+          "response": {
+            "type": "json",
+            "value": {"received": "binary_message", "format": "bytes"}
+          }
+        }
+      ],
+      "defaultResponse": {
+        "type": "json",
+        "value": {"received": "unknown", "echo": true}
+      }
+    }
+  },
+  {
+    "name": "WS No Response Matcher",
+    "description": "Matches messages but explicitly does not respond (silent acknowledgment)",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/silent",
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "prefix",
+            "value": "LOG:"
+          },
+          "noResponse": true
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "heartbeat"
+          },
+          "noResponse": true
+        },
+        {
+          "match": {
+            "type": "exact",
+            "value": "ack"
+          },
+          "response": {
+            "type": "text",
+            "value": "acknowledged"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS Subprotocol Negotiation",
+    "description": "Supports multiple subprotocols for client negotiation",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/protocols",
+      "subprotocols": ["graphql-ws", "subscriptions-transport-ws", "json"],
+      "requireSubprotocol": false,
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "connection_init"
+          },
+          "response": {
+            "type": "json",
+            "value": {"type": "connection_ack"}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "ping"
+          },
+          "response": {
+            "type": "json",
+            "value": {"type": "pong"}
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS Required Subprotocol",
+    "description": "Requires a specific subprotocol - rejects connections without match",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/strict-protocol",
+      "subprotocols": ["mqtt", "stomp"],
+      "requireSubprotocol": true,
+      "echoMode": true
+    }
+  },
+  {
+    "name": "WS Heartbeat Enabled",
+    "description": "WebSocket endpoint with ping/pong heartbeat to keep connections alive",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/heartbeat",
+      "echoMode": true,
+      "heartbeat": {
+        "enabled": true,
+        "interval": "30s",
+        "timeout": "10s"
+      }
+    }
+  },
+  {
+    "name": "WS Connection Limits",
+    "description": "Limits maximum concurrent connections to this endpoint",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/limited",
+      "echoMode": true,
+      "maxConnections": 5,
+      "maxMessageSize": 32768
+    }
+  },
+  {
+    "name": "WS Idle Timeout",
+    "description": "Automatically closes connections after period of inactivity",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/idle-timeout",
+      "echoMode": true,
+      "idleTimeout": "5m",
+      "heartbeat": {
+        "enabled": true,
+        "interval": "1m",
+        "timeout": "30s"
+      }
+    }
+  },
+  {
+    "name": "WS Scenario - Welcome Sequence",
+    "description": "Sends a welcome message sequence when client connects",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/welcome",
+      "echoMode": false,
+      "scenario": {
+        "name": "welcome-sequence",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "welcome", "message": "Connected to server"},
+              "delay": "100ms"
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "500ms"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "info", "serverTime": "2024-01-01T12:00:00Z", "version": "1.0.0"}
+            }
+          }
+        ],
+        "loop": false
+      }
+    }
+  },
+  {
+    "name": "WS Scenario - Interactive Chat Flow",
+    "description": "Simulates a chat interaction with expected client messages",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/chat-flow",
+      "echoMode": false,
+      "scenario": {
+        "name": "chat-interaction",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "prompt", "message": "Please send your username"}
+            }
+          },
+          {
+            "type": "expect",
+            "match": {
+              "type": "json",
+              "path": "$.type",
+              "value": "username"
+            },
+            "timeout": "30s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "authenticated", "message": "Welcome! You are now logged in."},
+              "delay": "200ms"
+            }
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "ready", "channels": ["general", "support", "announcements"]}
+            }
+          }
+        ],
+        "loop": false,
+        "resetOnReconnect": true
+      }
+    }
+  },
+  {
+    "name": "WS Scenario - Looping Heartbeat",
+    "description": "Continuously sends status updates in a loop",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/status-loop",
+      "echoMode": false,
+      "scenario": {
+        "name": "status-heartbeat",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "status", "status": "healthy", "timestamp": "now"}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "5s"
+          }
+        ],
+        "loop": true
+      }
+    }
+  },
+  {
+    "name": "WS Scenario - Optional Steps",
+    "description": "Scenario with optional expect steps that don't block on timeout",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/optional-flow",
+      "echoMode": false,
+      "scenario": {
+        "name": "optional-interaction",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "greeting", "message": "Hello! Reply with 'ready' within 5s or we'll continue anyway."}
+            }
+          },
+          {
+            "type": "expect",
+            "match": {
+              "type": "exact",
+              "value": "ready"
+            },
+            "timeout": "5s",
+            "optional": true
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "proceed", "message": "Proceeding with setup..."}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "1s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "complete", "message": "Setup complete!"}
+            }
+          }
+        ],
+        "loop": false
+      }
+    }
+  },
+  {
+    "name": "WS Scenario - Stock Ticker Simulation",
+    "description": "Simulates real-time stock price updates",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/stocks",
+      "echoMode": false,
+      "scenario": {
+        "name": "stock-ticker",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "ticker", "symbol": "AAPL", "price": 150.25, "change": 2.50}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "1s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "ticker", "symbol": "GOOGL", "price": 2800.00, "change": -15.30}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "1s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "ticker", "symbol": "MSFT", "price": 305.75, "change": 1.25}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "1s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "ticker", "symbol": "TSLA", "price": 725.50, "change": 12.00}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "1s"
+          }
+        ],
+        "loop": true
+      }
+    }
+  },
+  {
+    "name": "WS Scenario - Game Server Events",
+    "description": "Simulates a game server sending periodic events",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/game",
+      "echoMode": false,
+      "scenario": {
+        "name": "game-events",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"event": "player_joined", "player": {"id": "p1", "name": "Player1", "team": "red"}}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "2s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"event": "game_starting", "countdown": 10}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "3s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"event": "game_started", "mapId": "arena_01", "mode": "deathmatch"}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "5s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"event": "score_update", "scores": {"red": 5, "blue": 3}}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "5s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"event": "game_ended", "winner": "red", "finalScores": {"red": 10, "blue": 7}}
+            }
+          }
+        ],
+        "loop": false,
+        "resetOnReconnect": true
+      }
+    }
+  },
+  {
+    "name": "WS GraphQL Subscriptions Mock",
+    "description": "Mocks GraphQL WebSocket subscriptions protocol (graphql-ws)",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/graphql",
+      "subprotocols": ["graphql-transport-ws"],
+      "requireSubprotocol": true,
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "connection_init"
+          },
+          "response": {
+            "type": "json",
+            "value": {"type": "connection_ack"}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "ping"
+          },
+          "response": {
+            "type": "json",
+            "value": {"type": "pong"}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "subscribe"
+          },
+          "response": {
+            "type": "json",
+            "value": {"id": "1", "type": "next", "payload": {"data": {"onMessage": {"id": "msg-1", "content": "Hello from subscription!", "author": "system"}}}}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "complete"
+          },
+          "noResponse": true
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS Chat Room Simulation",
+    "description": "Full chat room simulation with message responses",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/chatroom",
+      "subprotocols": ["chat-v1"],
+      "echoMode": false,
+      "maxConnections": 100,
+      "idleTimeout": "30m",
+      "heartbeat": {
+        "enabled": true,
+        "interval": "30s",
+        "timeout": "10s"
+      },
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "join"
+          },
+          "response": {
+            "type": "json",
+            "value": {"type": "system", "message": "Welcome to the chat room!", "users": ["Alice", "Bob", "Charlie"]}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "message"
+          },
+          "response": {
+            "type": "json",
+            "value": {"type": "message_ack", "status": "delivered", "timestamp": "2024-01-01T12:00:00Z"}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "typing"
+          },
+          "noResponse": true
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "leave"
+          },
+          "response": {
+            "type": "json",
+            "value": {"type": "system", "message": "Goodbye!"}
+          }
+        }
+      ],
+      "defaultResponse": {
+        "type": "json",
+        "value": {"error": "unknown_action", "supported": ["join", "message", "typing", "leave"]}
+      }
+    }
+  },
+  {
+    "name": "WS IoT Device Simulator",
+    "description": "Simulates IoT device telemetry stream",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/iot",
+      "echoMode": false,
+      "scenario": {
+        "name": "iot-telemetry",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "telemetry", "deviceId": "sensor-001", "temperature": 22.5, "humidity": 45.2, "pressure": 1013.25}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "2s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "telemetry", "deviceId": "sensor-001", "temperature": 22.7, "humidity": 44.8, "pressure": 1013.20}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "2s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "telemetry", "deviceId": "sensor-001", "temperature": 22.9, "humidity": 44.5, "pressure": 1013.15}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "2s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "alert", "deviceId": "sensor-001", "level": "warning", "message": "Temperature rising"}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "3s"
+          }
+        ],
+        "loop": true
+      },
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.command",
+            "value": "getStatus"
+          },
+          "response": {
+            "type": "json",
+            "value": {"deviceId": "sensor-001", "status": "online", "battery": 85, "lastUpdate": "2024-01-01T12:00:00Z"}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.command",
+            "value": "reboot"
+          },
+          "response": {
+            "type": "json",
+            "value": {"deviceId": "sensor-001", "command": "reboot", "status": "acknowledged"},
+            "delay": "500ms"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS Notification Service",
+    "description": "Push notification service with various notification types",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/notifications",
+      "echoMode": false,
+      "scenario": {
+        "name": "notification-stream",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "notification", "category": "info", "title": "Welcome", "body": "You have 3 unread messages", "badge": 3}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "10s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "notification", "category": "social", "title": "New follower", "body": "Jane Doe started following you", "action": "view_profile"}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "15s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "notification", "category": "alert", "title": "Security Alert", "body": "New login detected from unknown device", "priority": "high"}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "20s"
+          }
+        ],
+        "loop": true
+      },
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "markRead"
+          },
+          "response": {
+            "type": "json",
+            "value": {"status": "success", "unreadCount": 0}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "dismiss"
+          },
+          "noResponse": true
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS Order Book Simulation",
+    "description": "Simulates a cryptocurrency order book with bid/ask updates",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/orderbook",
+      "subprotocols": ["orderbook-v1"],
+      "echoMode": false,
+      "scenario": {
+        "name": "orderbook-updates",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {
+                "type": "snapshot",
+                "symbol": "BTC-USD",
+                "bids": [[50000.00, 1.5], [49999.50, 2.0], [49999.00, 0.8]],
+                "asks": [[50001.00, 1.2], [50001.50, 3.0], [50002.00, 1.0]]
+              }
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "500ms"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "update", "symbol": "BTC-USD", "side": "bid", "price": 50000.50, "size": 0.5}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "300ms"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "update", "symbol": "BTC-USD", "side": "ask", "price": 50000.75, "size": 1.0}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "400ms"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "trade", "symbol": "BTC-USD", "price": 50000.50, "size": 0.3, "side": "buy"}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "600ms"
+          }
+        ],
+        "loop": true
+      },
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.action",
+            "value": "subscribe"
+          },
+          "response": {
+            "type": "json",
+            "value": {"type": "subscribed", "channels": ["orderbook", "trades"]}
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "WS Large Message Size",
+    "description": "Configured for handling larger messages (1MB limit)",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/large-messages",
+      "echoMode": true,
+      "maxMessageSize": 1048576
+    }
+  },
+  {
+    "name": "WS Multi-matcher Priority",
+    "description": "Demonstrates matcher priority - first match wins",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/priority",
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "exact",
+            "value": "admin:secret"
+          },
+          "response": {
+            "type": "json",
+            "value": {"access": "admin", "permissions": ["read", "write", "delete"]}
+          }
+        },
+        {
+          "match": {
+            "type": "prefix",
+            "value": "admin:"
+          },
+          "response": {
+            "type": "json",
+            "value": {"access": "admin", "permissions": ["read", "write"]}
+          }
+        },
+        {
+          "match": {
+            "type": "prefix",
+            "value": "user:"
+          },
+          "response": {
+            "type": "json",
+            "value": {"access": "user", "permissions": ["read"]}
+          }
+        },
+        {
+          "match": {
+            "type": "contains",
+            "value": ":"
+          },
+          "response": {
+            "type": "json",
+            "value": {"access": "guest", "permissions": []}
+          }
+        }
+      ],
+      "defaultResponse": {
+        "type": "json",
+        "value": {"error": "invalid_format", "expected": "role:identifier"}
+      }
+    }
+  },
+  {
+    "name": "WS Scenario with Expect Timeout",
+    "description": "Demonstrates expect steps with configurable timeouts",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/auth-flow",
+      "echoMode": false,
+      "scenario": {
+        "name": "authentication-flow",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "auth_required", "methods": ["token", "password"]}
+            }
+          },
+          {
+            "type": "expect",
+            "match": {
+              "type": "json",
+              "path": "$.type",
+              "value": "auth"
+            },
+            "timeout": "60s",
+            "optional": false
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "auth_success", "userId": "user-123", "sessionId": "sess-abc"},
+              "delay": "100ms"
+            }
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "ready", "features": ["messaging", "presence", "typing_indicators"]}
+            }
+          }
+        ],
+        "loop": false,
+        "resetOnReconnect": true
+      }
+    }
+  },
+  {
+    "name": "WS Complex JSON Matching",
+    "description": "Matches nested JSON paths for complex message structures",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/nested-json",
+      "echoMode": false,
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.data.user.role",
+            "value": "admin"
+          },
+          "response": {
+            "type": "json",
+            "value": {"authorized": true, "level": "full"}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.data.user.role",
+            "value": "moderator"
+          },
+          "response": {
+            "type": "json",
+            "value": {"authorized": true, "level": "partial"}
+          }
+        },
+        {
+          "match": {
+            "type": "json",
+            "path": "$.metadata.version",
+            "value": "2"
+          },
+          "response": {
+            "type": "json",
+            "value": {"protocol": "v2", "features": ["compression", "batching"]}
+          }
+        }
+      ],
+      "defaultResponse": {
+        "type": "json",
+        "value": {"authorized": false, "message": "Invalid request structure"}
+      }
+    }
+  },
+  {
+    "name": "WS Collaborative Editor Events",
+    "description": "Simulates real-time collaborative editing events",
+    "type": "websocket",
+    "enabled": true,
+    "websocket": {
+      "path": "/ws/collab-editor",
+      "echoMode": false,
+      "scenario": {
+        "name": "collaborative-events",
+        "steps": [
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "cursor", "userId": "user-2", "position": {"line": 10, "column": 5}}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "1s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "insert", "userId": "user-2", "position": {"line": 10, "column": 5}, "text": "Hello "}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "500ms"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "cursor", "userId": "user-2", "position": {"line": 10, "column": 11}}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "1s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "insert", "userId": "user-2", "position": {"line": 10, "column": 11}, "text": "World!"}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "2s"
+          },
+          {
+            "type": "send",
+            "message": {
+              "type": "json",
+              "value": {"type": "selection", "userId": "user-3", "start": {"line": 5, "column": 0}, "end": {"line": 5, "column": 20}}
+            }
+          },
+          {
+            "type": "wait",
+            "duration": "3s"
+          }
+        ],
+        "loop": true
+      },
+      "matchers": [
+        {
+          "match": {
+            "type": "json",
+            "path": "$.type",
+            "value": "sync"
+          },
+          "response": {
+            "type": "json",
+            "value": {"type": "sync_ack", "version": 42, "content": "Document content here..."}
+          }
+        }
+      ]
+    }
+  }
+]

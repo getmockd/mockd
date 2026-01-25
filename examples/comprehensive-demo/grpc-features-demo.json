@@ -1,0 +1,1038 @@
+[
+  {
+    "id": "grpc-demo-comprehensive",
+    "type": "grpc",
+    "name": "Comprehensive gRPC Demo",
+    "description": "Demonstrates all gRPC features: unary, server streaming, client streaming, bidirectional streaming, multiple services, nested messages, repeated fields, errors, metadata matching, delays, and templated responses",
+    "enabled": true,
+    "grpc": {
+      "port": 50051,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.UserService": {
+          "methods": {
+            "CreateUser": {
+              "delay": "100ms",
+              "response": {
+                "user": {
+                  "id": "{{uuid}}",
+                  "username": "{{request.body.username}}",
+                  "email": "{{request.body.email}}",
+                  "fullName": "{{request.body.fullName}}",
+                  "contact": {
+                    "email": "{{request.body.email}}",
+                    "phone": "+1-555-123-4567",
+                    "address": {
+                      "street": "123 Main St",
+                      "city": "San Francisco",
+                      "state": "CA",
+                      "zipCode": "94102",
+                      "country": "USA"
+                    }
+                  },
+                  "roles": ["user", "member"],
+                  "status": "STATUS_ACTIVE",
+                  "metadata": {
+                    "labels": {
+                      "team": "engineering",
+                      "tier": "standard"
+                    },
+                    "annotations": {
+                      "created-by": "grpc-mock"
+                    },
+                    "createdAt": "{{now}}",
+                    "updatedAt": "{{now}}"
+                  }
+                }
+              }
+            },
+            "GetUser": {
+              "response": {
+                "user": {
+                  "id": "{{request.body.id}}",
+                  "username": "john_doe",
+                  "email": "john.doe@example.com",
+                  "fullName": "John Doe",
+                  "contact": {
+                    "email": "john.doe@example.com",
+                    "phone": "+1-555-987-6543",
+                    "address": {
+                      "street": "456 Oak Ave",
+                      "city": "New York",
+                      "state": "NY",
+                      "zipCode": "10001",
+                      "country": "USA"
+                    }
+                  },
+                  "roles": ["user", "admin", "moderator"],
+                  "status": "STATUS_ACTIVE",
+                  "metadata": {
+                    "labels": {
+                      "department": "IT",
+                      "access-level": "elevated"
+                    },
+                    "annotations": {
+                      "last-login": "2024-01-15T10:30:00Z"
+                    },
+                    "createdAt": "2023-06-01T00:00:00Z",
+                    "updatedAt": "2024-01-15T10:30:00Z"
+                  }
+                }
+              }
+            },
+            "ListUsers": {
+              "delay": "50ms",
+              "response": {
+                "users": [
+                  {
+                    "id": "user-001",
+                    "username": "alice",
+                    "email": "alice@example.com",
+                    "fullName": "Alice Smith",
+                    "roles": ["user", "admin"],
+                    "status": "STATUS_ACTIVE"
+                  },
+                  {
+                    "id": "user-002",
+                    "username": "bob",
+                    "email": "bob@example.com",
+                    "fullName": "Bob Johnson",
+                    "roles": ["user"],
+                    "status": "STATUS_ACTIVE"
+                  },
+                  {
+                    "id": "user-003",
+                    "username": "charlie",
+                    "email": "charlie@example.com",
+                    "fullName": "Charlie Brown",
+                    "roles": ["user", "moderator"],
+                    "status": "STATUS_PENDING"
+                  }
+                ],
+                "nextPageToken": "token_page_2",
+                "totalCount": 150
+              }
+            },
+            "UpdateUser": {
+              "delay": "75ms",
+              "response": {
+                "user": {
+                  "id": "{{request.body.id}}",
+                  "username": "updated_user",
+                  "email": "{{request.body.email}}",
+                  "fullName": "{{request.body.fullName}}",
+                  "roles": ["user"],
+                  "status": "STATUS_ACTIVE",
+                  "metadata": {
+                    "updatedAt": "{{now}}"
+                  }
+                }
+              }
+            },
+            "DeleteUser": {
+              "response": {
+                "success": true
+              }
+            }
+          }
+        },
+        "demo.StreamingService": {
+          "methods": {
+            "Subscribe": {
+              "delay": "50ms",
+              "streamDelay": "200ms",
+              "responses": [
+                {
+                  "id": "evt-001",
+                  "type": "user.created",
+                  "source": "user-service",
+                  "data": "{\"userId\": \"u-123\", \"action\": \"created\"}",
+                  "timestamp": "2024-01-15T10:00:00Z",
+                  "priority": "PRIORITY_HIGH"
+                },
+                {
+                  "id": "evt-002",
+                  "type": "order.placed",
+                  "source": "order-service",
+                  "data": "{\"orderId\": \"ord-456\", \"total\": 99.99}",
+                  "timestamp": "2024-01-15T10:01:00Z",
+                  "priority": "PRIORITY_MEDIUM"
+                },
+                {
+                  "id": "evt-003",
+                  "type": "payment.processed",
+                  "source": "payment-service",
+                  "data": "{\"paymentId\": \"pay-789\", \"status\": \"success\"}",
+                  "timestamp": "2024-01-15T10:02:00Z",
+                  "priority": "PRIORITY_HIGH"
+                },
+                {
+                  "id": "evt-004",
+                  "type": "inventory.updated",
+                  "source": "inventory-service",
+                  "data": "{\"productId\": \"prod-321\", \"quantity\": 50}",
+                  "timestamp": "2024-01-15T10:03:00Z",
+                  "priority": "PRIORITY_LOW"
+                },
+                {
+                  "id": "evt-005",
+                  "type": "notification.sent",
+                  "source": "notification-service",
+                  "data": "{\"notificationId\": \"notif-654\", \"channel\": \"email\"}",
+                  "timestamp": "2024-01-15T10:04:00Z",
+                  "priority": "PRIORITY_MEDIUM"
+                }
+              ]
+            },
+            "Upload": {
+              "delay": "100ms",
+              "response": {
+                "fileId": "{{uuid}}",
+                "totalBytes": 1048576,
+                "chunksReceived": 10,
+                "checksum": "sha256:abc123def456..."
+              }
+            },
+            "Chat": {
+              "streamDelay": "150ms",
+              "responses": [
+                {
+                  "id": "{{uuid}}",
+                  "userId": "bot-assistant",
+                  "content": "Hello! How can I help you today?",
+                  "roomId": "general",
+                  "timestamp": "{{now}}"
+                },
+                {
+                  "id": "{{uuid}}",
+                  "userId": "bot-assistant",
+                  "content": "I see you're interested in our services.",
+                  "roomId": "general",
+                  "timestamp": "{{now}}"
+                },
+                {
+                  "id": "{{uuid}}",
+                  "userId": "bot-assistant",
+                  "content": "Is there anything specific you'd like to know?",
+                  "roomId": "general",
+                  "timestamp": "{{now}}"
+                }
+              ]
+            }
+          }
+        },
+        "demo.OrderService": {
+          "methods": {
+            "CreateOrder": {
+              "delay": "150ms",
+              "response": {
+                "order": {
+                  "id": "{{uuid}}",
+                  "customerId": "{{request.body.customerId}}",
+                  "items": [
+                    {
+                      "productId": "prod-001",
+                      "productName": "Widget Pro",
+                      "quantity": 2,
+                      "unitPrice": 29.99,
+                      "totalPrice": 59.98
+                    },
+                    {
+                      "productId": "prod-002",
+                      "productName": "Gadget Plus",
+                      "quantity": 1,
+                      "unitPrice": 149.99,
+                      "totalPrice": 149.99
+                    }
+                  ],
+                  "subtotal": 209.97,
+                  "tax": 18.90,
+                  "total": 228.87,
+                  "status": "STATUS_PENDING",
+                  "shippingAddress": {
+                    "street": "789 Commerce Blvd",
+                    "city": "Chicago",
+                    "state": "IL",
+                    "zipCode": "60601",
+                    "country": "USA"
+                  },
+                  "billingAddress": {
+                    "street": "789 Commerce Blvd",
+                    "city": "Chicago",
+                    "state": "IL",
+                    "zipCode": "60601",
+                    "country": "USA"
+                  },
+                  "metadata": {
+                    "labels": {
+                      "source": "web",
+                      "campaign": "winter-sale"
+                    },
+                    "createdAt": "{{now}}"
+                  }
+                }
+              }
+            },
+            "GetOrder": {
+              "response": {
+                "order": {
+                  "id": "{{request.body.id}}",
+                  "customerId": "cust-12345",
+                  "items": [
+                    {
+                      "productId": "prod-001",
+                      "productName": "Widget Pro",
+                      "quantity": 3,
+                      "unitPrice": 29.99,
+                      "totalPrice": 89.97
+                    }
+                  ],
+                  "subtotal": 89.97,
+                  "tax": 8.10,
+                  "total": 98.07,
+                  "status": "STATUS_COMPLETED",
+                  "metadata": {
+                    "createdAt": "2024-01-10T08:00:00Z",
+                    "updatedAt": "2024-01-12T14:30:00Z"
+                  }
+                }
+              }
+            },
+            "TrackOrder": {
+              "delay": "100ms",
+              "streamDelay": "500ms",
+              "responses": [
+                {
+                  "orderId": "{{request.body.id}}",
+                  "status": "STATUS_PENDING",
+                  "location": "Warehouse - San Francisco",
+                  "description": "Order received and being processed",
+                  "timestamp": "2024-01-15T08:00:00Z"
+                },
+                {
+                  "orderId": "{{request.body.id}}",
+                  "status": "STATUS_ACTIVE",
+                  "location": "Distribution Center - Oakland",
+                  "description": "Package picked up by carrier",
+                  "timestamp": "2024-01-15T10:30:00Z"
+                },
+                {
+                  "orderId": "{{request.body.id}}",
+                  "status": "STATUS_ACTIVE",
+                  "location": "In Transit - Sacramento",
+                  "description": "Package in transit to destination",
+                  "timestamp": "2024-01-15T14:00:00Z"
+                },
+                {
+                  "orderId": "{{request.body.id}}",
+                  "status": "STATUS_ACTIVE",
+                  "location": "Local Facility - Destination City",
+                  "description": "Package arrived at local facility",
+                  "timestamp": "2024-01-16T06:00:00Z"
+                },
+                {
+                  "orderId": "{{request.body.id}}",
+                  "status": "STATUS_COMPLETED",
+                  "location": "Delivered",
+                  "description": "Package delivered successfully",
+                  "timestamp": "2024-01-16T11:45:00Z"
+                }
+              ]
+            }
+          }
+        },
+        "demo.AnalyticsService": {
+          "methods": {
+            "SendMetrics": {
+              "delay": "50ms",
+              "response": {
+                "accepted": 100,
+                "rejected": 2,
+                "errors": [
+                  "Invalid timestamp for metric at index 45",
+                  "Missing metric_name for metric at index 78"
+                ]
+              }
+            },
+            "QueryMetrics": {
+              "delay": "200ms",
+              "streamDelay": "100ms",
+              "responses": [
+                {
+                  "points": [
+                    {
+                      "metricName": "cpu_usage",
+                      "value": 45.2,
+                      "timestamp": "2024-01-15T10:00:00Z",
+                      "tags": {"host": "server-1", "region": "us-west"}
+                    },
+                    {
+                      "metricName": "cpu_usage",
+                      "value": 52.8,
+                      "timestamp": "2024-01-15T10:05:00Z",
+                      "tags": {"host": "server-1", "region": "us-west"}
+                    }
+                  ]
+                },
+                {
+                  "points": [
+                    {
+                      "metricName": "cpu_usage",
+                      "value": 48.1,
+                      "timestamp": "2024-01-15T10:10:00Z",
+                      "tags": {"host": "server-1", "region": "us-west"}
+                    },
+                    {
+                      "metricName": "cpu_usage",
+                      "value": 61.5,
+                      "timestamp": "2024-01-15T10:15:00Z",
+                      "tags": {"host": "server-1", "region": "us-west"}
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-error-demo-not-found",
+    "type": "grpc",
+    "name": "gRPC Error Demo - NOT_FOUND",
+    "description": "Demonstrates gRPC NOT_FOUND error with ResourceInfo details",
+    "enabled": true,
+    "grpc": {
+      "port": 50052,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.UserService": {
+          "methods": {
+            "GetUser": {
+              "match": {
+                "request": {
+                  "id": "nonexistent"
+                }
+              },
+              "error": {
+                "code": "NOT_FOUND",
+                "message": "User not found with the specified ID",
+                "details": {
+                  "resource_info": {
+                    "resource_type": "User",
+                    "resource_name": "nonexistent",
+                    "owner": "demo.UserService",
+                    "description": "The requested user does not exist in the system"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-error-demo-invalid-argument",
+    "type": "grpc",
+    "name": "gRPC Error Demo - INVALID_ARGUMENT",
+    "description": "Demonstrates gRPC INVALID_ARGUMENT error with BadRequest field violations",
+    "enabled": true,
+    "grpc": {
+      "port": 50053,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.UserService": {
+          "methods": {
+            "CreateUser": {
+              "match": {
+                "request": {
+                  "email": ""
+                }
+              },
+              "error": {
+                "code": "INVALID_ARGUMENT",
+                "message": "Invalid request: missing required fields",
+                "details": {
+                  "bad_request": {
+                    "field_violations": [
+                      {
+                        "field": "email",
+                        "description": "Email address is required and cannot be empty"
+                      },
+                      {
+                        "field": "username",
+                        "description": "Username must be between 3 and 30 characters"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-error-demo-permission-denied",
+    "type": "grpc",
+    "name": "gRPC Error Demo - PERMISSION_DENIED",
+    "description": "Demonstrates gRPC PERMISSION_DENIED error with ErrorInfo details",
+    "enabled": true,
+    "grpc": {
+      "port": 50054,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.UserService": {
+          "methods": {
+            "DeleteUser": {
+              "match": {
+                "metadata": {
+                  "x-user-role": "viewer"
+                }
+              },
+              "error": {
+                "code": "PERMISSION_DENIED",
+                "message": "Insufficient permissions to delete user",
+                "details": {
+                  "error_info": {
+                    "reason": "INSUFFICIENT_PERMISSIONS",
+                    "domain": "demo.userservice.v1",
+                    "metadata": {
+                      "required_role": "admin",
+                      "current_role": "viewer",
+                      "resource": "User"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-error-demo-resource-exhausted",
+    "type": "grpc",
+    "name": "gRPC Error Demo - RESOURCE_EXHAUSTED",
+    "description": "Demonstrates gRPC RESOURCE_EXHAUSTED error with QuotaFailure and RetryInfo",
+    "enabled": true,
+    "grpc": {
+      "port": 50055,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.OrderService": {
+          "methods": {
+            "CreateOrder": {
+              "match": {
+                "metadata": {
+                  "x-rate-limit-exceeded": "true"
+                }
+              },
+              "error": {
+                "code": "RESOURCE_EXHAUSTED",
+                "message": "Rate limit exceeded for order creation",
+                "details": {
+                  "quota_failure": {
+                    "violations": [
+                      {
+                        "subject": "orders_per_minute",
+                        "description": "Exceeded maximum of 100 orders per minute"
+                      }
+                    ]
+                  },
+                  "retry_info": {
+                    "retry_delay": "30s"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-error-demo-failed-precondition",
+    "type": "grpc",
+    "name": "gRPC Error Demo - FAILED_PRECONDITION",
+    "description": "Demonstrates gRPC FAILED_PRECONDITION error with PreconditionFailure details",
+    "enabled": true,
+    "grpc": {
+      "port": 50056,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.OrderService": {
+          "methods": {
+            "CreateOrder": {
+              "match": {
+                "request": {
+                  "customerId": "suspended-customer"
+                }
+              },
+              "error": {
+                "code": "FAILED_PRECONDITION",
+                "message": "Cannot create order: customer account is suspended",
+                "details": {
+                  "precondition_failure": {
+                    "violations": [
+                      {
+                        "type": "ACCOUNT_STATUS",
+                        "subject": "customer/suspended-customer",
+                        "description": "Customer account must be active to place orders"
+                      },
+                      {
+                        "type": "PAYMENT_METHOD",
+                        "subject": "customer/suspended-customer/payment",
+                        "description": "No valid payment method on file"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-error-demo-unavailable",
+    "type": "grpc",
+    "name": "gRPC Error Demo - UNAVAILABLE",
+    "description": "Demonstrates gRPC UNAVAILABLE error with DebugInfo and RetryInfo",
+    "enabled": true,
+    "grpc": {
+      "port": 50057,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.AnalyticsService": {
+          "methods": {
+            "QueryMetrics": {
+              "delay": "2s",
+              "error": {
+                "code": "UNAVAILABLE",
+                "message": "Analytics service temporarily unavailable",
+                "details": {
+                  "debug_info": {
+                    "stack_entries": [
+                      "analytics.QueryMetrics",
+                      "storage.TimeseriesDB.Query",
+                      "connection.Pool.Acquire"
+                    ],
+                    "detail": "Connection pool exhausted after 5000ms timeout"
+                  },
+                  "retry_info": {
+                    "retry_delay": "5s"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-error-demo-internal",
+    "type": "grpc",
+    "name": "gRPC Error Demo - INTERNAL",
+    "description": "Demonstrates gRPC INTERNAL error with Help links",
+    "enabled": true,
+    "grpc": {
+      "port": 50058,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.StreamingService": {
+          "methods": {
+            "Upload": {
+              "error": {
+                "code": "INTERNAL",
+                "message": "Internal server error during file processing",
+                "details": {
+                  "debug_info": {
+                    "detail": "Unexpected error in file processor: checksum validation failed"
+                  },
+                  "help": {
+                    "links": [
+                      {
+                        "description": "File upload troubleshooting guide",
+                        "url": "https://docs.example.com/troubleshooting/file-upload"
+                      },
+                      {
+                        "description": "Contact support",
+                        "url": "https://support.example.com/tickets/new"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-error-demo-unauthenticated",
+    "type": "grpc",
+    "name": "gRPC Error Demo - UNAUTHENTICATED",
+    "description": "Demonstrates gRPC UNAUTHENTICATED error with LocalizedMessage",
+    "enabled": true,
+    "grpc": {
+      "port": 50059,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.UserService": {
+          "methods": {
+            "GetUser": {
+              "match": {
+                "metadata": {
+                  "authorization": ""
+                }
+              },
+              "error": {
+                "code": "UNAUTHENTICATED",
+                "message": "Authentication required",
+                "details": {
+                  "error_info": {
+                    "reason": "MISSING_CREDENTIALS",
+                    "domain": "auth.example.com",
+                    "metadata": {
+                      "method": "Bearer token",
+                      "header": "Authorization"
+                    }
+                  },
+                  "localized_message": {
+                    "locale": "en-US",
+                    "message": "Please provide a valid authentication token in the Authorization header"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-metadata-matching-demo",
+    "type": "grpc",
+    "name": "gRPC Metadata Matching Demo",
+    "description": "Demonstrates conditional responses based on gRPC metadata headers",
+    "enabled": true,
+    "grpc": {
+      "port": 50060,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.UserService": {
+          "methods": {
+            "GetUser": {
+              "match": {
+                "metadata": {
+                  "x-api-version": "v2"
+                }
+              },
+              "response": {
+                "user": {
+                  "id": "{{request.body.id}}",
+                  "username": "v2_user",
+                  "email": "v2@example.com",
+                  "fullName": "API V2 User Response",
+                  "roles": ["user", "v2-beta-tester"],
+                  "status": "STATUS_ACTIVE",
+                  "metadata": {
+                    "labels": {
+                      "api-version": "v2",
+                      "response-format": "enhanced"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-delay-demo",
+    "type": "grpc",
+    "name": "gRPC Delay Demo",
+    "description": "Demonstrates various delay configurations for simulating network latency",
+    "enabled": true,
+    "grpc": {
+      "port": 50061,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.UserService": {
+          "methods": {
+            "GetUser": {
+              "delay": "500ms",
+              "response": {
+                "user": {
+                  "id": "{{request.body.id}}",
+                  "username": "slow_response_user",
+                  "email": "slow@example.com",
+                  "fullName": "Delayed Response User"
+                }
+              }
+            },
+            "ListUsers": {
+              "delay": "1s",
+              "response": {
+                "users": [
+                  {"id": "user-1", "username": "user1"},
+                  {"id": "user-2", "username": "user2"}
+                ],
+                "totalCount": 2
+              }
+            }
+          }
+        },
+        "demo.StreamingService": {
+          "methods": {
+            "Subscribe": {
+              "delay": "200ms",
+              "streamDelay": "1s",
+              "responses": [
+                {"id": "slow-evt-1", "type": "delayed.event", "data": "First event after 200ms initial delay"},
+                {"id": "slow-evt-2", "type": "delayed.event", "data": "Second event after 1s stream delay"},
+                {"id": "slow-evt-3", "type": "delayed.event", "data": "Third event after another 1s stream delay"}
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-template-demo",
+    "type": "grpc",
+    "name": "gRPC Templated Response Demo",
+    "description": "Demonstrates all template variables and functions available in gRPC responses",
+    "enabled": true,
+    "grpc": {
+      "port": 50062,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.UserService": {
+          "methods": {
+            "CreateUser": {
+              "response": {
+                "user": {
+                  "id": "{{uuid}}",
+                  "username": "{{request.body.username}}",
+                  "email": "{{request.body.email}}",
+                  "fullName": "{{upper request.body.fullName}}",
+                  "contact": {
+                    "email": "{{lower request.body.email}}",
+                    "phone": "{{default request.body.phone '+1-555-000-0000'}}"
+                  },
+                  "roles": ["user"],
+                  "status": "STATUS_ACTIVE",
+                  "metadata": {
+                    "labels": {
+                      "request-id": "{{uuid.short}}",
+                      "timestamp": "{{timestamp}}",
+                      "random-tag": "tag-{{random}}"
+                    },
+                    "annotations": {
+                      "created-at-iso": "{{now}}",
+                      "random-score": "{{random.float}}"
+                    },
+                    "createdAt": "{{now}}",
+                    "updatedAt": "{{now}}"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "demo.OrderService": {
+          "methods": {
+            "CreateOrder": {
+              "response": {
+                "order": {
+                  "id": "ord-{{uuid.short}}",
+                  "customerId": "{{request.body.customerId}}",
+                  "items": [
+                    {
+                      "productId": "prod-{{random}}",
+                      "productName": "Dynamic Product",
+                      "quantity": 1,
+                      "unitPrice": 99.99,
+                      "totalPrice": 99.99
+                    }
+                  ],
+                  "subtotal": 99.99,
+                  "tax": 9.00,
+                  "total": 108.99,
+                  "status": "STATUS_PENDING",
+                  "metadata": {
+                    "labels": {
+                      "correlation-id": "{{uuid}}",
+                      "created-timestamp": "{{timestamp}}"
+                    },
+                    "createdAt": "{{now}}"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "grpc-all-error-codes-demo",
+    "type": "grpc",
+    "name": "gRPC All Error Codes Demo",
+    "description": "Demonstrates all gRPC status codes with request matching",
+    "enabled": true,
+    "grpc": {
+      "port": 50063,
+      "protoFile": "./demo.proto",
+      "reflection": true,
+      "services": {
+        "demo.UserService": {
+          "methods": {
+            "GetUser": {
+              "match": {
+                "request": {
+                  "id": "error-cancelled"
+                }
+              },
+              "error": {
+                "code": "CANCELLED",
+                "message": "Operation was cancelled by the client"
+              }
+            }
+          }
+        },
+        "demo.OrderService": {
+          "methods": {
+            "GetOrder": {
+              "match": {
+                "request": {
+                  "id": "error-deadline"
+                }
+              },
+              "delay": "100ms",
+              "error": {
+                "code": "DEADLINE_EXCEEDED",
+                "message": "Operation timed out after deadline"
+              }
+            },
+            "CreateOrder": {
+              "match": {
+                "request": {
+                  "customerId": "duplicate-order"
+                }
+              },
+              "error": {
+                "code": "ALREADY_EXISTS",
+                "message": "An order with this ID already exists",
+                "details": {
+                  "resource_info": {
+                    "resource_type": "Order",
+                    "resource_name": "duplicate-order",
+                    "description": "Order already exists in the system"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "demo.AnalyticsService": {
+          "methods": {
+            "SendMetrics": {
+              "match": {
+                "metadata": {
+                  "x-trigger-error": "out-of-range"
+                }
+              },
+              "error": {
+                "code": "OUT_OF_RANGE",
+                "message": "Metric value out of acceptable range",
+                "details": {
+                  "bad_request": {
+                    "field_violations": [
+                      {
+                        "field": "metrics[0].value",
+                        "description": "Value must be between 0 and 1000000"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "QueryMetrics": {
+              "match": {
+                "metadata": {
+                  "x-trigger-error": "unimplemented"
+                }
+              },
+              "error": {
+                "code": "UNIMPLEMENTED",
+                "message": "This query type is not yet implemented"
+              }
+            }
+          }
+        },
+        "demo.StreamingService": {
+          "methods": {
+            "Chat": {
+              "match": {
+                "metadata": {
+                  "x-trigger-error": "aborted"
+                }
+              },
+              "error": {
+                "code": "ABORTED",
+                "message": "Chat session aborted due to conflict",
+                "details": {
+                  "error_info": {
+                    "reason": "CONCURRENT_MODIFICATION",
+                    "domain": "chat.example.com"
+                  }
+                }
+              }
+            },
+            "Subscribe": {
+              "match": {
+                "metadata": {
+                  "x-trigger-error": "data-loss"
+                }
+              },
+              "error": {
+                "code": "DATA_LOSS",
+                "message": "Unrecoverable data loss detected in event stream",
+                "details": {
+                  "debug_info": {
+                    "detail": "Event buffer overflow - some events may have been lost"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+]
