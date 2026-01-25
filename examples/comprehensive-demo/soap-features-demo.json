@@ -1,640 +1,676 @@
-[
-  {
-    "type": "soap",
-    "name": "SOAP 1.1 Basic Operation - Single GetUser",
-    "description": "Demonstrates basic SOAP 1.1 request/response with SOAPAction header matching",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/users",
-      "operations": {
-        "GetUser": {
-          "soapAction": "http://example.com/GetUser",
-          "response": "<GetUserResponse xmlns=\"http://example.com/userservice\"><id>user-123</id><name>John Doe</name><email>john@example.com</email><status>active</status></GetUserResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP 1.1 Multiple Operations - User CRUD Service",
-    "description": "Demonstrates multiple SOAP operations in a single endpoint with different SOAPAction values",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/user-service",
-      "operations": {
-        "GetUser": {
-          "soapAction": "http://example.com/user/GetUser",
-          "response": "<GetUserResponse xmlns=\"http://example.com/user\"><id>{{xpath://GetUser/userId}}</id><name>John Doe</name><email>john@example.com</email><createdAt>2024-01-15T10:30:00Z</createdAt></GetUserResponse>"
-        },
-        "CreateUser": {
-          "soapAction": "http://example.com/user/CreateUser",
-          "response": "<CreateUserResponse xmlns=\"http://example.com/user\"><userId>new-user-{{uuid}}</userId><status>created</status><timestamp>{{now}}</timestamp></CreateUserResponse>"
-        },
-        "UpdateUser": {
-          "soapAction": "http://example.com/user/UpdateUser",
-          "response": "<UpdateUserResponse xmlns=\"http://example.com/user\"><userId>{{xpath://UpdateUser/userId}}</userId><status>updated</status><modifiedAt>{{now}}</modifiedAt></UpdateUserResponse>"
-        },
-        "DeleteUser": {
-          "soapAction": "http://example.com/user/DeleteUser",
-          "response": "<DeleteUserResponse xmlns=\"http://example.com/user\"><userId>{{xpath://DeleteUser/userId}}</userId><success>true</success><deletedAt>{{now}}</deletedAt></DeleteUserResponse>"
-        },
-        "ListUsers": {
-          "soapAction": "http://example.com/user/ListUsers",
-          "response": "<ListUsersResponse xmlns=\"http://example.com/user\"><users><user><id>user-001</id><name>Alice</name></user><user><id>user-002</id><name>Bob</name></user><user><id>user-003</id><name>Charlie</name></user></users><totalCount>3</totalCount></ListUsersResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Operation Matching by Element Name",
-    "description": "Demonstrates operation matching by XML element name when no SOAPAction is provided",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/products",
-      "operations": {
-        "GetProduct": {
-          "response": "<GetProductResponse xmlns=\"http://example.com/products\"><productId>{{xpath://GetProduct/productId}}</productId><name>Widget Pro</name><price>29.99</price><inStock>true</inStock></GetProductResponse>"
-        },
-        "SearchProducts": {
-          "response": "<SearchProductsResponse xmlns=\"http://example.com/products\"><results><product><id>prod-001</id><name>Widget</name></product><product><id>prod-002</id><name>Gadget</name></product></results></SearchProductsResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP with Inline WSDL - Order Service",
-    "description": "Demonstrates WSDL serving with inline WSDL definition accessible via ?wsdl query parameter",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/orders",
-      "wsdl": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><definitions name=\"OrderService\" xmlns=\"http://schemas.xmlsoap.org/wsdl/\" xmlns:soap=\"http://schemas.xmlsoap.org/wsdl/soap/\" xmlns:tns=\"http://example.com/orderservice\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"http://example.com/orderservice\"><types><xsd:schema targetNamespace=\"http://example.com/orderservice\"><xsd:element name=\"GetOrderRequest\"><xsd:complexType><xsd:sequence><xsd:element name=\"orderId\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"GetOrderResponse\"><xsd:complexType><xsd:sequence><xsd:element name=\"orderId\" type=\"xsd:string\"/><xsd:element name=\"status\" type=\"xsd:string\"/><xsd:element name=\"total\" type=\"xsd:decimal\"/><xsd:element name=\"currency\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"CreateOrderRequest\"><xsd:complexType><xsd:sequence><xsd:element name=\"customerId\" type=\"xsd:string\"/><xsd:element name=\"items\" type=\"tns:OrderItems\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"CreateOrderResponse\"><xsd:complexType><xsd:sequence><xsd:element name=\"orderId\" type=\"xsd:string\"/><xsd:element name=\"status\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:complexType name=\"OrderItems\"><xsd:sequence><xsd:element name=\"item\" type=\"tns:OrderItem\" maxOccurs=\"unbounded\"/></xsd:sequence></xsd:complexType><xsd:complexType name=\"OrderItem\"><xsd:sequence><xsd:element name=\"productId\" type=\"xsd:string\"/><xsd:element name=\"quantity\" type=\"xsd:int\"/><xsd:element name=\"price\" type=\"xsd:decimal\"/></xsd:sequence></xsd:complexType></xsd:schema></types><message name=\"GetOrderRequest\"><part name=\"parameters\" element=\"tns:GetOrderRequest\"/></message><message name=\"GetOrderResponse\"><part name=\"parameters\" element=\"tns:GetOrderResponse\"/></message><message name=\"CreateOrderRequest\"><part name=\"parameters\" element=\"tns:CreateOrderRequest\"/></message><message name=\"CreateOrderResponse\"><part name=\"parameters\" element=\"tns:CreateOrderResponse\"/></message><portType name=\"OrderPortType\"><operation name=\"GetOrder\"><input message=\"tns:GetOrderRequest\"/><output message=\"tns:GetOrderResponse\"/></operation><operation name=\"CreateOrder\"><input message=\"tns:CreateOrderRequest\"/><output message=\"tns:CreateOrderResponse\"/></operation></portType><binding name=\"OrderBinding\" type=\"tns:OrderPortType\"><soap:binding style=\"document\" transport=\"http://schemas.xmlsoap.org/soap/http\"/><operation name=\"GetOrder\"><soap:operation soapAction=\"http://example.com/GetOrder\"/></operation><operation name=\"CreateOrder\"><soap:operation soapAction=\"http://example.com/CreateOrder\"/></operation></binding><service name=\"OrderService\"><port name=\"OrderPort\" binding=\"tns:OrderBinding\"><soap:address location=\"http://localhost:8080/soap/orders\"/></port></service></definitions>",
-      "operations": {
-        "GetOrder": {
-          "soapAction": "http://example.com/GetOrder",
-          "response": "<GetOrderResponse xmlns=\"http://example.com/orderservice\"><orderId>{{xpath://GetOrder/orderId}}</orderId><status>confirmed</status><total>149.99</total><currency>USD</currency></GetOrderResponse>"
-        },
-        "CreateOrder": {
-          "soapAction": "http://example.com/CreateOrder",
-          "response": "<CreateOrderResponse xmlns=\"http://example.com/orderservice\"><orderId>ORD-{{uuid}}</orderId><status>pending</status></CreateOrderResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP 1.1 Client Fault Response",
-    "description": "Demonstrates SOAP 1.1 fault response for client errors (invalid request)",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/validation-error",
-      "operations": {
-        "ValidateData": {
-          "soapAction": "http://example.com/ValidateData",
-          "fault": {
-            "code": "soap:Client",
-            "message": "Validation failed: Required field 'customerId' is missing",
-            "detail": "<validationError xmlns=\"http://example.com/errors\"><field>customerId</field><errorCode>REQUIRED_FIELD_MISSING</errorCode><description>The customerId field is required but was not provided</description></validationError>"
+{
+  "version": "1.0",
+  "name": "SOAP Features Demo",
+  "description": "Comprehensive demonstration of SOAP mocking features including SOAP 1.1/1.2, WSDL, and complex operations",
+  "mocks": [
+    {
+      "type": "soap",
+      "name": "SOAP 1.1 Basic Operation - Single GetUser",
+      "description": "Demonstrates basic SOAP 1.1 request/response with SOAPAction header matching",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/users",
+        "operations": {
+          "GetUser": {
+            "soapAction": "http://example.com/GetUser",
+            "response": "<GetUserResponse xmlns=\"http://example.com/userservice\"><id>user-123</id><name>John Doe</name><email>john@example.com</email><status>active</status></GetUserResponse>"
           }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP 1.1 Server Fault Response",
-    "description": "Demonstrates SOAP 1.1 fault response for server errors (internal error)",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/server-error",
-      "operations": {
-        "ProcessPayment": {
-          "soapAction": "http://example.com/ProcessPayment",
-          "fault": {
-            "code": "soap:Server",
-            "message": "Payment processing service temporarily unavailable",
-            "detail": "<serverError xmlns=\"http://example.com/errors\"><errorCode>SERVICE_UNAVAILABLE</errorCode><retryAfter>300</retryAfter><supportContact>support@example.com</supportContact></serverError>"
-          }
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP 1.2 Service - Modern Inventory API",
-    "description": "Demonstrates SOAP 1.2 protocol with action in Content-Type header (application/soap+xml)",
-    "enabled": true,
-    "soap": {
-      "path": "/soap12/inventory",
-      "operations": {
-        "CheckStock": {
-          "soapAction": "http://example.com/inventory/CheckStock",
-          "response": "<CheckStockResponse xmlns=\"http://example.com/inventory\"><productId>{{xpath://CheckStock/productId}}</productId><warehouseId>{{xpath://CheckStock/warehouseId}}</warehouseId><quantity>42</quantity><lastUpdated>{{now}}</lastUpdated><status>in_stock</status></CheckStockResponse>"
-        },
-        "ReserveStock": {
-          "soapAction": "http://example.com/inventory/ReserveStock",
-          "response": "<ReserveStockResponse xmlns=\"http://example.com/inventory\"><reservationId>RES-{{uuid}}</reservationId><productId>{{xpath://ReserveStock/productId}}</productId><quantity>{{xpath://ReserveStock/quantity}}</quantity><expiresAt>2024-12-31T23:59:59Z</expiresAt><status>reserved</status></ReserveStockResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP 1.2 Fault Response (Sender)",
-    "description": "Demonstrates SOAP 1.2 fault with Sender code (equivalent to SOAP 1.1 Client fault)",
-    "enabled": true,
-    "soap": {
-      "path": "/soap12/auth-error",
-      "operations": {
-        "Authenticate": {
-          "soapAction": "http://example.com/auth/Authenticate",
-          "fault": {
-            "code": "soap:Client",
-            "message": "Authentication failed: Invalid credentials provided",
-            "detail": "<authError xmlns=\"http://example.com/auth\"><errorCode>INVALID_CREDENTIALS</errorCode><attemptCount>3</attemptCount><lockoutRemaining>300</lockoutRemaining></authError>"
-          }
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP 1.2 Fault Response (Receiver)",
-    "description": "Demonstrates SOAP 1.2 fault with Receiver code (equivalent to SOAP 1.1 Server fault)",
-    "enabled": true,
-    "soap": {
-      "path": "/soap12/database-error",
-      "operations": {
-        "QueryDatabase": {
-          "soapAction": "http://example.com/db/Query",
-          "fault": {
-            "code": "soap:Server",
-            "message": "Database connection timeout exceeded",
-            "detail": "<databaseError xmlns=\"http://example.com/db\"><errorCode>CONNECTION_TIMEOUT</errorCode><database>primary-db-01</database><timeoutMs>30000</timeoutMs></databaseError>"
-          }
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP XPath Request Matching - Premium User",
-    "description": "Demonstrates XPath-based request matching to return different responses based on request content",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/premium-check",
-      "operations": {
-        "GetUserTier": {
-          "soapAction": "http://example.com/GetUserTier",
-          "match": {
-            "xpath": {
-              "//membershipType": "premium"
-            }
+      },
+      "id": "soap-demo-01"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP 1.1 Multiple Operations - User CRUD Service",
+      "description": "Demonstrates multiple SOAP operations in a single endpoint with different SOAPAction values",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/user-service",
+        "operations": {
+          "GetUser": {
+            "soapAction": "http://example.com/user/GetUser",
+            "response": "<GetUserResponse xmlns=\"http://example.com/user\"><id>{{xpath://GetUser/userId}}</id><name>John Doe</name><email>john@example.com</email><createdAt>2024-01-15T10:30:00Z</createdAt></GetUserResponse>"
           },
-          "response": "<GetUserTierResponse xmlns=\"http://example.com/membership\"><tier>premium</tier><benefits><benefit>Priority Support</benefit><benefit>Free Shipping</benefit><benefit>Early Access</benefit><benefit>Exclusive Discounts</benefit></benefits><discountPercent>20</discountPercent></GetUserTierResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP XPath Request Matching - Standard User",
-    "description": "Demonstrates XPath-based request matching for standard membership tier",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/standard-check",
-      "operations": {
-        "GetUserTier": {
-          "soapAction": "http://example.com/GetUserTier",
-          "match": {
-            "xpath": {
-              "//membershipType": "standard"
-            }
+          "CreateUser": {
+            "soapAction": "http://example.com/user/CreateUser",
+            "response": "<CreateUserResponse xmlns=\"http://example.com/user\"><userId>new-user-{{uuid}}</userId><status>created</status><timestamp>{{now}}</timestamp></CreateUserResponse>"
           },
-          "response": "<GetUserTierResponse xmlns=\"http://example.com/membership\"><tier>standard</tier><benefits><benefit>Email Support</benefit><benefit>Standard Shipping</benefit></benefits><discountPercent>5</discountPercent></GetUserTierResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Multiple XPath Conditions",
-    "description": "Demonstrates matching with multiple XPath conditions that all must be satisfied",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/admin-access",
-      "operations": {
-        "GetAdminAccess": {
-          "soapAction": "http://example.com/GetAdminAccess",
-          "match": {
-            "xpath": {
-              "//role": "admin",
-              "//department": "engineering"
-            }
+          "UpdateUser": {
+            "soapAction": "http://example.com/user/UpdateUser",
+            "response": "<UpdateUserResponse xmlns=\"http://example.com/user\"><userId>{{xpath://UpdateUser/userId}}</userId><status>updated</status><modifiedAt>{{now}}</modifiedAt></UpdateUserResponse>"
           },
-          "response": "<GetAdminAccessResponse xmlns=\"http://example.com/admin\"><accessLevel>full</accessLevel><permissions><permission>read</permission><permission>write</permission><permission>delete</permission><permission>admin</permission></permissions><expiresAt>2025-12-31T23:59:59Z</expiresAt></GetAdminAccessResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP XPath Template Variables - Echo Service",
-    "description": "Demonstrates extracting values from request using XPath and echoing them in response",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/echo",
-      "operations": {
-        "Echo": {
-          "soapAction": "http://example.com/Echo",
-          "response": "<EchoResponse xmlns=\"http://example.com/echo\"><requestId>{{xpath://Echo/requestId}}</requestId><message>{{xpath://Echo/message}}</message><timestamp>{{now}}</timestamp><correlationId>{{uuid}}</correlationId></EchoResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Nested XPath Extraction",
-    "description": "Demonstrates extracting deeply nested values from SOAP request using XPath",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/registration",
-      "operations": {
-        "RegisterCustomer": {
-          "soapAction": "http://example.com/RegisterCustomer",
-          "response": "<RegisterCustomerResponse xmlns=\"http://example.com/customer\"><customerId>CUST-{{uuid}}</customerId><registeredName>{{xpath://RegisterCustomer/customer/personalInfo/firstName}} {{xpath://RegisterCustomer/customer/personalInfo/lastName}}</registeredName><email>{{xpath://RegisterCustomer/customer/contactInfo/email}}</email><phone>{{xpath://RegisterCustomer/customer/contactInfo/phone}}</phone><address><street>{{xpath://RegisterCustomer/customer/address/street}}</street><city>{{xpath://RegisterCustomer/customer/address/city}}</city><country>{{xpath://RegisterCustomer/customer/address/country}}</country></address><status>registered</status><registeredAt>{{now}}</registeredAt></RegisterCustomerResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Response Delay - Slow Service Simulation",
-    "description": "Demonstrates configuring response delay to simulate slow services",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/slow-service",
-      "operations": {
-        "SlowQuery": {
-          "soapAction": "http://example.com/SlowQuery",
-          "delay": "2s",
-          "response": "<SlowQueryResponse xmlns=\"http://example.com/slow\"><result>completed</result><processingTime>2000ms</processingTime><data><record><id>1</id><value>data-1</value></record><record><id>2</id><value>data-2</value></record></data></SlowQueryResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Response Delay - Milliseconds",
-    "description": "Demonstrates response delay configuration in milliseconds",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/latency-test",
-      "operations": {
-        "TestLatency": {
-          "soapAction": "http://example.com/TestLatency",
-          "delay": "500ms",
-          "response": "<TestLatencyResponse xmlns=\"http://example.com/test\"><status>success</status><simulatedLatency>500ms</simulatedLatency></TestLatencyResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Complex Types - Shipping Service",
-    "description": "Demonstrates handling complex nested XML types in request and response",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/shipping",
-      "wsdl": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><definitions name=\"ShippingService\" xmlns=\"http://schemas.xmlsoap.org/wsdl/\" xmlns:soap=\"http://schemas.xmlsoap.org/wsdl/soap/\" xmlns:tns=\"http://example.com/shipping\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"http://example.com/shipping\"><types><xsd:schema targetNamespace=\"http://example.com/shipping\"><xsd:complexType name=\"Address\"><xsd:sequence><xsd:element name=\"street\" type=\"xsd:string\"/><xsd:element name=\"city\" type=\"xsd:string\"/><xsd:element name=\"state\" type=\"xsd:string\"/><xsd:element name=\"zipCode\" type=\"xsd:string\"/><xsd:element name=\"country\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType><xsd:complexType name=\"Package\"><xsd:sequence><xsd:element name=\"weight\" type=\"xsd:decimal\"/><xsd:element name=\"length\" type=\"xsd:decimal\"/><xsd:element name=\"width\" type=\"xsd:decimal\"/><xsd:element name=\"height\" type=\"xsd:decimal\"/><xsd:element name=\"description\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType><xsd:complexType name=\"ShippingRate\"><xsd:sequence><xsd:element name=\"carrier\" type=\"xsd:string\"/><xsd:element name=\"service\" type=\"xsd:string\"/><xsd:element name=\"price\" type=\"xsd:decimal\"/><xsd:element name=\"currency\" type=\"xsd:string\"/><xsd:element name=\"estimatedDays\" type=\"xsd:int\"/></xsd:sequence></xsd:complexType></xsd:schema></types><message name=\"CalculateRatesRequest\"><part name=\"origin\" type=\"tns:Address\"/><part name=\"destination\" type=\"tns:Address\"/><part name=\"package\" type=\"tns:Package\"/></message><message name=\"CalculateRatesResponse\"><part name=\"rates\" type=\"tns:ShippingRate\"/></message><portType name=\"ShippingPortType\"><operation name=\"CalculateRates\"><input message=\"tns:CalculateRatesRequest\"/><output message=\"tns:CalculateRatesResponse\"/></operation></portType><binding name=\"ShippingBinding\" type=\"tns:ShippingPortType\"><soap:binding style=\"document\" transport=\"http://schemas.xmlsoap.org/soap/http\"/><operation name=\"CalculateRates\"><soap:operation soapAction=\"http://example.com/shipping/CalculateRates\"/></operation></binding><service name=\"ShippingService\"><port name=\"ShippingPort\" binding=\"tns:ShippingBinding\"><soap:address location=\"http://localhost:8080/soap/shipping\"/></port></service></definitions>",
-      "operations": {
-        "CalculateRates": {
-          "soapAction": "http://example.com/shipping/CalculateRates",
-          "response": "<CalculateRatesResponse xmlns=\"http://example.com/shipping\"><rates><rate><carrier>FedEx</carrier><service>Ground</service><price>12.99</price><currency>USD</currency><estimatedDays>5</estimatedDays></rate><rate><carrier>FedEx</carrier><service>Express</service><price>24.99</price><currency>USD</currency><estimatedDays>2</estimatedDays></rate><rate><carrier>UPS</carrier><service>Ground</service><price>11.99</price><currency>USD</currency><estimatedDays>6</estimatedDays></rate><rate><carrier>UPS</carrier><service>Next Day Air</service><price>49.99</price><currency>USD</currency><estimatedDays>1</estimatedDays></rate><rate><carrier>USPS</carrier><service>Priority Mail</service><price>8.99</price><currency>USD</currency><estimatedDays>3</estimatedDays></rate></rates><originZip>{{xpath://CalculateRates/origin/zipCode}}</originZip><destinationZip>{{xpath://CalculateRates/destination/zipCode}}</destinationZip><packageWeight>{{xpath://CalculateRates/package/weight}}</packageWeight></CalculateRatesResponse>"
-        },
-        "CreateShipment": {
-          "soapAction": "http://example.com/shipping/CreateShipment",
-          "response": "<CreateShipmentResponse xmlns=\"http://example.com/shipping\"><shipmentId>SHIP-{{uuid}}</shipmentId><trackingNumber>1Z{{randomInt:100000000:999999999}}</trackingNumber><carrier>{{xpath://CreateShipment/selectedCarrier}}</carrier><service>{{xpath://CreateShipment/selectedService}}</service><status>label_created</status><labelUrl>https://shipping.example.com/labels/SHIP-{{uuid}}.pdf</labelUrl><estimatedDelivery>2024-12-20</estimatedDelivery><createdAt>{{now}}</createdAt></CreateShipmentResponse>"
-        },
-        "TrackShipment": {
-          "soapAction": "http://example.com/shipping/TrackShipment",
-          "response": "<TrackShipmentResponse xmlns=\"http://example.com/shipping\"><trackingNumber>{{xpath://TrackShipment/trackingNumber}}</trackingNumber><status>in_transit</status><events><event><timestamp>2024-12-15T08:00:00Z</timestamp><location>New York, NY</location><status>Package picked up</status></event><event><timestamp>2024-12-15T14:30:00Z</timestamp><location>Newark, NJ</location><status>Arrived at sorting facility</status></event><event><timestamp>2024-12-16T06:00:00Z</timestamp><location>Chicago, IL</location><status>In transit to destination</status></event></events><estimatedDelivery>2024-12-18</estimatedDelivery></TrackShipmentResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Namespace Handling - Prefixed Elements",
-    "description": "Demonstrates handling namespaced XML elements in requests and responses",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/namespaced",
-      "operations": {
-        "GetAccount": {
-          "soapAction": "http://example.com/accounts/GetAccount",
-          "response": "<acc:GetAccountResponse xmlns:acc=\"http://example.com/accounts\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><acc:account><acc:accountId>ACC-{{uuid}}</acc:accountId><acc:accountNumber>{{xpath://GetAccount/accountNumber}}</acc:accountNumber><acc:accountType>checking</acc:accountType><acc:balance xsi:type=\"xsd:decimal\">5432.10</acc:balance><acc:currency>USD</acc:currency><acc:status>active</acc:status><acc:lastActivity>{{now}}</acc:lastActivity></acc:account></acc:GetAccountResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Financial Service - Complete Banking API",
-    "description": "Comprehensive banking API demonstrating multiple operations, complex types, and XPath extraction",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/banking",
-      "wsdl": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><definitions name=\"BankingService\" xmlns=\"http://schemas.xmlsoap.org/wsdl/\" xmlns:soap=\"http://schemas.xmlsoap.org/wsdl/soap/\" xmlns:tns=\"http://example.com/banking\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"http://example.com/banking\"><types><xsd:schema targetNamespace=\"http://example.com/banking\"><xsd:element name=\"GetBalanceRequest\"><xsd:complexType><xsd:sequence><xsd:element name=\"accountNumber\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"GetBalanceResponse\"><xsd:complexType><xsd:sequence><xsd:element name=\"balance\" type=\"xsd:decimal\"/><xsd:element name=\"availableBalance\" type=\"xsd:decimal\"/><xsd:element name=\"currency\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"TransferRequest\"><xsd:complexType><xsd:sequence><xsd:element name=\"fromAccount\" type=\"xsd:string\"/><xsd:element name=\"toAccount\" type=\"xsd:string\"/><xsd:element name=\"amount\" type=\"xsd:decimal\"/><xsd:element name=\"currency\" type=\"xsd:string\"/><xsd:element name=\"description\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"TransferResponse\"><xsd:complexType><xsd:sequence><xsd:element name=\"transactionId\" type=\"xsd:string\"/><xsd:element name=\"status\" type=\"xsd:string\"/><xsd:element name=\"timestamp\" type=\"xsd:dateTime\"/></xsd:sequence></xsd:complexType></xsd:element></xsd:schema></types><portType name=\"BankingPortType\"><operation name=\"GetBalance\"><input message=\"tns:GetBalanceRequest\"/><output message=\"tns:GetBalanceResponse\"/></operation><operation name=\"Transfer\"><input message=\"tns:TransferRequest\"/><output message=\"tns:TransferResponse\"/></operation></portType><binding name=\"BankingBinding\" type=\"tns:BankingPortType\"><soap:binding style=\"document\" transport=\"http://schemas.xmlsoap.org/soap/http\"/></binding><service name=\"BankingService\"><port name=\"BankingPort\" binding=\"tns:BankingBinding\"><soap:address location=\"http://localhost:8080/soap/banking\"/></port></service></definitions>",
-      "operations": {
-        "GetBalance": {
-          "soapAction": "http://example.com/banking/GetBalance",
-          "response": "<GetBalanceResponse xmlns=\"http://example.com/banking\"><accountNumber>{{xpath://GetBalance/accountNumber}}</accountNumber><balance>15234.56</balance><availableBalance>14500.00</availableBalance><pendingTransactions>734.56</pendingTransactions><currency>USD</currency><lastUpdated>{{now}}</lastUpdated></GetBalanceResponse>"
-        },
-        "Transfer": {
-          "soapAction": "http://example.com/banking/Transfer",
-          "response": "<TransferResponse xmlns=\"http://example.com/banking\"><transactionId>TXN-{{uuid}}</transactionId><fromAccount>{{xpath://Transfer/fromAccount}}</fromAccount><toAccount>{{xpath://Transfer/toAccount}}</toAccount><amount>{{xpath://Transfer/amount}}</amount><currency>{{xpath://Transfer/currency}}</currency><description>{{xpath://Transfer/description}}</description><status>completed</status><timestamp>{{now}}</timestamp><referenceNumber>REF-{{randomInt:100000:999999}}</referenceNumber></TransferResponse>"
-        },
-        "GetTransactionHistory": {
-          "soapAction": "http://example.com/banking/GetTransactionHistory",
-          "response": "<GetTransactionHistoryResponse xmlns=\"http://example.com/banking\"><accountNumber>{{xpath://GetTransactionHistory/accountNumber}}</accountNumber><transactions><transaction><id>TXN-001</id><date>2024-12-10</date><description>Direct Deposit</description><amount>3500.00</amount><type>credit</type><balance>15234.56</balance></transaction><transaction><id>TXN-002</id><date>2024-12-09</date><description>Electric Bill</description><amount>-125.50</amount><type>debit</type><balance>11734.56</balance></transaction><transaction><id>TXN-003</id><date>2024-12-08</date><description>Grocery Store</description><amount>-87.32</amount><type>debit</type><balance>11860.06</balance></transaction><transaction><id>TXN-004</id><date>2024-12-07</date><description>ATM Withdrawal</description><amount>-200.00</amount><type>debit</type><balance>11947.38</balance></transaction><transaction><id>TXN-005</id><date>2024-12-05</date><description>Transfer from Savings</description><amount>500.00</amount><type>credit</type><balance>12147.38</balance></transaction></transactions><pageInfo><currentPage>1</currentPage><totalPages>5</totalPages><totalTransactions>47</totalTransactions></pageInfo></GetTransactionHistoryResponse>"
-        },
-        "GetAccountDetails": {
-          "soapAction": "http://example.com/banking/GetAccountDetails",
-          "response": "<GetAccountDetailsResponse xmlns=\"http://example.com/banking\"><account><accountNumber>{{xpath://GetAccountDetails/accountNumber}}</accountNumber><accountType>checking</accountType><accountName>Primary Checking</accountName><ownerName>John Doe</ownerName><openDate>2020-03-15</openDate><status>active</status><interestRate>0.05</interestRate><overdraftProtection>true</overdraftProtection><overdraftLimit>500.00</overdraftLimit><linkedAccounts><account>SAVINGS-001</account><account>CREDIT-001</account></linkedAccounts></account></GetAccountDetailsResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Healthcare Service - Patient Records",
-    "description": "Demonstrates SOAP for healthcare with HIPAA-style response structure",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/healthcare",
-      "operations": {
-        "GetPatientRecord": {
-          "soapAction": "http://example.com/healthcare/GetPatientRecord",
-          "response": "<GetPatientRecordResponse xmlns=\"http://example.com/healthcare\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><patient><patientId>{{xpath://GetPatientRecord/patientId}}</patientId><demographics><firstName>Jane</firstName><lastName>Smith</lastName><dateOfBirth>1985-07-22</dateOfBirth><gender>F</gender><ssn>***-**-1234</ssn></demographics><contact><address><street>123 Health Ave</street><city>Medical City</city><state>CA</state><zipCode>90210</zipCode></address><phone>555-123-4567</phone><email>jane.smith@email.com</email></contact><insurance><providerId>INS-12345</providerId><providerName>Blue Cross Blue Shield</providerName><policyNumber>POL-987654</policyNumber><groupNumber>GRP-456</groupNumber></insurance><medicalHistory><allergies><allergy>Penicillin</allergy><allergy>Peanuts</allergy></allergies><conditions><condition><code>I10</code><description>Essential hypertension</description><diagnosedDate>2019-05-10</diagnosedDate></condition></conditions><medications><medication><name>Lisinopril</name><dosage>10mg</dosage><frequency>daily</frequency></medication></medications></medicalHistory></patient><lastUpdated>{{now}}</lastUpdated></GetPatientRecordResponse>"
-        },
-        "ScheduleAppointment": {
-          "soapAction": "http://example.com/healthcare/ScheduleAppointment",
-          "response": "<ScheduleAppointmentResponse xmlns=\"http://example.com/healthcare\"><appointmentId>APT-{{uuid}}</appointmentId><patientId>{{xpath://ScheduleAppointment/patientId}}</patientId><providerId>{{xpath://ScheduleAppointment/providerId}}</providerId><appointmentType>{{xpath://ScheduleAppointment/appointmentType}}</appointmentType><scheduledDateTime>{{xpath://ScheduleAppointment/requestedDateTime}}</scheduledDateTime><duration>30</duration><status>confirmed</status><location><facilityName>Main Medical Center</facilityName><address>456 Hospital Blvd, Medical City, CA 90210</address><room>Exam Room 3</room></location><instructions>Please arrive 15 minutes early. Bring insurance card and photo ID.</instructions><confirmationNumber>CONF-{{randomInt:100000:999999}}</confirmationNumber></ScheduleAppointmentResponse>"
-        }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP with Fault and XPath Match - Authorization Error",
-    "description": "Demonstrates returning fault only when specific XPath conditions match (e.g., invalid token)",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/auth-check",
-      "operations": {
-        "ValidateToken": {
-          "soapAction": "http://example.com/auth/ValidateToken",
-          "match": {
-            "xpath": {
-              "//token": "invalid-token"
-            }
+          "DeleteUser": {
+            "soapAction": "http://example.com/user/DeleteUser",
+            "response": "<DeleteUserResponse xmlns=\"http://example.com/user\"><userId>{{xpath://DeleteUser/userId}}</userId><success>true</success><deletedAt>{{now}}</deletedAt></DeleteUserResponse>"
           },
-          "fault": {
-            "code": "soap:Client",
-            "message": "Token validation failed: The provided token is invalid or expired",
-            "detail": "<authorizationError xmlns=\"http://example.com/auth\"><errorCode>TOKEN_INVALID</errorCode><tokenProvided>invalid-token</tokenProvided><suggestion>Please obtain a new token using the /auth/login endpoint</suggestion></authorizationError>"
+          "ListUsers": {
+            "soapAction": "http://example.com/user/ListUsers",
+            "response": "<ListUsersResponse xmlns=\"http://example.com/user\"><users><user><id>user-001</id><name>Alice</name></user><user><id>user-002</id><name>Bob</name></user><user><id>user-003</id><name>Charlie</name></user></users><totalCount>3</totalCount></ListUsersResponse>"
           }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Travel Booking Service",
-    "description": "Complete travel booking API with flight search, booking, and itinerary operations",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/travel",
-      "operations": {
-        "SearchFlights": {
-          "soapAction": "http://example.com/travel/SearchFlights",
-          "response": "<SearchFlightsResponse xmlns=\"http://example.com/travel\"><searchId>SRCH-{{uuid}}</searchId><origin>{{xpath://SearchFlights/origin}}</origin><destination>{{xpath://SearchFlights/destination}}</destination><departureDate>{{xpath://SearchFlights/departureDate}}</departureDate><flights><flight><flightNumber>AA1234</flightNumber><airline>American Airlines</airline><departureTime>08:00</departureTime><arrivalTime>11:30</arrivalTime><duration>3h 30m</duration><stops>0</stops><price>299.00</price><currency>USD</currency><seatsAvailable>45</seatsAvailable><class>economy</class></flight><flight><flightNumber>UA5678</flightNumber><airline>United Airlines</airline><departureTime>10:15</departureTime><arrivalTime>14:00</arrivalTime><duration>3h 45m</duration><stops>1</stops><price>249.00</price><currency>USD</currency><seatsAvailable>23</seatsAvailable><class>economy</class></flight><flight><flightNumber>DL9012</flightNumber><airline>Delta Airlines</airline><departureTime>14:30</departureTime><arrivalTime>18:00</arrivalTime><duration>3h 30m</duration><stops>0</stops><price>329.00</price><currency>USD</currency><seatsAvailable>12</seatsAvailable><class>economy</class></flight></flights><totalResults>3</totalResults></SearchFlightsResponse>"
-        },
-        "BookFlight": {
-          "soapAction": "http://example.com/travel/BookFlight",
-          "response": "<BookFlightResponse xmlns=\"http://example.com/travel\"><bookingReference>BK-{{uuid}}</bookingReference><confirmationNumber>CONF-{{randomInt:100000:999999}}</confirmationNumber><flightNumber>{{xpath://BookFlight/flightNumber}}</flightNumber><passenger><firstName>{{xpath://BookFlight/passenger/firstName}}</firstName><lastName>{{xpath://BookFlight/passenger/lastName}}</lastName><email>{{xpath://BookFlight/passenger/email}}</email></passenger><status>confirmed</status><ticketNumber>TKT-{{randomInt:1000000000:9999999999}}</ticketNumber><bookedAt>{{now}}</bookedAt><paymentStatus>completed</paymentStatus><totalPrice>{{xpath://BookFlight/totalPrice}}</totalPrice><currency>USD</currency></BookFlightResponse>"
-        },
-        "GetItinerary": {
-          "soapAction": "http://example.com/travel/GetItinerary",
-          "response": "<GetItineraryResponse xmlns=\"http://example.com/travel\"><bookingReference>{{xpath://GetItinerary/bookingReference}}</bookingReference><itinerary><segment type=\"outbound\"><flightNumber>AA1234</flightNumber><airline>American Airlines</airline><origin>LAX</origin><destination>JFK</destination><departureDate>2024-12-20</departureDate><departureTime>08:00</departureTime><arrivalDate>2024-12-20</arrivalDate><arrivalTime>16:30</arrivalTime><terminal>Terminal 4</terminal><gate>B22</gate><seat>14A</seat><class>Economy</class><status>confirmed</status></segment><segment type=\"return\"><flightNumber>AA5678</flightNumber><airline>American Airlines</airline><origin>JFK</origin><destination>LAX</destination><departureDate>2024-12-27</departureDate><departureTime>19:00</departureTime><arrivalDate>2024-12-27</arrivalDate><arrivalTime>22:30</arrivalTime><terminal>Terminal 8</terminal><gate>C15</gate><seat>14A</seat><class>Economy</class><status>confirmed</status></segment></itinerary><passenger><firstName>John</firstName><lastName>Traveler</lastName><frequentFlyerNumber>AA123456789</frequentFlyerNumber></passenger></GetItineraryResponse>"
-        },
-        "CancelBooking": {
-          "soapAction": "http://example.com/travel/CancelBooking",
-          "response": "<CancelBookingResponse xmlns=\"http://example.com/travel\"><bookingReference>{{xpath://CancelBooking/bookingReference}}</bookingReference><status>cancelled</status><cancellationId>CAN-{{uuid}}</cancellationId><cancelledAt>{{now}}</cancelledAt><refund><amount>249.00</amount><currency>USD</currency><method>original_payment_method</method><estimatedProcessingDays>5</estimatedProcessingDays></refund><cancellationPolicy>Full refund applicable for cancellations made 24+ hours before departure.</cancellationPolicy></CancelBookingResponse>"
+      },
+      "id": "soap-demo-02"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Operation Matching by Element Name",
+      "description": "Demonstrates operation matching by XML element name when no SOAPAction is provided",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/products",
+        "operations": {
+          "GetProduct": {
+            "response": "<GetProductResponse xmlns=\"http://example.com/products\"><productId>{{xpath://GetProduct/productId}}</productId><name>Widget Pro</name><price>29.99</price><inStock>true</inStock></GetProductResponse>"
+          },
+          "SearchProducts": {
+            "response": "<SearchProductsResponse xmlns=\"http://example.com/products\"><results><product><id>prod-001</id><name>Widget</name></product><product><id>prod-002</id><name>Gadget</name></product></results></SearchProductsResponse>"
+          }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP E-Commerce Catalog Service",
-    "description": "Product catalog API with search, details, and inventory operations",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/catalog",
-      "operations": {
-        "SearchProducts": {
-          "soapAction": "http://example.com/catalog/SearchProducts",
-          "response": "<SearchProductsResponse xmlns=\"http://example.com/catalog\"><query>{{xpath://SearchProducts/query}}</query><category>{{xpath://SearchProducts/category}}</category><products><product><sku>SKU-001</sku><name>Wireless Bluetooth Headphones</name><brand>TechSound</brand><price>79.99</price><salePrice>59.99</salePrice><currency>USD</currency><rating>4.5</rating><reviewCount>1234</reviewCount><inStock>true</inStock><imageUrl>https://example.com/images/headphones-001.jpg</imageUrl></product><product><sku>SKU-002</sku><name>Premium Noise-Canceling Earbuds</name><brand>AudioPro</brand><price>149.99</price><currency>USD</currency><rating>4.8</rating><reviewCount>567</reviewCount><inStock>true</inStock><imageUrl>https://example.com/images/earbuds-002.jpg</imageUrl></product><product><sku>SKU-003</sku><name>Studio Monitor Headphones</name><brand>ProAudio</brand><price>199.99</price><currency>USD</currency><rating>4.9</rating><reviewCount>89</reviewCount><inStock>false</inStock><imageUrl>https://example.com/images/monitors-003.jpg</imageUrl></product></products><pagination><page>1</page><pageSize>10</pageSize><totalProducts>156</totalProducts><totalPages>16</totalPages></pagination></SearchProductsResponse>"
-        },
-        "GetProductDetails": {
-          "soapAction": "http://example.com/catalog/GetProductDetails",
-          "response": "<GetProductDetailsResponse xmlns=\"http://example.com/catalog\"><product><sku>{{xpath://GetProductDetails/sku}}</sku><name>Wireless Bluetooth Headphones</name><brand>TechSound</brand><description>Premium wireless headphones with 40-hour battery life, active noise cancellation, and crystal-clear audio quality.</description><price>79.99</price><salePrice>59.99</salePrice><currency>USD</currency><specifications><spec name=\"Battery Life\">40 hours</spec><spec name=\"Bluetooth Version\">5.2</spec><spec name=\"Driver Size\">40mm</spec><spec name=\"Weight\">250g</spec><spec name=\"Noise Cancellation\">Active</spec><spec name=\"Foldable\">Yes</spec></specifications><colors><color code=\"BLK\">Black</color><color code=\"WHT\">White</color><color code=\"NVY\">Navy Blue</color></colors><images><image type=\"main\">https://example.com/images/headphones-main.jpg</image><image type=\"side\">https://example.com/images/headphones-side.jpg</image><image type=\"detail\">https://example.com/images/headphones-detail.jpg</image></images><reviews><averageRating>4.5</averageRating><totalReviews>1234</totalReviews><breakdown><stars5>890</stars5><stars4>234</stars4><stars3>78</stars3><stars2>22</stars2><stars1>10</stars1></breakdown></reviews><inStock>true</inStock><stockQuantity>156</stockQuantity><shippingInfo><freeShipping>true</freeShipping><estimatedDelivery>3-5 business days</estimatedDelivery></shippingInfo></product></GetProductDetailsResponse>"
-        },
-        "AddToCart": {
-          "soapAction": "http://example.com/catalog/AddToCart",
-          "response": "<AddToCartResponse xmlns=\"http://example.com/catalog\"><cartId>CART-{{uuid}}</cartId><item><sku>{{xpath://AddToCart/sku}}</sku><quantity>{{xpath://AddToCart/quantity}}</quantity><price>59.99</price><subtotal>{{xpath://AddToCart/quantity}}x59.99</subtotal></item><cartSummary><itemCount>1</itemCount><subtotal>59.99</subtotal><tax>5.40</tax><shipping>0.00</shipping><total>65.39</total><currency>USD</currency></cartSummary><addedAt>{{now}}</addedAt></AddToCartResponse>"
+      },
+      "id": "soap-demo-03"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP with Inline WSDL - Order Service",
+      "description": "Demonstrates WSDL serving with inline WSDL definition accessible via ?wsdl query parameter",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/orders",
+        "wsdl": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><definitions name=\"OrderService\" xmlns=\"http://schemas.xmlsoap.org/wsdl/\" xmlns:soap=\"http://schemas.xmlsoap.org/wsdl/soap/\" xmlns:tns=\"http://example.com/orderservice\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"http://example.com/orderservice\"><types><xsd:schema targetNamespace=\"http://example.com/orderservice\"><xsd:element name=\"GetOrderRequest\"><xsd:complexType><xsd:sequence><xsd:element name=\"orderId\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"GetOrderResponse\"><xsd:complexType><xsd:sequence><xsd:element name=\"orderId\" type=\"xsd:string\"/><xsd:element name=\"status\" type=\"xsd:string\"/><xsd:element name=\"total\" type=\"xsd:decimal\"/><xsd:element name=\"currency\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"CreateOrderRequest\"><xsd:complexType><xsd:sequence><xsd:element name=\"customerId\" type=\"xsd:string\"/><xsd:element name=\"items\" type=\"tns:OrderItems\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"CreateOrderResponse\"><xsd:complexType><xsd:sequence><xsd:element name=\"orderId\" type=\"xsd:string\"/><xsd:element name=\"status\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:complexType name=\"OrderItems\"><xsd:sequence><xsd:element name=\"item\" type=\"tns:OrderItem\" maxOccurs=\"unbounded\"/></xsd:sequence></xsd:complexType><xsd:complexType name=\"OrderItem\"><xsd:sequence><xsd:element name=\"productId\" type=\"xsd:string\"/><xsd:element name=\"quantity\" type=\"xsd:int\"/><xsd:element name=\"price\" type=\"xsd:decimal\"/></xsd:sequence></xsd:complexType></xsd:schema></types><message name=\"GetOrderRequest\"><part name=\"parameters\" element=\"tns:GetOrderRequest\"/></message><message name=\"GetOrderResponse\"><part name=\"parameters\" element=\"tns:GetOrderResponse\"/></message><message name=\"CreateOrderRequest\"><part name=\"parameters\" element=\"tns:CreateOrderRequest\"/></message><message name=\"CreateOrderResponse\"><part name=\"parameters\" element=\"tns:CreateOrderResponse\"/></message><portType name=\"OrderPortType\"><operation name=\"GetOrder\"><input message=\"tns:GetOrderRequest\"/><output message=\"tns:GetOrderResponse\"/></operation><operation name=\"CreateOrder\"><input message=\"tns:CreateOrderRequest\"/><output message=\"tns:CreateOrderResponse\"/></operation></portType><binding name=\"OrderBinding\" type=\"tns:OrderPortType\"><soap:binding style=\"document\" transport=\"http://schemas.xmlsoap.org/soap/http\"/><operation name=\"GetOrder\"><soap:operation soapAction=\"http://example.com/GetOrder\"/></operation><operation name=\"CreateOrder\"><soap:operation soapAction=\"http://example.com/CreateOrder\"/></operation></binding><service name=\"OrderService\"><port name=\"OrderPort\" binding=\"tns:OrderBinding\"><soap:address location=\"http://localhost:8080/soap/orders\"/></port></service></definitions>",
+        "operations": {
+          "GetOrder": {
+            "soapAction": "http://example.com/GetOrder",
+            "response": "<GetOrderResponse xmlns=\"http://example.com/orderservice\"><orderId>{{xpath://GetOrder/orderId}}</orderId><status>confirmed</status><total>149.99</total><currency>USD</currency></GetOrderResponse>"
+          },
+          "CreateOrder": {
+            "soapAction": "http://example.com/CreateOrder",
+            "response": "<CreateOrderResponse xmlns=\"http://example.com/orderservice\"><orderId>ORD-{{uuid}}</orderId><status>pending</status></CreateOrderResponse>"
+          }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Insurance Quote Service",
-    "description": "Insurance quote API with complex risk assessment response",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/insurance",
-      "operations": {
-        "GetAutoQuote": {
-          "soapAction": "http://example.com/insurance/GetAutoQuote",
-          "response": "<GetAutoQuoteResponse xmlns=\"http://example.com/insurance\"><quoteId>QT-{{uuid}}</quoteId><applicant><firstName>{{xpath://GetAutoQuote/applicant/firstName}}</firstName><lastName>{{xpath://GetAutoQuote/applicant/lastName}}</lastName><dateOfBirth>{{xpath://GetAutoQuote/applicant/dateOfBirth}}</dateOfBirth><address><zipCode>{{xpath://GetAutoQuote/applicant/zipCode}}</zipCode></address></applicant><vehicle><year>{{xpath://GetAutoQuote/vehicle/year}}</year><make>{{xpath://GetAutoQuote/vehicle/make}}</make><model>{{xpath://GetAutoQuote/vehicle/model}}</model><vin>{{xpath://GetAutoQuote/vehicle/vin}}</vin></vehicle><coverage><liability><bodily>100000/300000</bodily><property>100000</property></liability><collision><deductible>500</deductible></collision><comprehensive><deductible>250</deductible></comprehensive><uninsuredMotorist>100000/300000</uninsuredMotorist><medicalPayments>5000</medicalPayments></coverage><premium><annual>1847.00</annual><semiAnnual>948.00</semiAnnual><quarterly>487.00</quarterly><monthly>162.00</monthly><currency>USD</currency></premium><discounts><discount><type>Multi-policy</type><amount>185.00</amount></discount><discount><type>Good driver</type><amount>92.00</amount></discount><discount><type>Paperless</type><amount>25.00</amount></discount></discounts><totalSavings>302.00</totalSavings><quoteValidUntil>2024-12-31</quoteValidUntil><generatedAt>{{now}}</generatedAt></GetAutoQuoteResponse>"
+      },
+      "id": "soap-demo-04"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP 1.1 Client Fault Response",
+      "description": "Demonstrates SOAP 1.1 fault response for client errors (invalid request)",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/validation-error",
+        "operations": {
+          "ValidateData": {
+            "soapAction": "http://example.com/ValidateData",
+            "fault": {
+              "code": "soap:Client",
+              "message": "Validation failed: Required field 'customerId' is missing",
+              "detail": "<validationError xmlns=\"http://example.com/errors\"><field>customerId</field><errorCode>REQUIRED_FIELD_MISSING</errorCode><description>The customerId field is required but was not provided</description></validationError>"
+            }
+          }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Weather Service",
-    "description": "Weather data API demonstrating array responses and meteorological data",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/weather",
-      "operations": {
-        "GetCurrentWeather": {
-          "soapAction": "http://example.com/weather/GetCurrentWeather",
-          "response": "<GetCurrentWeatherResponse xmlns=\"http://example.com/weather\"><location><city>{{xpath://GetCurrentWeather/city}}</city><country>{{xpath://GetCurrentWeather/country}}</country><coordinates><latitude>34.0522</latitude><longitude>-118.2437</longitude></coordinates></location><current><temperature><value>72</value><unit>F</unit></temperature><feelsLike><value>70</value><unit>F</unit></feelsLike><humidity>45</humidity><windSpeed><value>8</value><unit>mph</unit><direction>NW</direction></windSpeed><pressure><value>1015</value><unit>hPa</unit></pressure><visibility><value>10</value><unit>miles</unit></visibility><uvIndex>6</uvIndex><condition>Partly Cloudy</condition><conditionCode>802</conditionCode><icon>partly-cloudy-day</icon></current><observedAt>{{now}}</observedAt><source>National Weather Service</source></GetCurrentWeatherResponse>"
-        },
-        "GetForecast": {
-          "soapAction": "http://example.com/weather/GetForecast",
-          "response": "<GetForecastResponse xmlns=\"http://example.com/weather\"><location><city>{{xpath://GetForecast/city}}</city></location><forecast><day date=\"2024-12-16\"><high>75</high><low>58</low><condition>Sunny</condition><precipitation>0</precipitation><humidity>40</humidity><windSpeed>5</windSpeed></day><day date=\"2024-12-17\"><high>72</high><low>56</low><condition>Partly Cloudy</condition><precipitation>10</precipitation><humidity>45</humidity><windSpeed>8</windSpeed></day><day date=\"2024-12-18\"><high>68</high><low>52</low><condition>Cloudy</condition><precipitation>30</precipitation><humidity>55</humidity><windSpeed>12</windSpeed></day><day date=\"2024-12-19\"><high>65</high><low>50</low><condition>Rain</condition><precipitation>80</precipitation><humidity>75</humidity><windSpeed>15</windSpeed></day><day date=\"2024-12-20\"><high>70</high><low>54</low><condition>Partly Cloudy</condition><precipitation>20</precipitation><humidity>50</humidity><windSpeed>7</windSpeed></day></forecast><units><temperature>F</temperature><windSpeed>mph</windSpeed><precipitation>%</precipitation></units><generatedAt>{{now}}</generatedAt></GetForecastResponse>"
+      },
+      "id": "soap-demo-05"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP 1.1 Server Fault Response",
+      "description": "Demonstrates SOAP 1.1 fault response for server errors (internal error)",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/server-error",
+        "operations": {
+          "ProcessPayment": {
+            "soapAction": "http://example.com/ProcessPayment",
+            "fault": {
+              "code": "soap:Server",
+              "message": "Payment processing service temporarily unavailable",
+              "detail": "<serverError xmlns=\"http://example.com/errors\"><errorCode>SERVICE_UNAVAILABLE</errorCode><retryAfter>300</retryAfter><supportContact>support@example.com</supportContact></serverError>"
+            }
+          }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Document Management Service",
-    "description": "Document/file management API with upload, download, and metadata operations",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/documents",
-      "operations": {
-        "UploadDocument": {
-          "soapAction": "http://example.com/docs/UploadDocument",
-          "response": "<UploadDocumentResponse xmlns=\"http://example.com/docs\"><documentId>DOC-{{uuid}}</documentId><fileName>{{xpath://UploadDocument/fileName}}</fileName><fileSize>{{xpath://UploadDocument/fileSize}}</fileSize><mimeType>{{xpath://UploadDocument/mimeType}}</mimeType><checksum>sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</checksum><uploadedBy>{{xpath://UploadDocument/userId}}</uploadedBy><uploadedAt>{{now}}</uploadedAt><status>processed</status><storageLocation>s3://documents-bucket/2024/12/DOC-{{uuid}}</storageLocation><metadata><version>1</version><encrypted>true</encrypted><retentionPolicy>7-years</retentionPolicy></metadata></UploadDocumentResponse>"
-        },
-        "GetDocumentMetadata": {
-          "soapAction": "http://example.com/docs/GetDocumentMetadata",
-          "response": "<GetDocumentMetadataResponse xmlns=\"http://example.com/docs\"><document><documentId>{{xpath://GetDocumentMetadata/documentId}}</documentId><fileName>quarterly-report-q3-2024.pdf</fileName><fileSize>2458632</fileSize><mimeType>application/pdf</mimeType><checksum>sha256:abc123def456</checksum><createdAt>2024-10-15T14:30:00Z</createdAt><modifiedAt>2024-11-01T09:15:00Z</modifiedAt><createdBy>user-001</createdBy><modifiedBy>user-002</modifiedBy><version>3</version><locked>false</locked><tags><tag>quarterly</tag><tag>financial</tag><tag>2024</tag></tags><permissions><permission><userId>user-001</userId><access>owner</access></permission><permission><groupId>finance-team</groupId><access>read-write</access></permission><permission><groupId>all-employees</groupId><access>read</access></permission></permissions></document></GetDocumentMetadataResponse>"
-        },
-        "SearchDocuments": {
-          "soapAction": "http://example.com/docs/SearchDocuments",
-          "response": "<SearchDocumentsResponse xmlns=\"http://example.com/docs\"><query>{{xpath://SearchDocuments/query}}</query><results><document><documentId>DOC-001</documentId><fileName>annual-report-2024.pdf</fileName><mimeType>application/pdf</mimeType><relevanceScore>0.95</relevanceScore><snippet>...quarterly revenue increased by 15% compared to...</snippet><modifiedAt>2024-12-01</modifiedAt></document><document><documentId>DOC-002</documentId><fileName>financial-summary.xlsx</fileName><mimeType>application/vnd.openxmlformats-officedocument.spreadsheetml.sheet</mimeType><relevanceScore>0.82</relevanceScore><snippet>...budget allocations for Q4 show...</snippet><modifiedAt>2024-11-28</modifiedAt></document><document><documentId>DOC-003</documentId><fileName>board-presentation.pptx</fileName><mimeType>application/vnd.openxmlformats-officedocument.presentationml.presentation</mimeType><relevanceScore>0.75</relevanceScore><snippet>...strategic initiatives for fiscal year...</snippet><modifiedAt>2024-11-15</modifiedAt></document></results><totalResults>47</totalResults><page>1</page><pageSize>10</pageSize></SearchDocumentsResponse>"
+      },
+      "id": "soap-demo-06"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP 1.2 Service - Modern Inventory API",
+      "description": "Demonstrates SOAP 1.2 protocol with action in Content-Type header (application/soap+xml)",
+      "enabled": true,
+      "soap": {
+        "path": "/soap12/inventory",
+        "operations": {
+          "CheckStock": {
+            "soapAction": "http://example.com/inventory/CheckStock",
+            "response": "<CheckStockResponse xmlns=\"http://example.com/inventory\"><productId>{{xpath://CheckStock/productId}}</productId><warehouseId>{{xpath://CheckStock/warehouseId}}</warehouseId><quantity>42</quantity><lastUpdated>{{now}}</lastUpdated><status>in_stock</status></CheckStockResponse>"
+          },
+          "ReserveStock": {
+            "soapAction": "http://example.com/inventory/ReserveStock",
+            "response": "<ReserveStockResponse xmlns=\"http://example.com/inventory\"><reservationId>RES-{{uuid}}</reservationId><productId>{{xpath://ReserveStock/productId}}</productId><quantity>{{xpath://ReserveStock/quantity}}</quantity><expiresAt>2024-12-31T23:59:59Z</expiresAt><status>reserved</status></ReserveStockResponse>"
+          }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Notification Service",
-    "description": "Multi-channel notification API supporting email, SMS, and push notifications",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/notifications",
-      "operations": {
-        "SendEmail": {
-          "soapAction": "http://example.com/notify/SendEmail",
-          "delay": "100ms",
-          "response": "<SendEmailResponse xmlns=\"http://example.com/notify\"><messageId>MSG-{{uuid}}</messageId><to>{{xpath://SendEmail/to}}</to><from>{{xpath://SendEmail/from}}</from><subject>{{xpath://SendEmail/subject}}</subject><status>queued</status><queuedAt>{{now}}</queuedAt><estimatedDelivery>within 5 minutes</estimatedDelivery><trackingId>TRK-{{randomInt:100000000:999999999}}</trackingId></SendEmailResponse>"
-        },
-        "SendSMS": {
-          "soapAction": "http://example.com/notify/SendSMS",
-          "response": "<SendSMSResponse xmlns=\"http://example.com/notify\"><messageId>SMS-{{uuid}}</messageId><to>{{xpath://SendSMS/phoneNumber}}</to><segments>1</segments><status>sent</status><sentAt>{{now}}</sentAt><carrier>Verizon</carrier><cost><amount>0.0075</amount><currency>USD</currency></cost></SendSMSResponse>"
-        },
-        "SendPushNotification": {
-          "soapAction": "http://example.com/notify/SendPushNotification",
-          "response": "<SendPushNotificationResponse xmlns=\"http://example.com/notify\"><notificationId>PUSH-{{uuid}}</notificationId><deviceToken>{{xpath://SendPushNotification/deviceToken}}</deviceToken><platform>{{xpath://SendPushNotification/platform}}</platform><title>{{xpath://SendPushNotification/title}}</title><status>delivered</status><deliveredAt>{{now}}</deliveredAt><opened>false</opened></SendPushNotificationResponse>"
-        },
-        "GetNotificationStatus": {
-          "soapAction": "http://example.com/notify/GetNotificationStatus",
-          "response": "<GetNotificationStatusResponse xmlns=\"http://example.com/notify\"><messageId>{{xpath://GetNotificationStatus/messageId}}</messageId><status>delivered</status><channel>email</channel><events><event><timestamp>2024-12-15T10:00:00Z</timestamp><status>queued</status></event><event><timestamp>2024-12-15T10:00:05Z</timestamp><status>sent</status></event><event><timestamp>2024-12-15T10:00:12Z</timestamp><status>delivered</status></event><event><timestamp>2024-12-15T10:05:30Z</timestamp><status>opened</status></event></events><recipient>user@example.com</recipient></GetNotificationStatusResponse>"
+      },
+      "id": "soap-demo-07"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP 1.2 Fault Response (Sender)",
+      "description": "Demonstrates SOAP 1.2 fault with Sender code (equivalent to SOAP 1.1 Client fault)",
+      "enabled": true,
+      "soap": {
+        "path": "/soap12/auth-error",
+        "operations": {
+          "Authenticate": {
+            "soapAction": "http://example.com/auth/Authenticate",
+            "fault": {
+              "code": "soap:Client",
+              "message": "Authentication failed: Invalid credentials provided",
+              "detail": "<authError xmlns=\"http://example.com/auth\"><errorCode>INVALID_CREDENTIALS</errorCode><attemptCount>3</attemptCount><lockoutRemaining>300</lockoutRemaining></authError>"
+            }
+          }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Currency Exchange Service",
-    "description": "Real-time currency conversion and exchange rate API",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/currency",
-      "operations": {
-        "GetExchangeRate": {
-          "soapAction": "http://example.com/currency/GetExchangeRate",
-          "response": "<GetExchangeRateResponse xmlns=\"http://example.com/currency\"><fromCurrency>{{xpath://GetExchangeRate/fromCurrency}}</fromCurrency><toCurrency>{{xpath://GetExchangeRate/toCurrency}}</toCurrency><rate>1.0847</rate><inverseRate>0.9219</inverseRate><timestamp>{{now}}</timestamp><source>European Central Bank</source><validUntil>2024-12-15T18:00:00Z</validUntil></GetExchangeRateResponse>"
-        },
-        "ConvertCurrency": {
-          "soapAction": "http://example.com/currency/ConvertCurrency",
-          "response": "<ConvertCurrencyResponse xmlns=\"http://example.com/currency\"><fromCurrency>{{xpath://ConvertCurrency/fromCurrency}}</fromCurrency><toCurrency>{{xpath://ConvertCurrency/toCurrency}}</toCurrency><originalAmount>{{xpath://ConvertCurrency/amount}}</originalAmount><convertedAmount>1084.70</convertedAmount><exchangeRate>1.0847</exchangeRate><fee><amount>2.50</amount><currency>USD</currency></fee><timestamp>{{now}}</timestamp></ConvertCurrencyResponse>"
-        },
-        "GetHistoricalRates": {
-          "soapAction": "http://example.com/currency/GetHistoricalRates",
-          "response": "<GetHistoricalRatesResponse xmlns=\"http://example.com/currency\"><baseCurrency>{{xpath://GetHistoricalRates/baseCurrency}}</baseCurrency><quoteCurrency>{{xpath://GetHistoricalRates/quoteCurrency}}</quoteCurrency><period><startDate>{{xpath://GetHistoricalRates/startDate}}</startDate><endDate>{{xpath://GetHistoricalRates/endDate}}</endDate></period><rates><rate date=\"2024-12-01\">1.0521</rate><rate date=\"2024-12-02\">1.0498</rate><rate date=\"2024-12-03\">1.0534</rate><rate date=\"2024-12-04\">1.0612</rate><rate date=\"2024-12-05\">1.0589</rate><rate date=\"2024-12-06\">1.0645</rate><rate date=\"2024-12-07\">1.0678</rate><rate date=\"2024-12-08\">1.0701</rate><rate date=\"2024-12-09\">1.0756</rate><rate date=\"2024-12-10\">1.0847</rate></rates><statistics><high>1.0847</high><low>1.0498</low><average>1.0638</average><volatility>0.0112</volatility></statistics></GetHistoricalRatesResponse>"
+      },
+      "id": "soap-demo-08"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP 1.2 Fault Response (Receiver)",
+      "description": "Demonstrates SOAP 1.2 fault with Receiver code (equivalent to SOAP 1.1 Server fault)",
+      "enabled": true,
+      "soap": {
+        "path": "/soap12/database-error",
+        "operations": {
+          "QueryDatabase": {
+            "soapAction": "http://example.com/db/Query",
+            "fault": {
+              "code": "soap:Server",
+              "message": "Database connection timeout exceeded",
+              "detail": "<databaseError xmlns=\"http://example.com/db\"><errorCode>CONNECTION_TIMEOUT</errorCode><database>primary-db-01</database><timeoutMs>30000</timeoutMs></databaseError>"
+            }
+          }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Reservation System - Hotels",
-    "description": "Hotel booking API with availability check, booking, and cancellation",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/hotels",
-      "operations": {
-        "CheckAvailability": {
-          "soapAction": "http://example.com/hotels/CheckAvailability",
-          "response": "<CheckAvailabilityResponse xmlns=\"http://example.com/hotels\"><searchId>HSR-{{uuid}}</searchId><destination>{{xpath://CheckAvailability/destination}}</destination><checkIn>{{xpath://CheckAvailability/checkIn}}</checkIn><checkOut>{{xpath://CheckAvailability/checkOut}}</checkOut><guests>{{xpath://CheckAvailability/guests}}</guests><hotels><hotel><hotelId>HTL-001</hotelId><name>Grand Plaza Hotel</name><starRating>5</starRating><address>123 Downtown Ave, New York, NY 10001</address><rooms><room><roomType>Deluxe King</roomType><rate>299.00</rate><currency>USD</currency><available>true</available><bedType>King</bedType><maxOccupancy>2</maxOccupancy><amenities>WiFi, Mini Bar, City View, Breakfast</amenities></room><room><roomType>Executive Suite</roomType><rate>499.00</rate><currency>USD</currency><available>true</available><bedType>King</bedType><maxOccupancy>3</maxOccupancy><amenities>WiFi, Mini Bar, City View, Breakfast, Lounge Access</amenities></room></rooms><rating>4.7</rating><reviewCount>2341</reviewCount></hotel><hotel><hotelId>HTL-002</hotelId><name>City Center Inn</name><starRating>3</starRating><address>456 Main St, New York, NY 10002</address><rooms><room><roomType>Standard Queen</roomType><rate>149.00</rate><currency>USD</currency><available>true</available><bedType>Queen</bedType><maxOccupancy>2</maxOccupancy><amenities>WiFi, Coffee Maker</amenities></room></rooms><rating>4.2</rating><reviewCount>892</reviewCount></hotel></hotels><totalResults>2</totalResults></CheckAvailabilityResponse>"
-        },
-        "BookRoom": {
-          "soapAction": "http://example.com/hotels/BookRoom",
-          "response": "<BookRoomResponse xmlns=\"http://example.com/hotels\"><confirmationNumber>HBK-{{uuid}}</confirmationNumber><hotelId>{{xpath://BookRoom/hotelId}}</hotelId><hotelName>Grand Plaza Hotel</hotelName><roomType>{{xpath://BookRoom/roomType}}</roomType><checkIn>{{xpath://BookRoom/checkIn}}</checkIn><checkOut>{{xpath://BookRoom/checkOut}}</checkOut><guest><firstName>{{xpath://BookRoom/guest/firstName}}</firstName><lastName>{{xpath://BookRoom/guest/lastName}}</lastName><email>{{xpath://BookRoom/guest/email}}</email></guest><pricing><nightlyRate>299.00</nightlyRate><nights>3</nights><subtotal>897.00</subtotal><taxes>134.55</taxes><fees>25.00</fees><total>1056.55</total><currency>USD</currency></pricing><status>confirmed</status><bookedAt>{{now}}</bookedAt><cancellationPolicy>Free cancellation until 48 hours before check-in</cancellationPolicy></BookRoomResponse>"
-        },
-        "CancelReservation": {
-          "soapAction": "http://example.com/hotels/CancelReservation",
-          "response": "<CancelReservationResponse xmlns=\"http://example.com/hotels\"><confirmationNumber>{{xpath://CancelReservation/confirmationNumber}}</confirmationNumber><status>cancelled</status><cancellationNumber>CAN-{{uuid}}</cancellationNumber><cancelledAt>{{now}}</cancelledAt><refund><eligible>true</eligible><amount>1056.55</amount><currency>USD</currency><method>original_payment</method><processingDays>5-7</processingDays></refund></CancelReservationResponse>"
+      },
+      "id": "soap-demo-09"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP XPath Request Matching - Premium User",
+      "description": "Demonstrates XPath-based request matching to return different responses based on request content",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/premium-check",
+        "operations": {
+          "GetUserTier": {
+            "soapAction": "http://example.com/GetUserTier",
+            "match": {
+              "xpath": {
+                "//membershipType": "premium"
+              }
+            },
+            "response": "<GetUserTierResponse xmlns=\"http://example.com/membership\"><tier>premium</tier><benefits><benefit>Priority Support</benefit><benefit>Free Shipping</benefit><benefit>Early Access</benefit><benefit>Exclusive Discounts</benefit></benefits><discountPercent>20</discountPercent></GetUserTierResponse>"
+          }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Audit Logging Service",
-    "description": "Enterprise audit logging API for compliance and security tracking",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/audit",
-      "operations": {
-        "LogEvent": {
-          "soapAction": "http://example.com/audit/LogEvent",
-          "response": "<LogEventResponse xmlns=\"http://example.com/audit\"><eventId>EVT-{{uuid}}</eventId><timestamp>{{now}}</timestamp><status>recorded</status><acknowledged>true</acknowledged><partition>2024-12</partition><sequenceNumber>{{randomInt:1000000:9999999}}</sequenceNumber></LogEventResponse>"
-        },
-        "SearchAuditLogs": {
-          "soapAction": "http://example.com/audit/SearchAuditLogs",
-          "response": "<SearchAuditLogsResponse xmlns=\"http://example.com/audit\"><query><userId>{{xpath://SearchAuditLogs/userId}}</userId><startDate>{{xpath://SearchAuditLogs/startDate}}</startDate><endDate>{{xpath://SearchAuditLogs/endDate}}</endDate></query><events><event><eventId>EVT-001</eventId><timestamp>2024-12-15T10:30:00Z</timestamp><userId>user-001</userId><action>LOGIN</action><resource>web-portal</resource><result>success</result><ipAddress>192.168.1.100</ipAddress><userAgent>Mozilla/5.0</userAgent></event><event><eventId>EVT-002</eventId><timestamp>2024-12-15T10:35:00Z</timestamp><userId>user-001</userId><action>VIEW</action><resource>document/DOC-123</resource><result>success</result><ipAddress>192.168.1.100</ipAddress></event><event><eventId>EVT-003</eventId><timestamp>2024-12-15T10:40:00Z</timestamp><userId>user-001</userId><action>DOWNLOAD</action><resource>document/DOC-123</resource><result>success</result><ipAddress>192.168.1.100</ipAddress></event><event><eventId>EVT-004</eventId><timestamp>2024-12-15T11:00:00Z</timestamp><userId>user-001</userId><action>LOGOUT</action><resource>web-portal</resource><result>success</result><ipAddress>192.168.1.100</ipAddress></event></events><pagination><page>1</page><pageSize>100</pageSize><totalEvents>4</totalEvents></pagination></SearchAuditLogsResponse>"
+      },
+      "id": "soap-demo-10"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP XPath Request Matching - Standard User",
+      "description": "Demonstrates XPath-based request matching for standard membership tier",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/standard-check",
+        "operations": {
+          "GetUserTier": {
+            "soapAction": "http://example.com/GetUserTier",
+            "match": {
+              "xpath": {
+                "//membershipType": "standard"
+              }
+            },
+            "response": "<GetUserTierResponse xmlns=\"http://example.com/membership\"><tier>standard</tier><benefits><benefit>Email Support</benefit><benefit>Standard Shipping</benefit></benefits><discountPercent>5</discountPercent></GetUserTierResponse>"
+          }
         }
-      }
-    }
-  },
-  {
-    "type": "soap",
-    "name": "SOAP Workflow Service - Approval Process",
-    "description": "Business workflow API for document approval processes",
-    "enabled": true,
-    "soap": {
-      "path": "/soap/workflow",
-      "operations": {
-        "SubmitForApproval": {
-          "soapAction": "http://example.com/workflow/SubmitForApproval",
-          "response": "<SubmitForApprovalResponse xmlns=\"http://example.com/workflow\"><workflowId>WF-{{uuid}}</workflowId><documentId>{{xpath://SubmitForApproval/documentId}}</documentId><submittedBy>{{xpath://SubmitForApproval/submittedBy}}</submittedBy><submittedAt>{{now}}</submittedAt><status>pending_approval</status><currentStep>1</currentStep><totalSteps>3</totalSteps><approvalChain><step order=\"1\"><approver>manager@example.com</approver><role>Direct Manager</role><status>pending</status><dueDate>2024-12-17</dueDate></step><step order=\"2\"><approver>director@example.com</approver><role>Department Director</role><status>waiting</status><dueDate>2024-12-19</dueDate></step><step order=\"3\"><approver>vp@example.com</approver><role>VP Finance</role><status>waiting</status><dueDate>2024-12-21</dueDate></step></approvalChain><estimatedCompletion>2024-12-21</estimatedCompletion></SubmitForApprovalResponse>"
-        },
-        "ApproveDocument": {
-          "soapAction": "http://example.com/workflow/ApproveDocument",
-          "response": "<ApproveDocumentResponse xmlns=\"http://example.com/workflow\"><workflowId>{{xpath://ApproveDocument/workflowId}}</workflowId><approvedBy>{{xpath://ApproveDocument/approverId}}</approvedBy><approvedAt>{{now}}</approvedAt><comments>{{xpath://ApproveDocument/comments}}</comments><status>approved</status><nextStep><approver>director@example.com</approver><role>Department Director</role><notificationSent>true</notificationSent></nextStep></ApproveDocumentResponse>"
-        },
-        "RejectDocument": {
-          "soapAction": "http://example.com/workflow/RejectDocument",
-          "response": "<RejectDocumentResponse xmlns=\"http://example.com/workflow\"><workflowId>{{xpath://RejectDocument/workflowId}}</workflowId><rejectedBy>{{xpath://RejectDocument/approverId}}</rejectedBy><rejectedAt>{{now}}</rejectedAt><reason>{{xpath://RejectDocument/reason}}</reason><status>rejected</status><workflowStatus>terminated</workflowStatus><notificationsSent><notification recipient=\"submitter@example.com\">Rejection notification</notification><notification recipient=\"manager@example.com\">Workflow terminated</notification></notificationsSent></RejectDocumentResponse>"
-        },
-        "GetWorkflowStatus": {
-          "soapAction": "http://example.com/workflow/GetWorkflowStatus",
-          "response": "<GetWorkflowStatusResponse xmlns=\"http://example.com/workflow\"><workflowId>{{xpath://GetWorkflowStatus/workflowId}}</workflowId><documentId>DOC-12345</documentId><documentTitle>Q4 Budget Proposal</documentTitle><submittedBy>user@example.com</submittedBy><submittedAt>2024-12-15T09:00:00Z</submittedAt><status>in_progress</status><currentStep>2</currentStep><totalSteps>3</totalSteps><history><action timestamp=\"2024-12-15T09:00:00Z\" actor=\"user@example.com\">Submitted for approval</action><action timestamp=\"2024-12-15T14:30:00Z\" actor=\"manager@example.com\">Approved - Step 1 complete</action><action timestamp=\"2024-12-16T10:00:00Z\" actor=\"system\">Notification sent to Step 2 approver</action></history><pendingAction><approver>director@example.com</approver><role>Department Director</role><dueDate>2024-12-19</dueDate><remindersSent>1</remindersSent></pendingAction></GetWorkflowStatusResponse>"
+      },
+      "id": "soap-demo-11"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Multiple XPath Conditions",
+      "description": "Demonstrates matching with multiple XPath conditions that all must be satisfied",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/admin-access",
+        "operations": {
+          "GetAdminAccess": {
+            "soapAction": "http://example.com/GetAdminAccess",
+            "match": {
+              "xpath": {
+                "//role": "admin",
+                "//department": "engineering"
+              }
+            },
+            "response": "<GetAdminAccessResponse xmlns=\"http://example.com/admin\"><accessLevel>full</accessLevel><permissions><permission>read</permission><permission>write</permission><permission>delete</permission><permission>admin</permission></permissions><expiresAt>2025-12-31T23:59:59Z</expiresAt></GetAdminAccessResponse>"
+          }
         }
-      }
+      },
+      "id": "soap-demo-12"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP XPath Template Variables - Echo Service",
+      "description": "Demonstrates extracting values from request using XPath and echoing them in response",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/echo",
+        "operations": {
+          "Echo": {
+            "soapAction": "http://example.com/Echo",
+            "response": "<EchoResponse xmlns=\"http://example.com/echo\"><requestId>{{xpath://Echo/requestId}}</requestId><message>{{xpath://Echo/message}}</message><timestamp>{{now}}</timestamp><correlationId>{{uuid}}</correlationId></EchoResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-13"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Nested XPath Extraction",
+      "description": "Demonstrates extracting deeply nested values from SOAP request using XPath",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/registration",
+        "operations": {
+          "RegisterCustomer": {
+            "soapAction": "http://example.com/RegisterCustomer",
+            "response": "<RegisterCustomerResponse xmlns=\"http://example.com/customer\"><customerId>CUST-{{uuid}}</customerId><registeredName>{{xpath://RegisterCustomer/customer/personalInfo/firstName}} {{xpath://RegisterCustomer/customer/personalInfo/lastName}}</registeredName><email>{{xpath://RegisterCustomer/customer/contactInfo/email}}</email><phone>{{xpath://RegisterCustomer/customer/contactInfo/phone}}</phone><address><street>{{xpath://RegisterCustomer/customer/address/street}}</street><city>{{xpath://RegisterCustomer/customer/address/city}}</city><country>{{xpath://RegisterCustomer/customer/address/country}}</country></address><status>registered</status><registeredAt>{{now}}</registeredAt></RegisterCustomerResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-14"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Response Delay - Slow Service Simulation",
+      "description": "Demonstrates configuring response delay to simulate slow services",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/slow-service",
+        "operations": {
+          "SlowQuery": {
+            "soapAction": "http://example.com/SlowQuery",
+            "delay": "2s",
+            "response": "<SlowQueryResponse xmlns=\"http://example.com/slow\"><result>completed</result><processingTime>2000ms</processingTime><data><record><id>1</id><value>data-1</value></record><record><id>2</id><value>data-2</value></record></data></SlowQueryResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-15"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Response Delay - Milliseconds",
+      "description": "Demonstrates response delay configuration in milliseconds",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/latency-test",
+        "operations": {
+          "TestLatency": {
+            "soapAction": "http://example.com/TestLatency",
+            "delay": "500ms",
+            "response": "<TestLatencyResponse xmlns=\"http://example.com/test\"><status>success</status><simulatedLatency>500ms</simulatedLatency></TestLatencyResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-16"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Complex Types - Shipping Service",
+      "description": "Demonstrates handling complex nested XML types in request and response",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/shipping",
+        "wsdl": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><definitions name=\"ShippingService\" xmlns=\"http://schemas.xmlsoap.org/wsdl/\" xmlns:soap=\"http://schemas.xmlsoap.org/wsdl/soap/\" xmlns:tns=\"http://example.com/shipping\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"http://example.com/shipping\"><types><xsd:schema targetNamespace=\"http://example.com/shipping\"><xsd:complexType name=\"Address\"><xsd:sequence><xsd:element name=\"street\" type=\"xsd:string\"/><xsd:element name=\"city\" type=\"xsd:string\"/><xsd:element name=\"state\" type=\"xsd:string\"/><xsd:element name=\"zipCode\" type=\"xsd:string\"/><xsd:element name=\"country\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType><xsd:complexType name=\"Package\"><xsd:sequence><xsd:element name=\"weight\" type=\"xsd:decimal\"/><xsd:element name=\"length\" type=\"xsd:decimal\"/><xsd:element name=\"width\" type=\"xsd:decimal\"/><xsd:element name=\"height\" type=\"xsd:decimal\"/><xsd:element name=\"description\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType><xsd:complexType name=\"ShippingRate\"><xsd:sequence><xsd:element name=\"carrier\" type=\"xsd:string\"/><xsd:element name=\"service\" type=\"xsd:string\"/><xsd:element name=\"price\" type=\"xsd:decimal\"/><xsd:element name=\"currency\" type=\"xsd:string\"/><xsd:element name=\"estimatedDays\" type=\"xsd:int\"/></xsd:sequence></xsd:complexType></xsd:schema></types><message name=\"CalculateRatesRequest\"><part name=\"origin\" type=\"tns:Address\"/><part name=\"destination\" type=\"tns:Address\"/><part name=\"package\" type=\"tns:Package\"/></message><message name=\"CalculateRatesResponse\"><part name=\"rates\" type=\"tns:ShippingRate\"/></message><portType name=\"ShippingPortType\"><operation name=\"CalculateRates\"><input message=\"tns:CalculateRatesRequest\"/><output message=\"tns:CalculateRatesResponse\"/></operation></portType><binding name=\"ShippingBinding\" type=\"tns:ShippingPortType\"><soap:binding style=\"document\" transport=\"http://schemas.xmlsoap.org/soap/http\"/><operation name=\"CalculateRates\"><soap:operation soapAction=\"http://example.com/shipping/CalculateRates\"/></operation></binding><service name=\"ShippingService\"><port name=\"ShippingPort\" binding=\"tns:ShippingBinding\"><soap:address location=\"http://localhost:8080/soap/shipping\"/></port></service></definitions>",
+        "operations": {
+          "CalculateRates": {
+            "soapAction": "http://example.com/shipping/CalculateRates",
+            "response": "<CalculateRatesResponse xmlns=\"http://example.com/shipping\"><rates><rate><carrier>FedEx</carrier><service>Ground</service><price>12.99</price><currency>USD</currency><estimatedDays>5</estimatedDays></rate><rate><carrier>FedEx</carrier><service>Express</service><price>24.99</price><currency>USD</currency><estimatedDays>2</estimatedDays></rate><rate><carrier>UPS</carrier><service>Ground</service><price>11.99</price><currency>USD</currency><estimatedDays>6</estimatedDays></rate><rate><carrier>UPS</carrier><service>Next Day Air</service><price>49.99</price><currency>USD</currency><estimatedDays>1</estimatedDays></rate><rate><carrier>USPS</carrier><service>Priority Mail</service><price>8.99</price><currency>USD</currency><estimatedDays>3</estimatedDays></rate></rates><originZip>{{xpath://CalculateRates/origin/zipCode}}</originZip><destinationZip>{{xpath://CalculateRates/destination/zipCode}}</destinationZip><packageWeight>{{xpath://CalculateRates/package/weight}}</packageWeight></CalculateRatesResponse>"
+          },
+          "CreateShipment": {
+            "soapAction": "http://example.com/shipping/CreateShipment",
+            "response": "<CreateShipmentResponse xmlns=\"http://example.com/shipping\"><shipmentId>SHIP-{{uuid}}</shipmentId><trackingNumber>1Z{{randomInt:100000000:999999999}}</trackingNumber><carrier>{{xpath://CreateShipment/selectedCarrier}}</carrier><service>{{xpath://CreateShipment/selectedService}}</service><status>label_created</status><labelUrl>https://shipping.example.com/labels/SHIP-{{uuid}}.pdf</labelUrl><estimatedDelivery>2024-12-20</estimatedDelivery><createdAt>{{now}}</createdAt></CreateShipmentResponse>"
+          },
+          "TrackShipment": {
+            "soapAction": "http://example.com/shipping/TrackShipment",
+            "response": "<TrackShipmentResponse xmlns=\"http://example.com/shipping\"><trackingNumber>{{xpath://TrackShipment/trackingNumber}}</trackingNumber><status>in_transit</status><events><event><timestamp>2024-12-15T08:00:00Z</timestamp><location>New York, NY</location><status>Package picked up</status></event><event><timestamp>2024-12-15T14:30:00Z</timestamp><location>Newark, NJ</location><status>Arrived at sorting facility</status></event><event><timestamp>2024-12-16T06:00:00Z</timestamp><location>Chicago, IL</location><status>In transit to destination</status></event></events><estimatedDelivery>2024-12-18</estimatedDelivery></TrackShipmentResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-17"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Namespace Handling - Prefixed Elements",
+      "description": "Demonstrates handling namespaced XML elements in requests and responses",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/namespaced",
+        "operations": {
+          "GetAccount": {
+            "soapAction": "http://example.com/accounts/GetAccount",
+            "response": "<acc:GetAccountResponse xmlns:acc=\"http://example.com/accounts\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><acc:account><acc:accountId>ACC-{{uuid}}</acc:accountId><acc:accountNumber>{{xpath://GetAccount/accountNumber}}</acc:accountNumber><acc:accountType>checking</acc:accountType><acc:balance xsi:type=\"xsd:decimal\">5432.10</acc:balance><acc:currency>USD</acc:currency><acc:status>active</acc:status><acc:lastActivity>{{now}}</acc:lastActivity></acc:account></acc:GetAccountResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-18"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Financial Service - Complete Banking API",
+      "description": "Comprehensive banking API demonstrating multiple operations, complex types, and XPath extraction",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/banking",
+        "wsdl": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><definitions name=\"BankingService\" xmlns=\"http://schemas.xmlsoap.org/wsdl/\" xmlns:soap=\"http://schemas.xmlsoap.org/wsdl/soap/\" xmlns:tns=\"http://example.com/banking\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"http://example.com/banking\"><types><xsd:schema targetNamespace=\"http://example.com/banking\"><xsd:element name=\"GetBalanceRequest\"><xsd:complexType><xsd:sequence><xsd:element name=\"accountNumber\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"GetBalanceResponse\"><xsd:complexType><xsd:sequence><xsd:element name=\"balance\" type=\"xsd:decimal\"/><xsd:element name=\"availableBalance\" type=\"xsd:decimal\"/><xsd:element name=\"currency\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"TransferRequest\"><xsd:complexType><xsd:sequence><xsd:element name=\"fromAccount\" type=\"xsd:string\"/><xsd:element name=\"toAccount\" type=\"xsd:string\"/><xsd:element name=\"amount\" type=\"xsd:decimal\"/><xsd:element name=\"currency\" type=\"xsd:string\"/><xsd:element name=\"description\" type=\"xsd:string\"/></xsd:sequence></xsd:complexType></xsd:element><xsd:element name=\"TransferResponse\"><xsd:complexType><xsd:sequence><xsd:element name=\"transactionId\" type=\"xsd:string\"/><xsd:element name=\"status\" type=\"xsd:string\"/><xsd:element name=\"timestamp\" type=\"xsd:dateTime\"/></xsd:sequence></xsd:complexType></xsd:element></xsd:schema></types><portType name=\"BankingPortType\"><operation name=\"GetBalance\"><input message=\"tns:GetBalanceRequest\"/><output message=\"tns:GetBalanceResponse\"/></operation><operation name=\"Transfer\"><input message=\"tns:TransferRequest\"/><output message=\"tns:TransferResponse\"/></operation></portType><binding name=\"BankingBinding\" type=\"tns:BankingPortType\"><soap:binding style=\"document\" transport=\"http://schemas.xmlsoap.org/soap/http\"/></binding><service name=\"BankingService\"><port name=\"BankingPort\" binding=\"tns:BankingBinding\"><soap:address location=\"http://localhost:8080/soap/banking\"/></port></service></definitions>",
+        "operations": {
+          "GetBalance": {
+            "soapAction": "http://example.com/banking/GetBalance",
+            "response": "<GetBalanceResponse xmlns=\"http://example.com/banking\"><accountNumber>{{xpath://GetBalance/accountNumber}}</accountNumber><balance>15234.56</balance><availableBalance>14500.00</availableBalance><pendingTransactions>734.56</pendingTransactions><currency>USD</currency><lastUpdated>{{now}}</lastUpdated></GetBalanceResponse>"
+          },
+          "Transfer": {
+            "soapAction": "http://example.com/banking/Transfer",
+            "response": "<TransferResponse xmlns=\"http://example.com/banking\"><transactionId>TXN-{{uuid}}</transactionId><fromAccount>{{xpath://Transfer/fromAccount}}</fromAccount><toAccount>{{xpath://Transfer/toAccount}}</toAccount><amount>{{xpath://Transfer/amount}}</amount><currency>{{xpath://Transfer/currency}}</currency><description>{{xpath://Transfer/description}}</description><status>completed</status><timestamp>{{now}}</timestamp><referenceNumber>REF-{{randomInt:100000:999999}}</referenceNumber></TransferResponse>"
+          },
+          "GetTransactionHistory": {
+            "soapAction": "http://example.com/banking/GetTransactionHistory",
+            "response": "<GetTransactionHistoryResponse xmlns=\"http://example.com/banking\"><accountNumber>{{xpath://GetTransactionHistory/accountNumber}}</accountNumber><transactions><transaction><id>TXN-001</id><date>2024-12-10</date><description>Direct Deposit</description><amount>3500.00</amount><type>credit</type><balance>15234.56</balance></transaction><transaction><id>TXN-002</id><date>2024-12-09</date><description>Electric Bill</description><amount>-125.50</amount><type>debit</type><balance>11734.56</balance></transaction><transaction><id>TXN-003</id><date>2024-12-08</date><description>Grocery Store</description><amount>-87.32</amount><type>debit</type><balance>11860.06</balance></transaction><transaction><id>TXN-004</id><date>2024-12-07</date><description>ATM Withdrawal</description><amount>-200.00</amount><type>debit</type><balance>11947.38</balance></transaction><transaction><id>TXN-005</id><date>2024-12-05</date><description>Transfer from Savings</description><amount>500.00</amount><type>credit</type><balance>12147.38</balance></transaction></transactions><pageInfo><currentPage>1</currentPage><totalPages>5</totalPages><totalTransactions>47</totalTransactions></pageInfo></GetTransactionHistoryResponse>"
+          },
+          "GetAccountDetails": {
+            "soapAction": "http://example.com/banking/GetAccountDetails",
+            "response": "<GetAccountDetailsResponse xmlns=\"http://example.com/banking\"><account><accountNumber>{{xpath://GetAccountDetails/accountNumber}}</accountNumber><accountType>checking</accountType><accountName>Primary Checking</accountName><ownerName>John Doe</ownerName><openDate>2020-03-15</openDate><status>active</status><interestRate>0.05</interestRate><overdraftProtection>true</overdraftProtection><overdraftLimit>500.00</overdraftLimit><linkedAccounts><account>SAVINGS-001</account><account>CREDIT-001</account></linkedAccounts></account></GetAccountDetailsResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-19"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Healthcare Service - Patient Records",
+      "description": "Demonstrates SOAP for healthcare with HIPAA-style response structure",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/healthcare",
+        "operations": {
+          "GetPatientRecord": {
+            "soapAction": "http://example.com/healthcare/GetPatientRecord",
+            "response": "<GetPatientRecordResponse xmlns=\"http://example.com/healthcare\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><patient><patientId>{{xpath://GetPatientRecord/patientId}}</patientId><demographics><firstName>Jane</firstName><lastName>Smith</lastName><dateOfBirth>1985-07-22</dateOfBirth><gender>F</gender><ssn>***-**-1234</ssn></demographics><contact><address><street>123 Health Ave</street><city>Medical City</city><state>CA</state><zipCode>90210</zipCode></address><phone>555-123-4567</phone><email>jane.smith@email.com</email></contact><insurance><providerId>INS-12345</providerId><providerName>Blue Cross Blue Shield</providerName><policyNumber>POL-987654</policyNumber><groupNumber>GRP-456</groupNumber></insurance><medicalHistory><allergies><allergy>Penicillin</allergy><allergy>Peanuts</allergy></allergies><conditions><condition><code>I10</code><description>Essential hypertension</description><diagnosedDate>2019-05-10</diagnosedDate></condition></conditions><medications><medication><name>Lisinopril</name><dosage>10mg</dosage><frequency>daily</frequency></medication></medications></medicalHistory></patient><lastUpdated>{{now}}</lastUpdated></GetPatientRecordResponse>"
+          },
+          "ScheduleAppointment": {
+            "soapAction": "http://example.com/healthcare/ScheduleAppointment",
+            "response": "<ScheduleAppointmentResponse xmlns=\"http://example.com/healthcare\"><appointmentId>APT-{{uuid}}</appointmentId><patientId>{{xpath://ScheduleAppointment/patientId}}</patientId><providerId>{{xpath://ScheduleAppointment/providerId}}</providerId><appointmentType>{{xpath://ScheduleAppointment/appointmentType}}</appointmentType><scheduledDateTime>{{xpath://ScheduleAppointment/requestedDateTime}}</scheduledDateTime><duration>30</duration><status>confirmed</status><location><facilityName>Main Medical Center</facilityName><address>456 Hospital Blvd, Medical City, CA 90210</address><room>Exam Room 3</room></location><instructions>Please arrive 15 minutes early. Bring insurance card and photo ID.</instructions><confirmationNumber>CONF-{{randomInt:100000:999999}}</confirmationNumber></ScheduleAppointmentResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-20"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP with Fault and XPath Match - Authorization Error",
+      "description": "Demonstrates returning fault only when specific XPath conditions match (e.g., invalid token)",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/auth-check",
+        "operations": {
+          "ValidateToken": {
+            "soapAction": "http://example.com/auth/ValidateToken",
+            "match": {
+              "xpath": {
+                "//token": "invalid-token"
+              }
+            },
+            "fault": {
+              "code": "soap:Client",
+              "message": "Token validation failed: The provided token is invalid or expired",
+              "detail": "<authorizationError xmlns=\"http://example.com/auth\"><errorCode>TOKEN_INVALID</errorCode><tokenProvided>invalid-token</tokenProvided><suggestion>Please obtain a new token using the /auth/login endpoint</suggestion></authorizationError>"
+            }
+          }
+        }
+      },
+      "id": "soap-demo-21"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Travel Booking Service",
+      "description": "Complete travel booking API with flight search, booking, and itinerary operations",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/travel",
+        "operations": {
+          "SearchFlights": {
+            "soapAction": "http://example.com/travel/SearchFlights",
+            "response": "<SearchFlightsResponse xmlns=\"http://example.com/travel\"><searchId>SRCH-{{uuid}}</searchId><origin>{{xpath://SearchFlights/origin}}</origin><destination>{{xpath://SearchFlights/destination}}</destination><departureDate>{{xpath://SearchFlights/departureDate}}</departureDate><flights><flight><flightNumber>AA1234</flightNumber><airline>American Airlines</airline><departureTime>08:00</departureTime><arrivalTime>11:30</arrivalTime><duration>3h 30m</duration><stops>0</stops><price>299.00</price><currency>USD</currency><seatsAvailable>45</seatsAvailable><class>economy</class></flight><flight><flightNumber>UA5678</flightNumber><airline>United Airlines</airline><departureTime>10:15</departureTime><arrivalTime>14:00</arrivalTime><duration>3h 45m</duration><stops>1</stops><price>249.00</price><currency>USD</currency><seatsAvailable>23</seatsAvailable><class>economy</class></flight><flight><flightNumber>DL9012</flightNumber><airline>Delta Airlines</airline><departureTime>14:30</departureTime><arrivalTime>18:00</arrivalTime><duration>3h 30m</duration><stops>0</stops><price>329.00</price><currency>USD</currency><seatsAvailable>12</seatsAvailable><class>economy</class></flight></flights><totalResults>3</totalResults></SearchFlightsResponse>"
+          },
+          "BookFlight": {
+            "soapAction": "http://example.com/travel/BookFlight",
+            "response": "<BookFlightResponse xmlns=\"http://example.com/travel\"><bookingReference>BK-{{uuid}}</bookingReference><confirmationNumber>CONF-{{randomInt:100000:999999}}</confirmationNumber><flightNumber>{{xpath://BookFlight/flightNumber}}</flightNumber><passenger><firstName>{{xpath://BookFlight/passenger/firstName}}</firstName><lastName>{{xpath://BookFlight/passenger/lastName}}</lastName><email>{{xpath://BookFlight/passenger/email}}</email></passenger><status>confirmed</status><ticketNumber>TKT-{{randomInt:1000000000:9999999999}}</ticketNumber><bookedAt>{{now}}</bookedAt><paymentStatus>completed</paymentStatus><totalPrice>{{xpath://BookFlight/totalPrice}}</totalPrice><currency>USD</currency></BookFlightResponse>"
+          },
+          "GetItinerary": {
+            "soapAction": "http://example.com/travel/GetItinerary",
+            "response": "<GetItineraryResponse xmlns=\"http://example.com/travel\"><bookingReference>{{xpath://GetItinerary/bookingReference}}</bookingReference><itinerary><segment type=\"outbound\"><flightNumber>AA1234</flightNumber><airline>American Airlines</airline><origin>LAX</origin><destination>JFK</destination><departureDate>2024-12-20</departureDate><departureTime>08:00</departureTime><arrivalDate>2024-12-20</arrivalDate><arrivalTime>16:30</arrivalTime><terminal>Terminal 4</terminal><gate>B22</gate><seat>14A</seat><class>Economy</class><status>confirmed</status></segment><segment type=\"return\"><flightNumber>AA5678</flightNumber><airline>American Airlines</airline><origin>JFK</origin><destination>LAX</destination><departureDate>2024-12-27</departureDate><departureTime>19:00</departureTime><arrivalDate>2024-12-27</arrivalDate><arrivalTime>22:30</arrivalTime><terminal>Terminal 8</terminal><gate>C15</gate><seat>14A</seat><class>Economy</class><status>confirmed</status></segment></itinerary><passenger><firstName>John</firstName><lastName>Traveler</lastName><frequentFlyerNumber>AA123456789</frequentFlyerNumber></passenger></GetItineraryResponse>"
+          },
+          "CancelBooking": {
+            "soapAction": "http://example.com/travel/CancelBooking",
+            "response": "<CancelBookingResponse xmlns=\"http://example.com/travel\"><bookingReference>{{xpath://CancelBooking/bookingReference}}</bookingReference><status>cancelled</status><cancellationId>CAN-{{uuid}}</cancellationId><cancelledAt>{{now}}</cancelledAt><refund><amount>249.00</amount><currency>USD</currency><method>original_payment_method</method><estimatedProcessingDays>5</estimatedProcessingDays></refund><cancellationPolicy>Full refund applicable for cancellations made 24+ hours before departure.</cancellationPolicy></CancelBookingResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-22"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP E-Commerce Catalog Service",
+      "description": "Product catalog API with search, details, and inventory operations",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/catalog",
+        "operations": {
+          "SearchProducts": {
+            "soapAction": "http://example.com/catalog/SearchProducts",
+            "response": "<SearchProductsResponse xmlns=\"http://example.com/catalog\"><query>{{xpath://SearchProducts/query}}</query><category>{{xpath://SearchProducts/category}}</category><products><product><sku>SKU-001</sku><name>Wireless Bluetooth Headphones</name><brand>TechSound</brand><price>79.99</price><salePrice>59.99</salePrice><currency>USD</currency><rating>4.5</rating><reviewCount>1234</reviewCount><inStock>true</inStock><imageUrl>https://example.com/images/headphones-001.jpg</imageUrl></product><product><sku>SKU-002</sku><name>Premium Noise-Canceling Earbuds</name><brand>AudioPro</brand><price>149.99</price><currency>USD</currency><rating>4.8</rating><reviewCount>567</reviewCount><inStock>true</inStock><imageUrl>https://example.com/images/earbuds-002.jpg</imageUrl></product><product><sku>SKU-003</sku><name>Studio Monitor Headphones</name><brand>ProAudio</brand><price>199.99</price><currency>USD</currency><rating>4.9</rating><reviewCount>89</reviewCount><inStock>false</inStock><imageUrl>https://example.com/images/monitors-003.jpg</imageUrl></product></products><pagination><page>1</page><pageSize>10</pageSize><totalProducts>156</totalProducts><totalPages>16</totalPages></pagination></SearchProductsResponse>"
+          },
+          "GetProductDetails": {
+            "soapAction": "http://example.com/catalog/GetProductDetails",
+            "response": "<GetProductDetailsResponse xmlns=\"http://example.com/catalog\"><product><sku>{{xpath://GetProductDetails/sku}}</sku><name>Wireless Bluetooth Headphones</name><brand>TechSound</brand><description>Premium wireless headphones with 40-hour battery life, active noise cancellation, and crystal-clear audio quality.</description><price>79.99</price><salePrice>59.99</salePrice><currency>USD</currency><specifications><spec name=\"Battery Life\">40 hours</spec><spec name=\"Bluetooth Version\">5.2</spec><spec name=\"Driver Size\">40mm</spec><spec name=\"Weight\">250g</spec><spec name=\"Noise Cancellation\">Active</spec><spec name=\"Foldable\">Yes</spec></specifications><colors><color code=\"BLK\">Black</color><color code=\"WHT\">White</color><color code=\"NVY\">Navy Blue</color></colors><images><image type=\"main\">https://example.com/images/headphones-main.jpg</image><image type=\"side\">https://example.com/images/headphones-side.jpg</image><image type=\"detail\">https://example.com/images/headphones-detail.jpg</image></images><reviews><averageRating>4.5</averageRating><totalReviews>1234</totalReviews><breakdown><stars5>890</stars5><stars4>234</stars4><stars3>78</stars3><stars2>22</stars2><stars1>10</stars1></breakdown></reviews><inStock>true</inStock><stockQuantity>156</stockQuantity><shippingInfo><freeShipping>true</freeShipping><estimatedDelivery>3-5 business days</estimatedDelivery></shippingInfo></product></GetProductDetailsResponse>"
+          },
+          "AddToCart": {
+            "soapAction": "http://example.com/catalog/AddToCart",
+            "response": "<AddToCartResponse xmlns=\"http://example.com/catalog\"><cartId>CART-{{uuid}}</cartId><item><sku>{{xpath://AddToCart/sku}}</sku><quantity>{{xpath://AddToCart/quantity}}</quantity><price>59.99</price><subtotal>{{xpath://AddToCart/quantity}}x59.99</subtotal></item><cartSummary><itemCount>1</itemCount><subtotal>59.99</subtotal><tax>5.40</tax><shipping>0.00</shipping><total>65.39</total><currency>USD</currency></cartSummary><addedAt>{{now}}</addedAt></AddToCartResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-23"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Insurance Quote Service",
+      "description": "Insurance quote API with complex risk assessment response",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/insurance",
+        "operations": {
+          "GetAutoQuote": {
+            "soapAction": "http://example.com/insurance/GetAutoQuote",
+            "response": "<GetAutoQuoteResponse xmlns=\"http://example.com/insurance\"><quoteId>QT-{{uuid}}</quoteId><applicant><firstName>{{xpath://GetAutoQuote/applicant/firstName}}</firstName><lastName>{{xpath://GetAutoQuote/applicant/lastName}}</lastName><dateOfBirth>{{xpath://GetAutoQuote/applicant/dateOfBirth}}</dateOfBirth><address><zipCode>{{xpath://GetAutoQuote/applicant/zipCode}}</zipCode></address></applicant><vehicle><year>{{xpath://GetAutoQuote/vehicle/year}}</year><make>{{xpath://GetAutoQuote/vehicle/make}}</make><model>{{xpath://GetAutoQuote/vehicle/model}}</model><vin>{{xpath://GetAutoQuote/vehicle/vin}}</vin></vehicle><coverage><liability><bodily>100000/300000</bodily><property>100000</property></liability><collision><deductible>500</deductible></collision><comprehensive><deductible>250</deductible></comprehensive><uninsuredMotorist>100000/300000</uninsuredMotorist><medicalPayments>5000</medicalPayments></coverage><premium><annual>1847.00</annual><semiAnnual>948.00</semiAnnual><quarterly>487.00</quarterly><monthly>162.00</monthly><currency>USD</currency></premium><discounts><discount><type>Multi-policy</type><amount>185.00</amount></discount><discount><type>Good driver</type><amount>92.00</amount></discount><discount><type>Paperless</type><amount>25.00</amount></discount></discounts><totalSavings>302.00</totalSavings><quoteValidUntil>2024-12-31</quoteValidUntil><generatedAt>{{now}}</generatedAt></GetAutoQuoteResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-24"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Weather Service",
+      "description": "Weather data API demonstrating array responses and meteorological data",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/weather",
+        "operations": {
+          "GetCurrentWeather": {
+            "soapAction": "http://example.com/weather/GetCurrentWeather",
+            "response": "<GetCurrentWeatherResponse xmlns=\"http://example.com/weather\"><location><city>{{xpath://GetCurrentWeather/city}}</city><country>{{xpath://GetCurrentWeather/country}}</country><coordinates><latitude>34.0522</latitude><longitude>-118.2437</longitude></coordinates></location><current><temperature><value>72</value><unit>F</unit></temperature><feelsLike><value>70</value><unit>F</unit></feelsLike><humidity>45</humidity><windSpeed><value>8</value><unit>mph</unit><direction>NW</direction></windSpeed><pressure><value>1015</value><unit>hPa</unit></pressure><visibility><value>10</value><unit>miles</unit></visibility><uvIndex>6</uvIndex><condition>Partly Cloudy</condition><conditionCode>802</conditionCode><icon>partly-cloudy-day</icon></current><observedAt>{{now}}</observedAt><source>National Weather Service</source></GetCurrentWeatherResponse>"
+          },
+          "GetForecast": {
+            "soapAction": "http://example.com/weather/GetForecast",
+            "response": "<GetForecastResponse xmlns=\"http://example.com/weather\"><location><city>{{xpath://GetForecast/city}}</city></location><forecast><day date=\"2024-12-16\"><high>75</high><low>58</low><condition>Sunny</condition><precipitation>0</precipitation><humidity>40</humidity><windSpeed>5</windSpeed></day><day date=\"2024-12-17\"><high>72</high><low>56</low><condition>Partly Cloudy</condition><precipitation>10</precipitation><humidity>45</humidity><windSpeed>8</windSpeed></day><day date=\"2024-12-18\"><high>68</high><low>52</low><condition>Cloudy</condition><precipitation>30</precipitation><humidity>55</humidity><windSpeed>12</windSpeed></day><day date=\"2024-12-19\"><high>65</high><low>50</low><condition>Rain</condition><precipitation>80</precipitation><humidity>75</humidity><windSpeed>15</windSpeed></day><day date=\"2024-12-20\"><high>70</high><low>54</low><condition>Partly Cloudy</condition><precipitation>20</precipitation><humidity>50</humidity><windSpeed>7</windSpeed></day></forecast><units><temperature>F</temperature><windSpeed>mph</windSpeed><precipitation>%</precipitation></units><generatedAt>{{now}}</generatedAt></GetForecastResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-25"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Document Management Service",
+      "description": "Document/file management API with upload, download, and metadata operations",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/documents",
+        "operations": {
+          "UploadDocument": {
+            "soapAction": "http://example.com/docs/UploadDocument",
+            "response": "<UploadDocumentResponse xmlns=\"http://example.com/docs\"><documentId>DOC-{{uuid}}</documentId><fileName>{{xpath://UploadDocument/fileName}}</fileName><fileSize>{{xpath://UploadDocument/fileSize}}</fileSize><mimeType>{{xpath://UploadDocument/mimeType}}</mimeType><checksum>sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</checksum><uploadedBy>{{xpath://UploadDocument/userId}}</uploadedBy><uploadedAt>{{now}}</uploadedAt><status>processed</status><storageLocation>s3://documents-bucket/2024/12/DOC-{{uuid}}</storageLocation><metadata><version>1</version><encrypted>true</encrypted><retentionPolicy>7-years</retentionPolicy></metadata></UploadDocumentResponse>"
+          },
+          "GetDocumentMetadata": {
+            "soapAction": "http://example.com/docs/GetDocumentMetadata",
+            "response": "<GetDocumentMetadataResponse xmlns=\"http://example.com/docs\"><document><documentId>{{xpath://GetDocumentMetadata/documentId}}</documentId><fileName>quarterly-report-q3-2024.pdf</fileName><fileSize>2458632</fileSize><mimeType>application/pdf</mimeType><checksum>sha256:abc123def456</checksum><createdAt>2024-10-15T14:30:00Z</createdAt><modifiedAt>2024-11-01T09:15:00Z</modifiedAt><createdBy>user-001</createdBy><modifiedBy>user-002</modifiedBy><version>3</version><locked>false</locked><tags><tag>quarterly</tag><tag>financial</tag><tag>2024</tag></tags><permissions><permission><userId>user-001</userId><access>owner</access></permission><permission><groupId>finance-team</groupId><access>read-write</access></permission><permission><groupId>all-employees</groupId><access>read</access></permission></permissions></document></GetDocumentMetadataResponse>"
+          },
+          "SearchDocuments": {
+            "soapAction": "http://example.com/docs/SearchDocuments",
+            "response": "<SearchDocumentsResponse xmlns=\"http://example.com/docs\"><query>{{xpath://SearchDocuments/query}}</query><results><document><documentId>DOC-001</documentId><fileName>annual-report-2024.pdf</fileName><mimeType>application/pdf</mimeType><relevanceScore>0.95</relevanceScore><snippet>...quarterly revenue increased by 15% compared to...</snippet><modifiedAt>2024-12-01</modifiedAt></document><document><documentId>DOC-002</documentId><fileName>financial-summary.xlsx</fileName><mimeType>application/vnd.openxmlformats-officedocument.spreadsheetml.sheet</mimeType><relevanceScore>0.82</relevanceScore><snippet>...budget allocations for Q4 show...</snippet><modifiedAt>2024-11-28</modifiedAt></document><document><documentId>DOC-003</documentId><fileName>board-presentation.pptx</fileName><mimeType>application/vnd.openxmlformats-officedocument.presentationml.presentation</mimeType><relevanceScore>0.75</relevanceScore><snippet>...strategic initiatives for fiscal year...</snippet><modifiedAt>2024-11-15</modifiedAt></document></results><totalResults>47</totalResults><page>1</page><pageSize>10</pageSize></SearchDocumentsResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-26"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Notification Service",
+      "description": "Multi-channel notification API supporting email, SMS, and push notifications",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/notifications",
+        "operations": {
+          "SendEmail": {
+            "soapAction": "http://example.com/notify/SendEmail",
+            "delay": "100ms",
+            "response": "<SendEmailResponse xmlns=\"http://example.com/notify\"><messageId>MSG-{{uuid}}</messageId><to>{{xpath://SendEmail/to}}</to><from>{{xpath://SendEmail/from}}</from><subject>{{xpath://SendEmail/subject}}</subject><status>queued</status><queuedAt>{{now}}</queuedAt><estimatedDelivery>within 5 minutes</estimatedDelivery><trackingId>TRK-{{randomInt:100000000:999999999}}</trackingId></SendEmailResponse>"
+          },
+          "SendSMS": {
+            "soapAction": "http://example.com/notify/SendSMS",
+            "response": "<SendSMSResponse xmlns=\"http://example.com/notify\"><messageId>SMS-{{uuid}}</messageId><to>{{xpath://SendSMS/phoneNumber}}</to><segments>1</segments><status>sent</status><sentAt>{{now}}</sentAt><carrier>Verizon</carrier><cost><amount>0.0075</amount><currency>USD</currency></cost></SendSMSResponse>"
+          },
+          "SendPushNotification": {
+            "soapAction": "http://example.com/notify/SendPushNotification",
+            "response": "<SendPushNotificationResponse xmlns=\"http://example.com/notify\"><notificationId>PUSH-{{uuid}}</notificationId><deviceToken>{{xpath://SendPushNotification/deviceToken}}</deviceToken><platform>{{xpath://SendPushNotification/platform}}</platform><title>{{xpath://SendPushNotification/title}}</title><status>delivered</status><deliveredAt>{{now}}</deliveredAt><opened>false</opened></SendPushNotificationResponse>"
+          },
+          "GetNotificationStatus": {
+            "soapAction": "http://example.com/notify/GetNotificationStatus",
+            "response": "<GetNotificationStatusResponse xmlns=\"http://example.com/notify\"><messageId>{{xpath://GetNotificationStatus/messageId}}</messageId><status>delivered</status><channel>email</channel><events><event><timestamp>2024-12-15T10:00:00Z</timestamp><status>queued</status></event><event><timestamp>2024-12-15T10:00:05Z</timestamp><status>sent</status></event><event><timestamp>2024-12-15T10:00:12Z</timestamp><status>delivered</status></event><event><timestamp>2024-12-15T10:05:30Z</timestamp><status>opened</status></event></events><recipient>user@example.com</recipient></GetNotificationStatusResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-27"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Currency Exchange Service",
+      "description": "Real-time currency conversion and exchange rate API",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/currency",
+        "operations": {
+          "GetExchangeRate": {
+            "soapAction": "http://example.com/currency/GetExchangeRate",
+            "response": "<GetExchangeRateResponse xmlns=\"http://example.com/currency\"><fromCurrency>{{xpath://GetExchangeRate/fromCurrency}}</fromCurrency><toCurrency>{{xpath://GetExchangeRate/toCurrency}}</toCurrency><rate>1.0847</rate><inverseRate>0.9219</inverseRate><timestamp>{{now}}</timestamp><source>European Central Bank</source><validUntil>2024-12-15T18:00:00Z</validUntil></GetExchangeRateResponse>"
+          },
+          "ConvertCurrency": {
+            "soapAction": "http://example.com/currency/ConvertCurrency",
+            "response": "<ConvertCurrencyResponse xmlns=\"http://example.com/currency\"><fromCurrency>{{xpath://ConvertCurrency/fromCurrency}}</fromCurrency><toCurrency>{{xpath://ConvertCurrency/toCurrency}}</toCurrency><originalAmount>{{xpath://ConvertCurrency/amount}}</originalAmount><convertedAmount>1084.70</convertedAmount><exchangeRate>1.0847</exchangeRate><fee><amount>2.50</amount><currency>USD</currency></fee><timestamp>{{now}}</timestamp></ConvertCurrencyResponse>"
+          },
+          "GetHistoricalRates": {
+            "soapAction": "http://example.com/currency/GetHistoricalRates",
+            "response": "<GetHistoricalRatesResponse xmlns=\"http://example.com/currency\"><baseCurrency>{{xpath://GetHistoricalRates/baseCurrency}}</baseCurrency><quoteCurrency>{{xpath://GetHistoricalRates/quoteCurrency}}</quoteCurrency><period><startDate>{{xpath://GetHistoricalRates/startDate}}</startDate><endDate>{{xpath://GetHistoricalRates/endDate}}</endDate></period><rates><rate date=\"2024-12-01\">1.0521</rate><rate date=\"2024-12-02\">1.0498</rate><rate date=\"2024-12-03\">1.0534</rate><rate date=\"2024-12-04\">1.0612</rate><rate date=\"2024-12-05\">1.0589</rate><rate date=\"2024-12-06\">1.0645</rate><rate date=\"2024-12-07\">1.0678</rate><rate date=\"2024-12-08\">1.0701</rate><rate date=\"2024-12-09\">1.0756</rate><rate date=\"2024-12-10\">1.0847</rate></rates><statistics><high>1.0847</high><low>1.0498</low><average>1.0638</average><volatility>0.0112</volatility></statistics></GetHistoricalRatesResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-28"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Reservation System - Hotels",
+      "description": "Hotel booking API with availability check, booking, and cancellation",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/hotels",
+        "operations": {
+          "CheckAvailability": {
+            "soapAction": "http://example.com/hotels/CheckAvailability",
+            "response": "<CheckAvailabilityResponse xmlns=\"http://example.com/hotels\"><searchId>HSR-{{uuid}}</searchId><destination>{{xpath://CheckAvailability/destination}}</destination><checkIn>{{xpath://CheckAvailability/checkIn}}</checkIn><checkOut>{{xpath://CheckAvailability/checkOut}}</checkOut><guests>{{xpath://CheckAvailability/guests}}</guests><hotels><hotel><hotelId>HTL-001</hotelId><name>Grand Plaza Hotel</name><starRating>5</starRating><address>123 Downtown Ave, New York, NY 10001</address><rooms><room><roomType>Deluxe King</roomType><rate>299.00</rate><currency>USD</currency><available>true</available><bedType>King</bedType><maxOccupancy>2</maxOccupancy><amenities>WiFi, Mini Bar, City View, Breakfast</amenities></room><room><roomType>Executive Suite</roomType><rate>499.00</rate><currency>USD</currency><available>true</available><bedType>King</bedType><maxOccupancy>3</maxOccupancy><amenities>WiFi, Mini Bar, City View, Breakfast, Lounge Access</amenities></room></rooms><rating>4.7</rating><reviewCount>2341</reviewCount></hotel><hotel><hotelId>HTL-002</hotelId><name>City Center Inn</name><starRating>3</starRating><address>456 Main St, New York, NY 10002</address><rooms><room><roomType>Standard Queen</roomType><rate>149.00</rate><currency>USD</currency><available>true</available><bedType>Queen</bedType><maxOccupancy>2</maxOccupancy><amenities>WiFi, Coffee Maker</amenities></room></rooms><rating>4.2</rating><reviewCount>892</reviewCount></hotel></hotels><totalResults>2</totalResults></CheckAvailabilityResponse>"
+          },
+          "BookRoom": {
+            "soapAction": "http://example.com/hotels/BookRoom",
+            "response": "<BookRoomResponse xmlns=\"http://example.com/hotels\"><confirmationNumber>HBK-{{uuid}}</confirmationNumber><hotelId>{{xpath://BookRoom/hotelId}}</hotelId><hotelName>Grand Plaza Hotel</hotelName><roomType>{{xpath://BookRoom/roomType}}</roomType><checkIn>{{xpath://BookRoom/checkIn}}</checkIn><checkOut>{{xpath://BookRoom/checkOut}}</checkOut><guest><firstName>{{xpath://BookRoom/guest/firstName}}</firstName><lastName>{{xpath://BookRoom/guest/lastName}}</lastName><email>{{xpath://BookRoom/guest/email}}</email></guest><pricing><nightlyRate>299.00</nightlyRate><nights>3</nights><subtotal>897.00</subtotal><taxes>134.55</taxes><fees>25.00</fees><total>1056.55</total><currency>USD</currency></pricing><status>confirmed</status><bookedAt>{{now}}</bookedAt><cancellationPolicy>Free cancellation until 48 hours before check-in</cancellationPolicy></BookRoomResponse>"
+          },
+          "CancelReservation": {
+            "soapAction": "http://example.com/hotels/CancelReservation",
+            "response": "<CancelReservationResponse xmlns=\"http://example.com/hotels\"><confirmationNumber>{{xpath://CancelReservation/confirmationNumber}}</confirmationNumber><status>cancelled</status><cancellationNumber>CAN-{{uuid}}</cancellationNumber><cancelledAt>{{now}}</cancelledAt><refund><eligible>true</eligible><amount>1056.55</amount><currency>USD</currency><method>original_payment</method><processingDays>5-7</processingDays></refund></CancelReservationResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-29"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Audit Logging Service",
+      "description": "Enterprise audit logging API for compliance and security tracking",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/audit",
+        "operations": {
+          "LogEvent": {
+            "soapAction": "http://example.com/audit/LogEvent",
+            "response": "<LogEventResponse xmlns=\"http://example.com/audit\"><eventId>EVT-{{uuid}}</eventId><timestamp>{{now}}</timestamp><status>recorded</status><acknowledged>true</acknowledged><partition>2024-12</partition><sequenceNumber>{{randomInt:1000000:9999999}}</sequenceNumber></LogEventResponse>"
+          },
+          "SearchAuditLogs": {
+            "soapAction": "http://example.com/audit/SearchAuditLogs",
+            "response": "<SearchAuditLogsResponse xmlns=\"http://example.com/audit\"><query><userId>{{xpath://SearchAuditLogs/userId}}</userId><startDate>{{xpath://SearchAuditLogs/startDate}}</startDate><endDate>{{xpath://SearchAuditLogs/endDate}}</endDate></query><events><event><eventId>EVT-001</eventId><timestamp>2024-12-15T10:30:00Z</timestamp><userId>user-001</userId><action>LOGIN</action><resource>web-portal</resource><result>success</result><ipAddress>192.168.1.100</ipAddress><userAgent>Mozilla/5.0</userAgent></event><event><eventId>EVT-002</eventId><timestamp>2024-12-15T10:35:00Z</timestamp><userId>user-001</userId><action>VIEW</action><resource>document/DOC-123</resource><result>success</result><ipAddress>192.168.1.100</ipAddress></event><event><eventId>EVT-003</eventId><timestamp>2024-12-15T10:40:00Z</timestamp><userId>user-001</userId><action>DOWNLOAD</action><resource>document/DOC-123</resource><result>success</result><ipAddress>192.168.1.100</ipAddress></event><event><eventId>EVT-004</eventId><timestamp>2024-12-15T11:00:00Z</timestamp><userId>user-001</userId><action>LOGOUT</action><resource>web-portal</resource><result>success</result><ipAddress>192.168.1.100</ipAddress></event></events><pagination><page>1</page><pageSize>100</pageSize><totalEvents>4</totalEvents></pagination></SearchAuditLogsResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-30"
+    },
+    {
+      "type": "soap",
+      "name": "SOAP Workflow Service - Approval Process",
+      "description": "Business workflow API for document approval processes",
+      "enabled": true,
+      "soap": {
+        "path": "/soap/workflow",
+        "operations": {
+          "SubmitForApproval": {
+            "soapAction": "http://example.com/workflow/SubmitForApproval",
+            "response": "<SubmitForApprovalResponse xmlns=\"http://example.com/workflow\"><workflowId>WF-{{uuid}}</workflowId><documentId>{{xpath://SubmitForApproval/documentId}}</documentId><submittedBy>{{xpath://SubmitForApproval/submittedBy}}</submittedBy><submittedAt>{{now}}</submittedAt><status>pending_approval</status><currentStep>1</currentStep><totalSteps>3</totalSteps><approvalChain><step order=\"1\"><approver>manager@example.com</approver><role>Direct Manager</role><status>pending</status><dueDate>2024-12-17</dueDate></step><step order=\"2\"><approver>director@example.com</approver><role>Department Director</role><status>waiting</status><dueDate>2024-12-19</dueDate></step><step order=\"3\"><approver>vp@example.com</approver><role>VP Finance</role><status>waiting</status><dueDate>2024-12-21</dueDate></step></approvalChain><estimatedCompletion>2024-12-21</estimatedCompletion></SubmitForApprovalResponse>"
+          },
+          "ApproveDocument": {
+            "soapAction": "http://example.com/workflow/ApproveDocument",
+            "response": "<ApproveDocumentResponse xmlns=\"http://example.com/workflow\"><workflowId>{{xpath://ApproveDocument/workflowId}}</workflowId><approvedBy>{{xpath://ApproveDocument/approverId}}</approvedBy><approvedAt>{{now}}</approvedAt><comments>{{xpath://ApproveDocument/comments}}</comments><status>approved</status><nextStep><approver>director@example.com</approver><role>Department Director</role><notificationSent>true</notificationSent></nextStep></ApproveDocumentResponse>"
+          },
+          "RejectDocument": {
+            "soapAction": "http://example.com/workflow/RejectDocument",
+            "response": "<RejectDocumentResponse xmlns=\"http://example.com/workflow\"><workflowId>{{xpath://RejectDocument/workflowId}}</workflowId><rejectedBy>{{xpath://RejectDocument/approverId}}</rejectedBy><rejectedAt>{{now}}</rejectedAt><reason>{{xpath://RejectDocument/reason}}</reason><status>rejected</status><workflowStatus>terminated</workflowStatus><notificationsSent><notification recipient=\"submitter@example.com\">Rejection notification</notification><notification recipient=\"manager@example.com\">Workflow terminated</notification></notificationsSent></RejectDocumentResponse>"
+          },
+          "GetWorkflowStatus": {
+            "soapAction": "http://example.com/workflow/GetWorkflowStatus",
+            "response": "<GetWorkflowStatusResponse xmlns=\"http://example.com/workflow\"><workflowId>{{xpath://GetWorkflowStatus/workflowId}}</workflowId><documentId>DOC-12345</documentId><documentTitle>Q4 Budget Proposal</documentTitle><submittedBy>user@example.com</submittedBy><submittedAt>2024-12-15T09:00:00Z</submittedAt><status>in_progress</status><currentStep>2</currentStep><totalSteps>3</totalSteps><history><action timestamp=\"2024-12-15T09:00:00Z\" actor=\"user@example.com\">Submitted for approval</action><action timestamp=\"2024-12-15T14:30:00Z\" actor=\"manager@example.com\">Approved - Step 1 complete</action><action timestamp=\"2024-12-16T10:00:00Z\" actor=\"system\">Notification sent to Step 2 approver</action></history><pendingAction><approver>director@example.com</approver><role>Department Director</role><dueDate>2024-12-19</dueDate><remindersSent>1</remindersSent></pendingAction></GetWorkflowStatusResponse>"
+          }
+        }
+      },
+      "id": "soap-demo-31"
     }
-  }
-]
+  ]
+}
