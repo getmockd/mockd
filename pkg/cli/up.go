@@ -338,10 +338,15 @@ func (uctx *upContext) startAll() error {
 		}
 	}
 
-	// Start engines
+	// Start engines and connect them to their admins
 	for _, engineCfg := range uctx.cfg.Engines {
 		if err := uctx.startEngine(engineCfg); err != nil {
 			return fmt.Errorf("starting engine '%s': %w", engineCfg.Name, err)
+		}
+
+		// Connect the engine to its admin
+		if err := uctx.connectEngineToAdmin(engineCfg); err != nil {
+			return fmt.Errorf("connecting engine '%s' to admin: %w", engineCfg.Name, err)
 		}
 	}
 
@@ -429,6 +434,31 @@ func (uctx *upContext) startEngine(engineCfg config.EngineConfig) error {
 	}
 
 	fmt.Println("✓")
+	return nil
+}
+
+func (uctx *upContext) connectEngineToAdmin(engineCfg config.EngineConfig) error {
+	// Find the admin this engine should connect to
+	adminAPI, ok := uctx.admins[engineCfg.Admin]
+	if !ok {
+		// Admin might be remote, skip connection
+		return nil
+	}
+
+	// Find the engine
+	srv, ok := uctx.engines[engineCfg.Name]
+	if !ok {
+		return fmt.Errorf("engine '%s' not found", engineCfg.Name)
+	}
+
+	// Connect admin to engine via the engine's management port
+	engineURL := fmt.Sprintf("http://localhost:%d", srv.ManagementPort())
+	engClient := engineclient.New(engineURL)
+
+	// Set the engine client on the admin
+	adminAPI.SetLocalEngine(engClient)
+
+	fmt.Printf("Connected engine '%s' to admin '%s'\n", engineCfg.Name, engineCfg.Admin)
 	return nil
 }
 

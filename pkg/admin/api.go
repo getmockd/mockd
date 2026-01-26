@@ -216,6 +216,12 @@ func (a *AdminAPI) LocalEngine() *engineclient.Client {
 	return a.localEngine
 }
 
+// SetLocalEngine sets the local engine client after the admin has started.
+// This allows connecting an engine that was started after the admin.
+func (a *AdminAPI) SetLocalEngine(client *engineclient.Client) {
+	a.localEngine = client
+}
+
 // MetricsRegistry returns the metrics registry for Prometheus metrics.
 func (a *AdminAPI) MetricsRegistry() *metrics.Registry {
 	return a.metricsRegistry
