@@ -115,12 +115,22 @@ func CompareValues(a, b interface{}) bool {
 
 // Paginate applies offset and limit to a slice of items.
 // Returns the paginated slice and the total count before pagination.
+// Handles edge cases: negative offset is treated as 0, zero/negative limit uses default (100).
 func Paginate(items []*ResourceItem, offset, limit int) ([]*ResourceItem, int) {
 	total := len(items)
 
+	// Handle negative offset - treat as 0
 	start := offset
+	if start < 0 {
+		start = 0
+	}
 	if start > total {
 		start = total
+	}
+
+	// Handle zero/negative limit - use default
+	if limit <= 0 {
+		limit = 100 // Default limit
 	}
 
 	end := start + limit

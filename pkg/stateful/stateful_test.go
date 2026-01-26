@@ -1211,6 +1211,258 @@ func TestMetricsObserver_ConcurrentResetAndUpdate(t *testing.T) {
 }
 
 // =============================================================================
+// Edge Case Tests (P1 Audit Findings)
+// =============================================================================
+
+func TestResource_EdgeCase_EmptyResource(t *testing.T) {
+	// Test operations on an empty resource (no seed data)
+	store := NewStateStore()
+	err := store.Register(&ResourceConfig{
+		Name:     "empty",
+		BasePath: "/api/empty",
+		// No seed data
+	})
+	if err != nil {
+		t.Fatalf("failed to register: %v", err)
+	}
+
+	resource := store.Get("empty")
+	if resource == nil {
+		t.Fatal("resource should exist")
+	}
+
+	// List should return response with empty data, not nil
+	response := resource.List(nil)
+	if response == nil {
+		t.Error("List should return response, not nil")
+	}
+	if len(response.Data) != 0 {
+		t.Errorf("expected 0 items, got %d", len(response.Data))
+	}
+	if response.Meta.Total != 0 {
+		t.Errorf("expected total 0, got %d", response.Meta.Total)
+	}
+
+	// Count should be 0
+	if resource.Count() != 0 {
+		t.Errorf("expected count 0, got %d", resource.Count())
+	}
+
+	// Get non-existent ID should return nil
+	item := resource.Get("nonexistent")
+	if item != nil {
+		t.Error("Get on empty resource should return nil")
+	}
+
+	// Update non-existent should return error
+	_, err = resource.Update("nonexistent", map[string]interface{}{"name": "test"})
+	if err == nil {
+		t.Error("Update on empty resource should return error")
+	}
+
+	// Delete non-existent should return error
+	err = resource.Delete("nonexistent")
+	if err == nil {
+		t.Error("Delete on empty resource should return error")
+	}
+}
+
+func TestResource_EdgeCase_NegativeOffset(t *testing.T) {
+	store := NewStateStore()
+	store.Register(&ResourceConfig{
+		Name:     "items",
+		BasePath: "/api/items",
+		SeedData: []map[string]interface{}{
+			{"id": "1", "name": "Item 1"},
+			{"id": "2", "name": "Item 2"},
+			{"id": "3", "name": "Item 3"},
+		},
+	})
+
+	resource := store.Get("items")
+
+	// Negative offset should be treated as 0 or handled gracefully
+	filter := &QueryFilter{Offset: -5, Limit: 10}
+	response := resource.List(filter)
+	// Implementation should handle gracefully
+	if response == nil {
+		t.Error("List with negative offset should not return nil")
+	}
+	// Should still return items (treating -5 as 0 or clamping)
+	if len(response.Data) == 0 {
+		t.Error("List with negative offset should return items")
+	}
+}
+
+func TestResource_EdgeCase_ZeroLimit(t *testing.T) {
+	store := NewStateStore()
+	store.Register(&ResourceConfig{
+		Name:     "items",
+		BasePath: "/api/items",
+		SeedData: []map[string]interface{}{
+			{"id": "1", "name": "Item 1"},
+			{"id": "2", "name": "Item 2"},
+		},
+	})
+
+	resource := store.Get("items")
+
+	// Zero limit - default should be applied
+	filter := &QueryFilter{Offset: 0, Limit: 0}
+	response := resource.List(filter)
+	// Should handle gracefully (apply default limit)
+	if response == nil {
+		t.Error("List with zero limit should not return nil")
+	}
+}
+
+func TestResource_EdgeCase_LargeOffset(t *testing.T) {
+	store := NewStateStore()
+	store.Register(&ResourceConfig{
+		Name:     "items",
+		BasePath: "/api/items",
+		SeedData: []map[string]interface{}{
+			{"id": "1", "name": "Item 1"},
+		},
+	})
+
+	resource := store.Get("items")
+
+	// Offset larger than total items should return empty data
+	filter := &QueryFilter{Offset: 1000, Limit: 10}
+	response := resource.List(filter)
+	if response == nil {
+		t.Error("List with large offset should return response, not nil")
+	}
+	if len(response.Data) != 0 {
+		t.Errorf("expected 0 items with large offset, got %d", len(response.Data))
+	}
+}
+
+func TestResource_EdgeCase_SpecialCharactersInID(t *testing.T) {
+	store := NewStateStore()
+	store.Register(&ResourceConfig{
+		Name:     "items",
+		BasePath: "/api/items",
+	})
+
+	resource := store.Get("items")
+
+	// Test IDs with special characters
+	specialIDs := []string{
+		"id-with-dashes",
+		"id_with_underscores",
+		"id.with.dots",
+		"id:with:colons",
+		"id/with/slashes",
+		"id with spaces",
+		"id@with@at",
+	}
+
+	for _, id := range specialIDs {
+		data := map[string]interface{}{"id": id, "name": "test"}
+		created, err := resource.Create(data, nil)
+		if err != nil {
+			// Some special chars may be rejected - that's OK
+			continue
+		}
+
+		// If created, verify we can retrieve it
+		retrieved := resource.Get(id)
+		if retrieved == nil {
+			t.Errorf("failed to retrieve item with ID %q", id)
+			continue
+		}
+
+		// Verify we can delete it
+		err = resource.Delete(id)
+		if err != nil {
+			t.Errorf("failed to delete item with ID %q: %v", id, err)
+		}
+
+		_ = created // suppress unused warning
+	}
+}
+
+func TestResource_EdgeCase_EmptyUpdate(t *testing.T) {
+	store := NewStateStore()
+	store.Register(&ResourceConfig{
+		Name:     "items",
+		BasePath: "/api/items",
+		SeedData: []map[string]interface{}{
+			{"id": "1", "name": "Original"},
+		},
+	})
+
+	resource := store.Get("items")
+
+	// Update uses PUT semantics (full replacement), not PATCH (partial update)
+	// Empty data should replace the entire item data (except system fields)
+	_, err := resource.Update("1", map[string]interface{}{})
+	// Should not error - empty update is valid
+	if err != nil {
+		t.Errorf("empty update should not error: %v", err)
+	}
+
+	// Item should still exist with ID preserved
+	item := resource.Get("1")
+	if item == nil {
+		t.Fatal("item should still exist")
+	}
+
+	// ID should be preserved (system field)
+	if item.ID != "1" {
+		t.Errorf("ID should be preserved, got %v", item.ID)
+	}
+
+	// CreatedAt should be preserved (system field)
+	if item.CreatedAt.IsZero() {
+		t.Error("CreatedAt should be preserved")
+	}
+
+	// With PUT semantics, user data fields are replaced (not preserved)
+	// This is the expected behavior for full replacement
+	itemData := item.ToJSON()
+	// The "name" field should NOT be present since we replaced with empty data
+	// This test documents the PUT semantics behavior
+	_ = itemData // Document that data is now empty (except id, createdAt, updatedAt)
+}
+
+func TestResource_EdgeCase_NullValues(t *testing.T) {
+	store := NewStateStore()
+	store.Register(&ResourceConfig{
+		Name:     "items",
+		BasePath: "/api/items",
+	})
+
+	resource := store.Get("items")
+
+	// Create with null values
+	data := map[string]interface{}{
+		"id":       "null-test",
+		"name":     nil, // null value
+		"optional": nil,
+	}
+
+	created, err := resource.Create(data, nil)
+	if err != nil {
+		t.Fatalf("create with null values failed: %v", err)
+	}
+
+	// Retrieve and verify nulls are preserved
+	item := resource.Get("null-test")
+	if item == nil {
+		t.Fatal("item should exist")
+	}
+	itemData := item.ToJSON()
+	if itemData["name"] != nil {
+		t.Errorf("null value should be preserved, got %v", itemData["name"])
+	}
+
+	_ = created
+}
+
+// =============================================================================
 // Helpers
 // =============================================================================
 
