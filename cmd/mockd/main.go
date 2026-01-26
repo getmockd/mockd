@@ -131,6 +131,8 @@ func run(args []string) error {
 		return cli.RunDoctor(cmdArgs)
 	case "ports":
 		return cli.RunPorts(cmdArgs)
+	case "validate":
+		return cli.RunValidate(cmdArgs)
 	case "context":
 		return cli.RunContext(cmdArgs)
 	case "workspace":
@@ -157,6 +159,7 @@ Commands:
   stop        Stop a running mockd server
   status      Show status of running mockd server
   ports       Show all ports in use by mockd
+  validate    Validate config file without starting services
 
 Configuration:
   context     Manage contexts (admin server + workspace pairs)
@@ -281,7 +284,7 @@ func isCommand(s string) bool {
 		"proxy", "recordings", "convert", "generate", "enhance",
 		"stream-recordings", "graphql", "chaos", "grpc", "mqtt", "soap",
 		"templates", "tunnel", "init", "help", "status", "stop", "doctor",
-		"websocket", "context", "workspace", "ports",
+		"websocket", "context", "workspace", "ports", "validate",
 	}
 	return slices.Contains(commands, s)
 }
