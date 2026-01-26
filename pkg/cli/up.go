@@ -258,6 +258,12 @@ func (uctx *upContext) run() error {
 		return err
 	}
 
+	// Load and apply mocks from config (including file references and globs)
+	if err := uctx.loadAndApplyMocks(); err != nil {
+		uctx.stopAll()
+		return fmt.Errorf("loading mocks: %w", err)
+	}
+
 	// Write PID file
 	pidPath := defaultUpPIDPath()
 	if err := uctx.writePIDFile(pidPath); err != nil {
@@ -527,4 +533,38 @@ func (uctx *upContext) waitForHealth(client *engineclient.Client, timeout time.D
 	}
 
 	return fmt.Errorf("timeout waiting for engine health")
+}
+
+// loadAndApplyMocks loads mocks from the config (including file references and globs)
+// and applies them to the appropriate engines via the admin API.
+func (uctx *upContext) loadAndApplyMocks() error {
+	if len(uctx.cfg.Mocks) == 0 {
+		return nil
+	}
+
+	// Get base directory for resolving relative paths in mock file references
+	baseDir := config.GetMockFileBaseDir(uctx.configPath)
+
+	// Load all mocks (expanding file refs and globs)
+	mocks, err := config.LoadAllMocks(uctx.cfg.Mocks, baseDir)
+	if err != nil {
+		return err
+	}
+
+	if len(mocks) == 0 {
+		return nil
+	}
+
+	fmt.Printf("Loading %d mocks...\n", len(mocks))
+
+	// TODO: Apply mocks to engines via admin API
+	// For now, just log the loaded mocks
+	for _, m := range mocks {
+		if m.IsInline() {
+			uctx.log.Debug("loaded mock", "id", m.ID, "type", m.Type, "workspace", m.Workspace)
+		}
+	}
+
+	fmt.Printf("Loaded %d mocks\n", len(mocks))
+	return nil
 }
