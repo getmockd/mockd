@@ -85,6 +85,9 @@ type Server struct {
 
 	// Tracer for distributed tracing (optional)
 	tracer *tracing.Tracer
+
+	// Rate limiter for the mock engine (optional)
+	rateLimiter *EngineRateLimiter
 }
 
 // ServerOption is a functional option for configuring a Server.
@@ -264,6 +267,20 @@ func (s *Server) Start() error {
 	// Wrap handler with middleware chain
 	s.httpHandler = s.middlewareChain.Wrap(s.handler)
 
+	// Apply CORS middleware (uses secure defaults if not configured)
+	corsConfig := s.cfg.CORS
+	if corsConfig == nil {
+		corsConfig = config.DefaultCORSConfig()
+	}
+	s.httpHandler = NewCORSMiddleware(s.httpHandler, corsConfig)
+
+	// Apply rate limiting middleware if enabled
+	if s.cfg.RateLimit != nil && s.cfg.RateLimit.Enabled {
+		s.rateLimiter = NewEngineRateLimiter(s.cfg.RateLimit)
+		s.httpHandler = NewRateLimitMiddleware(s.httpHandler, s.rateLimiter)
+		s.log.Info("rate limiting enabled", "rps", s.cfg.RateLimit.RequestsPerSecond, "burst", s.cfg.RateLimit.BurstSize)
+	}
+
 	// Build protocol config from server config
 	protocolCfg := &ProtocolConfig{
 		GraphQL: s.cfg.GraphQL,
@@ -345,6 +362,12 @@ func (s *Server) Stop() error {
 	defer cancel()
 
 	var errs []error
+
+	// Stop rate limiter cleanup goroutine
+	if s.rateLimiter != nil {
+		s.rateLimiter.Stop()
+		s.rateLimiter = nil
+	}
 
 	// Stop the control API
 	if s.controlAPI != nil {

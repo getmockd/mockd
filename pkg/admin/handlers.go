@@ -82,7 +82,7 @@ func (a *AdminAPI) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 
 	engineStatus, err := a.localEngine.Status(ctx)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", "Failed to get engine status: "+err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "get engine status"))
 		return
 	}
 
@@ -130,7 +130,7 @@ func (a *AdminAPI) handleListMocks(w http.ResponseWriter, r *http.Request) {
 
 	mocks, err := a.localEngine.ListMocks(ctx)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", "Failed to list mocks: "+err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "list mocks"))
 		return
 	}
 
@@ -189,7 +189,7 @@ func (a *AdminAPI) handleCreateMock(w http.ResponseWriter, r *http.Request) {
 
 	var mock config.MockConfiguration
 	if err := json.NewDecoder(r.Body).Decode(&mock); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
@@ -209,10 +209,10 @@ func (a *AdminAPI) handleCreateMock(w http.ResponseWriter, r *http.Request) {
 	created, err := a.localEngine.CreateMock(ctx, &mock)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrDuplicate) {
-			writeError(w, http.StatusConflict, "duplicate_id", "Mock with this ID already exists")
+			writeError(w, http.StatusConflict, "duplicate_id", ErrMsgConflict)
 			return
 		}
-		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		writeError(w, http.StatusBadRequest, "validation_error", sanitizeValidationError(err, a.log))
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
@@ -235,10 +235,10 @@ func (a *AdminAPI) handleGetMock(w http.ResponseWriter, r *http.Request) {
 	mock, err := a.localEngine.GetMock(ctx, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", "Failed to get mock: "+err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "get mock"))
 		return
 	}
 	writeJSON(w, http.StatusOK, mock)
@@ -260,17 +260,17 @@ func (a *AdminAPI) handleUpdateMock(w http.ResponseWriter, r *http.Request) {
 
 	var mock config.MockConfiguration
 	if err := json.NewDecoder(r.Body).Decode(&mock); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
 	updated, err := a.localEngine.UpdateMock(ctx, id, &mock)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
 			return
 		}
-		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		writeError(w, http.StatusBadRequest, "validation_error", sanitizeValidationError(err, a.log))
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
@@ -292,10 +292,10 @@ func (a *AdminAPI) handleDeleteMock(w http.ResponseWriter, r *http.Request) {
 
 	if err := a.localEngine.DeleteMock(ctx, id); err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", "Failed to delete mock: "+err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "delete mock"))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -322,17 +322,17 @@ func (a *AdminAPI) handleToggleMock(w http.ResponseWriter, r *http.Request) {
 
 	var req ToggleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
 	mock, err := a.localEngine.ToggleMock(ctx, id, req.Enabled)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		writeError(w, http.StatusInternalServerError, "internal_error", sanitizeError(err, a.log, "toggle mock", "id", id))
 		return
 	}
 	writeJSON(w, http.StatusOK, mock)
@@ -366,7 +366,7 @@ func (a *AdminAPI) handleExportConfig(w http.ResponseWriter, r *http.Request) {
 
 	collection, err := a.localEngine.ExportConfig(ctx, name)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", "Failed to export config: "+err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "export config"))
 		return
 	}
 	writeJSON(w, http.StatusOK, collection)
@@ -377,7 +377,7 @@ func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req ConfigImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
@@ -392,7 +392,7 @@ func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := a.localEngine.ImportConfig(ctx, req.Config, req.Replace); err != nil {
-		writeError(w, http.StatusBadRequest, "import_error", err.Error())
+		writeError(w, http.StatusBadRequest, "import_error", sanitizeError(err, a.log, "import config"))
 		return
 	}
 	// Get the updated state
@@ -470,7 +470,7 @@ func (a *AdminAPI) handleListRequests(w http.ResponseWriter, r *http.Request) {
 
 	result, err := a.localEngine.ListRequests(ctx, clientFilter)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", "Failed to list requests: "+err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "list requests"))
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -493,10 +493,10 @@ func (a *AdminAPI) handleGetRequest(w http.ResponseWriter, r *http.Request) {
 	entry, err := a.localEngine.GetRequest(ctx, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Request log not found")
+			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", "Failed to get request: "+err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "get request"))
 		return
 	}
 	writeJSON(w, http.StatusOK, entry)
@@ -513,7 +513,7 @@ func (a *AdminAPI) handleClearRequests(w http.ResponseWriter, r *http.Request) {
 
 	count, err := a.localEngine.ClearRequests(ctx)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", "Failed to clear requests: "+err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "clear requests"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

@@ -93,20 +93,10 @@ func (h *Handler) SetStore(store storage.MockStore) {
 }
 
 // ServeHTTP implements the http.Handler interface.
+// Note: CORS is handled by the CORSMiddleware wrapper, not directly in this handler.
+// This ensures CORS configuration is respected rather than using hardcoded wildcards.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
-
-	// Add CORS headers for test panels and browser-based clients
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin")
-	w.Header().Set("Access-Control-Max-Age", "86400")
-
-	// Handle CORS preflight requests
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
 
 	// Check for health/ready endpoints with /__mockd/ prefix first (always takes priority)
 	switch r.URL.Path {

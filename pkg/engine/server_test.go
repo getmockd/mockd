@@ -186,20 +186,63 @@ func TestServerConfig(t *testing.T) {
 func TestHandlerServeHTTP(t *testing.T) {
 	t.Parallel()
 
-	t.Run("handles CORS preflight request", func(t *testing.T) {
+	t.Run("handles CORS preflight request with middleware", func(t *testing.T) {
 		t.Parallel()
 		store := storage.NewInMemoryMockStore()
 		handler := NewHandler(store)
 
+		// CORS is now handled by middleware, not the handler directly
+		// Test with wildcard CORS config
+		corsConfig := WildcardCORSConfig()
+		corsHandler := NewCORSMiddleware(handler, corsConfig)
+
 		req := httptest.NewRequest(http.MethodOptions, "/api/test", nil)
+		req.Header.Set("Origin", "http://example.com")
 		rec := httptest.NewRecorder()
 
-		handler.ServeHTTP(rec, req)
+		corsHandler.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, "*", rec.Header().Get("Access-Control-Allow-Origin"))
 		assert.Contains(t, rec.Header().Get("Access-Control-Allow-Methods"), "GET")
 		assert.Contains(t, rec.Header().Get("Access-Control-Allow-Methods"), "POST")
+	})
+
+	t.Run("CORS middleware blocks unauthorized origins with default config", func(t *testing.T) {
+		t.Parallel()
+		store := storage.NewInMemoryMockStore()
+		handler := NewHandler(store)
+
+		// Default config only allows localhost
+		corsHandler := NewCORSMiddleware(handler, nil)
+
+		req := httptest.NewRequest(http.MethodOptions, "/api/test", nil)
+		req.Header.Set("Origin", "http://evil.com")
+		rec := httptest.NewRecorder()
+
+		corsHandler.ServeHTTP(rec, req)
+
+		// Should return 403 Forbidden for unauthorized origin preflight
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"))
+	})
+
+	t.Run("CORS middleware allows localhost with default config", func(t *testing.T) {
+		t.Parallel()
+		store := storage.NewInMemoryMockStore()
+		handler := NewHandler(store)
+
+		// Default config allows localhost
+		corsHandler := NewCORSMiddleware(handler, nil)
+
+		req := httptest.NewRequest(http.MethodOptions, "/api/test", nil)
+		req.Header.Set("Origin", "http://localhost:3000")
+		rec := httptest.NewRecorder()
+
+		corsHandler.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "http://localhost:3000", rec.Header().Get("Access-Control-Allow-Origin"))
 	})
 
 	t.Run("handles health endpoint", func(t *testing.T) {
