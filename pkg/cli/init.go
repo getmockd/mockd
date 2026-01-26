@@ -5,71 +5,83 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/getmockd/mockd/pkg/cli/templates"
 	"github.com/getmockd/mockd/pkg/config"
-	"github.com/getmockd/mockd/pkg/mock"
 	"gopkg.in/yaml.v3"
 )
 
+// initConfig holds the configuration gathered during init.
+type initConfig struct {
+	AdminPort   int
+	HTTPPort    int
+	EnableHTTPS bool
+	HTTPSPort   int
+	AuthType    string // "none" or "api-key"
+}
+
+// defaultInitConfig returns default values for init configuration.
+func defaultInitConfig() *initConfig {
+	return &initConfig{
+		AdminPort:   4290,
+		HTTPPort:    4280,
+		EnableHTTPS: false,
+		HTTPSPort:   4443,
+		AuthType:    "none",
+	}
+}
+
 // RunInit handles the init command for creating a starter config file.
 func RunInit(args []string) error {
+	return runInitWithIO(args, os.Stdin, os.Stdout, os.Stderr)
+}
+
+// runInitWithIO is the testable version of RunInit that accepts custom I/O.
+func runInitWithIO(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 
 	force := fs.Bool("force", false, "Overwrite existing config file")
 	output := fs.String("output", "mockd.yaml", "Output filename")
 	fs.StringVar(output, "o", "mockd.yaml", "Output filename (shorthand)")
 	format := fs.String("format", "", "Output format: yaml or json (default: inferred from filename)")
-	interactive := fs.Bool("interactive", false, "Interactive mode - prompts for configuration")
-	fs.BoolVar(interactive, "i", false, "Interactive mode (shorthand)")
-	template := fs.String("template", "default", "Template to use (use 'list' to see available templates)")
-	fs.StringVar(template, "t", "default", "Template to use (shorthand)")
+	defaults := fs.Bool("defaults", false, "Generate minimal config without prompts")
+	template := fs.String("template", "", "Use predefined template (minimal, full, api)")
+	fs.StringVar(template, "t", "", "Use predefined template (shorthand)")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd init [flags]
+		fmt.Fprint(stderr, `Usage: mockd init [flags]
 
-Create a starter mockd configuration file with example mocks.
+Create a starter mockd.yaml configuration file.
 
 Flags:
       --force           Overwrite existing config file
   -o, --output          Output filename (default: mockd.yaml)
       --format          Output format: yaml or json (default: inferred from filename)
-  -i, --interactive     Interactive mode - prompts for configuration
-  -t, --template        Template to use (default: default)
+      --defaults        Generate minimal config without prompts
+  -t, --template        Use predefined template (minimal, full, api)
 
 Templates:
-  default          Basic HTTP mocks (hello, echo, health)
-  crud             Full REST CRUD API for resources
-  websocket-chat   Chat room WebSocket endpoint with echo
-  graphql-api      GraphQL API with User CRUD resolvers
-  grpc-service     gRPC Greeter service with reflection
-  mqtt-iot         MQTT broker with IoT sensor topics
+  minimal    Just admin + engine + one health mock
+  full       Admin + engine + workspace + sample mocks
+  api        Setup for REST API mocking with CRUD examples
 
 Examples:
-  # Create default mockd.yaml
+  # Interactive wizard (default)
   mockd init
 
-  # List available templates
-  mockd init --template list
+  # Generate minimal config without prompts
+  mockd init --defaults
 
-  # Use CRUD API template
-  mockd init --template crud
+  # Use a specific template
+  mockd init --template full
 
-  # Use WebSocket template with custom output
-  mockd init -t websocket-chat -o websocket.yaml
-
-  # Interactive setup
-  mockd init -i
-
-  # Create with custom filename
+  # Custom output file
   mockd init -o my-mocks.yaml
-
-  # Create JSON config
-  mockd init --format json -o mocks.json
 
   # Overwrite existing config
   mockd init --force
@@ -77,13 +89,10 @@ Examples:
 	}
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
 		return err
-	}
-
-	// Handle template list command
-	if *template == "list" {
-		fmt.Print(templates.FormatList())
-		return nil
 	}
 
 	// Determine output format
@@ -110,51 +119,44 @@ Examples:
 		}
 	}
 
-	// Build the config - either interactively, from template, or with defaults
-	var data []byte
+	// Build the config based on flags
+	var cfg *config.ProjectConfig
 	var err error
 
-	if *interactive {
-		collection, err := runInteractiveInit()
+	if *template != "" {
+		// Use predefined template
+		cfg, err = getProjectConfigTemplate(*template)
 		if err != nil {
 			return err
 		}
-		// Generate output for interactive mode
-		if outputFormat == "json" {
-			data, err = json.MarshalIndent(collection, "", "  ")
-			if err != nil {
-				return fmt.Errorf("failed to generate JSON: %w", err)
-			}
-			data = append(data, '\n')
-		} else {
-			data, err = generateYAMLWithComments(collection)
-			if err != nil {
-				return fmt.Errorf("failed to generate YAML: %w", err)
-			}
-		}
+	} else if *defaults {
+		// Generate minimal config without prompts
+		cfg = generateMinimalProjectConfig(defaultInitConfig())
 	} else {
-		// Use template
-		if !templates.Exists(*template) {
-			return fmt.Errorf("unknown template: %s\n\nRun 'mockd init --template list' to see available templates", *template)
-		}
+		// Interactive wizard
+		fmt.Fprintln(stdout, "Creating new mockd configuration...")
+		fmt.Fprintln(stdout)
 
-		data, err = templates.Get(*template)
+		initCfg, err := runInteractiveWizard(stdin, stdout)
 		if err != nil {
-			return fmt.Errorf("failed to load template: %w", err)
+			return err
 		}
 
-		// Convert to JSON if requested
-		if outputFormat == "json" {
-			// Parse YAML template and convert to JSON
-			var collection config.MockCollection
-			if err := yaml.Unmarshal(data, &collection); err != nil {
-				return fmt.Errorf("failed to parse template: %w", err)
-			}
-			data, err = json.MarshalIndent(collection, "", "  ")
-			if err != nil {
-				return fmt.Errorf("failed to generate JSON: %w", err)
-			}
-			data = append(data, '\n')
+		cfg = generateMinimalProjectConfig(initCfg)
+	}
+
+	// Generate output
+	var data []byte
+	if outputFormat == "json" {
+		data, err = json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to generate JSON: %w", err)
+		}
+		data = append(data, '\n')
+	} else {
+		data, err = generateProjectConfigYAML(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to generate YAML: %w", err)
 		}
 	}
 
@@ -164,40 +166,419 @@ Examples:
 	}
 
 	// Print success message
-	tmpl, _ := templates.GetTemplate(*template)
-	fmt.Printf("Created %s", *output)
-	if tmpl != nil && *template != "default" {
-		fmt.Printf(" (template: %s)", tmpl.Name)
-	}
-	fmt.Println()
-	fmt.Println()
-	fmt.Println("Next steps:")
-	fmt.Printf("  mockd serve --config %s\n", *output)
-
-	// Template-specific hints
-	switch *template {
-	case "crud":
-		fmt.Println("  curl http://localhost:4280/api/resources")
-	case "websocket-chat":
-		fmt.Println("  wscat -c ws://localhost:4280/ws/chat")
-	case "graphql-api":
-		fmt.Println("  curl -X POST http://localhost:4280/graphql -H 'Content-Type: application/json' -d '{\"query\": \"{ users { id name } }\"}'")
-	case "grpc-service":
-		fmt.Println("  grpcurl -plaintext localhost:50051 list")
-	case "mqtt-iot":
-		//nolint:misspell // mosquitto is the correct name of the MQTT broker software
-		fmt.Println("  mosquitto_sub -h localhost -p 1883 -t 'sensors/#'")
-	default:
-		fmt.Println("  curl http://localhost:4280/hello")
-	}
+	fmt.Fprintf(stdout, "\nWriting %s...\n", *output)
+	fmt.Fprintln(stdout, "Done! Run 'mockd up' to start.")
 
 	return nil
 }
 
-// generateYAMLWithComments generates YAML output with header comments.
-func generateYAMLWithComments(collection *config.MockCollection) ([]byte, error) {
+// runInteractiveWizard prompts the user for configuration options.
+func runInteractiveWizard(stdin io.Reader, stdout io.Writer) (*initConfig, error) {
+	reader := bufio.NewReader(stdin)
+	cfg := defaultInitConfig()
+
+	// Admin port
+	fmt.Fprintf(stdout, "Admin port [%d]: ", cfg.AdminPort)
+	if val, err := readIntWithDefault(reader, cfg.AdminPort); err == nil {
+		cfg.AdminPort = val
+	}
+
+	// Engine HTTP port
+	fmt.Fprintf(stdout, "Engine HTTP port [%d]: ", cfg.HTTPPort)
+	if val, err := readIntWithDefault(reader, cfg.HTTPPort); err == nil {
+		cfg.HTTPPort = val
+	}
+
+	// Enable HTTPS?
+	fmt.Fprint(stdout, "Enable HTTPS? (y/N): ")
+	if val, _ := readBoolWithDefault(reader, false); val {
+		cfg.EnableHTTPS = true
+		fmt.Fprintf(stdout, "Engine HTTPS port [%d]: ", cfg.HTTPSPort)
+		if val, err := readIntWithDefault(reader, cfg.HTTPSPort); err == nil {
+			cfg.HTTPSPort = val
+		}
+	}
+
+	// Auth type
+	fmt.Fprintf(stdout, "Auth type (none/api-key) [%s]: ", cfg.AuthType)
+	if val, _ := readStringWithDefault(reader, cfg.AuthType); val == "api-key" || val == "none" {
+		cfg.AuthType = val
+	}
+
+	fmt.Fprintln(stdout)
+
+	return cfg, nil
+}
+
+// readIntWithDefault reads an integer from the reader, returning the default if empty.
+func readIntWithDefault(reader *bufio.Reader, defaultVal int) (int, error) {
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return defaultVal, nil
+	}
+	return strconv.Atoi(input)
+}
+
+// readBoolWithDefault reads a boolean (y/n) from the reader, returning the default if empty.
+func readBoolWithDefault(reader *bufio.Reader, defaultVal bool) (bool, error) {
+	input, _ := reader.ReadString('\n')
+	input = strings.ToLower(strings.TrimSpace(input))
+	if input == "" {
+		return defaultVal, nil
+	}
+	return input == "y" || input == "yes", nil
+}
+
+// readStringWithDefault reads a string from the reader, returning the default if empty.
+func readStringWithDefault(reader *bufio.Reader, defaultVal string) (string, error) {
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return defaultVal, nil
+	}
+	return input, nil
+}
+
+// generateMinimalProjectConfig creates a minimal ProjectConfig from init settings.
+func generateMinimalProjectConfig(cfg *initConfig) *config.ProjectConfig {
+	projectCfg := &config.ProjectConfig{
+		Version: "1",
+		Admins: []config.AdminConfig{
+			{
+				Name: "local",
+				Port: cfg.AdminPort,
+				Auth: &config.AdminAuthConfig{
+					Type: cfg.AuthType,
+				},
+			},
+		},
+		Engines: []config.EngineConfig{
+			{
+				Name:     "default",
+				HTTPPort: cfg.HTTPPort,
+				Admin:    "local",
+			},
+		},
+		Workspaces: []config.WorkspaceConfig{
+			{
+				Name:    "default",
+				Engines: []string{"default"},
+			},
+		},
+		Mocks: []config.MockEntry{
+			{
+				ID:        "health",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Path: "/health",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 200,
+						Body:       `{"status": "ok"}`,
+					},
+				},
+			},
+		},
+	}
+
+	// Add HTTPS if enabled
+	if cfg.EnableHTTPS {
+		projectCfg.Engines[0].HTTPSPort = cfg.HTTPSPort
+		projectCfg.Engines[0].TLS = &config.TLSConfig{
+			Enabled:          true,
+			AutoGenerateCert: true,
+		}
+	}
+
+	return projectCfg
+}
+
+// getProjectConfigTemplate returns a ProjectConfig for the given template name.
+func getProjectConfigTemplate(name string) (*config.ProjectConfig, error) {
+	switch strings.ToLower(name) {
+	case "minimal":
+		return generateMinimalTemplate(), nil
+	case "full":
+		return generateFullTemplate(), nil
+	case "api":
+		return generateAPITemplate(), nil
+	default:
+		return nil, fmt.Errorf("unknown template: %s\n\nAvailable templates: minimal, full, api", name)
+	}
+}
+
+// generateMinimalTemplate creates a minimal ProjectConfig template.
+func generateMinimalTemplate() *config.ProjectConfig {
+	return &config.ProjectConfig{
+		Version: "1",
+		Admins: []config.AdminConfig{
+			{
+				Name: "local",
+				Port: 4290,
+				Auth: &config.AdminAuthConfig{
+					Type: "none",
+				},
+			},
+		},
+		Engines: []config.EngineConfig{
+			{
+				Name:     "default",
+				HTTPPort: 4280,
+				Admin:    "local",
+			},
+		},
+		Workspaces: []config.WorkspaceConfig{
+			{
+				Name:    "default",
+				Engines: []string{"default"},
+			},
+		},
+		Mocks: []config.MockEntry{
+			{
+				ID:        "health",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Path: "/health",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 200,
+						Body:       `{"status": "ok"}`,
+					},
+				},
+			},
+		},
+	}
+}
+
+// generateFullTemplate creates a full ProjectConfig template with sample mocks.
+func generateFullTemplate() *config.ProjectConfig {
+	return &config.ProjectConfig{
+		Version: "1",
+		Admins: []config.AdminConfig{
+			{
+				Name: "local",
+				Port: 4290,
+				Auth: &config.AdminAuthConfig{
+					Type: "none",
+				},
+			},
+		},
+		Engines: []config.EngineConfig{
+			{
+				Name:     "default",
+				HTTPPort: 4280,
+				Admin:    "local",
+			},
+		},
+		Workspaces: []config.WorkspaceConfig{
+			{
+				Name:        "default",
+				Description: "Default workspace for development",
+				Engines:     []string{"default"},
+			},
+		},
+		Mocks: []config.MockEntry{
+			{
+				ID:        "health",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Path: "/health",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 200,
+						Headers: map[string]string{
+							"Content-Type": "application/json",
+						},
+						Body: `{"status": "ok"}`,
+					},
+				},
+			},
+			{
+				ID:        "hello",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Method: "GET",
+						Path:   "/hello",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 200,
+						Headers: map[string]string{
+							"Content-Type": "application/json",
+						},
+						Body: `{"message": "Hello from mockd!"}`,
+					},
+				},
+			},
+			{
+				ID:        "echo",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Method: "POST",
+						Path:   "/echo",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 200,
+						Headers: map[string]string{
+							"Content-Type": "application/json",
+						},
+						Body: `{"received": {{request.body}}}`,
+					},
+				},
+			},
+		},
+	}
+}
+
+// generateAPITemplate creates a ProjectConfig template for REST API mocking with CRUD examples.
+func generateAPITemplate() *config.ProjectConfig {
+	return &config.ProjectConfig{
+		Version: "1",
+		Admins: []config.AdminConfig{
+			{
+				Name: "local",
+				Port: 4290,
+				Auth: &config.AdminAuthConfig{
+					Type: "none",
+				},
+			},
+		},
+		Engines: []config.EngineConfig{
+			{
+				Name:     "default",
+				HTTPPort: 4280,
+				Admin:    "local",
+			},
+		},
+		Workspaces: []config.WorkspaceConfig{
+			{
+				Name:        "default",
+				Description: "REST API mocking workspace",
+				Engines:     []string{"default"},
+			},
+		},
+		Mocks: []config.MockEntry{
+			{
+				ID:        "health",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Path: "/health",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 200,
+						Headers: map[string]string{
+							"Content-Type": "application/json",
+						},
+						Body: `{"status": "ok"}`,
+					},
+				},
+			},
+			{
+				ID:        "users-list",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Method: "GET",
+						Path:   "/api/users",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 200,
+						Headers: map[string]string{
+							"Content-Type": "application/json",
+						},
+						Body: `{"users": [{"id": 1, "name": "Alice", "email": "alice@example.com"}, {"id": 2, "name": "Bob", "email": "bob@example.com"}]}`,
+					},
+				},
+			},
+			{
+				ID:        "users-get",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Method: "GET",
+						Path:   "/api/users/{id}",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 200,
+						Headers: map[string]string{
+							"Content-Type": "application/json",
+						},
+						Body: `{"id": "{{request.pathParam.id}}", "name": "Alice", "email": "alice@example.com"}`,
+					},
+				},
+			},
+			{
+				ID:        "users-create",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Method: "POST",
+						Path:   "/api/users",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 201,
+						Headers: map[string]string{
+							"Content-Type": "application/json",
+						},
+						Body: `{"id": 3, "name": "{{request.body.name}}", "email": "{{request.body.email}}"}`,
+					},
+				},
+			},
+			{
+				ID:        "users-update",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Method: "PUT",
+						Path:   "/api/users/{id}",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 200,
+						Headers: map[string]string{
+							"Content-Type": "application/json",
+						},
+						Body: `{"id": "{{request.pathParam.id}}", "name": "{{request.body.name}}", "email": "{{request.body.email}}"}`,
+					},
+				},
+			},
+			{
+				ID:        "users-delete",
+				Workspace: "default",
+				Type:      "http",
+				HTTP: &config.HTTPMockConfig{
+					Matcher: config.HTTPMatcher{
+						Method: "DELETE",
+						Path:   "/api/users/{id}",
+					},
+					Response: config.HTTPResponse{
+						StatusCode: 204,
+					},
+				},
+			},
+		},
+	}
+}
+
+// generateProjectConfigYAML generates YAML output with header comments.
+func generateProjectConfigYAML(cfg *config.ProjectConfig) ([]byte, error) {
 	// Generate the YAML content
-	yamlData, err := yaml.Marshal(collection)
+	yamlData, err := yaml.Marshal(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -207,472 +588,9 @@ func generateYAMLWithComments(collection *config.MockCollection) ([]byte, error)
 # Generated by: mockd init
 # Documentation: https://mockd.io/docs
 #
-# Start server:  mockd serve --config mockd.yaml
-# Test endpoint: curl http://localhost:4280/hello
+# Start services: mockd up
+# Test endpoint:  curl http://localhost:4280/health
 
 `
 	return append([]byte(header), yamlData...), nil
-}
-
-// runInteractiveInit prompts the user for configuration options.
-func runInteractiveInit() (*config.MockCollection, error) {
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Println("mockd Interactive Setup")
-	fmt.Println("========================")
-	fmt.Println()
-
-	// Protocol selection
-	fmt.Println("Select protocol type:")
-	fmt.Println("  1. HTTP (REST API)")
-	fmt.Println("  2. WebSocket")
-	fmt.Println("  3. GraphQL")
-	fmt.Println("  4. gRPC")
-	fmt.Println("  5. MQTT")
-	fmt.Println("  6. SOAP")
-	fmt.Println()
-	fmt.Print("Choice [1]: ")
-
-	choiceInput, _ := reader.ReadString('\n')
-	choice := strings.TrimSpace(choiceInput)
-	if choice == "" {
-		choice = "1"
-	}
-
-	fmt.Println()
-
-	switch choice {
-	case "1":
-		return interactiveHTTP(reader)
-	case "2":
-		return interactiveWebSocket(reader)
-	case "3":
-		return interactiveGraphQL(reader)
-	case "4":
-		return interactiveGRPC(reader)
-	case "5":
-		return interactiveMQTT(reader)
-	case "6":
-		return interactiveSOAP(reader)
-	default:
-		return interactiveHTTP(reader)
-	}
-}
-
-// interactiveHTTP prompts for HTTP mock configuration.
-func interactiveHTTP(reader *bufio.Reader) (*config.MockCollection, error) {
-	fmt.Println("HTTP Mock Configuration")
-	fmt.Println("-----------------------")
-	fmt.Println()
-
-	// Prompt for endpoint path
-	fmt.Print("Endpoint path [/hello]: ")
-	pathInput, _ := reader.ReadString('\n')
-	path := strings.TrimSpace(pathInput)
-	if path == "" {
-		path = "/hello"
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	// Prompt for HTTP method
-	fmt.Print("HTTP method [GET]: ")
-	methodInput, _ := reader.ReadString('\n')
-	method := strings.ToUpper(strings.TrimSpace(methodInput))
-	if method == "" {
-		method = "GET"
-	}
-
-	// Prompt for response status
-	fmt.Print("Response status code [200]: ")
-	statusInput, _ := reader.ReadString('\n')
-	statusStr := strings.TrimSpace(statusInput)
-	status := 200
-	if statusStr != "" {
-		if parsed, err := strconv.Atoi(statusStr); err == nil {
-			status = parsed
-		}
-	}
-
-	// Prompt for response body
-	fmt.Print("Response body (JSON) [{\"message\": \"Hello!\"}]: ")
-	bodyInput, _ := reader.ReadString('\n')
-	body := strings.TrimSpace(bodyInput)
-	if body == "" {
-		body = `{"message": "Hello!"}`
-	}
-
-	// Prompt for mock name
-	fmt.Print("Mock name [My API]: ")
-	nameInput, _ := reader.ReadString('\n')
-	name := strings.TrimSpace(nameInput)
-	if name == "" {
-		name = "My API"
-	}
-
-	id := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-
-	fmt.Println()
-	fmt.Println("Creating HTTP mock configuration...")
-
-	return &config.MockCollection{
-		Version: "1.0",
-		Mocks: []*mock.Mock{
-			{
-				ID:      id,
-				Name:    name,
-				Type:    mock.MockTypeHTTP,
-				Enabled: true,
-				HTTP: &mock.HTTPSpec{
-					Matcher: &mock.HTTPMatcher{
-						Method: method,
-						Path:   path,
-					},
-					Response: &mock.HTTPResponse{
-						StatusCode: status,
-						Headers: map[string]string{
-							"Content-Type": "application/json",
-						},
-						Body: body,
-					},
-				},
-			},
-		},
-	}, nil
-}
-
-// interactiveWebSocket prompts for WebSocket mock configuration.
-func interactiveWebSocket(reader *bufio.Reader) (*config.MockCollection, error) {
-	fmt.Println("WebSocket Mock Configuration")
-	fmt.Println("----------------------------")
-	fmt.Println()
-
-	// Prompt for path
-	fmt.Print("WebSocket path [/ws]: ")
-	pathInput, _ := reader.ReadString('\n')
-	path := strings.TrimSpace(pathInput)
-	if path == "" {
-		path = "/ws"
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	// Prompt for echo mode
-	fmt.Print("Enable echo mode? [Y/n]: ")
-	echoInput, _ := reader.ReadString('\n')
-	echoStr := strings.ToLower(strings.TrimSpace(echoInput))
-	echoMode := echoStr == "" || echoStr == "y" || echoStr == "yes"
-
-	// Prompt for mock name
-	fmt.Print("Mock name [WebSocket Endpoint]: ")
-	nameInput, _ := reader.ReadString('\n')
-	name := strings.TrimSpace(nameInput)
-	if name == "" {
-		name = "WebSocket Endpoint"
-	}
-
-	id := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-
-	fmt.Println()
-	fmt.Println("Creating WebSocket mock configuration...")
-
-	return &config.MockCollection{
-		Version: "1.0",
-		Mocks: []*mock.Mock{
-			{
-				ID:      id,
-				Name:    name,
-				Type:    mock.MockTypeWebSocket,
-				Enabled: true,
-				WebSocket: &mock.WebSocketSpec{
-					Path:     path,
-					EchoMode: &echoMode,
-				},
-			},
-		},
-	}, nil
-}
-
-// interactiveGraphQL prompts for GraphQL mock configuration.
-func interactiveGraphQL(reader *bufio.Reader) (*config.MockCollection, error) {
-	fmt.Println("GraphQL Mock Configuration")
-	fmt.Println("--------------------------")
-	fmt.Println()
-
-	// Prompt for path
-	fmt.Print("GraphQL endpoint path [/graphql]: ")
-	pathInput, _ := reader.ReadString('\n')
-	path := strings.TrimSpace(pathInput)
-	if path == "" {
-		path = "/graphql"
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	// Prompt for introspection
-	fmt.Print("Enable introspection? [Y/n]: ")
-	introInput, _ := reader.ReadString('\n')
-	introStr := strings.ToLower(strings.TrimSpace(introInput))
-	introspection := introStr == "" || introStr == "y" || introStr == "yes"
-
-	// Prompt for mock name
-	fmt.Print("Mock name [GraphQL API]: ")
-	nameInput, _ := reader.ReadString('\n')
-	name := strings.TrimSpace(nameInput)
-	if name == "" {
-		name = "GraphQL API"
-	}
-
-	id := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-
-	fmt.Println()
-	fmt.Println("Creating GraphQL mock configuration...")
-
-	schema := `type Query {
-  hello: String
-  users: [User!]!
-}
-
-type User {
-  id: ID!
-  name: String!
-  email: String
-}`
-
-	return &config.MockCollection{
-		Version: "1.0",
-		Mocks: []*mock.Mock{
-			{
-				ID:      id,
-				Name:    name,
-				Type:    mock.MockTypeGraphQL,
-				Enabled: true,
-				GraphQL: &mock.GraphQLSpec{
-					Path:          path,
-					Schema:        schema,
-					Introspection: introspection,
-					Resolvers: map[string]mock.ResolverConfig{
-						"Query.hello": {Response: "Hello from GraphQL!"},
-						"Query.users": {Response: []map[string]any{
-							{"id": "1", "name": "Alice", "email": "alice@example.com"},
-							{"id": "2", "name": "Bob", "email": "bob@example.com"},
-						}},
-					},
-				},
-			},
-		},
-	}, nil
-}
-
-// interactiveGRPC prompts for gRPC mock configuration.
-func interactiveGRPC(reader *bufio.Reader) (*config.MockCollection, error) {
-	fmt.Println("gRPC Mock Configuration")
-	fmt.Println("-----------------------")
-	fmt.Println()
-
-	// Prompt for port
-	fmt.Print("gRPC port [50051]: ")
-	portInput, _ := reader.ReadString('\n')
-	portStr := strings.TrimSpace(portInput)
-	port := 50051
-	if portStr != "" {
-		if parsed, err := strconv.Atoi(portStr); err == nil {
-			port = parsed
-		}
-	}
-
-	// Prompt for service name
-	fmt.Print("Service name [greeter.Greeter]: ")
-	serviceInput, _ := reader.ReadString('\n')
-	service := strings.TrimSpace(serviceInput)
-	if service == "" {
-		service = "greeter.Greeter"
-	}
-
-	// Prompt for method name
-	fmt.Print("Method name [SayHello]: ")
-	methodInput, _ := reader.ReadString('\n')
-	method := strings.TrimSpace(methodInput)
-	if method == "" {
-		method = "SayHello"
-	}
-
-	// Prompt for reflection
-	fmt.Print("Enable reflection? [Y/n]: ")
-	reflInput, _ := reader.ReadString('\n')
-	reflStr := strings.ToLower(strings.TrimSpace(reflInput))
-	reflection := reflStr == "" || reflStr == "y" || reflStr == "yes"
-
-	// Prompt for mock name
-	fmt.Print("Mock name [gRPC Service]: ")
-	nameInput, _ := reader.ReadString('\n')
-	name := strings.TrimSpace(nameInput)
-	if name == "" {
-		name = "gRPC Service"
-	}
-
-	id := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-
-	fmt.Println()
-	fmt.Println("Creating gRPC mock configuration...")
-
-	return &config.MockCollection{
-		Version: "1.0",
-		Mocks: []*mock.Mock{
-			{
-				ID:      id,
-				Name:    name,
-				Type:    mock.MockTypeGRPC,
-				Enabled: true,
-				GRPC: &mock.GRPCSpec{
-					Port:       port,
-					Reflection: reflection,
-					Services: map[string]mock.ServiceConfig{
-						service: {
-							Methods: map[string]mock.MethodConfig{
-								method: {
-									Response: map[string]any{
-										"message": "Hello from gRPC!",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}, nil
-}
-
-// interactiveMQTT prompts for MQTT mock configuration.
-func interactiveMQTT(reader *bufio.Reader) (*config.MockCollection, error) {
-	fmt.Println("MQTT Broker Configuration")
-	fmt.Println("-------------------------")
-	fmt.Println()
-
-	// Prompt for port
-	fmt.Print("MQTT port [1883]: ")
-	portInput, _ := reader.ReadString('\n')
-	portStr := strings.TrimSpace(portInput)
-	port := 1883
-	if portStr != "" {
-		if parsed, err := strconv.Atoi(portStr); err == nil {
-			port = parsed
-		}
-	}
-
-	// Prompt for topic
-	fmt.Print("Topic pattern [sensors/temperature]: ")
-	topicInput, _ := reader.ReadString('\n')
-	topic := strings.TrimSpace(topicInput)
-	if topic == "" {
-		topic = "sensors/temperature"
-	}
-
-	// Prompt for mock name
-	fmt.Print("Mock name [MQTT Broker]: ")
-	nameInput, _ := reader.ReadString('\n')
-	name := strings.TrimSpace(nameInput)
-	if name == "" {
-		name = "MQTT Broker"
-	}
-
-	id := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-
-	fmt.Println()
-	fmt.Println("Creating MQTT mock configuration...")
-
-	return &config.MockCollection{
-		Version: "1.0",
-		Mocks: []*mock.Mock{
-			{
-				ID:      id,
-				Name:    name,
-				Type:    mock.MockTypeMQTT,
-				Enabled: true,
-				MQTT: &mock.MQTTSpec{
-					Port: port,
-					Topics: []mock.TopicConfig{
-						{
-							Topic: topic,
-							QoS:   1,
-							Messages: []mock.MessageConfig{
-								{
-									Payload:  `{"value": 25.5, "unit": "C", "timestamp": "{{now}}"}`,
-									Interval: "5s",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}, nil
-}
-
-// interactiveSOAP prompts for SOAP mock configuration.
-func interactiveSOAP(reader *bufio.Reader) (*config.MockCollection, error) {
-	fmt.Println("SOAP Mock Configuration")
-	fmt.Println("-----------------------")
-	fmt.Println()
-
-	// Prompt for path
-	fmt.Print("SOAP endpoint path [/soap/service]: ")
-	pathInput, _ := reader.ReadString('\n')
-	path := strings.TrimSpace(pathInput)
-	if path == "" {
-		path = "/soap/service"
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	// Prompt for operation name
-	fmt.Print("Operation name [GetUser]: ")
-	opInput, _ := reader.ReadString('\n')
-	operation := strings.TrimSpace(opInput)
-	if operation == "" {
-		operation = "GetUser"
-	}
-
-	// Prompt for mock name
-	fmt.Print("Mock name [SOAP Service]: ")
-	nameInput, _ := reader.ReadString('\n')
-	name := strings.TrimSpace(nameInput)
-	if name == "" {
-		name = "SOAP Service"
-	}
-
-	id := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-
-	fmt.Println()
-	fmt.Println("Creating SOAP mock configuration...")
-
-	return &config.MockCollection{
-		Version: "1.0",
-		Mocks: []*mock.Mock{
-			{
-				ID:      id,
-				Name:    name,
-				Type:    mock.MockTypeSOAP,
-				Enabled: true,
-				SOAP: &mock.SOAPSpec{
-					Path: path,
-					Operations: map[string]mock.OperationConfig{
-						operation: {
-							Response: `<` + operation + `Response>
-  <Result>
-    <Id>1</Id>
-    <Name>Example</Name>
-  </Result>
-</` + operation + `Response>`,
-						},
-					},
-				},
-			},
-		},
-	}, nil
 }

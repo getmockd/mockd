@@ -368,7 +368,8 @@ func TestCLIInitCommand(t *testing.T) {
 	t.Run("create_default_yaml", func(t *testing.T) {
 		outputFile := filepath.Join(t.TempDir(), "mockd.yaml")
 
-		cmd := exec.Command("./mockd_test", "init", "-o", outputFile)
+		// Use --defaults to skip interactive prompts
+		cmd := exec.Command("./mockd_test", "init", "--defaults", "-o", outputFile)
 		cmd.Dir = "../.."
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -376,11 +377,8 @@ func TestCLIInitCommand(t *testing.T) {
 		}
 
 		// Check success message
-		if !strings.Contains(string(out), "Created") {
-			t.Errorf("Expected 'Created' in output, got: %s", out)
-		}
-		if !strings.Contains(string(out), "Next steps:") {
-			t.Errorf("Expected 'Next steps:' in output, got: %s", out)
+		if !strings.Contains(string(out), "Done!") {
+			t.Errorf("Expected 'Done!' in output, got: %s", out)
 		}
 
 		// Check file exists and contains expected content
@@ -390,17 +388,17 @@ func TestCLIInitCommand(t *testing.T) {
 		}
 
 		content := string(data)
-		if !strings.Contains(content, "# mockd.yaml") {
-			t.Error("Expected YAML header comment")
-		}
-		if !strings.Contains(content, "Hello World") {
-			t.Error("Expected Hello World mock")
-		}
-		if !strings.Contains(content, "/hello") {
-			t.Error("Expected /hello path")
-		}
 		if !strings.Contains(content, "version:") {
 			t.Error("Expected version field")
+		}
+		if !strings.Contains(content, "admins:") {
+			t.Error("Expected admins section")
+		}
+		if !strings.Contains(content, "engines:") {
+			t.Error("Expected engines section")
+		}
+		if !strings.Contains(content, "/health") {
+			t.Error("Expected /health path in mocks")
 		}
 		if !strings.Contains(content, "type: http") {
 			t.Error("Expected type: http in mocks")
@@ -410,7 +408,8 @@ func TestCLIInitCommand(t *testing.T) {
 	t.Run("create_json_format", func(t *testing.T) {
 		outputFile := filepath.Join(t.TempDir(), "mocks.json")
 
-		cmd := exec.Command("./mockd_test", "init", "--format", "json", "-o", outputFile)
+		// Use --defaults to skip interactive prompts
+		cmd := exec.Command("./mockd_test", "init", "--defaults", "--format", "json", "-o", outputFile)
 		cmd.Dir = "../.."
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -428,9 +427,15 @@ func TestCLIInitCommand(t *testing.T) {
 			t.Fatalf("Invalid JSON output: %v", err)
 		}
 
-		// Check expected structure - MockCollection format
+		// Check expected structure - ProjectConfig format
 		if _, ok := config["version"]; !ok {
 			t.Error("Expected 'version' key in JSON")
+		}
+		if _, ok := config["admins"]; !ok {
+			t.Error("Expected 'admins' key in JSON")
+		}
+		if _, ok := config["engines"]; !ok {
+			t.Error("Expected 'engines' key in JSON")
 		}
 		if _, ok := config["mocks"]; !ok {
 			t.Error("Expected 'mocks' key in JSON")
@@ -466,7 +471,8 @@ func TestCLIInitCommand(t *testing.T) {
 			t.Fatalf("Failed to create existing file: %v", err)
 		}
 
-		cmd := exec.Command("./mockd_test", "init", "--force", "-o", outputFile)
+		// Use --defaults to skip interactive prompts
+		cmd := exec.Command("./mockd_test", "init", "--defaults", "--force", "-o", outputFile)
 		cmd.Dir = "../.."
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -478,7 +484,7 @@ func TestCLIInitCommand(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to read output file: %v", err)
 		}
-		if !strings.Contains(string(data), "Hello World") {
+		if !strings.Contains(string(data), "/health") {
 			t.Error("Expected file to be overwritten with new content")
 		}
 	})
@@ -486,7 +492,8 @@ func TestCLIInitCommand(t *testing.T) {
 	t.Run("infer_json_from_extension", func(t *testing.T) {
 		outputFile := filepath.Join(t.TempDir(), "config.json")
 
-		cmd := exec.Command("./mockd_test", "init", "-o", outputFile)
+		// Use --defaults to skip interactive prompts
+		cmd := exec.Command("./mockd_test", "init", "--defaults", "-o", outputFile)
 		cmd.Dir = "../.."
 		out, err := cmd.CombinedOutput()
 		if err != nil {
