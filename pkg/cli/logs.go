@@ -6,86 +6,497 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"text/tabwriter"
+	"time"
 
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/requestlog"
 )
 
-// RunLogs handles the logs command.
+// RunLogs handles the logs command for viewing daemon logs when running in detached mode.
 func RunLogs(args []string) error {
 	fs := flag.NewFlagSet("logs", flag.ContinueOnError)
 
-	protocol := fs.String("protocol", "", "Filter by protocol (http, grpc, mqtt, soap, graphql, websocket, sse)")
-	method := fs.String("method", "", "Filter by HTTP method")
+	// Daemon logs flags
+	follow := fs.Bool("follow", false, "Follow log output in real-time (like tail -f)")
+	fs.BoolVar(follow, "f", false, "Follow log output in real-time (shorthand)")
+	lines := fs.Int("lines", 100, "Number of lines to show")
+	fs.IntVar(lines, "n", 100, "Number of lines to show (shorthand)")
+	logDir := fs.String("log-dir", defaultLogsPath(), "Path to logs directory")
+
+	// Request logs flags (for --requests mode)
+	requests := fs.Bool("requests", false, "Show request logs from admin API instead of daemon logs")
+	protocol := fs.String("protocol", "", "Filter by protocol (http, grpc, mqtt, soap, graphql, websocket, sse) [requests mode]")
+	method := fs.String("method", "", "Filter by HTTP method [requests mode]")
 	fs.StringVar(method, "m", "", "Filter by HTTP method (shorthand)")
-	path := fs.String("path", "", "Filter by path (substring match)")
+	path := fs.String("path", "", "Filter by path (substring match) [requests mode]")
 	fs.StringVar(path, "p", "", "Filter by path (shorthand)")
-	matched := fs.Bool("matched", false, "Show only matched requests")
-	unmatched := fs.Bool("unmatched", false, "Show only unmatched requests")
-	limit := fs.Int("limit", 20, "Number of entries to show")
-	fs.IntVar(limit, "n", 20, "Number of entries to show (shorthand)")
-	verbose := fs.Bool("verbose", false, "Show headers and body")
-	clear := fs.Bool("clear", false, "Clear all logs")
-	follow := fs.Bool("follow", false, "Stream logs in real-time (like tail -f)")
-	fs.BoolVar(follow, "f", false, "Stream logs in real-time (shorthand)")
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
+	matched := fs.Bool("matched", false, "Show only matched requests [requests mode]")
+	unmatched := fs.Bool("unmatched", false, "Show only unmatched requests [requests mode]")
+	verbose := fs.Bool("verbose", false, "Show headers and body [requests mode]")
+	clear := fs.Bool("clear", false, "Clear all logs [requests mode]")
+	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL [requests mode]")
 	jsonOutput := fs.Bool("json", false, "Output in JSON format")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd logs [flags]
+		fmt.Fprint(os.Stderr, `Usage: mockd logs [service-name] [flags]
 
-View request logs.
+View logs from mockd services running in detached mode.
+
+By default, shows daemon logs from ~/.mockd/logs/. Use --requests to show
+request logs from the admin API instead.
+
+Arguments:
+  service-name      Optional service name filter (admin/local, engine/default, etc.)
 
 Flags:
+  -f, --follow      Follow log output in real-time (like tail -f)
+  -n, --lines       Number of lines to show (default: 100)
+      --log-dir     Path to logs directory (default: ~/.mockd/logs/)
+      --json        Output in JSON format
+
+Request Logs Mode (--requests):
+      --requests    Show request logs from admin API
       --protocol    Filter by protocol (http, grpc, mqtt, soap, graphql, websocket, sse)
   -m, --method      Filter by HTTP method
   -p, --path        Filter by path (substring match)
       --matched     Show only matched requests
       --unmatched   Show only unmatched requests
-  -n, --limit       Number of entries to show (default: 20)
       --verbose     Show headers and body
       --clear       Clear all logs
-  -f, --follow      Stream logs in real-time (like tail -f)
       --admin-url   Admin API base URL (default: http://localhost:4290)
-      --json        Output in JSON format
 
 Examples:
-  # Show recent logs
+  # Show recent daemon logs (last 100 lines)
   mockd logs
 
-  # Show last 50 entries
+  # Show last 50 lines
   mockd logs -n 50
 
-  # Filter by method
-  mockd logs -m POST
+  # Follow logs in real-time
+  mockd logs -f
 
-  # Filter by protocol
-  mockd logs --protocol grpc
+  # Show logs for a specific service
+  mockd logs admin/local
+  mockd logs engine/default
 
-  # Show verbose output
-  mockd logs --verbose
+  # Show request logs from admin API
+  mockd logs --requests
 
-  # Stream logs in real-time
-  mockd logs --follow
+  # Follow request logs in real-time
+  mockd logs --requests -f
 
-  # Clear logs
-  mockd logs --clear
+  # Filter request logs by method
+  mockd logs --requests -m POST
 `)
 	}
 
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
 		return err
 	}
 
+	// Get optional service name from positional args
+	serviceName := ""
+	if fs.NArg() > 0 {
+		serviceName = fs.Arg(0)
+	}
+
+	// If --requests flag is set, show request logs from admin API
+	if *requests {
+		return runRequestLogs(runRequestLogsOptions{
+			protocol:   *protocol,
+			method:     *method,
+			path:       *path,
+			matched:    *matched,
+			unmatched:  *unmatched,
+			limit:      *lines,
+			verbose:    *verbose,
+			clear:      *clear,
+			follow:     *follow,
+			adminURL:   *adminURL,
+			jsonOutput: *jsonOutput,
+		})
+	}
+
+	// Show daemon logs from files
+	return runDaemonLogs(runDaemonLogsOptions{
+		logDir:      *logDir,
+		serviceName: serviceName,
+		lines:       *lines,
+		follow:      *follow,
+		jsonOutput:  *jsonOutput,
+	})
+}
+
+// defaultLogsPath returns the default path for daemon logs.
+func defaultLogsPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/tmp/mockd/logs"
+	}
+	return filepath.Join(home, ".mockd", "logs")
+}
+
+// runDaemonLogsOptions contains options for viewing daemon logs.
+type runDaemonLogsOptions struct {
+	logDir      string
+	serviceName string
+	lines       int
+	follow      bool
+	jsonOutput  bool
+}
+
+// runDaemonLogs reads and displays logs from the daemon log files.
+func runDaemonLogs(opts runDaemonLogsOptions) error {
+	// Check if log directory exists
+	if _, err := os.Stat(opts.logDir); os.IsNotExist(err) {
+		fmt.Printf("No logs found at %s\n", opts.logDir)
+		fmt.Println("Logs are created when running 'mockd up -d' in detached mode.")
+		return nil
+	}
+
+	// Find log files
+	logFiles, err := findLogFiles(opts.logDir, opts.serviceName)
+	if err != nil {
+		return fmt.Errorf("finding log files: %w", err)
+	}
+
+	if len(logFiles) == 0 {
+		if opts.serviceName != "" {
+			fmt.Printf("No logs found for service '%s' in %s\n", opts.serviceName, opts.logDir)
+		} else {
+			fmt.Printf("No log files found in %s\n", opts.logDir)
+		}
+		return nil
+	}
+
+	// Follow mode
+	if opts.follow {
+		return followLogs(logFiles, opts.jsonOutput)
+	}
+
+	// Read and display logs
+	return displayLogs(logFiles, opts.lines, opts.jsonOutput)
+}
+
+// findLogFiles finds log files in the directory, optionally filtered by service name.
+func findLogFiles(logDir, serviceName string) ([]string, error) {
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".log") {
+			continue
+		}
+
+		// Filter by service name if provided
+		if serviceName != "" {
+			// Normalize service name: admin/local -> admin-local, engine/default -> engine-default
+			normalizedService := strings.ReplaceAll(serviceName, "/", "-")
+			baseName := strings.TrimSuffix(name, ".log")
+
+			// Check for exact match or if file is mockd.log (combined log)
+			if baseName != normalizedService && baseName != "mockd" {
+				continue
+			}
+		}
+
+		files = append(files, filepath.Join(logDir, name))
+	}
+
+	// Sort by modification time (newest first for display, but we'll read oldest first for chronological order)
+	sort.Slice(files, func(i, j int) bool {
+		infoI, _ := os.Stat(files[i])
+		infoJ, _ := os.Stat(files[j])
+		if infoI == nil || infoJ == nil {
+			return false
+		}
+		return infoI.ModTime().Before(infoJ.ModTime())
+	})
+
+	return files, nil
+}
+
+// displayLogs reads and displays the last N lines from log files.
+func displayLogs(logFiles []string, numLines int, jsonOutput bool) error {
+	// Collect all log lines with their timestamps
+	type logLine struct {
+		timestamp time.Time
+		line      string
+		file      string
+	}
+
+	var allLines []logLine
+
+	for _, file := range logFiles {
+		lines, err := readLastLines(file, numLines)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not read %s: %v\n", file, err)
+			continue
+		}
+
+		for _, line := range lines {
+			ts := parseLogTimestamp(line)
+			allLines = append(allLines, logLine{
+				timestamp: ts,
+				line:      line,
+				file:      filepath.Base(file),
+			})
+		}
+	}
+
+	// Sort by timestamp
+	sort.Slice(allLines, func(i, j int) bool {
+		return allLines[i].timestamp.Before(allLines[j].timestamp)
+	})
+
+	// Take last N lines
+	if len(allLines) > numLines {
+		allLines = allLines[len(allLines)-numLines:]
+	}
+
+	// Output
+	if jsonOutput {
+		type jsonLine struct {
+			Timestamp string `json:"timestamp"`
+			File      string `json:"file"`
+			Message   string `json:"message"`
+		}
+		var output []jsonLine
+		for _, l := range allLines {
+			output = append(output, jsonLine{
+				Timestamp: l.timestamp.Format(time.RFC3339),
+				File:      l.file,
+				Message:   l.line,
+			})
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(output)
+	}
+
+	// Print lines
+	for _, l := range allLines {
+		fmt.Println(l.line)
+	}
+
+	return nil
+}
+
+// readLastLines reads the last N lines from a file.
+func readLastLines(filePath string, n int) ([]string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	// Read all lines (for simplicity; could optimize with reverse reading for large files)
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	// Increase buffer size for long lines
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	// Return last N lines
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+
+	return lines, nil
+}
+
+// parseLogTimestamp attempts to parse a timestamp from the beginning of a log line.
+func parseLogTimestamp(line string) time.Time {
+	// Common log formats:
+	// 2024-01-15T10:30:00Z ...
+	// 2024-01-15 10:30:00 ...
+	// [2024-01-15T10:30:00Z] ...
+
+	line = strings.TrimPrefix(line, "[")
+
+	// Try RFC3339
+	if len(line) >= 20 {
+		if t, err := time.Parse(time.RFC3339, line[:20]); err == nil {
+			return t
+		}
+		// Try with longer RFC3339 (with milliseconds)
+		if len(line) >= 24 {
+			if t, err := time.Parse(time.RFC3339Nano, line[:min(30, len(line))]); err == nil {
+				return t
+			}
+		}
+	}
+
+	// Try common format: 2024-01-15 10:30:00
+	if len(line) >= 19 {
+		if t, err := time.Parse("2006-01-02 15:04:05", line[:19]); err == nil {
+			return t
+		}
+	}
+
+	// Return zero time if parsing fails
+	return time.Time{}
+}
+
+// followLogs follows log files in real-time (like tail -f).
+func followLogs(logFiles []string, jsonOutput bool) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle interrupt signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\nStopping log stream...")
+		cancel()
+	}()
+
+	fmt.Println("Following logs (press Ctrl+C to stop)...")
+	fmt.Println()
+
+	// Track file positions
+	type fileTracker struct {
+		path   string
+		offset int64
+	}
+
+	trackers := make([]*fileTracker, len(logFiles))
+	for i, file := range logFiles {
+		info, err := os.Stat(file)
+		if err != nil {
+			trackers[i] = &fileTracker{path: file, offset: 0}
+		} else {
+			trackers[i] = &fileTracker{path: file, offset: info.Size()}
+		}
+	}
+
+	// Poll for new content
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			for _, tracker := range trackers {
+				newLines, newOffset, err := readNewLines(tracker.path, tracker.offset)
+				if err != nil {
+					continue
+				}
+
+				tracker.offset = newOffset
+
+				for _, line := range newLines {
+					if jsonOutput {
+						jsonLine := struct {
+							Timestamp string `json:"timestamp"`
+							File      string `json:"file"`
+							Message   string `json:"message"`
+						}{
+							Timestamp: time.Now().Format(time.RFC3339),
+							File:      filepath.Base(tracker.path),
+							Message:   line,
+						}
+						data, _ := json.Marshal(jsonLine)
+						fmt.Println(string(data))
+					} else {
+						fmt.Println(line)
+					}
+				}
+			}
+		}
+	}
+}
+
+// readNewLines reads new lines from a file starting at the given offset.
+func readNewLines(filePath string, offset int64) ([]string, int64, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, offset, err
+	}
+	defer file.Close()
+
+	// Get current file size
+	info, err := file.Stat()
+	if err != nil {
+		return nil, offset, err
+	}
+
+	// If file was truncated, start from beginning
+	if info.Size() < offset {
+		offset = 0
+	}
+
+	// No new content
+	if info.Size() == offset {
+		return nil, offset, nil
+	}
+
+	// Seek to offset
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		return nil, offset, err
+	}
+
+	// Read new content
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	return lines, info.Size(), scanner.Err()
+}
+
+// runRequestLogsOptions contains options for viewing request logs.
+type runRequestLogsOptions struct {
+	protocol   string
+	method     string
+	path       string
+	matched    bool
+	unmatched  bool
+	limit      int
+	verbose    bool
+	clear      bool
+	follow     bool
+	adminURL   string
+	jsonOutput bool
+}
+
+// runRequestLogs shows request logs from the admin API.
+func runRequestLogs(opts runRequestLogsOptions) error {
 	// Handle clear command
-	if *clear {
-		client := NewAdminClientWithAuth(*adminURL)
+	if opts.clear {
+		client := NewAdminClientWithAuth(opts.adminURL)
 		count, err := client.ClearLogs()
 		if err != nil {
 			return fmt.Errorf("%s", FormatConnectionError(err))
@@ -95,18 +506,18 @@ Examples:
 	}
 
 	// Handle follow mode (streaming)
-	if *follow {
-		return streamLogs(*adminURL, *jsonOutput, *verbose)
+	if opts.follow {
+		return streamRequestLogs(opts.adminURL, opts.jsonOutput, opts.verbose)
 	}
 
-	client := NewAdminClientWithAuth(*adminURL)
+	client := NewAdminClientWithAuth(opts.adminURL)
 
 	// Build filter
 	filter := &LogFilter{
-		Protocol: *protocol,
-		Method:   *method,
-		Path:     *path,
-		Limit:    *limit,
+		Protocol: opts.protocol,
+		Method:   opts.method,
+		Path:     opts.path,
+		Limit:    opts.limit,
 	}
 
 	// Get logs
@@ -117,11 +528,11 @@ Examples:
 
 	// Filter matched/unmatched locally
 	requests := result.Requests
-	if *matched || *unmatched {
+	if opts.matched || opts.unmatched {
 		filtered := make([]*requestlog.Entry, 0)
 		for _, req := range result.Requests {
 			hasMatch := req.MatchedMockID != ""
-			if (*matched && hasMatch) || (*unmatched && !hasMatch) {
+			if (opts.matched && hasMatch) || (opts.unmatched && !hasMatch) {
 				filtered = append(filtered, req)
 			}
 		}
@@ -129,7 +540,7 @@ Examples:
 	}
 
 	// JSON output
-	if *jsonOutput {
+	if opts.jsonOutput {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(requests)
@@ -142,7 +553,7 @@ Examples:
 	}
 
 	// Verbose output
-	if *verbose {
+	if opts.verbose {
 		return printVerboseLogs(requests)
 	}
 
@@ -177,8 +588,8 @@ func printTableLogs(requests []*requestlog.Entry) error {
 	return w.Flush()
 }
 
-// streamLogs connects to the SSE endpoint and streams logs in real-time.
-func streamLogs(adminURL string, jsonOutput, verbose bool) error {
+// streamRequestLogs connects to the SSE endpoint and streams logs in real-time.
+func streamRequestLogs(adminURL string, jsonOutput, verbose bool) error {
 	// Set up context with cancellation for Ctrl+C
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -307,7 +718,7 @@ func printVerboseEntry(req *requestlog.Entry) {
 		matched = "(none)"
 	}
 
-	fmt.Printf("[%s] [%s] %s %s → %d (%dms)\n",
+	fmt.Printf("[%s] [%s] %s %s -> %d (%dms)\n",
 		timestamp, protocol, req.Method, req.Path, req.ResponseStatus, req.DurationMs)
 	fmt.Printf("  Matched: %s\n", matched)
 
