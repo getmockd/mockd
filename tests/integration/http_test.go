@@ -3,6 +3,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,10 +36,10 @@ func setupHTTPServer(t *testing.T) *httpTestBundle {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -209,8 +210,13 @@ func TestHTTP_US2_NamedParams(t *testing.T) {
 	resp.Body.Close()
 
 	assert.Equal(t, 200, resp.StatusCode)
-	assert.Contains(t, string(body), "42")
-	assert.Contains(t, string(body), "123")
+
+	// Parse JSON response for precise assertions instead of string Contains
+	var result map[string]string
+	err = json.Unmarshal(body, &result)
+	require.NoError(t, err, "Response should be valid JSON: %s", string(body))
+	assert.Equal(t, "42", result["userId"], "userId path param should be captured")
+	assert.Equal(t, "123", result["postId"], "postId path param should be captured")
 }
 
 func TestHTTP_US2_WildcardPath(t *testing.T) {
@@ -1102,8 +1108,12 @@ func TestHTTP_US11_QueryParams(t *testing.T) {
 	resp.Body.Close()
 
 	assert.Equal(t, 200, resp.StatusCode)
-	assert.Contains(t, string(body), "John")
-	assert.Contains(t, string(body), "123")
+	// Parse JSON for precise assertions
+	var result map[string]string
+	err = json.Unmarshal(body, &result)
+	require.NoError(t, err, "Response should be valid JSON: %s", string(body))
+	assert.Equal(t, "John", result["name"], "name query param should be captured")
+	assert.Equal(t, "123", result["id"], "id query param should be captured")
 }
 
 func TestHTTP_US11_RequestBody(t *testing.T) {
@@ -1136,7 +1146,11 @@ func TestHTTP_US11_RequestBody(t *testing.T) {
 	resp.Body.Close()
 
 	assert.Equal(t, 200, resp.StatusCode)
-	assert.Contains(t, string(body), "TestUser")
+	// Parse JSON for precise assertion
+	var result map[string]string
+	err = json.Unmarshal(body, &result)
+	require.NoError(t, err, "Response should be valid JSON: %s", string(body))
+	assert.Equal(t, "TestUser", result["received_name"], "request body name should be echoed")
 }
 
 func TestHTTP_US11_DynamicValues(t *testing.T) {

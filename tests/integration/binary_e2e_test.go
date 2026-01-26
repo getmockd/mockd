@@ -195,8 +195,9 @@ func TestBinaryE2E_HTTPMocking(t *testing.T) {
 		t.Fatalf("Failed to create mock: %v", err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		t.Fatalf("Failed to create mock: status %d", resp.StatusCode)
+	// API contract: POST /mocks should return 201 Created for new mocks
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("Expected status 201 Created for mock creation, got %d", resp.StatusCode)
 	}
 
 	// Verify mock works
