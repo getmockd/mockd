@@ -85,6 +85,43 @@ type MTLSConfig struct {
 	AllowedOUs []string `json:"allowedOUs,omitempty" yaml:"allowedOUs,omitempty"`
 }
 
+// CORSConfig defines Cross-Origin Resource Sharing settings.
+type CORSConfig struct {
+	// Enabled enables CORS handling. When false, no CORS headers are added.
+	// Default: true (for development convenience)
+	Enabled bool `json:"enabled" yaml:"enabled"`
+	// AllowOrigins specifies allowed origins. Use "*" for any origin (not recommended for production).
+	// Empty list defaults to localhost origins only.
+	// Examples: ["https://example.com", "http://localhost:3000"]
+	AllowOrigins []string `json:"allowOrigins,omitempty" yaml:"allowOrigins,omitempty"`
+	// AllowMethods specifies allowed HTTP methods.
+	// Default: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+	AllowMethods []string `json:"allowMethods,omitempty" yaml:"allowMethods,omitempty"`
+	// AllowHeaders specifies allowed request headers.
+	// Default: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"]
+	AllowHeaders []string `json:"allowHeaders,omitempty" yaml:"allowHeaders,omitempty"`
+	// ExposeHeaders specifies headers that browsers are allowed to access.
+	ExposeHeaders []string `json:"exposeHeaders,omitempty" yaml:"exposeHeaders,omitempty"`
+	// AllowCredentials indicates whether credentials are allowed.
+	// Cannot be used with AllowOrigins: ["*"]
+	AllowCredentials bool `json:"allowCredentials,omitempty" yaml:"allowCredentials,omitempty"`
+	// MaxAge is the preflight cache duration in seconds. Default: 86400 (24 hours)
+	MaxAge int `json:"maxAge,omitempty" yaml:"maxAge,omitempty"`
+}
+
+// RateLimitConfig defines rate limiting settings for the mock engine.
+type RateLimitConfig struct {
+	// Enabled enables rate limiting. Default: false
+	Enabled bool `json:"enabled" yaml:"enabled"`
+	// RequestsPerSecond is the rate limit (tokens per second). Default: 1000
+	RequestsPerSecond float64 `json:"requestsPerSecond,omitempty" yaml:"requestsPerSecond,omitempty"`
+	// BurstSize is the maximum burst size. Default: 2000
+	BurstSize int `json:"burstSize,omitempty" yaml:"burstSize,omitempty"`
+	// TrustedProxies is a list of CIDR ranges or IPs for trusted proxies.
+	// When set, X-Forwarded-For headers are trusted from these sources.
+	TrustedProxies []string `json:"trustedProxies,omitempty" yaml:"trustedProxies,omitempty"`
+}
+
 // ServerConfiguration defines the mock server runtime settings and operational parameters.
 type ServerConfiguration struct {
 	// HTTPPort is the port for the HTTP server (0 = disabled)
@@ -100,6 +137,10 @@ type ServerConfiguration struct {
 	TLS *TLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
 	// MTLS configures mutual TLS client certificate authentication
 	MTLS *MTLSConfig `json:"mtls,omitempty" yaml:"mtls,omitempty"`
+	// CORS configures Cross-Origin Resource Sharing. Default allows localhost only.
+	CORS *CORSConfig `json:"cors,omitempty" yaml:"cors,omitempty"`
+	// RateLimit configures rate limiting for the mock engine. Default: disabled.
+	RateLimit *RateLimitConfig `json:"rateLimit,omitempty" yaml:"rateLimit,omitempty"`
 	// LogRequests enables request logging
 	LogRequests bool `json:"logRequests" yaml:"logRequests"`
 	// MaxLogEntries is the maximum number of request log entries to retain
@@ -222,5 +263,79 @@ func DefaultServerConfiguration() *ServerConfiguration {
 		MaxBodySize:    10 * 1024 * 1024, // 10MB
 		ReadTimeout:    30,
 		WriteTimeout:   30,
+		CORS:           DefaultCORSConfig(),
+		RateLimit:      nil, // Rate limiting disabled by default
 	}
+}
+
+// DefaultCORSConfig returns a CORSConfig with secure defaults (localhost only).
+func DefaultCORSConfig() *CORSConfig {
+	return &CORSConfig{
+		Enabled: true,
+		AllowOrigins: []string{
+			"http://localhost:3000",
+			"http://localhost:4290",
+			"http://localhost:5173",
+			"http://127.0.0.1:3000",
+			"http://127.0.0.1:4290",
+			"http://127.0.0.1:5173",
+		},
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
+		AllowHeaders: []string{"Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"},
+		MaxAge:       86400,
+	}
+}
+
+// DefaultRateLimitConfig returns a RateLimitConfig with sensible defaults.
+func DefaultRateLimitConfig() *RateLimitConfig {
+	return &RateLimitConfig{
+		Enabled:           true,
+		RequestsPerSecond: 1000,
+		BurstSize:         2000,
+	}
+}
+
+// IsWildcard returns true if the CORS config allows all origins.
+func (c *CORSConfig) IsWildcard() bool {
+	if c == nil {
+		return false
+	}
+	for _, origin := range c.AllowOrigins {
+		if origin == "*" {
+			return true
+		}
+	}
+	return false
+}
+
+// GetAllowOriginValue returns the appropriate Access-Control-Allow-Origin header value
+// for the given request origin. Returns empty string if origin is not allowed.
+func (c *CORSConfig) GetAllowOriginValue(requestOrigin string) string {
+	if c == nil || !c.Enabled {
+		return ""
+	}
+
+	// Check for wildcard
+	for _, origin := range c.AllowOrigins {
+		if origin == "*" {
+			// Cannot use * with credentials
+			if c.AllowCredentials {
+				// Return the actual origin instead of *
+				if requestOrigin != "" {
+					return requestOrigin
+				}
+				return ""
+			}
+			return "*"
+		}
+	}
+
+	// Check if request origin is in allowed list
+	for _, allowed := range c.AllowOrigins {
+		if allowed == requestOrigin {
+			return requestOrigin
+		}
+	}
+
+	return ""
 }
