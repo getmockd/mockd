@@ -1,27 +1,147 @@
 CONFIGURATION FILE
 ==================
 
-mockd configuration files use YAML or JSON format.
+mockd uses YAML configuration files following a Docker Compose-style approach.
 
-BASIC STRUCTURE
----------------
+PROJECT CONFIGURATION (mockd.yaml)
+----------------------------------
 
-  version: "1.0"
+The main config file defines admins, engines, workspaces, and mocks:
+
+  version: "1"
   
+  # Control plane - manages workspaces, mocks, engine registry
+  admins:
+    - name: local
+      port: 4290
+      auth:
+        type: none           # none | api-key
+  
+  # Data plane - serves mock responses  
+  engines:
+    - name: default
+      httpPort: 4280
+      admin: local           # Which admin to register with
+  
+  # Logical groupings of mocks
+  workspaces:
+    - name: default
+      engines:
+        - default
+  
+  # Mock definitions (inline or file references)
   mocks:
-    - id: unique-mock-id
-      name: "My Mock"
+    - id: health-check
+      workspace: default
       type: http
-      enabled: true
+      http:
+        matcher:
+          path: /health
+        response:
+          statusCode: 200
+          body: '{"status": "ok"}'
+
+ENVIRONMENT VARIABLES
+---------------------
+
+Environment variable substitution is supported:
+
+  admins:
+    - name: local
+      port: ${MOCKD_PORT:-4290}        # With default
+      
+  engines:
+    - name: default
+      httpPort: ${MOCKD_HTTP_PORT}     # Required env var
+
+CONFIG DISCOVERY
+----------------
+
+Priority order:
+  1. --config / -f flags (can specify multiple)
+  2. MOCKD_CONFIG environment variable
+  3. ./mockd.yaml in current directory
+  4. ./mockd.yml in current directory
+
+CONFIG MERGING
+--------------
+
+Multiple -f flags merge configs (later overrides earlier):
+
+  mockd up -f base.yaml -f production.yaml
+
+Merge rules:
+  - Scalars: Later value wins
+  - Objects: Deep merge
+  - Arrays with name/id: Merge by key
+  - Arrays without key: Later replaces entirely
+
+ADMINS
+------
+
+Local admin (mockd starts it):
+
+  admins:
+    - name: local
+      port: 4290
+      auth:
+        type: api-key
+        keyFile: ~/.mockd/api-key
+
+Remote admin (mockd connects to it):
+
+  admins:
+    - name: production
+      url: https://admin.prod.com:4290
+      apiKey: ${PROD_API_KEY}
+
+ENGINES
+-------
+
+Local engine registering with local admin:
+
+  engines:
+    - name: default
+      httpPort: 4280
+      httpsPort: 0              # 0 = disabled
+      grpcPort: 0               # 0 = disabled
+      admin: local
+
+Engine registering with remote admin:
+
+  engines:
+    - name: prod-helper
+      httpPort: 4281
+      admin: production
+      registration:
+        token: ${ENGINE_TOKEN}
+
+MOCKS
+-----
+
+Inline mock:
+
+  mocks:
+    - id: get-users
+      workspace: default
+      type: http
       http:
         matcher:
           method: GET
-          path: /api/endpoint
+          path: /api/users
         response:
           statusCode: 200
-          headers:
-            Content-Type: application/json
-          body: '{"key": "value"}'
+          body: '[{"id": 1, "name": "Alice"}]'
+
+File reference:
+
+  mocks:
+    - file: ./mocks/users.yaml
+
+Directory glob:
+
+  mocks:
+    - files: ./mocks/**/*.yaml
 
 MOCK TYPES
 ----------
@@ -39,9 +159,8 @@ HTTP MOCK EXAMPLE
 
   mocks:
     - id: get-users
-      name: Get Users
+      workspace: default
       type: http
-      enabled: true
       http:
         matcher:
           method: GET
@@ -55,73 +174,6 @@ HTTP MOCK EXAMPLE
           body: |
             {"users": [{"id": 1, "name": "Alice"}]}
           delayMs: 100
-
-WEBSOCKET MOCK EXAMPLE
-----------------------
-
-  mocks:
-    - id: chat-ws
-      name: Chat WebSocket
-      type: websocket
-      enabled: true
-      websocket:
-        path: /ws/chat
-        echoMode: true
-        matchers:
-          - match:
-              type: json
-              path: $.type
-              value: "ping"
-            response:
-              type: json
-              value: {"type": "pong"}
-
-GRAPHQL MOCK EXAMPLE
---------------------
-
-  mocks:
-    - id: graphql-api
-      name: GraphQL API
-      type: graphql
-      enabled: true
-      graphql:
-        path: /graphql
-        introspection: true
-        resolvers:
-          Query.users:
-            response:
-              - {id: "1", name: "Alice"}
-
-SERVER CONFIGURATION
---------------------
-
-Server settings can be included in the config file:
-
-  version: "1.0"
-  
-  server:
-    port: 4280
-    adminPort: 4290
-    httpsPort: 8443
-    readTimeout: 30
-    writeTimeout: 30
-  
-  mocks: [...]
-
-STATEFUL RESOURCES
-------------------
-
-For CRUD operations with persistent state:
-
-  statefulResources:
-    - name: users
-      collectionPath: /api/users
-      itemPath: /api/users/{id}
-      idField: id
-      autoGenerateId: true
-      initialData:
-        - {id: "1", name: "Alice"}
-        - {id: "2", name: "Bob"}
 
 TEMPLATE VARIABLES
 ------------------
@@ -143,11 +195,20 @@ GETTING STARTED
   # Create a starter config
   mockd init
   
-  # Start server with config
-  mockd serve --config mockd.yaml
+  # Validate config
+  mockd validate
   
-  # List available templates
-  mockd init --template list
+  # Start services (Docker Compose style)
+  mockd up
+  
+  # Show running services
+  mockd ps
+  
+  # Stop services
+  mockd down
+  
+  # Or use legacy serve command
+  mockd serve --config mockd.yaml
 
 SEE ALSO
 --------
