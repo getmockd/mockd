@@ -90,7 +90,7 @@ func TestExpandEnvVars(t *testing.T) {
 	}
 }
 
-func TestLoadV1ConfigFromBytes(t *testing.T) {
+func TestLoadProjectConfigFromBytes(t *testing.T) {
 	yaml := `
 version: "1"
 
@@ -120,9 +120,9 @@ mocks:
         body: '{"status": "ok"}'
 `
 
-	cfg, err := LoadV1ConfigFromBytes([]byte(yaml))
+	cfg, err := LoadProjectConfigFromBytes([]byte(yaml))
 	if err != nil {
-		t.Fatalf("LoadV1ConfigFromBytes failed: %v", err)
+		t.Fatalf("LoadProjectConfigFromBytes failed: %v", err)
 	}
 
 	if cfg.Version != "1" {
@@ -163,7 +163,7 @@ mocks:
 	}
 }
 
-func TestLoadV1ConfigFromBytes_WithEnvVars(t *testing.T) {
+func TestLoadProjectConfigFromBytes_WithEnvVars(t *testing.T) {
 	os.Setenv("API_KEY", "secret123")
 	defer os.Unsetenv("API_KEY")
 
@@ -181,9 +181,9 @@ engines:
     admin: production
 `
 
-	cfg, err := LoadV1ConfigFromBytes([]byte(yaml))
+	cfg, err := LoadProjectConfigFromBytes([]byte(yaml))
 	if err != nil {
-		t.Fatalf("LoadV1ConfigFromBytes failed: %v", err)
+		t.Fatalf("LoadProjectConfigFromBytes failed: %v", err)
 	}
 
 	if cfg.Admins[0].APIKey != "secret123" {
@@ -191,8 +191,8 @@ engines:
 	}
 }
 
-func TestMergeV1Configs(t *testing.T) {
-	base := &V1Config{
+func TestMergeProjectConfigs(t *testing.T) {
+	base := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
@@ -202,7 +202,7 @@ func TestMergeV1Configs(t *testing.T) {
 		},
 	}
 
-	overlay := &V1Config{
+	overlay := &ProjectConfig{
 		Admins: []AdminConfig{
 			{Name: "local", Port: 9090}, // Override port
 		},
@@ -212,7 +212,7 @@ func TestMergeV1Configs(t *testing.T) {
 		},
 	}
 
-	result := MergeV1Configs(base, overlay)
+	result := MergeProjectConfigs(base, overlay)
 
 	if result.Version != "1" {
 		t.Errorf("Version = %q, want %q", result.Version, "1")
@@ -239,8 +239,8 @@ func TestMergeV1Configs(t *testing.T) {
 	}
 }
 
-func TestValidateV1Config_Valid(t *testing.T) {
-	cfg := &V1Config{
+func TestValidateProjectConfig_Valid(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
@@ -264,22 +264,22 @@ func TestValidateV1Config_Valid(t *testing.T) {
 		},
 	}
 
-	result := ValidateV1Config(cfg)
+	result := ValidateProjectConfig(cfg)
 	if !result.IsValid() {
-		t.Errorf("ValidateV1Config returned errors for valid config: %v", result.Error())
+		t.Errorf("ValidateProjectConfig returned errors for valid config: %v", result.Error())
 	}
 }
 
-func TestValidateV1Config_MissingVersion(t *testing.T) {
-	cfg := &V1Config{
+func TestValidateProjectConfig_MissingVersion(t *testing.T) {
+	cfg := &ProjectConfig{
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
 		},
 	}
 
-	result := ValidateV1Config(cfg)
+	result := ValidateProjectConfig(cfg)
 	if result.IsValid() {
-		t.Error("ValidateV1Config should have returned error for missing version")
+		t.Error("ValidateProjectConfig should have returned error for missing version")
 	}
 
 	found := false
@@ -294,19 +294,19 @@ func TestValidateV1Config_MissingVersion(t *testing.T) {
 	}
 }
 
-func TestValidateV1Config_InvalidVersion(t *testing.T) {
-	cfg := &V1Config{
+func TestValidateProjectConfig_InvalidVersion(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "2",
 	}
 
-	result := ValidateV1Config(cfg)
+	result := ValidateProjectConfig(cfg)
 	if result.IsValid() {
-		t.Error("ValidateV1Config should have returned error for unsupported version")
+		t.Error("ValidateProjectConfig should have returned error for unsupported version")
 	}
 }
 
-func TestValidateV1Config_DuplicateAdminName(t *testing.T) {
-	cfg := &V1Config{
+func TestValidateProjectConfig_DuplicateAdminName(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
@@ -314,28 +314,28 @@ func TestValidateV1Config_DuplicateAdminName(t *testing.T) {
 		},
 	}
 
-	result := ValidateV1Config(cfg)
+	result := ValidateProjectConfig(cfg)
 	if result.IsValid() {
-		t.Error("ValidateV1Config should have returned error for duplicate admin name")
+		t.Error("ValidateProjectConfig should have returned error for duplicate admin name")
 	}
 }
 
-func TestValidateV1Config_LocalAdminMissingPort(t *testing.T) {
-	cfg := &V1Config{
+func TestValidateProjectConfig_LocalAdminMissingPort(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "local"}, // No port, no URL
 		},
 	}
 
-	result := ValidateV1Config(cfg)
+	result := ValidateProjectConfig(cfg)
 	if result.IsValid() {
-		t.Error("ValidateV1Config should have returned error for local admin missing port")
+		t.Error("ValidateProjectConfig should have returned error for local admin missing port")
 	}
 }
 
-func TestValidateV1Config_RemoteAdmin(t *testing.T) {
-	cfg := &V1Config{
+func TestValidateProjectConfig_RemoteAdmin(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "remote", URL: "https://admin.example.com", APIKey: "secret"},
@@ -345,14 +345,14 @@ func TestValidateV1Config_RemoteAdmin(t *testing.T) {
 		},
 	}
 
-	result := ValidateV1Config(cfg)
+	result := ValidateProjectConfig(cfg)
 	if !result.IsValid() {
-		t.Errorf("ValidateV1Config returned errors for valid remote admin config: %v", result.Error())
+		t.Errorf("ValidateProjectConfig returned errors for valid remote admin config: %v", result.Error())
 	}
 }
 
-func TestValidateV1Config_EngineReferencesUnknownAdmin(t *testing.T) {
-	cfg := &V1Config{
+func TestValidateProjectConfig_EngineReferencesUnknownAdmin(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
@@ -362,14 +362,14 @@ func TestValidateV1Config_EngineReferencesUnknownAdmin(t *testing.T) {
 		},
 	}
 
-	result := ValidateV1Config(cfg)
+	result := ValidateProjectConfig(cfg)
 	if result.IsValid() {
-		t.Error("ValidateV1Config should have returned error for unknown admin reference")
+		t.Error("ValidateProjectConfig should have returned error for unknown admin reference")
 	}
 }
 
-func TestValidateV1Config_EngineMissingPorts(t *testing.T) {
-	cfg := &V1Config{
+func TestValidateProjectConfig_EngineMissingPorts(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
@@ -379,14 +379,14 @@ func TestValidateV1Config_EngineMissingPorts(t *testing.T) {
 		},
 	}
 
-	result := ValidateV1Config(cfg)
+	result := ValidateProjectConfig(cfg)
 	if result.IsValid() {
-		t.Error("ValidateV1Config should have returned error for engine with no ports")
+		t.Error("ValidateProjectConfig should have returned error for engine with no ports")
 	}
 }
 
-func TestValidateV1Config_MockFileRef(t *testing.T) {
-	cfg := &V1Config{
+func TestValidateProjectConfig_MockFileRef(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
@@ -399,14 +399,14 @@ func TestValidateV1Config_MockFileRef(t *testing.T) {
 		},
 	}
 
-	result := ValidateV1Config(cfg)
+	result := ValidateProjectConfig(cfg)
 	if !result.IsValid() {
-		t.Errorf("ValidateV1Config returned errors for file ref mock: %v", result.Error())
+		t.Errorf("ValidateProjectConfig returned errors for file ref mock: %v", result.Error())
 	}
 }
 
-func TestValidateV1Config_MockGlob(t *testing.T) {
-	cfg := &V1Config{
+func TestValidateProjectConfig_MockGlob(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
@@ -419,14 +419,14 @@ func TestValidateV1Config_MockGlob(t *testing.T) {
 		},
 	}
 
-	result := ValidateV1Config(cfg)
+	result := ValidateProjectConfig(cfg)
 	if !result.IsValid() {
-		t.Errorf("ValidateV1Config returned errors for glob mock: %v", result.Error())
+		t.Errorf("ValidateProjectConfig returned errors for glob mock: %v", result.Error())
 	}
 }
 
-func TestValidateV1PortConflicts(t *testing.T) {
-	cfg := &V1Config{
+func TestValidatePortConflicts(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4280}, // Same as engine HTTP
@@ -436,14 +436,14 @@ func TestValidateV1PortConflicts(t *testing.T) {
 		},
 	}
 
-	result := ValidateV1PortConflicts(cfg)
+	result := ValidatePortConflicts(cfg)
 	if result.IsValid() {
-		t.Error("ValidateV1PortConflicts should have detected port conflict")
+		t.Error("ValidatePortConflicts should have detected port conflict")
 	}
 }
 
-func TestValidateV1PortConflicts_NoConflict(t *testing.T) {
-	cfg := &V1Config{
+func TestValidatePortConflicts_NoConflict(t *testing.T) {
+	cfg := &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
@@ -453,9 +453,9 @@ func TestValidateV1PortConflicts_NoConflict(t *testing.T) {
 		},
 	}
 
-	result := ValidateV1PortConflicts(cfg)
+	result := ValidatePortConflicts(cfg)
 	if !result.IsValid() {
-		t.Errorf("ValidateV1PortConflicts returned errors for valid config: %v", result.Error())
+		t.Errorf("ValidatePortConflicts returned errors for valid config: %v", result.Error())
 	}
 }
 
@@ -497,8 +497,8 @@ func TestMockEntry_TypeChecks(t *testing.T) {
 	}
 }
 
-func TestDefaultV1Config(t *testing.T) {
-	cfg := DefaultV1Config()
+func TestDefaultProjectConfig(t *testing.T) {
+	cfg := DefaultProjectConfig()
 
 	if cfg.Version != "1" {
 		t.Errorf("Version = %q, want %q", cfg.Version, "1")
