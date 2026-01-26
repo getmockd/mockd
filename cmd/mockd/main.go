@@ -133,6 +133,12 @@ func run(args []string) error {
 		return cli.RunPorts(cmdArgs)
 	case "validate":
 		return cli.RunValidate(cmdArgs)
+	case "up":
+		return cli.RunUp(cmdArgs)
+	case "down":
+		return cli.RunDown(cmdArgs)
+	case "ps":
+		return cli.RunPs(cmdArgs)
 	case "context":
 		return cli.RunContext(cmdArgs)
 	case "workspace":
@@ -153,6 +159,9 @@ Usage:
   mockd <command> [flags]        Run a specific command
 
 Commands:
+  up          Start services from mockd.yaml (Docker Compose style)
+  down        Stop services started by 'mockd up'
+  ps          Show running services
   serve       Start the mock server (default command)
   init        Create a starter config file
   start       Start the mock server (alias for serve)
@@ -284,7 +293,7 @@ func isCommand(s string) bool {
 		"proxy", "recordings", "convert", "generate", "enhance",
 		"stream-recordings", "graphql", "chaos", "grpc", "mqtt", "soap",
 		"templates", "tunnel", "init", "help", "status", "stop", "doctor",
-		"websocket", "context", "workspace", "ports", "validate",
+		"websocket", "context", "workspace", "ports", "validate", "up", "down", "ps",
 	}
 	return slices.Contains(commands, s)
 }
