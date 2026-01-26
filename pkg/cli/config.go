@@ -9,23 +9,37 @@ import (
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
-// RunConfig handles the config command.
+// RunConfig handles the config command and its subcommands.
 func RunConfig(args []string) error {
+	// Check for subcommands first
+	if handled, err := runConfigSubcommand(args); handled {
+		return err
+	}
+
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
 
 	jsonOutput := fs.Bool("json", false, "Output in JSON format")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd config [flags]
+		fmt.Fprint(os.Stderr, `Usage: mockd config [command] [flags]
 
-Show effective configuration with source annotations.
+Manage and display configuration.
+
+Commands:
+  show        Show resolved project config (env vars expanded)
 
 Flags:
       --json         Output in JSON format
 
 Examples:
+  # Show CLI effective config
   mockd config
   mockd config --json
+
+  # Show resolved project config (mockd.yaml)
+  mockd config show
+  mockd config show --service default
+  mockd config show --json
 `)
 	}
 
