@@ -9,31 +9,31 @@ import (
 	"strings"
 )
 
-// V1ValidationError represents a single config validation error.
-type V1ValidationError struct {
+// SchemaValidationError represents a single config validation error.
+type SchemaValidationError struct {
 	Path    string // Config path, e.g., "admins[0].port"
 	Message string
 }
 
-func (e V1ValidationError) Error() string {
+func (e SchemaValidationError) Error() string {
 	if e.Path != "" {
 		return fmt.Sprintf("%s: %s", e.Path, e.Message)
 	}
 	return e.Message
 }
 
-// V1ValidationResult contains all validation errors for a V1Config.
-type V1ValidationResult struct {
-	Errors []V1ValidationError
+// SchemaValidationResult contains all validation errors for a ProjectConfig.
+type SchemaValidationResult struct {
+	Errors []SchemaValidationError
 }
 
 // IsValid returns true if there are no validation errors.
-func (r *V1ValidationResult) IsValid() bool {
+func (r *SchemaValidationResult) IsValid() bool {
 	return len(r.Errors) == 0
 }
 
 // Error returns a combined error message.
-func (r *V1ValidationResult) Error() string {
+func (r *SchemaValidationResult) Error() string {
 	if r.IsValid() {
 		return ""
 	}
@@ -45,13 +45,13 @@ func (r *V1ValidationResult) Error() string {
 }
 
 // AddError adds a validation error.
-func (r *V1ValidationResult) AddError(path, message string) {
-	r.Errors = append(r.Errors, V1ValidationError{Path: path, Message: message})
+func (r *SchemaValidationResult) AddError(path, message string) {
+	r.Errors = append(r.Errors, SchemaValidationError{Path: path, Message: message})
 }
 
-// ValidateV1Config validates a V1Config structure and returns any errors found.
-func ValidateV1Config(cfg *V1Config) *V1ValidationResult {
-	result := &V1ValidationResult{}
+// ValidateProjectConfig validates a ProjectConfig structure and returns any errors found.
+func ValidateProjectConfig(cfg *ProjectConfig) *SchemaValidationResult {
+	result := &SchemaValidationResult{}
 
 	// Version is required
 	if cfg.Version == "" {
@@ -98,7 +98,7 @@ func ValidateV1Config(cfg *V1Config) *V1ValidationResult {
 	return result
 }
 
-func validateAdmin(admin *AdminConfig, path string, names map[string]bool, result *V1ValidationResult) {
+func validateAdmin(admin *AdminConfig, path string, names map[string]bool, result *SchemaValidationResult) {
 	// Name is required
 	if admin.Name == "" {
 		result.AddError(path+".name", "required")
@@ -154,14 +154,14 @@ func validateAdmin(admin *AdminConfig, path string, names map[string]bool, resul
 	}
 }
 
-func validateAdminAuth(auth *AdminAuthConfig, path string, result *V1ValidationResult) {
+func validateAdminAuth(auth *AdminAuthConfig, path string, result *SchemaValidationResult) {
 	validTypes := map[string]bool{"api-key": true, "none": true}
 	if auth.Type != "" && !validTypes[auth.Type] {
 		result.AddError(path+".type", fmt.Sprintf("invalid auth type %q, must be \"api-key\" or \"none\"", auth.Type))
 	}
 }
 
-func validateAdminPersistence(persistence *AdminPersistenceConfig, path string, result *V1ValidationResult) {
+func validateAdminPersistence(persistence *AdminPersistenceConfig, path string, result *SchemaValidationResult) {
 	validTypes := map[string]bool{"sqlite": true, "memory": true}
 	if persistence.Type != "" && !validTypes[persistence.Type] {
 		result.AddError(path+".type", fmt.Sprintf("invalid persistence type %q, must be \"sqlite\" or \"memory\"", persistence.Type))
@@ -173,7 +173,7 @@ func validateAdminPersistence(persistence *AdminPersistenceConfig, path string, 
 	}
 }
 
-func validateEngine(engine *EngineConfig, path string, names map[string]bool, adminNames map[string]bool, result *V1ValidationResult) {
+func validateEngine(engine *EngineConfig, path string, names map[string]bool, adminNames map[string]bool, result *SchemaValidationResult) {
 	// Name is required
 	if engine.Name == "" {
 		result.AddError(path+".name", "required")
@@ -218,7 +218,7 @@ func validateEngine(engine *EngineConfig, path string, names map[string]bool, ad
 	}
 }
 
-func validateWorkspace(workspace *WorkspaceConfig, path string, names map[string]bool, engineNames map[string]bool, result *V1ValidationResult) {
+func validateWorkspace(workspace *WorkspaceConfig, path string, names map[string]bool, engineNames map[string]bool, result *SchemaValidationResult) {
 	// Name is required
 	if workspace.Name == "" {
 		result.AddError(path+".name", "required")
@@ -237,7 +237,7 @@ func validateWorkspace(workspace *WorkspaceConfig, path string, names map[string
 	}
 }
 
-func validateMock(mock *MockEntry, path string, ids map[string]bool, workspaceNames map[string]bool, result *V1ValidationResult) {
+func validateMock(mock *MockEntry, path string, ids map[string]bool, workspaceNames map[string]bool, result *SchemaValidationResult) {
 	// Determine mock type
 	typeCount := 0
 	if mock.IsInline() {
@@ -300,7 +300,7 @@ func validateMock(mock *MockEntry, path string, ids map[string]bool, workspaceNa
 	}
 }
 
-func validateHTTPMock(http *HTTPMockConfig, path string, result *V1ValidationResult) {
+func validateHTTPMock(http *HTTPMockConfig, path string, result *SchemaValidationResult) {
 	// Matcher validation
 	if http.Matcher.Path == "" && http.Matcher.PathPattern == "" {
 		result.AddError(path+".matcher.path", "either path or pathPattern is required")
@@ -317,7 +317,7 @@ func validateHTTPMock(http *HTTPMockConfig, path string, result *V1ValidationRes
 	}
 }
 
-func validateStatefulResource(resource *StatefulResourceEntry, path string, names map[string]bool, workspaceNames map[string]bool, result *V1ValidationResult) {
+func validateStatefulResource(resource *StatefulResourceEntry, path string, names map[string]bool, workspaceNames map[string]bool, result *SchemaValidationResult) {
 	// Name is required
 	if resource.Name == "" {
 		result.AddError(path+".name", "required")
@@ -341,10 +341,10 @@ func validateStatefulResource(resource *StatefulResourceEntry, path string, name
 	}
 }
 
-// ValidateV1PortConflicts checks for port conflicts between services.
+// ValidatePortConflicts checks for port conflicts between services.
 // This is a separate validation that can be run after merging configs.
-func ValidateV1PortConflicts(cfg *V1Config) *V1ValidationResult {
-	result := &V1ValidationResult{}
+func ValidatePortConflicts(cfg *ProjectConfig) *SchemaValidationResult {
+	result := &SchemaValidationResult{}
 	usedPorts := make(map[int]string) // port -> service name
 
 	// Check admin ports

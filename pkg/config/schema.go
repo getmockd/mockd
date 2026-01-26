@@ -17,12 +17,11 @@ import (
 )
 
 // ============================================================================
-// V1 Config Types
+// Project Config Types (mockd.yaml)
 // ============================================================================
 
-// V1Config is the root configuration structure for mockd.yaml files.
-// Version "1" uses this schema.
-type V1Config struct {
+// ProjectConfig is the root configuration structure for mockd.yaml files.
+type ProjectConfig struct {
 	// Version is the config format version (required, currently "1")
 	Version string `json:"version" yaml:"version"`
 
@@ -270,8 +269,8 @@ type CLIContext struct {
 	Workspace string `json:"workspace,omitempty" yaml:"workspace,omitempty"`
 }
 
-// V1PIDFile is the structure written to ~/.mockd/mockd.pid when running in detached mode.
-type V1PIDFile struct {
+// PIDFile is the structure written to ~/.mockd/mockd.pid when running in detached mode.
+type PIDFile struct {
 	// PID is the main process ID
 	PID int `json:"pid"`
 
@@ -282,11 +281,11 @@ type V1PIDFile struct {
 	Config string `json:"config"`
 
 	// Services lists all running services
-	Services []V1PIDFileService `json:"services"`
+	Services []PIDFileService `json:"services"`
 }
 
-// V1PIDFileService describes a single running service in the PID file.
-type V1PIDFileService struct {
+// PIDFileService describes a single running service in the PID file.
+type PIDFileService struct {
 	// Name is the service name
 	Name string `json:"name"`
 
@@ -300,9 +299,9 @@ type V1PIDFileService struct {
 	PID int `json:"pid"`
 }
 
-// DefaultV1Config returns a V1Config with sensible defaults for a minimal local setup.
-func DefaultV1Config() *V1Config {
-	return &V1Config{
+// DefaultProjectConfig returns a ProjectConfig with sensible defaults for a minimal local setup.
+func DefaultProjectConfig() *ProjectConfig {
+	return &ProjectConfig{
 		Version: "1",
 		Admins: []AdminConfig{
 			{
@@ -328,11 +327,11 @@ func DefaultV1Config() *V1Config {
 }
 
 // ============================================================================
-// V1 Config Loader
+// Project Config Loader
 // ============================================================================
 
-// V1ConfigDiscoveryOrder defines the priority order for finding config files.
-var V1ConfigDiscoveryOrder = []string{
+// ProjectConfigDiscoveryOrder defines the priority order for finding config files.
+var ProjectConfigDiscoveryOrder = []string{
 	"mockd.yaml",
 	"mockd.yml",
 }
@@ -340,12 +339,12 @@ var V1ConfigDiscoveryOrder = []string{
 // envVarPattern matches ${VAR_NAME} or ${VAR_NAME:-default}
 var envVarPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}`)
 
-// LoadV1Config loads a config from the given path, applying environment variable substitution.
+// LoadProjectConfig loads a config from the given path, applying environment variable substitution.
 // If path is empty, it tries to discover a config file in the current directory.
-func LoadV1Config(path string) (*V1Config, error) {
+func LoadProjectConfig(path string) (*ProjectConfig, error) {
 	// Discover config file if not specified
 	if path == "" {
-		discovered, err := DiscoverV1Config()
+		discovered, err := DiscoverProjectConfig()
 		if err != nil {
 			return nil, err
 		}
@@ -362,7 +361,7 @@ func LoadV1Config(path string) (*V1Config, error) {
 	expanded := ExpandEnvVars(string(data))
 
 	// Parse YAML
-	var cfg V1Config
+	var cfg ProjectConfig
 	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
 		return nil, fmt.Errorf("parsing config file: %w", err)
 	}
@@ -370,13 +369,13 @@ func LoadV1Config(path string) (*V1Config, error) {
 	return &cfg, nil
 }
 
-// LoadV1ConfigFromBytes loads a config from raw bytes, applying environment variable substitution.
-func LoadV1ConfigFromBytes(data []byte) (*V1Config, error) {
+// LoadProjectConfigFromBytes loads a config from raw bytes, applying environment variable substitution.
+func LoadProjectConfigFromBytes(data []byte) (*ProjectConfig, error) {
 	// Apply environment variable substitution
 	expanded := ExpandEnvVars(string(data))
 
 	// Parse YAML
-	var cfg V1Config
+	var cfg ProjectConfig
 	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
@@ -384,9 +383,9 @@ func LoadV1ConfigFromBytes(data []byte) (*V1Config, error) {
 	return &cfg, nil
 }
 
-// DiscoverV1Config finds a config file in the current directory or via MOCKD_CONFIG env var.
+// DiscoverProjectConfig finds a config file in the current directory or via MOCKD_CONFIG env var.
 // Returns the path to the config file, or an error if none is found.
-func DiscoverV1Config() (string, error) {
+func DiscoverProjectConfig() (string, error) {
 	// Check MOCKD_CONFIG env var first
 	if envPath := os.Getenv("MOCKD_CONFIG"); envPath != "" {
 		if _, err := os.Stat(envPath); err == nil {
@@ -401,7 +400,7 @@ func DiscoverV1Config() (string, error) {
 		return "", fmt.Errorf("getting current directory: %w", err)
 	}
 
-	for _, name := range V1ConfigDiscoveryOrder {
+	for _, name := range ProjectConfigDiscoveryOrder {
 		path := filepath.Join(cwd, name)
 		if _, err := os.Stat(path); err == nil {
 			return path, nil
@@ -437,14 +436,14 @@ func ExpandEnvVars(input string) string {
 	})
 }
 
-// MergeV1Configs merges multiple configs together.
+// MergeProjectConfigs merges multiple configs together.
 // Later configs override earlier ones. Arrays merge by name/id key.
-func MergeV1Configs(configs ...*V1Config) *V1Config {
+func MergeProjectConfigs(configs ...*ProjectConfig) *ProjectConfig {
 	if len(configs) == 0 {
 		return nil
 	}
 
-	result := &V1Config{
+	result := &ProjectConfig{
 		Version:           "1",
 		Admins:            []AdminConfig{},
 		Engines:           []EngineConfig{},
@@ -652,23 +651,23 @@ func mergeStatefulResource(base, overlay StatefulResourceEntry) StatefulResource
 	return base
 }
 
-// LoadAndMergeV1Configs loads multiple config files and merges them together.
+// LoadAndMergeProjectConfigs loads multiple config files and merges them together.
 // Files are loaded in order, with later files overriding earlier ones.
-func LoadAndMergeV1Configs(paths []string) (*V1Config, error) {
+func LoadAndMergeProjectConfigs(paths []string) (*ProjectConfig, error) {
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("no config files specified")
 	}
 
-	var configs []*V1Config
+	var configs []*ProjectConfig
 	for _, path := range paths {
-		cfg, err := LoadV1Config(path)
+		cfg, err := LoadProjectConfig(path)
 		if err != nil {
 			return nil, fmt.Errorf("loading %s: %w", path, err)
 		}
 		configs = append(configs, cfg)
 	}
 
-	return MergeV1Configs(configs...), nil
+	return MergeProjectConfigs(configs...), nil
 }
 
 // ResolvePath resolves a potentially relative path against a base directory.

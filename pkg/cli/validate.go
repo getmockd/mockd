@@ -66,18 +66,18 @@ Examples:
 	}
 
 	// Load config(s)
-	var cfg *config.V1Config
+	var cfg *config.ProjectConfig
 	var err error
 	var configPath string
 
 	if len(configFiles) == 0 {
 		// Discover config
-		configPath, err = config.DiscoverV1Config()
+		configPath, err = config.DiscoverProjectConfig()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			return err
 		}
-		cfg, err = config.LoadV1Config(configPath)
+		cfg, err = config.LoadProjectConfig(configPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", configPath, err)
 			return err
@@ -87,14 +87,14 @@ Examples:
 		}
 	} else if len(configFiles) == 1 {
 		configPath = configFiles[0]
-		cfg, err = config.LoadV1Config(configPath)
+		cfg, err = config.LoadProjectConfig(configPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", configPath, err)
 			return err
 		}
 	} else {
 		// Multiple configs - load and merge
-		cfg, err = config.LoadAndMergeV1Configs(configFiles)
+		cfg, err = config.LoadAndMergeProjectConfigs(configFiles)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading configs: %v\n", err)
 			return err
@@ -105,10 +105,10 @@ Examples:
 	}
 
 	// Run validation
-	result := config.ValidateV1Config(cfg)
+	result := config.ValidateProjectConfig(cfg)
 
 	// Also check port conflicts
-	portResult := config.ValidateV1PortConflicts(cfg)
+	portResult := config.ValidatePortConflicts(cfg)
 
 	// Combine results
 	allErrors := append(result.Errors, portResult.Errors...)
@@ -143,7 +143,7 @@ Examples:
 	return nil
 }
 
-func printVerboseValidation(cfg *config.V1Config, errors []config.V1ValidationError) {
+func printVerboseValidation(cfg *config.ProjectConfig, errors []config.SchemaValidationError) {
 	fmt.Println("Validation Results")
 	fmt.Println("==================")
 	fmt.Println()
@@ -167,7 +167,7 @@ func printVerboseValidation(cfg *config.V1Config, errors []config.V1ValidationEr
 	}
 }
 
-func printConfigSummary(cfg *config.V1Config) {
+func printConfigSummary(cfg *config.ProjectConfig) {
 	fmt.Println()
 	fmt.Println("Configuration Summary")
 	fmt.Println("---------------------")
@@ -237,7 +237,7 @@ func printConfigSummary(cfg *config.V1Config) {
 	}
 }
 
-func printResolvedConfig(cfg *config.V1Config) {
+func printResolvedConfig(cfg *config.ProjectConfig) {
 	// Print a summary of the resolved config
 	fmt.Printf("version: %q\n", cfg.Version)
 
