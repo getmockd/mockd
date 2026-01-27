@@ -124,7 +124,7 @@ mocks:
           retain: true
 
         # Device simulation - multiple virtual devices
-        - topic: sensors/device/+/telemetry
+        - topic: sensors/{device_id}/telemetry
           qos: 1
           deviceSimulation:
             enabled: true

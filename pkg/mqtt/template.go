@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	templatepkg "github.com/getmockd/mockd/pkg/template"
 	"github.com/google/uuid"
 )
 
@@ -385,7 +386,9 @@ func isValidVariable(varName string) bool {
 	// Simple variables
 	switch varName {
 	case "timestamp", "timestamp.iso", "timestamp.unix", "timestamp.unix_ms",
-		"uuid", "topic", "clientId", "device_id":
+		"uuid", "topic", "clientId", "device_id",
+		// Shared template variables (from HTTP template engine)
+		"now", "uuid.short", "random", "random.float":
 		return true
 	}
 
@@ -400,4 +403,19 @@ func isValidVariable(varName string) bool {
 	}
 
 	return false
+}
+
+// processSharedTemplateVars processes shared template variables that are handled
+// by the HTTP template engine ({{now}}, {{uuid}}, {{uuid.short}}, {{timestamp}},
+// {{random}}, {{random.float}}, {{random.int ...}}).
+// This is called after the MQTT template engine has already processed MQTT-specific
+// variables, so any remaining {{...}} expressions are candidates for the shared engine.
+func processSharedTemplateVars(input string) string {
+	engine := templatepkg.New()
+	ctx := &templatepkg.Context{}
+	result, err := engine.Process(input, ctx)
+	if err != nil {
+		return input
+	}
+	return result
 }

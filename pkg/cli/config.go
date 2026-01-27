@@ -78,13 +78,37 @@ Examples:
 
 	// Show loaded sources
 	fmt.Println()
-	fmt.Println("Sources loaded:")
+	globalPath, _ := cliconfig.FindGlobalConfig()
+	localPath, _ := cliconfig.FindLocalConfig()
 
-	if globalPath, err := cliconfig.FindGlobalConfig(); err == nil && globalPath != "" {
-		fmt.Printf("  • %s (global)\n", globalPath)
+	if globalPath != "" || localPath != "" {
+		fmt.Println("Sources loaded:")
+		if globalPath != "" {
+			fmt.Printf("  • %s (global)\n", globalPath)
+		}
+		if localPath != "" {
+			fmt.Printf("  • %s (local)\n", localPath)
+		}
+	} else {
+		fmt.Println("Sources loaded: (none)")
 	}
-	if localPath, err := cliconfig.FindLocalConfig(); err == nil && localPath != "" {
-		fmt.Printf("  • %s (local)\n", localPath)
+
+	// Show searched locations
+	fmt.Println()
+	fmt.Println("Searched:")
+	for _, p := range cliconfig.GetGlobalConfigSearchPaths() {
+		if p == globalPath {
+			fmt.Printf("  ✓ %s\n", p)
+		} else {
+			fmt.Printf("  ✗ %s\n", p)
+		}
+	}
+	for _, p := range cliconfig.GetLocalConfigSearchPaths() {
+		if p == localPath {
+			fmt.Printf("  ✓ %s\n", p)
+		} else {
+			fmt.Printf("  ✗ %s\n", p)
+		}
 	}
 
 	return nil

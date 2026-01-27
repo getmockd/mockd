@@ -45,7 +45,7 @@ func SelectBestMatchWithCaptures(mocks []*mock.Mock, r *http.Request) *MatchResu
 	var matches []MatchResult
 
 	for _, m := range mocks {
-		if m == nil || !m.Enabled {
+		if m == nil || (m.Enabled != nil && !*m.Enabled) {
 			continue
 		}
 

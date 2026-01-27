@@ -5,35 +5,35 @@ package cliconfig
 // Configuration values can come from multiple sources with the following precedence:
 // 1. Command-line flags (highest priority)
 // 2. Environment variables
-// 3. Local config file (.mockdrc.json in current directory)
-// 4. Global config file (~/.config/mockd/config.json)
+// 3. Local config file (.mockdrc.yaml in current directory)
+// 4. Global config file (~/.config/mockd/config.yaml)
 // 5. Default values (lowest priority)
 type CLIConfig struct {
 	// Server settings
-	Port         int    `json:"port"`
-	AdminPort    int    `json:"adminPort"`
-	HTTPSPort    int    `json:"httpsPort"`
-	ConfigFile   string `json:"configFile,omitempty"`
-	ReadTimeout  int    `json:"readTimeout"`
-	WriteTimeout int    `json:"writeTimeout"`
+	Port         int    `yaml:"port" json:"port"`
+	AdminPort    int    `yaml:"adminPort" json:"adminPort"`
+	HTTPSPort    int    `yaml:"httpsPort" json:"httpsPort"`
+	ConfigFile   string `yaml:"configFile,omitempty" json:"configFile,omitempty"`
+	ReadTimeout  int    `yaml:"readTimeout" json:"readTimeout"`
+	WriteTimeout int    `yaml:"writeTimeout" json:"writeTimeout"`
 
 	// Admin client settings
-	AdminURL string `json:"adminUrl"`
+	AdminURL string `yaml:"adminUrl" json:"adminUrl"`
 
 	// Logging settings
-	MaxLogEntries int `json:"maxLogEntries"`
+	MaxLogEntries int `yaml:"maxLogEntries" json:"maxLogEntries"`
 
 	// TLS settings
-	AutoCert bool   `json:"autoCert"`
-	CertFile string `json:"certFile,omitempty"`
-	KeyFile  string `json:"keyFile,omitempty"`
+	AutoCert bool   `yaml:"autoCert" json:"autoCert"`
+	CertFile string `yaml:"certFile,omitempty" json:"certFile,omitempty"`
+	KeyFile  string `yaml:"keyFile,omitempty" json:"keyFile,omitempty"`
 
 	// Output settings
-	Verbose bool `json:"verbose"`
-	JSON    bool `json:"json"`
+	Verbose bool `yaml:"verbose" json:"verbose"`
+	JSON    bool `yaml:"json" json:"json"`
 
 	// Source tracks where each value came from (for debugging)
-	Sources map[string]string `json:"-"`
+	Sources map[string]string `yaml:"-" json:"-"`
 }
 
 // ConfigSource identifies where a config value originated.

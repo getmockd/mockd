@@ -41,6 +41,10 @@ func (h *Handler) RegisterWebSocketEndpoint(cfg *config.WebSocketEndpointConfig)
 	if err != nil {
 		return err
 	}
+	// Wire template engine so WebSocket responses can use template variables
+	if h.templateEngine != nil {
+		endpoint.SetTemplateEngine(h.templateEngine)
+	}
 	h.wsManager.RegisterEndpoint(endpoint)
 	return nil
 }

@@ -3,6 +3,8 @@ package websocket
 import (
 	"sync"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/template"
 )
 
 // EndpointConfig defines the configuration for a WebSocket endpoint.
@@ -29,6 +31,10 @@ type EndpointConfig struct {
 	MaxConnections int `json:"maxConnections,omitempty"`
 	// EchoMode enables automatic echo of received messages (default: true if no matchers/scenario).
 	EchoMode *bool `json:"echoMode,omitempty"`
+	// SkipOriginVerify skips verification of the Origin header during WebSocket handshake.
+	// Default: true (allows any origin for development/testing convenience).
+	// Set to false to enforce that Origin matches the Host header.
+	SkipOriginVerify *bool `json:"skipOriginVerify,omitempty"`
 }
 
 // HeartbeatConfig configures WebSocket ping/pong keepalive.
@@ -62,11 +68,13 @@ type Endpoint struct {
 	idleTimeout        time.Duration
 	maxConnections     int
 	echoMode           bool
+	skipOriginVerify   bool
 	enabled            bool
 
-	manager     *ConnectionManager
-	connections map[string]*Connection
-	mu          sync.RWMutex
+	manager        *ConnectionManager
+	connections    map[string]*Connection
+	templateEngine *template.Engine
+	mu             sync.RWMutex
 }
 
 // NewEndpoint creates a new WebSocket endpoint with the given configuration.
@@ -90,6 +98,12 @@ func NewEndpoint(cfg *EndpointConfig) (*Endpoint, error) {
 		echoMode = false
 	}
 
+	// Determine skipOriginVerify (default: true for dev-friendly behavior)
+	skipOriginVerify := true
+	if cfg.SkipOriginVerify != nil {
+		skipOriginVerify = *cfg.SkipOriginVerify
+	}
+
 	e := &Endpoint{
 		path:               cfg.Path,
 		subprotocols:       cfg.Subprotocols,
@@ -100,6 +114,7 @@ func NewEndpoint(cfg *EndpointConfig) (*Endpoint, error) {
 		idleTimeout:        cfg.IdleTimeout.Duration(),
 		maxConnections:     cfg.MaxConnections,
 		echoMode:           echoMode,
+		skipOriginVerify:   skipOriginVerify,
 		enabled:            true, // Endpoints are enabled by default
 		connections:        make(map[string]*Connection),
 	}
@@ -160,6 +175,11 @@ func (e *Endpoint) EchoMode() bool {
 	return e.echoMode
 }
 
+// SkipOriginVerify returns whether origin verification should be skipped.
+func (e *Endpoint) SkipOriginVerify() bool {
+	return e.skipOriginVerify
+}
+
 // Enabled returns whether the endpoint is enabled.
 func (e *Endpoint) Enabled() bool {
 	e.mu.RLock()
@@ -196,6 +216,13 @@ func (e *Endpoint) Manager() *ConnectionManager {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.manager
+}
+
+// SetTemplateEngine sets the template engine for processing response templates.
+func (e *Endpoint) SetTemplateEngine(engine *template.Engine) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.templateEngine = engine
 }
 
 // CanAccept returns whether a new connection can be accepted.

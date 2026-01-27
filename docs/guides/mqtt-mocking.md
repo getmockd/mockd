@@ -105,7 +105,7 @@ mocks:
               payload: '{"status": "executed"}'
             forward: responses/device
 
-        - topic: devices/+/telemetry
+        - topic: devices/{device_id}/telemetry
           qos: 0
           deviceSimulation:
             enabled: true
@@ -392,9 +392,9 @@ Access levels:
 
 | Level | Description |
 |-------|-------------|
-| `read` | Subscribe only |
-| `write` | Publish only |
-| `readwrite` | Both subscribe and publish |
+| `read` / `subscribe` | Subscribe only |
+| `write` / `publish` | Publish only |
+| `readwrite` / `all` | Both subscribe and publish |
 
 ### Role-Based Access Example
 
@@ -462,7 +462,7 @@ Simulate multiple IoT devices publishing to topics.
 
 ```yaml
 topics:
-  - topic: devices/+/telemetry
+  - topic: devices/{device_id}/telemetry
     qos: 1
     deviceSimulation:
       enabled: true
@@ -470,11 +470,11 @@ topics:
       deviceIdPattern: "device_{index}"
 ```
 
-This creates 100 virtual devices (`device_0` through `device_99`) each publishing to their own topic:
-- `devices/device_0/telemetry`
+This creates 100 virtual devices (`device_1` through `device_100`) each publishing to their own topic:
 - `devices/device_1/telemetry`
+- `devices/device_2/telemetry`
 - ...
-- `devices/device_99/telemetry`
+- `devices/device_100/telemetry`
 
 ### Device Simulation Fields
 
@@ -482,14 +482,14 @@ This creates 100 virtual devices (`device_0` through `device_99`) each publishin
 |-------|------|-------------|
 | `enabled` | boolean | Enable device simulation |
 | `deviceCount` | integer | Number of virtual devices |
-| `deviceIdPattern` | string | Pattern for device IDs (`{index}` replaced with number) |
+| `deviceIdPattern` | string | Pattern for device IDs (`{n}`, `{id}`, or `{index}` replaced with number) |
 
 ### Simulating Device Fleet
 
 ```yaml
 topics:
   # Temperature sensors
-  - topic: sensors/temperature/+
+  - topic: sensors/temperature/{device_id}
     qos: 1
     deviceSimulation:
       enabled: true
@@ -506,7 +506,7 @@ topics:
         repeat: true
 
   # Motion sensors
-  - topic: sensors/motion/+
+  - topic: sensors/motion/{device_id}
     qos: 0
     deviceSimulation:
       enabled: true

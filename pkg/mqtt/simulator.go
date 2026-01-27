@@ -74,9 +74,18 @@ func NewSimulator(broker *Broker, topics []TopicConfig, sequences *SequenceStore
 func (s *Simulator) Start() {
 	for _, topic := range s.topics {
 		// Check if this topic has device simulation enabled
-		if topic.DeviceSimulation != nil && topic.DeviceSimulation.Enabled && strings.Contains(topic.Topic, "{device_id}") {
-			// Start per-topic device simulation
-			s.startPerTopicDeviceSimulation(topic)
+		if topic.DeviceSimulation != nil && topic.DeviceSimulation.Enabled {
+			if strings.Contains(topic.Topic, "{device_id}") {
+				// Start per-topic device simulation
+				s.startPerTopicDeviceSimulation(topic)
+			} else {
+				log.Printf("MQTT simulator: WARNING: deviceSimulation enabled for topic %q but topic does not contain {device_id} placeholder; skipping device simulation", topic.Topic)
+				// Fall through to regular message simulation
+				for _, msg := range topic.Messages {
+					s.wg.Add(1)
+					go s.runMessageLoop(topic, msg)
+				}
+			}
 		} else {
 			// Regular message simulation
 			for _, msg := range topic.Messages {
@@ -155,8 +164,8 @@ func ValidateDeviceSimulationSettings(settings *DeviceSimulationSettings, topicP
 	if settings.DeviceIDPattern == "" {
 		return fmt.Errorf("deviceIdPattern is required")
 	}
-	if !strings.Contains(settings.DeviceIDPattern, "{n}") && !strings.Contains(settings.DeviceIDPattern, "{id}") {
-		return fmt.Errorf("deviceIdPattern must contain {n} or {id} placeholder")
+	if !strings.Contains(settings.DeviceIDPattern, "{n}") && !strings.Contains(settings.DeviceIDPattern, "{id}") && !strings.Contains(settings.DeviceIDPattern, "{index}") {
+		return fmt.Errorf("deviceIdPattern must contain {n}, {id}, or {index} placeholder")
 	}
 	if !strings.Contains(topicPattern, "{device_id}") {
 		return fmt.Errorf("topic pattern must contain {device_id} placeholder for device simulation")
@@ -346,9 +355,10 @@ func (p *PerTopicDeviceSimulator) publishForDevice(device *perTopicSimulatedDevi
 // generateDeviceID generates a device ID from the pattern
 func (p *PerTopicDeviceSimulator) generateDeviceID(index int) string {
 	pattern := p.settings.DeviceIDPattern
-	// Support both {n} and {id} placeholders
+	// Support {n}, {id}, and {index} placeholders
 	pattern = strings.ReplaceAll(pattern, "{n}", fmt.Sprintf("%d", index))
 	pattern = strings.ReplaceAll(pattern, "{id}", fmt.Sprintf("%d", index))
+	pattern = strings.ReplaceAll(pattern, "{index}", fmt.Sprintf("%d", index))
 	return pattern
 }
 
@@ -381,6 +391,10 @@ func (p *PerTopicDeviceSimulator) generatePayload(deviceID string) []byte {
 	if rendered == "" {
 		return []byte(payloadTemplate)
 	}
+
+	// Process shared template variables ({{now}}, {{uuid.short}}, etc.)
+	rendered = processSharedTemplateVars(rendered)
+
 	return []byte(rendered)
 }
 
@@ -454,6 +468,9 @@ func (s *Simulator) processPayload(rawPayload, topicName string) []byte {
 		log.Printf("MQTT simulator: template rendered empty for topic %s, using raw payload", topicName)
 		return []byte(rawPayload)
 	}
+
+	// Process shared template variables ({{now}}, {{uuid.short}}, etc.)
+	rendered = processSharedTemplateVars(rendered)
 
 	return []byte(rendered)
 }
@@ -616,8 +633,8 @@ func ValidateMultiDeviceConfig(config *MultiDeviceSimulationConfig) error {
 	if config.DeviceIDPattern == "" {
 		return fmt.Errorf("deviceIdPattern is required")
 	}
-	if !strings.Contains(config.DeviceIDPattern, "{id}") {
-		return fmt.Errorf("deviceIdPattern must contain {id} placeholder")
+	if !strings.Contains(config.DeviceIDPattern, "{n}") && !strings.Contains(config.DeviceIDPattern, "{id}") && !strings.Contains(config.DeviceIDPattern, "{index}") {
+		return fmt.Errorf("deviceIdPattern must contain {n}, {id}, or {index} placeholder")
 	}
 	if config.TopicPattern == "" {
 		return fmt.Errorf("topicPattern is required")
@@ -812,7 +829,11 @@ func (m *MultiDeviceSimulator) publishForDevice(device *simulatedDevice, qos byt
 
 // generateDeviceID generates a device ID from the pattern
 func (m *MultiDeviceSimulator) generateDeviceID(index int) string {
-	return strings.ReplaceAll(m.config.DeviceIDPattern, "{id}", fmt.Sprintf("%d", index))
+	pattern := m.config.DeviceIDPattern
+	pattern = strings.ReplaceAll(pattern, "{n}", fmt.Sprintf("%d", index))
+	pattern = strings.ReplaceAll(pattern, "{id}", fmt.Sprintf("%d", index))
+	pattern = strings.ReplaceAll(pattern, "{index}", fmt.Sprintf("%d", index))
+	return pattern
 }
 
 // generateTopic generates a topic for a device
@@ -837,5 +858,9 @@ func (m *MultiDeviceSimulator) generatePayload(deviceID string) []byte {
 	if rendered == "" {
 		return []byte(m.config.PayloadTemplate)
 	}
+
+	// Process shared template variables ({{now}}, {{uuid.short}}, etc.)
+	rendered = processSharedTemplateVars(rendered)
+
 	return []byte(rendered)
 }

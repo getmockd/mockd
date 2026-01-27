@@ -63,7 +63,7 @@ func TestValidateMultiDeviceConfig(t *testing.T) {
 				IntervalMs:      1000,
 			},
 			wantErr: true,
-			errMsg:  "deviceIdPattern must contain {id} placeholder",
+			errMsg:  "deviceIdPattern must contain {n}, {id}, or {index} placeholder",
 		},
 		{
 			name: "missing topic pattern",

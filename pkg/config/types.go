@@ -233,6 +233,10 @@ type WebSocketEndpointConfig struct {
 	EchoMode *bool `json:"echoMode,omitempty" yaml:"echoMode,omitempty"`
 	// Enabled indicates whether the endpoint is active (default: true)
 	Enabled *bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	// SkipOriginVerify skips verification of the Origin header during WebSocket handshake.
+	// Default: true (allows any origin for development/testing convenience).
+	// Set to false to enforce that Origin matches the Host header.
+	SkipOriginVerify *bool `json:"skipOriginVerify,omitempty" yaml:"skipOriginVerify,omitempty"`
 }
 
 // StatefulResourceConfig defines configuration for a stateful CRUD resource.

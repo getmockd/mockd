@@ -1277,5 +1277,38 @@ func TestReflectionWithNestedTypes(t *testing.T) {
 	assert.Contains(t, fieldNames, "email")
 }
 
+func TestMatchMetadataValue(t *testing.T) {
+	tests := []struct {
+		value   string
+		pattern string
+		want    bool
+	}{
+		{"hello", "hello", true},
+		{"hello", "world", false},
+		{"hello", "*", true},
+		{"anything", "*", true},
+		{"bearer token123", "bearer *", true},
+		{"bearer token123", "basic *", false},
+		{"app/json", "*/json", true},
+		{"app/xml", "*/json", false},
+		{"v1.2.3", "v1.*", true},
+		{"v2.0.0", "v1.*", false},
+		{"test-value-end", "test-*-end", true},
+		{"test-middle-end", "test-*-end", true},
+		{"test-value-other", "test-*-end", false},
+		{"", "*", true},
+		{"", "", true},
+		{"hello", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s_%s", tt.value, tt.pattern), func(t *testing.T) {
+			got := matchMetadataValue(tt.value, tt.pattern)
+			if got != tt.want {
+				t.Errorf("matchMetadataValue(%q, %q) = %v, want %v", tt.value, tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
 // Helper to avoid unused import warning
 var _ = json.Marshal

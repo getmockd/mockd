@@ -65,10 +65,6 @@ site/
 __pycache__/
 *.py[cod]
 
-# TUI test artifacts
-tests/tui/screenshots/
-tests/tui/output/
-tests/tui/test_tabbar
 demo_resize_*.png
 mockd-test
 

@@ -332,7 +332,7 @@ func (s *WorkspaceServer) loadMocks(ctx context.Context) error {
 		// Clear and reload
 		s.store.Clear()
 		for _, cfg := range cfgs {
-			if cfg != nil && cfg.Enabled {
+			if cfg != nil && (cfg.Enabled == nil || *cfg.Enabled) {
 				// MockConfiguration is now an alias for mock.Mock
 				_ = s.store.Set(cfg)
 			}
@@ -345,7 +345,7 @@ func (s *WorkspaceServer) loadMocks(ctx context.Context) error {
 		allMocks := s.manager.centralStore.List()
 		s.store.Clear()
 		for _, m := range allMocks {
-			if m != nil && m.Enabled && m.WorkspaceID == s.WorkspaceID {
+			if m != nil && (m.Enabled == nil || *m.Enabled) && m.WorkspaceID == s.WorkspaceID {
 				_ = s.store.Set(m)
 			}
 		}

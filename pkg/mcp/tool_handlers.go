@@ -82,7 +82,7 @@ func handleGetMockData(args map[string]interface{}, session *MCPSession, server 
 		return ToolResultError("failed to list mocks: " + err.Error()), nil
 	}
 	for _, m := range mocks {
-		if !m.Enabled {
+		if m.Enabled != nil && !*m.Enabled {
 			continue
 		}
 		if m.HTTP == nil || m.HTTP.Matcher == nil {
@@ -167,8 +167,11 @@ func handleListEndpoints(args map[string]interface{}, session *MCPSession, serve
 		if pathPrefix != "" && m.HTTP != nil && m.HTTP.Matcher != nil && !strings.HasPrefix(m.HTTP.Matcher.Path, pathPrefix) {
 			continue
 		}
-		if enabledFilter != nil && m.Enabled != *enabledFilter {
-			continue
+		if enabledFilter != nil {
+			mEnabled := m.Enabled == nil || *m.Enabled
+			if mEnabled != *enabledFilter {
+				continue
+			}
 		}
 
 		path := ""
@@ -184,7 +187,7 @@ func handleListEndpoints(args map[string]interface{}, session *MCPSession, serve
 			ID:          m.ID,
 			Method:      method,
 			Path:        path,
-			Enabled:     m.Enabled,
+			Enabled:     m.Enabled == nil || *m.Enabled,
 			Description: m.Name,
 			Priority:    priority,
 			CreatedAt:   m.CreatedAt,
@@ -239,10 +242,11 @@ func handleCreateEndpoint(args map[string]interface{}, session *MCPSession, serv
 	delayMs := int(delay.Milliseconds())
 
 	// Create mock configuration
+	mcpEnabled := true
 	m := &config.MockConfiguration{
 		Name:    description,
 		Type:    mock.MockTypeHTTP,
-		Enabled: true,
+		Enabled: &mcpEnabled,
 		HTTP: &mock.HTTPSpec{
 			Priority: priority,
 			Matcher: &mock.HTTPMatcher{
@@ -397,7 +401,7 @@ func handleToggleEndpoint(args map[string]interface{}, session *MCPSession, serv
 		return ToolResultError("mock not found: " + id), nil
 	}
 
-	mockCfg.Enabled = enabled
+	mockCfg.Enabled = &enabled
 
 	if _, err := server.adminClient.UpdateMock(id, mockCfg); err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors

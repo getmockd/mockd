@@ -2,11 +2,13 @@ package websocket
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
 	ws "github.com/coder/websocket"
+	"github.com/getmockd/mockd/pkg/template"
 )
 
 // HandleUpgrade handles an HTTP request upgrade to WebSocket.
@@ -42,7 +44,7 @@ func (e *Endpoint) HandleUpgrade(w http.ResponseWriter, r *http.Request) error {
 	// Accept options
 	acceptOpts := &ws.AcceptOptions{
 		Subprotocols:       e.subprotocols,
-		InsecureSkipVerify: true,                   // Allow any origin for mocking
+		InsecureSkipVerify: e.skipOriginVerify,     // Configurable origin verification (default: true for mocking)
 		CompressionMode:    ws.CompressionDisabled, // Per spec, no compression in v1
 	}
 
@@ -120,7 +122,7 @@ func (e *Endpoint) handleConnection(conn *Connection) {
 	// Start scenario executor if configured
 	var executor *ScenarioExecutor
 	if e.scenario != nil {
-		executor = NewScenarioExecutor(conn, e.scenario)
+		executor = NewScenarioExecutor(conn, e.scenario, e.templateEngine)
 		go executor.Run()
 		defer executor.Stop()
 	}
@@ -190,8 +192,8 @@ func (e *Endpoint) handleMessage(conn *Connection, msgType MessageType, data []b
 	// Try to match against matchers
 	response := e.MatchMessage(msgType, data)
 	if response != nil {
-		// Send matched response
-		e.sendResponse(conn, response)
+		// Send matched response with incoming message context
+		e.sendResponse(conn, response, data)
 		return
 	}
 
@@ -205,7 +207,8 @@ func (e *Endpoint) handleMessage(conn *Connection, msgType MessageType, data []b
 }
 
 // sendResponse sends a MessageResponse to the connection.
-func (e *Endpoint) sendResponse(conn *Connection, response *MessageResponse) {
+// incomingMessage is the raw bytes of the received message (if any) for template context.
+func (e *Endpoint) sendResponse(conn *Connection, response *MessageResponse, incomingMessage []byte) {
 	// Apply delay if specified, respecting context cancellation
 	if response.Delay > 0 {
 		timer := time.NewTimer(response.Delay.Duration())
@@ -223,7 +226,45 @@ func (e *Endpoint) sendResponse(conn *Connection, response *MessageResponse) {
 		return
 	}
 
+	// Process template variables in text/json responses
+	if msgType == MessageText && e.templateEngine != nil {
+		ctx := e.createTemplateContext(incomingMessage)
+		processed, processErr := e.templateEngine.Process(string(data), ctx)
+		if processErr == nil {
+			data = []byte(processed)
+		}
+		// On error, use the original data (graceful degradation)
+	}
+
 	_ = conn.Send(msgType, data)
+}
+
+// createTemplateContext builds a template context for WebSocket responses.
+// The incoming message is made available as request.rawBody and parsed as
+// request.body (if valid JSON), enabling {{request.rawBody}} and
+// {{request.body.<field>}} in response templates.
+func (e *Endpoint) createTemplateContext(incomingMessage []byte) *template.Context {
+	ctx := &template.Context{
+		Request: template.RequestContext{
+			RawBody:             string(incomingMessage),
+			Path:                e.path,
+			Query:               make(map[string][]string),
+			Headers:             make(map[string][]string),
+			PathParams:          make(map[string]string),
+			PathPatternCaptures: make(map[string]string),
+			JSONPath:            make(map[string]interface{}),
+		},
+	}
+
+	// Try to parse incoming message as JSON for body field access
+	if len(incomingMessage) > 0 {
+		var body interface{}
+		if err := json.Unmarshal(incomingMessage, &body); err == nil {
+			ctx.Request.Body = body
+		}
+	}
+
+	return ctx
 }
 
 // runHeartbeat sends periodic pings to keep the connection alive.

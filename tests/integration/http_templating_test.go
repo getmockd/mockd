@@ -70,7 +70,7 @@ func setupTemplatingServer(t *testing.T) *templatingTestBundle {
 func createHTTPMock(t *testing.T, bundle *templatingTestBundle, name string, method string, path string, pathPattern string, body string, delayMs int) string {
 	testMock := &config.MockConfiguration{
 		Name:    name,
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -244,7 +244,7 @@ func TestHTTPTemplating_RequestRawBody(t *testing.T) {
 	// Note: rawBody contains raw JSON which needs special handling to embed in JSON
 	testMock := &config.MockConfiguration{
 		Name:    "raw-body-test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{

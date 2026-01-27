@@ -9,7 +9,7 @@ type Logger interface {
 }
 
 // Store defines the interface for request history storage.
-// Implementations store request/response entries for user inspection via TUI or Admin API.
+// Implementations store request/response entries for user inspection via the Admin API.
 // Store embeds Logger, so any Store implementation can be used where Logger is expected.
 type Store interface {
 	Logger
@@ -78,7 +78,7 @@ type Filter struct {
 }
 
 // Subscriber is a channel that receives new log entries.
-// Used for real-time updates in TUI or streaming APIs.
+// Used for real-time updates in streaming APIs.
 type Subscriber chan *Entry
 
 // SubscribableStore extends Store with subscription support for real-time updates.

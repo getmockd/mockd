@@ -113,7 +113,7 @@ func TestImportOpenAPI3Spec(t *testing.T) {
 
 	// Add all imported mocks to the server
 	for _, mockCfg := range result.Collection.Mocks {
-		mockCfg.Enabled = true
+		mockCfg.Enabled = boolPtr(true)
 		_, err := client.CreateMock(context.Background(), mockCfg)
 		require.NoError(t, err, "Failed to create mock: %s", mockCfg.Name)
 	}
@@ -201,7 +201,7 @@ func TestImportSwagger2Spec(t *testing.T) {
 
 	// Add the mock
 	mockCfg := result.Collection.Mocks[0]
-	mockCfg.Enabled = true
+	mockCfg.Enabled = boolPtr(true)
 	_, err = client.CreateMock(context.Background(), mockCfg)
 	require.NoError(t, err)
 
@@ -311,7 +311,7 @@ func TestImportPostmanCollection(t *testing.T) {
 
 	// Add all imported mocks to the server
 	for _, mockCfg := range result.Collection.Mocks {
-		mockCfg.Enabled = true
+		mockCfg.Enabled = boolPtr(true)
 		_, err := client.CreateMock(context.Background(), mockCfg)
 		require.NoError(t, err)
 	}
@@ -413,7 +413,7 @@ func TestImportWireMockStubs(t *testing.T) {
 
 	// Add all imported mocks to the server
 	for _, mockCfg := range result.Collection.Mocks {
-		mockCfg.Enabled = true
+		mockCfg.Enabled = boolPtr(true)
 		_, err := client.CreateMock(context.Background(), mockCfg)
 		require.NoError(t, err)
 	}
@@ -551,7 +551,7 @@ func TestImportHARFile(t *testing.T) {
 
 	// Add all imported mocks to the server
 	for _, mockCfg := range result.Collection.Mocks {
-		mockCfg.Enabled = true
+		mockCfg.Enabled = boolPtr(true)
 		_, err := client.CreateMock(context.Background(), mockCfg)
 		require.NoError(t, err)
 	}
@@ -655,7 +655,7 @@ func TestExportToMockdFormat(t *testing.T) {
 			{
 				ID:      "mock-export-1",
 				Name:    "Get Users",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 5,
@@ -679,7 +679,7 @@ func TestExportToMockdFormat(t *testing.T) {
 			{
 				ID:      "mock-export-2",
 				Name:    "Create User",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
@@ -729,7 +729,7 @@ func TestExportToOpenAPIFormat(t *testing.T) {
 			{
 				ID:      "oapi-mock-1",
 				Name:    "List Items",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
@@ -748,7 +748,7 @@ func TestExportToOpenAPIFormat(t *testing.T) {
 			{
 				ID:      "oapi-mock-2",
 				Name:    "Get Item Details",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
@@ -794,7 +794,7 @@ func TestRoundTripMockdFormat(t *testing.T) {
 			{
 				ID:      "rt-mock-1",
 				Name:    "Health Check",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 10,
@@ -819,7 +819,7 @@ func TestRoundTripMockdFormat(t *testing.T) {
 			{
 				ID:      "rt-mock-2",
 				Name:    "Error Response",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
@@ -871,7 +871,7 @@ func TestRoundTripOpenAPIFormat(t *testing.T) {
 			{
 				ID:      "oapi-rt-1",
 				Name:    "Get Resources",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
@@ -890,7 +890,7 @@ func TestRoundTripOpenAPIFormat(t *testing.T) {
 			{
 				ID:      "oapi-rt-2",
 				Name:    "Create Resource",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
@@ -963,7 +963,7 @@ func TestRoundTripWithServerIntegration(t *testing.T) {
 		{
 			ID:      "int-mock-1",
 			Name:    "Integration Mock 1",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
@@ -1018,7 +1018,7 @@ func TestRoundTripWithServerIntegration(t *testing.T) {
 
 	// Recreate mocks from import
 	for _, m := range importResult.Collection.Mocks {
-		m.Enabled = true
+		m.Enabled = boolPtr(true)
 		m.ID = "reimported-" + m.ID // Give a new ID
 		_, err := client.CreateMock(context.Background(), m)
 		require.NoError(t, err)

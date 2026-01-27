@@ -75,7 +75,7 @@ func TestHTTP_US1_AllMethods(t *testing.T) {
 		t.Run(method, func(t *testing.T) {
 			mockCfg := &config.MockConfiguration{
 				ID:      fmt.Sprintf("method-%s", strings.ToLower(method)),
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
@@ -117,7 +117,7 @@ func TestHTTP_US1_MethodMismatch(t *testing.T) {
 	// Add mock for GET only
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "get-only",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -148,7 +148,7 @@ func TestHTTP_US2_ExactPath(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "exact-path",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -189,7 +189,7 @@ func TestHTTP_US2_NamedParams(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "named-params",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -224,7 +224,7 @@ func TestHTTP_US2_WildcardPath(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "wildcard-path",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -261,7 +261,7 @@ func TestHTTP_US2_PathPattern(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "path-pattern",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -304,7 +304,7 @@ func TestHTTP_US2_PathPatternCapture(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "path-pattern-capture",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -337,7 +337,7 @@ func TestHTTP_US3_HeaderMatch(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "header-match",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -358,7 +358,7 @@ func TestHTTP_US3_HeaderMatch(t *testing.T) {
 	// Add fallback (lower priority than the specific header match)
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "header-match-fallback",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
@@ -398,7 +398,7 @@ func TestHTTP_US3_MultipleHeaders(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "multi-header",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -438,7 +438,7 @@ func TestHTTP_US4_QueryParamMatch(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "query-param",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -459,7 +459,7 @@ func TestHTTP_US4_QueryParamMatch(t *testing.T) {
 	// Add fallback (lower priority)
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "query-fallback",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
@@ -497,7 +497,7 @@ func TestHTTP_US4_MultipleQueryParams(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "multi-query",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -533,7 +533,7 @@ func TestHTTP_US5_BodyContains(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "body-contains",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -567,7 +567,7 @@ func TestHTTP_US5_BodyEquals(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "body-equals",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -611,7 +611,7 @@ func TestHTTP_US5_BodyPattern(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "body-pattern",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -645,7 +645,7 @@ func TestHTTP_US5_BodyJSONPath(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "body-jsonpath",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -692,7 +692,7 @@ func TestHTTP_US6_AllStatusCodes(t *testing.T) {
 		t.Run(fmt.Sprintf("Status%d", code), func(t *testing.T) {
 			_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 				ID:      fmt.Sprintf("status-%d", code),
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
@@ -724,7 +724,7 @@ func TestHTTP_US7_ResponseHeaders(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "response-headers",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -767,7 +767,7 @@ func TestHTTP_US8_ResponseDelay(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "delay-200ms",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -798,7 +798,7 @@ func TestHTTP_US8_NoDelay(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "no-delay",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -834,7 +834,7 @@ func TestHTTP_US9_PriorityTieBreaker(t *testing.T) {
 	// Add low priority first
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "low-pri",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 1,
@@ -853,7 +853,7 @@ func TestHTTP_US9_PriorityTieBreaker(t *testing.T) {
 	// Add high priority second
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "high-pri",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 100,
@@ -883,7 +883,7 @@ func TestHTTP_US9_ScoreBasedSelection(t *testing.T) {
 	// Generic mock (lower score)
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "generic",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -901,7 +901,7 @@ func TestHTTP_US9_ScoreBasedSelection(t *testing.T) {
 	// Specific mock with header (higher score)
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "specific",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -946,7 +946,7 @@ func TestHTTP_US10_DisabledMock(t *testing.T) {
 	// Add mock as enabled first
 	mockCfg := &config.MockConfiguration{
 		ID:      "disabled",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -969,7 +969,7 @@ func TestHTTP_US10_DisabledMock(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 
 	// Now disable it
-	mockCfg.Enabled = false
+	mockCfg.Enabled = boolPtr(false)
 	_, err = bundle.Client.UpdateMock(context.Background(), "disabled", mockCfg)
 	require.NoError(t, err)
 
@@ -986,7 +986,7 @@ func TestHTTP_US10_EnableDisableMock(t *testing.T) {
 	// Add enabled mock
 	mockCfg := &config.MockConfiguration{
 		ID:      "toggle",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1009,7 +1009,7 @@ func TestHTTP_US10_EnableDisableMock(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 
 	// Disable
-	mockCfg.Enabled = false
+	mockCfg.Enabled = boolPtr(false)
 	_, err = bundle.Client.UpdateMock(context.Background(), "toggle", mockCfg)
 	require.NoError(t, err)
 
@@ -1029,7 +1029,7 @@ func TestHTTP_US11_RequestPath(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "template-path",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1058,7 +1058,7 @@ func TestHTTP_US11_RequestMethod(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "template-method",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1087,7 +1087,7 @@ func TestHTTP_US11_QueryParams(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "template-query",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1121,7 +1121,7 @@ func TestHTTP_US11_RequestBody(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "template-body",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1158,7 +1158,7 @@ func TestHTTP_US11_DynamicValues(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "template-dynamic",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1196,7 +1196,7 @@ func TestHTTP_US12_CombinedCriteria(t *testing.T) {
 	// Mock with multiple criteria
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "combined",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1242,7 +1242,7 @@ func TestHTTP_US13_AddMock(t *testing.T) {
 	bundle := setupHTTPServer(t)
 
 	mockCfg := &config.MockConfiguration{
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1267,7 +1267,7 @@ func TestHTTP_US13_UpdateMock(t *testing.T) {
 	// Add initial mock
 	mockCfg := &config.MockConfiguration{
 		ID:      "update-test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1309,7 +1309,7 @@ func TestHTTP_US13_DeleteMock(t *testing.T) {
 	// Add mock
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "delete-test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1350,7 +1350,7 @@ func TestHTTP_US14_ConcurrentRequests(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "concurrent",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1401,7 +1401,7 @@ func TestHTTP_US15_JSONResponse(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "json-response",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1434,7 +1434,7 @@ func TestHTTP_US15_XMLResponse(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "xml-response",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1466,7 +1466,7 @@ func TestHTTP_US15_PlainTextResponse(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "text-response",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1498,7 +1498,7 @@ func TestHTTP_US15_HTMLResponse(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "html-response",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{

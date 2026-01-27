@@ -629,6 +629,14 @@ func (pm *ProtocolManager) AddGraphQLHandler(handler *graphql.Handler) {
 	pm.graphqlHandlers = append(pm.graphqlHandlers, handler)
 }
 
+// AddGraphQLSubscriptionHandler adds a GraphQL subscription handler to the manager.
+// This is used when loading subscriptions from config files so they are tracked for shutdown.
+func (pm *ProtocolManager) AddGraphQLSubscriptionHandler(handler *graphql.SubscriptionHandler) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.graphqlSubHandlers = append(pm.graphqlSubHandlers, handler)
+}
+
 // SOAPHandlers returns all SOAP handlers.
 func (pm *ProtocolManager) SOAPHandlers() []*soap.Handler {
 	pm.mu.RLock()

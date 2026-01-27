@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 // FileStore provides persistent file-based storage for stream recordings.
@@ -47,13 +49,9 @@ func (s *StreamRecordingSession) Recording() *StreamRecording {
 
 // NewFileStore creates a new file-based recording store.
 func NewFileStore(config StorageConfig) (*FileStore, error) {
-	// Apply defaults
+	// Apply defaults - recordings go in data dir per XDG spec
 	if config.DataDir == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get home directory: %w", err)
-		}
-		config.DataDir = filepath.Join(homeDir, ".config", "mockd", "recordings")
+		config.DataDir = store.DefaultRecordingsDir()
 	}
 	if config.MaxBytes == 0 {
 		config.MaxBytes = DefaultMaxStorageBytes

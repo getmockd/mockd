@@ -1279,3 +1279,59 @@ func TestConnectionManager_ConcurrentBroadcast_ListOperations(t *testing.T) {
 		t.Fatal("Concurrent list operations timed out")
 	}
 }
+
+// =============================================================================
+// Configuration Tests - SkipOriginVerify
+// =============================================================================
+
+func TestEndpoint_SkipOriginVerify_DefaultTrue(t *testing.T) {
+	// Test that SkipOriginVerify defaults to true for development convenience
+	cfg := &EndpointConfig{
+		Path: "/ws/test",
+	}
+
+	endpoint, err := NewEndpoint(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create endpoint: %v", err)
+	}
+
+	if !endpoint.SkipOriginVerify() {
+		t.Error("SkipOriginVerify should default to true")
+	}
+}
+
+func TestEndpoint_SkipOriginVerify_ExplicitFalse(t *testing.T) {
+	// Test that SkipOriginVerify can be explicitly set to false
+	skipVerify := false
+	cfg := &EndpointConfig{
+		Path:             "/ws/test",
+		SkipOriginVerify: &skipVerify,
+	}
+
+	endpoint, err := NewEndpoint(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create endpoint: %v", err)
+	}
+
+	if endpoint.SkipOriginVerify() {
+		t.Error("SkipOriginVerify should be false when explicitly set")
+	}
+}
+
+func TestEndpoint_SkipOriginVerify_ExplicitTrue(t *testing.T) {
+	// Test that SkipOriginVerify can be explicitly set to true
+	skipVerify := true
+	cfg := &EndpointConfig{
+		Path:             "/ws/test",
+		SkipOriginVerify: &skipVerify,
+	}
+
+	endpoint, err := NewEndpoint(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create endpoint: %v", err)
+	}
+
+	if !endpoint.SkipOriginVerify() {
+		t.Error("SkipOriginVerify should be true when explicitly set")
+	}
+}

@@ -908,10 +908,11 @@ func TestMock_Validate_HTTPOnlyOneResponseType(t *testing.T) {
 }
 
 func TestMock_Validate_ValidHTTPMock(t *testing.T) {
+	enabled := true
 	m := Mock{
 		ID:      "test-id",
 		Type:    MockTypeHTTP,
-		Enabled: true,
+		Enabled: &enabled,
 		HTTP: &HTTPSpec{
 			Matcher:  &HTTPMatcher{Method: "GET", Path: "/api/test"},
 			Response: &HTTPResponse{StatusCode: 200, Body: "ok"},
@@ -973,12 +974,13 @@ func TestMock_Validate_UnknownType(t *testing.T) {
 // =============================================================================
 
 func TestMock_JSON_RoundTrip_HTTP(t *testing.T) {
+	httpEnabled := true
 	original := Mock{
 		ID:          "http-1",
 		Type:        MockTypeHTTP,
 		Name:        "Test HTTP Mock",
 		Description: "A test mock",
-		Enabled:     true,
+		Enabled:     &httpEnabled,
 		ParentID:    "folder-1",
 		MetaSortKey: 1.5,
 		WorkspaceID: "ws-local",
@@ -1041,11 +1043,12 @@ func TestMock_JSON_RoundTrip_HTTP(t *testing.T) {
 }
 
 func TestMock_JSON_RoundTrip_WebSocket(t *testing.T) {
+	wsEnabled := true
 	original := Mock{
 		ID:      "ws-1",
 		Type:    MockTypeWebSocket,
 		Name:    "Test WebSocket Mock",
-		Enabled: true,
+		Enabled: &wsEnabled,
 		WebSocket: &WebSocketSpec{
 			Path:           "/ws/events",
 			Subprotocols:   []string{"graphql-ws", "subscriptions-transport-ws"},
@@ -1085,11 +1088,12 @@ func TestMock_JSON_RoundTrip_WebSocket(t *testing.T) {
 
 func TestMock_JSON_RoundTrip_SSE(t *testing.T) {
 	fixedDelay := 100
+	sseEnabled := true
 	original := Mock{
 		ID:      "sse-1",
 		Type:    MockTypeHTTP,
 		Name:    "Test SSE Mock",
-		Enabled: true,
+		Enabled: &sseEnabled,
 		HTTP: &HTTPSpec{
 			Matcher: &HTTPMatcher{
 				Method: "GET",

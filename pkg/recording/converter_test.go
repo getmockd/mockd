@@ -599,7 +599,7 @@ func TestToMock(t *testing.T) {
 		if mockCfg.HTTP.Response.StatusCode != 200 {
 			t.Errorf("expected status 200, got %d", mockCfg.HTTP.Response.StatusCode)
 		}
-		if !mockCfg.Enabled {
+		if mockCfg.Enabled != nil && !*mockCfg.Enabled {
 			t.Error("expected mock to be enabled")
 		}
 	})
@@ -1163,10 +1163,11 @@ func createTestHTTPRecordingWithBody(method, path string, status int, body strin
 
 func createTestMocksForDedup() []*config.MockConfiguration {
 	now := time.Now()
+	enabled := true
 	return []*config.MockConfiguration{
 		{
 			ID:        "1",
-			Enabled:   true,
+			Enabled:   &enabled,
 			Type:      mock.MockTypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -1177,7 +1178,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		},
 		{
 			ID:        "2",
-			Enabled:   true,
+			Enabled:   &enabled,
 			Type:      mock.MockTypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -1188,7 +1189,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		},
 		{
 			ID:        "3",
-			Enabled:   true,
+			Enabled:   &enabled,
 			Type:      mock.MockTypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -1199,7 +1200,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		},
 		{
 			ID:        "4",
-			Enabled:   true,
+			Enabled:   &enabled,
 			Type:      mock.MockTypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,

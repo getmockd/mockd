@@ -109,12 +109,18 @@ type subscriptionConn struct {
 
 // NewSubscriptionHandler creates a subscription handler.
 func NewSubscriptionHandler(schema *Schema, config *GraphQLConfig) *SubscriptionHandler {
+	// Determine skipOriginVerify (default: true for dev-friendly behavior)
+	skipOriginVerify := true
+	if config != nil && config.SkipOriginVerify != nil {
+		skipOriginVerify = *config.SkipOriginVerify
+	}
+
 	return &SubscriptionHandler{
 		schema: schema,
 		config: config,
 		upgrader: websocket.AcceptOptions{
 			Subprotocols:       []string{"graphql-transport-ws", "graphql-ws"},
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: skipOriginVerify, // Configurable origin verification (default: true for mocking)
 		},
 		conns:          make(map[string]*subscriptionConn),
 		templateEngine: template.New(),

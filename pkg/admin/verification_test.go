@@ -62,19 +62,19 @@ func TestVerifyMock_NoEngine(t *testing.T) {
 		assert.Equal(t, "no_engine", resp.Error)
 	})
 
-	t.Run("handleResetMockVerification returns not_implemented", func(t *testing.T) {
+	t.Run("handleResetMockVerification returns no_engine when no engine connected", func(t *testing.T) {
 		req := httptest.NewRequest("DELETE", "/mocks/test-id/invocations", nil)
 		req.SetPathValue("id", "test-id")
 		w := httptest.NewRecorder()
 
 		adminAPI.handleResetMockVerification(w, req)
 
-		assert.Equal(t, http.StatusNotImplemented, w.Code)
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 
 		var resp ErrorResponse
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err)
-		assert.Equal(t, "not_implemented", resp.Error)
+		assert.Equal(t, "no_engine", resp.Error)
 	})
 
 	t.Run("handleResetAllVerification returns no_engine error", func(t *testing.T) {

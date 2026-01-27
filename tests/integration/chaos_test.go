@@ -73,7 +73,7 @@ func setupChaosTestServer(t *testing.T, chaosConfig *chaos.ChaosConfig) *TestBun
 func setupBasicMock(t *testing.T, client *engineclient.Client, path string, body string) *config.MockConfiguration {
 	mockCfg := &config.MockConfiguration{
 		Name:    "Test Mock",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -636,7 +636,7 @@ func TestChaosMethodSpecificRules(t *testing.T) {
 	// Create mock that accepts both GET and POST
 	mockCfg := &config.MockConfiguration{
 		Name:    "Method Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{

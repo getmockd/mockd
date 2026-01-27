@@ -177,6 +177,75 @@ func TestHandleGetChaos(t *testing.T) {
 		assert.Equal(t, 503, resp.ErrorRate.DefaultCode)
 	})
 
+	t.Run("returns chaos config with bandwidth", func(t *testing.T) {
+		server := newMockChaosEngineServer()
+		defer server.Close()
+
+		server.chaosConfig = &engineclient.ChaosConfig{
+			Enabled: true,
+			Bandwidth: &engineclient.BandwidthConfig{
+				BytesPerSecond: 1024,
+				Probability:    0.3,
+			},
+		}
+
+		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+
+		req := httptest.NewRequest("GET", "/chaos", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleGetChaos(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp engineclient.ChaosConfig
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.True(t, resp.Enabled)
+		require.NotNil(t, resp.Bandwidth)
+		assert.Equal(t, 1024, resp.Bandwidth.BytesPerSecond)
+		assert.Equal(t, 0.3, resp.Bandwidth.Probability)
+	})
+
+	t.Run("returns chaos config with rules", func(t *testing.T) {
+		server := newMockChaosEngineServer()
+		defer server.Close()
+
+		server.chaosConfig = &engineclient.ChaosConfig{
+			Enabled: true,
+			Rules: []engineclient.ChaosRuleConfig{
+				{
+					PathPattern: "/api/v1/*",
+					Methods:     []string{"GET", "POST"},
+					Probability: 0.5,
+				},
+				{
+					PathPattern: "/health",
+					Probability: 0.0,
+				},
+			},
+		}
+
+		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+
+		req := httptest.NewRequest("GET", "/chaos", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleGetChaos(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp engineclient.ChaosConfig
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.True(t, resp.Enabled)
+		require.Len(t, resp.Rules, 2)
+		assert.Equal(t, "/api/v1/*", resp.Rules[0].PathPattern)
+		assert.Equal(t, []string{"GET", "POST"}, resp.Rules[0].Methods)
+		assert.Equal(t, 0.5, resp.Rules[0].Probability)
+		assert.Equal(t, "/health", resp.Rules[1].PathPattern)
+	})
+
 	t.Run("returns error when no engine connected", func(t *testing.T) {
 		api := NewAdminAPI(0) // No engine
 

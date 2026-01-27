@@ -24,6 +24,10 @@ type GraphQLConfig struct {
 	Subscriptions map[string]SubscriptionConfig `json:"subscriptions,omitempty" yaml:"subscriptions,omitempty"`
 	// Enabled indicates whether this GraphQL endpoint is active.
 	Enabled bool `json:"enabled" yaml:"enabled"`
+	// SkipOriginVerify skips verification of the Origin header during WebSocket handshake
+	// for GraphQL subscriptions. Default: true (allows any origin for development/testing).
+	// Set to false to enforce that Origin matches the Host header.
+	SkipOriginVerify *bool `json:"skipOriginVerify,omitempty" yaml:"skipOriginVerify,omitempty"`
 }
 
 // ResolverConfig configures how a GraphQL field is resolved.

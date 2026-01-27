@@ -95,7 +95,7 @@ func (a *AdminAPI) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	activeMocks := 0
 	for _, mock := range mocks {
-		if mock.Enabled {
+		if mock.Enabled == nil || *mock.Enabled {
 			activeMocks++
 		}
 	}
@@ -140,7 +140,8 @@ func (a *AdminAPI) handleListMocks(w http.ResponseWriter, r *http.Request) {
 		enabled := enabledParam == "true"
 		filtered := make([]*config.MockConfiguration, 0)
 		for _, mock := range mocks {
-			if mock.Enabled == enabled {
+			mockEnabled := mock.Enabled == nil || *mock.Enabled
+			if mockEnabled == enabled {
 				filtered = append(filtered, mock)
 			}
 		}
@@ -194,8 +195,9 @@ func (a *AdminAPI) handleCreateMock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set defaults
-	if !mock.Enabled {
-		mock.Enabled = true
+	if mock.Enabled == nil {
+		enabled := true
+		mock.Enabled = &enabled
 	}
 	now := time.Now()
 	mock.CreatedAt = now

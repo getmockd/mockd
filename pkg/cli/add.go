@@ -328,10 +328,11 @@ Run 'mockd add --help' for more options`)
 		matchQueryMap[key] = value
 	}
 
+	enabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
 		Type:    mock.MockTypeHTTP,
-		Enabled: true,
+		Enabled: &enabled,
 		HTTP: &mock.HTTPSpec{
 			Priority: priority,
 			Matcher: &mock.HTTPMatcher{
@@ -469,10 +470,11 @@ Usage: mockd add --type websocket --path /ws/endpoint [flags]
 Run 'mockd add --help' for more options`)
 	}
 
+	wsEnabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
 		Type:    mock.MockTypeWebSocket,
-		Enabled: true,
+		Enabled: &wsEnabled,
 		WebSocket: &mock.WebSocketSpec{
 			Path: path,
 		},
@@ -523,10 +525,11 @@ Run 'mockd add --help' for more options`)
 	// Auto-generate a minimal schema for CLI-created GraphQL mocks
 	schema := generateMinimalGraphQLSchema(operation, opType, response)
 
+	gqlEnabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
 		Type:    mock.MockTypeGraphQL,
-		Enabled: true,
+		Enabled: &gqlEnabled,
 		GraphQL: &mock.GraphQLSpec{
 			Path:      path,
 			Schema:    schema,
@@ -626,10 +629,11 @@ Run 'mockd add --help' for more options`)
 		}
 	}
 
+	grpcEnabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
 		Type:    mock.MockTypeGRPC,
-		Enabled: true,
+		Enabled: &grpcEnabled,
 		GRPC: &mock.GRPCSpec{
 			Port:       port,
 			Reflection: true, // Enable reflection for grpcurl/grpcui support
@@ -684,10 +688,11 @@ Run 'mockd add --help' for more options`)
 		return nil, fmt.Errorf("invalid --qos: %d (must be 0, 1, or 2)", qos)
 	}
 
+	mqttEnabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
 		Type:    mock.MockTypeMQTT,
-		Enabled: true,
+		Enabled: &mqttEnabled,
 		MQTT: &mock.MQTTSpec{
 			Port: port,
 			Topics: []mock.TopicConfig{
@@ -726,10 +731,11 @@ Run 'mockd add --help' for more options`)
 		path = "/soap"
 	}
 
+	soapEnabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
 		Type:    mock.MockTypeSOAP,
-		Enabled: true,
+		Enabled: &soapEnabled,
 		SOAP: &mock.SOAPSpec{
 			Path:       path,
 			Operations: make(map[string]mock.OperationConfig),

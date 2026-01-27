@@ -1,10 +1,11 @@
 package cliconfig
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestNewDefaultContextConfig(t *testing.T) {
@@ -248,7 +249,7 @@ func TestLoadContextConfig_Default(t *testing.T) {
 	}
 }
 
-func TestLoadContextConfig_InvalidJSON(t *testing.T) {
+func TestLoadContextConfig_InvalidYAML(t *testing.T) {
 	// Create temp directory
 	tmpDir, err := os.MkdirTemp("", "mockd-test")
 	if err != nil {
@@ -265,12 +266,12 @@ func TestLoadContextConfig_InvalidJSON(t *testing.T) {
 	configDir := filepath.Join(tmpDir, GlobalConfigDir)
 	os.MkdirAll(configDir, 0755)
 	configPath := filepath.Join(configDir, ContextConfigFileName)
-	os.WriteFile(configPath, []byte("invalid json"), 0644)
+	os.WriteFile(configPath, []byte("invalid: yaml: [unclosed"), 0644)
 
 	// Load should fail
 	_, err = LoadContextConfig()
 	if err == nil {
-		t.Error("expected error for invalid JSON")
+		t.Error("expected error for invalid YAML")
 	}
 }
 
@@ -330,7 +331,7 @@ func TestResolveWorkspace(t *testing.T) {
 	}
 }
 
-func TestContextConfig_JSON_Serialization(t *testing.T) {
+func TestContextConfig_YAML_Serialization(t *testing.T) {
 	cfg := &ContextConfig{
 		Version:        1,
 		CurrentContext: "production",
@@ -350,15 +351,15 @@ func TestContextConfig_JSON_Serialization(t *testing.T) {
 	}
 
 	// Serialize
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	data, err := yaml.Marshal(cfg)
 	if err != nil {
-		t.Fatalf("json.Marshal failed: %v", err)
+		t.Fatalf("yaml.Marshal failed: %v", err)
 	}
 
 	// Deserialize
 	var loaded ContextConfig
-	if err := json.Unmarshal(data, &loaded); err != nil {
-		t.Fatalf("json.Unmarshal failed: %v", err)
+	if err := yaml.Unmarshal(data, &loaded); err != nil {
+		t.Fatalf("yaml.Unmarshal failed: %v", err)
 	}
 
 	// Verify

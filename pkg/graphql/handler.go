@@ -128,15 +128,12 @@ func (h *Handler) Pattern() string {
 
 // ServeHTTP handles POST /graphql requests.
 // It supports both application/json and application/graphql content types.
+// Note: CORS is handled by the engine's CORSMiddleware, not directly here.
+// This ensures CORS configuration is respected rather than using hardcoded wildcards.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
-	// Set CORS headers for GraphQL endpoints
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-	// Handle preflight requests
+	// Handle preflight requests (CORS headers are set by middleware)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return

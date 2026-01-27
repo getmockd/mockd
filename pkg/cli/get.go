@@ -134,7 +134,7 @@ Run 'mockd get --help' for more options`)
 	if mock.HTTP != nil && mock.HTTP.Response != nil {
 		fmt.Printf("  Status:   %d\n", mock.HTTP.Response.StatusCode)
 	}
-	fmt.Printf("  Enabled:  %t\n", mock.Enabled)
+	fmt.Printf("  Enabled:  %t\n", mock.Enabled == nil || *mock.Enabled)
 	priority := 0
 	if mock.HTTP != nil {
 		priority = mock.HTTP.Priority

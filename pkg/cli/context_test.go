@@ -274,7 +274,7 @@ func TestContextConfigPath(t *testing.T) {
 		t.Fatalf("GetContextConfigPath failed: %v", err)
 	}
 
-	// Should contain contexts.json
+	// Should contain contexts.yaml
 	if filepath.Base(path) != cliconfig.ContextConfigFileName {
 		t.Errorf("path = %q, want to end with %q", path, cliconfig.ContextConfigFileName)
 	}

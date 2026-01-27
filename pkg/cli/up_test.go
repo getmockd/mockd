@@ -49,7 +49,7 @@ func TestRunUp_InvalidConfig(t *testing.T) {
 
 	// Write invalid config (missing required fields)
 	invalidConfig := `
-version: "1"
+version: "1.0"
 admins:
   - name: ""
 `
@@ -67,7 +67,7 @@ func TestRunUp_PortConflict(t *testing.T) {
 
 	// Config with port conflict
 	conflictConfig := `
-version: "1"
+version: "1.0"
 admins:
   - name: local
     port: 4280
@@ -89,7 +89,7 @@ func TestLoadProjectConfig_SingleFile(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
 	validConfig := `
-version: "1"
+version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -109,8 +109,8 @@ engines:
 		t.Errorf("path = %q, want %q", path, configPath)
 	}
 
-	if cfg.Version != "1" {
-		t.Errorf("Version = %q, want %q", cfg.Version, "1")
+	if cfg.Version != "1.0" {
+		t.Errorf("Version = %q, want %q", cfg.Version, "1.0")
 	}
 
 	if len(cfg.Admins) != 1 {
@@ -127,7 +127,7 @@ func TestLoadProjectConfig_MultipleFiles(t *testing.T) {
 
 	basePath := filepath.Join(tmpDir, "base.yaml")
 	baseConfig := `
-version: "1"
+version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -162,7 +162,7 @@ func TestLoadProjectConfig_Discovery(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
 	validConfig := `
-version: "1"
+version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -187,8 +187,8 @@ engines:
 		t.Errorf("discovered path = %q, want %q", path, configPath)
 	}
 
-	if cfg.Version != "1" {
-		t.Errorf("Version = %q, want %q", cfg.Version, "1")
+	if cfg.Version != "1.0" {
+		t.Errorf("Version = %q, want %q", cfg.Version, "1.0")
 	}
 }
 
@@ -197,7 +197,7 @@ func TestLoadProjectConfig_EnvVarDiscovery(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "custom.yaml")
 
 	validConfig := `
-version: "1"
+version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -221,14 +221,14 @@ engines:
 		t.Errorf("path = %q, want %q", path, configPath)
 	}
 
-	if cfg.Version != "1" {
-		t.Errorf("Version = %q, want %q", cfg.Version, "1")
+	if cfg.Version != "1.0" {
+		t.Errorf("Version = %q, want %q", cfg.Version, "1.0")
 	}
 }
 
 func TestCheckProjectPorts_Available(t *testing.T) {
 	cfg := &config.ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []config.AdminConfig{
 			{Name: "local", Port: 0}, // Port 0 means any available
 		},
@@ -246,7 +246,7 @@ func TestCheckProjectPorts_Available(t *testing.T) {
 
 func TestPrintUpSummary(t *testing.T) {
 	cfg := &config.ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []config.AdminConfig{
 			{Name: "local", Port: 4290},
 			{Name: "remote", URL: "https://example.com"},
@@ -286,7 +286,7 @@ func TestUpContext_WritePIDFile(t *testing.T) {
 	pidPath := filepath.Join(tmpDir, ".mockd", "mockd.pid")
 
 	cfg := &config.ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []config.AdminConfig{
 			{Name: "local", Port: 4290},
 		},

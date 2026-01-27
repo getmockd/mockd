@@ -509,9 +509,20 @@ func (h *ConditionalResponseHandler) executeResponse(cfg responseConfig, trigger
 		responseTopic = RenderTopicTemplate(responseTopic, wildcards)
 	}
 
-	// Render payload template
+	// Render payload template (MQTT-specific variables first, then shared variables)
 	template := NewTemplate(cfg.payloadTemplate, h.sequences)
 	responsePayload := template.Render(ctx)
+	responsePayload = processSharedTemplateVars(responsePayload)
+
+	// Prevent infinite loop: mark this topic as an active mock response.
+	// If the topic is already marked, a loop has been detected.
+	if !h.broker.markMockResponseTopic(responseTopic) {
+		h.broker.log.Warn("skipping conditional response to prevent infinite loop",
+			"responseTopic", responseTopic,
+			"responseID", responseID)
+		return
+	}
+	defer h.broker.unmarkMockResponseTopic(responseTopic)
 
 	// Publish the response and log any errors
 	if err := h.broker.Publish(responseTopic, []byte(responsePayload), 0, false); err != nil {

@@ -243,7 +243,7 @@ func readStringWithDefault(reader *bufio.Reader, defaultVal string) (string, err
 // generateMinimalProjectConfig creates a minimal ProjectConfig from init settings.
 func generateMinimalProjectConfig(cfg *initConfig) *config.ProjectConfig {
 	projectCfg := &config.ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []config.AdminConfig{
 			{
 				Name: "local",
@@ -313,7 +313,7 @@ func getProjectConfigTemplate(name string) (*config.ProjectConfig, error) {
 // generateMinimalTemplate creates a minimal ProjectConfig template.
 func generateMinimalTemplate() *config.ProjectConfig {
 	return &config.ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []config.AdminConfig{
 			{
 				Name: "local",
@@ -358,7 +358,7 @@ func generateMinimalTemplate() *config.ProjectConfig {
 // generateFullTemplate creates a full ProjectConfig template with sample mocks.
 func generateFullTemplate() *config.ProjectConfig {
 	return &config.ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []config.AdminConfig{
 			{
 				Name: "local",
@@ -443,7 +443,7 @@ func generateFullTemplate() *config.ProjectConfig {
 // generateAPITemplate creates a ProjectConfig template for REST API mocking with CRUD examples.
 func generateAPITemplate() *config.ProjectConfig {
 	return &config.ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []config.AdminConfig{
 			{
 				Name: "local",

@@ -54,7 +54,7 @@ func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store
 	// all protocol types (HTTP, WebSocket, GraphQL, gRPC, MQTT, SOAP, OAuth, SSE).
 	// HTTP mocks are also matched via store lookup, but registerHandler is a no-op for them.
 	for _, m := range mocks {
-		if !m.Enabled {
+		if m.Enabled != nil && !*m.Enabled {
 			continue
 		}
 		// registerHandler logs warnings for failures but doesn't return errors
@@ -143,6 +143,33 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 
 			// Register the handler at the configured path
 			cl.server.handler.RegisterGraphQLHandler(gqlCfg.Path, gqlHandler)
+
+			// Create subscription handler if subscriptions are configured
+			if len(gqlCfg.Subscriptions) > 0 {
+				// Parse schema for subscription handler
+				var schema *graphql.Schema
+				var schemaErr error
+				if gqlCfg.Schema != "" {
+					schema, schemaErr = graphql.ParseSchema(gqlCfg.Schema)
+				} else if gqlCfg.SchemaFile != "" {
+					schema, schemaErr = graphql.ParseSchemaFile(gqlCfg.SchemaFile)
+				}
+				if schemaErr != nil {
+					return fmt.Errorf("failed to parse GraphQL schema for subscriptions: %w", schemaErr)
+				}
+
+				subHandler := graphql.NewSubscriptionHandler(schema, gqlCfg)
+				cl.server.protocolManager.AddGraphQLSubscriptionHandler(subHandler)
+
+				// Register subscription handler at path/ws
+				wsPath := gqlCfg.Path
+				if wsPath[len(wsPath)-1] != '/' {
+					wsPath += "/ws"
+				} else {
+					wsPath += "ws"
+				}
+				cl.server.handler.RegisterGraphQLSubscriptionHandler(wsPath, subHandler)
+			}
 		}
 	}
 

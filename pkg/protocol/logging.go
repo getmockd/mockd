@@ -27,7 +27,7 @@ type Loggable interface {
 }
 
 // RequestLoggable handlers support request logging for user inspection.
-// This captures request/response data for display in the TUI and Admin API.
+// This captures request/response data for display in the Admin API.
 //
 // Implementations MUST be thread-safe. The engine may call SetRequestLogger
 // at any time, and GetRequestLogger may be called concurrently from
@@ -64,7 +64,7 @@ type RequestLoggable interface {
 
 // Observable handlers expose operational metrics.
 // These metrics are used by the Admin API stats endpoints and
-// can be displayed in the TUI.
+// can be displayed in the Admin API.
 //
 // Example implementation:
 //

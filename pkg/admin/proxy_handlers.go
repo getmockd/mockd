@@ -163,7 +163,7 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create proxy with logger
-	// Use the same output as the default logger (which may be io.Discard in TUI mode)
+	// Use the same output as the default logger
 	logger := log.New(log.Writer(), "[proxy] ", log.LstdFlags)
 	p := proxy.New(proxy.Options{
 		Mode:      mode,

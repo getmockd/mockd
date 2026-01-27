@@ -56,8 +56,8 @@ func ValidateProjectConfig(cfg *ProjectConfig) *SchemaValidationResult {
 	// Version is required
 	if cfg.Version == "" {
 		result.AddError("version", "required")
-	} else if cfg.Version != "1" {
-		result.AddError("version", fmt.Sprintf("unsupported version %q, expected \"1\"", cfg.Version))
+	} else if cfg.Version != "1.0" {
+		result.AddError("version", fmt.Sprintf("unsupported version %q, expected \"1.0\"", cfg.Version))
 	}
 
 	// Validate admins

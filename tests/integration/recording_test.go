@@ -67,7 +67,7 @@ func TestRecordingsConvertToMocks(t *testing.T) {
 		t.Errorf("Unexpected body: %s", mock.HTTP.Response.Body)
 	}
 
-	if !mock.Enabled {
+	if mock.Enabled == nil || !*mock.Enabled {
 		t.Error("Expected mock to be enabled")
 	}
 

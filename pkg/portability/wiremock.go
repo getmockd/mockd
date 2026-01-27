@@ -128,11 +128,12 @@ func (i *WireMockImporter) convertMappings(mappings []WireMockMapping) (*config.
 
 // mappingToMock converts a WireMock mapping to a MockConfiguration.
 func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now time.Time) *config.MockConfiguration {
+	enabled := true
 	m := &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
 		Name:      mapping.Name,
 		Type:      mock.MockTypeHTTP,
-		Enabled:   true,
+		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
 		HTTP: &mock.HTTPSpec{

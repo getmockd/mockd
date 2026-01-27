@@ -1011,10 +1011,10 @@ func (s *Server) matchesCondition(match *MethodMatch, md metadata.MD, req map[st
 		if len(values) == 0 {
 			return false
 		}
-		// Check if any value matches
+		// Check if any value matches (supports wildcard patterns)
 		found := false
 		for _, v := range values {
-			if v == expectedValue {
+			if matchMetadataValue(v, expectedValue) {
 				found = true
 				break
 			}
@@ -1039,6 +1039,34 @@ func (s *Server) matchesCondition(match *MethodMatch, md metadata.MD, req map[st
 	}
 
 	return true
+}
+
+// matchMetadataValue checks if a metadata value matches the expected pattern.
+// Supports exact match and wildcard patterns:
+//   - "*" matches any value
+//   - "prefix*" matches values starting with "prefix"
+//   - "*suffix" matches values ending with "suffix"
+//   - "pre*suf" matches values starting with "pre" and ending with "suf"
+func matchMetadataValue(value, pattern string) bool {
+	if pattern == "*" {
+		return true
+	}
+	if !strings.Contains(pattern, "*") {
+		return value == pattern
+	}
+	parts := strings.SplitN(pattern, "*", 2)
+	if len(parts) == 2 {
+		prefix := parts[0]
+		suffix := parts[1]
+		if suffix == "" {
+			return strings.HasPrefix(value, prefix)
+		}
+		if prefix == "" {
+			return strings.HasSuffix(value, suffix)
+		}
+		return strings.HasPrefix(value, prefix) && strings.HasSuffix(value, suffix) && len(value) >= len(prefix)+len(suffix)
+	}
+	return value == pattern
 }
 
 // valuesEqual compares two values for equality, handling type differences.

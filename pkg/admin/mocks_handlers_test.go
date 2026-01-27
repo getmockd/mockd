@@ -120,10 +120,10 @@ func TestGetMockPort(t *testing.T) {
 func TestApplyMockFilter(t *testing.T) {
 	// Create test mocks
 	mocks := []*mock.Mock{
-		{ID: "mqtt-1", Type: mock.MockTypeMQTT, Enabled: true, WorkspaceID: "ws-1", ParentID: "folder-1"},
-		{ID: "mqtt-2", Type: mock.MockTypeMQTT, Enabled: false, WorkspaceID: "ws-1", ParentID: ""},
-		{ID: "grpc-1", Type: mock.MockTypeGRPC, Enabled: true, WorkspaceID: "ws-1", ParentID: ""},
-		{ID: "http-1", Type: mock.MockTypeHTTP, Enabled: true, WorkspaceID: "ws-2", ParentID: "folder-1"},
+		{ID: "mqtt-1", Type: mock.MockTypeMQTT, Enabled: boolPtr(true), WorkspaceID: "ws-1", ParentID: "folder-1"},
+		{ID: "mqtt-2", Type: mock.MockTypeMQTT, Enabled: boolPtr(false), WorkspaceID: "ws-1", ParentID: ""},
+		{ID: "grpc-1", Type: mock.MockTypeGRPC, Enabled: boolPtr(true), WorkspaceID: "ws-1", ParentID: ""},
+		{ID: "http-1", Type: mock.MockTypeHTTP, Enabled: boolPtr(true), WorkspaceID: "ws-2", ParentID: "folder-1"},
 	}
 
 	t.Run("filter by type", func(t *testing.T) {
@@ -150,7 +150,8 @@ func TestApplyMockFilter(t *testing.T) {
 		result := applyMockFilter(mocks, filter)
 		assert.Len(t, result, 3)
 		for _, m := range result {
-			assert.True(t, m.Enabled)
+			assert.NotNil(t, m.Enabled)
+			assert.True(t, *m.Enabled)
 		}
 	})
 
@@ -206,17 +207,19 @@ func TestApplyMockPatch(t *testing.T) {
 	})
 
 	t.Run("patch enabled to false", func(t *testing.T) {
-		m := &mock.Mock{ID: "test", Enabled: true}
+		m := &mock.Mock{ID: "test", Enabled: boolPtr(true)}
 		patch := map[string]interface{}{"enabled": false}
 		applyMockPatch(m, patch)
-		assert.False(t, m.Enabled)
+		assert.NotNil(t, m.Enabled)
+		assert.False(t, *m.Enabled)
 	})
 
 	t.Run("patch enabled to true", func(t *testing.T) {
-		m := &mock.Mock{ID: "test", Enabled: false}
+		m := &mock.Mock{ID: "test", Enabled: boolPtr(false)}
 		patch := map[string]interface{}{"enabled": true}
 		applyMockPatch(m, patch)
-		assert.True(t, m.Enabled)
+		assert.NotNil(t, m.Enabled)
+		assert.True(t, *m.Enabled)
 	})
 
 	t.Run("patch parentId", func(t *testing.T) {

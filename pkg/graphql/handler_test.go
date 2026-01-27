@@ -196,13 +196,8 @@ func TestHandler_ServeHTTP_OPTIONS(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v", rr.Code, http.StatusOK)
 	}
 
-	// Check CORS headers
-	if cors := rr.Header().Get("Access-Control-Allow-Origin"); cors != "*" {
-		t.Errorf("Access-Control-Allow-Origin = %v, want '*'", cors)
-	}
-	if methods := rr.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(methods, "POST") {
-		t.Errorf("Access-Control-Allow-Methods = %v, want to contain 'POST'", methods)
-	}
+	// Note: CORS headers are now handled by the engine's CORSMiddleware, not by the handler directly.
+	// This test only verifies that OPTIONS returns 200 OK for preflight requests.
 }
 
 func TestHandler_ServeHTTP_MethodNotAllowed(t *testing.T) {
@@ -471,7 +466,10 @@ func TestEndpoint_InvalidSchema(t *testing.T) {
 	}
 }
 
-func TestHandler_CORSHeaders(t *testing.T) {
+func TestHandler_CORSHandledByMiddleware(t *testing.T) {
+	// Note: CORS headers are now handled by the engine's CORSMiddleware, not by the GraphQL handler.
+	// This test verifies that the handler does NOT set CORS headers directly, as that would
+	// override the configurable CORS settings from the middleware.
 	handler := newTestHandler(t)
 
 	body := `{"query": "query { user(id: \"1\") { id } }"}`
@@ -481,8 +479,8 @@ func TestHandler_CORSHeaders(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	// Check CORS headers are set on all responses
-	if cors := rr.Header().Get("Access-Control-Allow-Origin"); cors != "*" {
-		t.Errorf("Access-Control-Allow-Origin = %v, want '*'", cors)
+	// Handler should NOT set CORS headers directly - this is now the middleware's job
+	if cors := rr.Header().Get("Access-Control-Allow-Origin"); cors != "" {
+		t.Errorf("Handler should not set Access-Control-Allow-Origin directly, got: %v", cors)
 	}
 }

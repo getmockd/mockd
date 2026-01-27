@@ -1339,9 +1339,12 @@ func TestGraphQL_HTTP_MethodNotAllowed(t *testing.T) {
 	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 }
 
-func TestGraphQL_HTTP_CORSHeaders(t *testing.T) {
+func TestGraphQL_HTTP_OptionsRequest(t *testing.T) {
+	// Note: CORS headers are now handled by the engine's CORSMiddleware, not by the handler.
+	// This test verifies that the GraphQL handler returns 200 OK for OPTIONS preflight requests.
+	// Actual CORS header testing should be done with the full engine setup.
 	cfg := &graphql.GraphQLConfig{
-		ID:            "test-cors",
+		ID:            "test-options",
 		Path:          "/graphql",
 		Schema:        testSchema,
 		Introspection: true,
@@ -1358,9 +1361,11 @@ func TestGraphQL_HTTP_CORSHeaders(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
+	// Handler should accept OPTIONS and return 200 OK
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
-	assert.Contains(t, resp.Header.Get("Access-Control-Allow-Methods"), "POST")
+
+	// Handler should NOT set CORS headers - that's the middleware's job
+	// Note: When running through the full engine, CORS headers would be set by CORSMiddleware
 }
 
 // ============================================================================

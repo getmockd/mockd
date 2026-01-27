@@ -27,7 +27,11 @@ mockd start --config chat-mock.json
 Copy a recording file to your mockd recordings directory:
 
 ```bash
-cp websocket-chat.json ~/.config/mockd/recordings/
+# Linux
+cp websocket-chat.json ~/.local/share/mockd/recordings/
+
+# macOS
+cp websocket-chat.json ~/Library/Application\ Support/mockd/recordings/
 ```
 
 ### Use in Tests

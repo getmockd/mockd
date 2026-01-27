@@ -194,7 +194,7 @@ func TestHandlerServeHTTP(t *testing.T) {
 		// CORS is now handled by middleware, not the handler directly
 		// Test with wildcard CORS config
 		corsConfig := WildcardCORSConfig()
-		corsHandler := NewCORSMiddleware(handler, corsConfig)
+		corsHandler := NewCORSMiddleware(handler, corsConfig, nil)
 
 		req := httptest.NewRequest(http.MethodOptions, "/api/test", nil)
 		req.Header.Set("Origin", "http://example.com")
@@ -214,7 +214,7 @@ func TestHandlerServeHTTP(t *testing.T) {
 		handler := NewHandler(store)
 
 		// Default config only allows localhost
-		corsHandler := NewCORSMiddleware(handler, nil)
+		corsHandler := NewCORSMiddleware(handler, nil, nil)
 
 		req := httptest.NewRequest(http.MethodOptions, "/api/test", nil)
 		req.Header.Set("Origin", "http://evil.com")
@@ -233,7 +233,7 @@ func TestHandlerServeHTTP(t *testing.T) {
 		handler := NewHandler(store)
 
 		// Default config allows localhost
-		corsHandler := NewCORSMiddleware(handler, nil)
+		corsHandler := NewCORSMiddleware(handler, nil, nil)
 
 		req := httptest.NewRequest(http.MethodOptions, "/api/test", nil)
 		req.Header.Set("Origin", "http://localhost:3000")
@@ -314,7 +314,7 @@ func TestHandlerServeHTTP(t *testing.T) {
 		mockCfg := &config.MockConfiguration{
 			ID:      "header-mock",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method:  "GET",
@@ -353,7 +353,7 @@ func TestHandlerServeHTTP(t *testing.T) {
 		mockCfg := &config.MockConfiguration{
 			ID:      "query-mock",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method:      "GET",
@@ -384,7 +384,7 @@ func TestHandlerServeHTTP(t *testing.T) {
 		mockCfg := &config.MockConfiguration{
 			ID:      "headers-mock",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -420,7 +420,7 @@ func TestHandlerServeHTTP(t *testing.T) {
 		mockCfg := &config.MockConfiguration{
 			ID:      "body-mock",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method:       "POST",
@@ -514,7 +514,8 @@ func TestMockManagerAdd(t *testing.T) {
 		err := mm.Add(mockCfg)
 		require.NoError(t, err)
 		assert.NotEmpty(t, mockCfg.ID) // ID should be generated
-		assert.True(t, mockCfg.Enabled)
+		assert.NotNil(t, mockCfg.Enabled)
+		assert.True(t, *mockCfg.Enabled)
 		assert.False(t, mockCfg.CreatedAt.IsZero())
 		assert.False(t, mockCfg.UpdatedAt.IsZero())
 	})
@@ -559,7 +560,7 @@ func TestMockManagerAdd(t *testing.T) {
 		mockCfg := &config.MockConfiguration{
 			ID:      "invalid-mock",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method:      "GET",
@@ -1017,7 +1018,7 @@ func TestHandlerIntegration(t *testing.T) {
 		lowPriority := &config.MockConfiguration{
 			ID:      "low-priority",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Priority: 1,
 				Matcher: &mock.HTTPMatcher{
@@ -1036,7 +1037,7 @@ func TestHandlerIntegration(t *testing.T) {
 		highPriority := &config.MockConfiguration{
 			ID:      "high-priority",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Priority: 10,
 				Matcher: &mock.HTTPMatcher{
@@ -1068,7 +1069,7 @@ func TestHandlerWithDelay(t *testing.T) {
 		mockCfg := &config.MockConfiguration{
 			ID:      "delayed-mock",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -1098,12 +1099,14 @@ func TestHandlerWithDelay(t *testing.T) {
 // Helper Functions
 // ============================================================================
 
+func boolPtr(b bool) *bool { return &b }
+
 // createTestHTTPMock creates a test HTTP mock configuration.
 func createTestHTTPMock(id, path, method string, statusCode int, body string) *config.MockConfiguration {
 	return &config.MockConfiguration{
 		ID:      id,
 		Type:    mock.MockTypeHTTP,
-		Enabled: true,
+		Enabled: boolPtr(true),
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: method,
@@ -1132,7 +1135,7 @@ func TestHandlerEdgeCases(t *testing.T) {
 		mockCfg := &config.MockConfiguration{
 			ID:      "empty-body-mock",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -1162,7 +1165,7 @@ func TestHandlerEdgeCases(t *testing.T) {
 		mockCfg := &config.MockConfiguration{
 			ID:      "large-body-mock",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "POST",
@@ -1192,7 +1195,7 @@ func TestHandlerEdgeCases(t *testing.T) {
 		mockCfg := &config.MockConfiguration{
 			ID:      "special-path-mock",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: boolPtr(true),
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -1221,7 +1224,7 @@ func TestHandlerEdgeCases(t *testing.T) {
 		mockCfg := &config.MockConfiguration{
 			ID:      "disabled-mock",
 			Type:    mock.MockTypeHTTP,
-			Enabled: false, // Disabled
+			Enabled: boolPtr(false), // Disabled
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",

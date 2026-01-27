@@ -106,7 +106,7 @@ Examples:
   mockd context remove old-server
 
 Configuration:
-  Contexts are stored in ~/.config/mockd/contexts.json
+  Contexts are stored in ~/.config/mockd/contexts.yaml
 `)
 }
 

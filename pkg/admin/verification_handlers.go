@@ -279,15 +279,41 @@ func (a *AdminAPI) handleListMockInvocations(w http.ResponseWriter, r *http.Requ
 
 // handleResetMockVerification handles DELETE /mocks/{id}/invocations.
 // Clears invocation history for a specific mock.
-// Note: This requires selective clearing which is not yet supported via the engine HTTP API.
 func (a *AdminAPI) handleResetMockVerification(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")
 		return
 	}
 
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Clearing invocations by mock ID requires direct engine access - coming soon")
+	if a.localEngine == nil {
+		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
+		return
+	}
+
+	// Verify mock exists
+	_, err := a.localEngine.GetMock(ctx, id)
+	if err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		return
+	}
+
+	count, err := a.localEngine.ClearRequestsByMockID(ctx, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message": "Invocations cleared",
+		"mockId":  id,
+		"cleared": count,
+	})
 }
 
 // handleResetAllVerification handles DELETE /verify.

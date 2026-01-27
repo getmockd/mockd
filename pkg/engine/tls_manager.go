@@ -130,5 +130,52 @@ func (tm *TLSManager) configureMTLS(tlsConfig *tls.Config) error {
 		tlsConfig.ClientCAs = certPool
 	}
 
+	// Configure CN/OU filtering if specified
+	if len(mtlsCfg.AllowedCNs) > 0 || len(mtlsCfg.AllowedOUs) > 0 {
+		// Create lookup maps for O(1) checking
+		allowedCNs := make(map[string]struct{})
+		for _, cn := range mtlsCfg.AllowedCNs {
+			allowedCNs[cn] = struct{}{}
+		}
+
+		allowedOUs := make(map[string]struct{})
+		for _, ou := range mtlsCfg.AllowedOUs {
+			allowedOUs[ou] = struct{}{}
+		}
+
+		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			// If no verified chains yet, let standard TLS verification handle it
+			if len(verifiedChains) == 0 || len(verifiedChains[0]) == 0 {
+				return nil
+			}
+
+			// Get the client certificate (first cert in first verified chain)
+			clientCert := verifiedChains[0][0]
+
+			// Check Common Name if AllowedCNs is configured
+			if len(allowedCNs) > 0 {
+				if _, ok := allowedCNs[clientCert.Subject.CommonName]; !ok {
+					return fmt.Errorf("client certificate CN %q not in allowed list", clientCert.Subject.CommonName)
+				}
+			}
+
+			// Check Organizational Units if AllowedOUs is configured
+			if len(allowedOUs) > 0 {
+				found := false
+				for _, ou := range clientCert.Subject.OrganizationalUnit {
+					if _, ok := allowedOUs[ou]; ok {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("client certificate OUs %v not in allowed list", clientCert.Subject.OrganizationalUnit)
+				}
+			}
+
+			return nil
+		}
+	}
+
 	return nil
 }

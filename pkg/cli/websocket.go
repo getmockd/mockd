@@ -620,7 +620,7 @@ Examples:
 			path = m.WebSocket.Path
 		}
 		status := "enabled"
-		if !m.Enabled {
+		if m.Enabled != nil && !*m.Enabled {
 			status = "disabled"
 		}
 		fmt.Printf("  - %s (%s) [%s]\n", path, m.ID, status)
