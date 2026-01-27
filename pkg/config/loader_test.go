@@ -103,13 +103,14 @@ func TestSaveToFile_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "output.json")
 
+	enabled := true
 	collection := &MockCollection{
 		Version: "1.0",
 		Name:    "test-save",
 		Mocks: []*MockConfiguration{
 			{
 				ID:      "save-mock",
-				Enabled: true,
+				Enabled: &enabled,
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 5,
@@ -162,6 +163,8 @@ func TestSaveToFile_NilCollection(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func boolPtr(b bool) *bool { return &b }
+
 func TestSaveLoadRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "roundtrip.json")
@@ -172,7 +175,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		Mocks: []*MockConfiguration{
 			{
 				ID:      "mock-1",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 10,
@@ -194,7 +197,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 			},
 			{
 				ID:      "mock-2",
-				Enabled: false,
+				Enabled: boolPtr(false),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 5,
@@ -303,7 +306,7 @@ func TestSaveMocksToFile(t *testing.T) {
 	mocks := []*MockConfiguration{
 		{
 			ID:      "sm1",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{

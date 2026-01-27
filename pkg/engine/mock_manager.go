@@ -66,8 +66,9 @@ func (mm *MockManager) Add(cfg *config.MockConfiguration) error {
 	cfg.UpdatedAt = now
 
 	// Set default enabled state
-	if !cfg.Enabled {
-		cfg.Enabled = true
+	if cfg.Enabled == nil {
+		enabled := true
+		cfg.Enabled = &enabled
 	}
 
 	// Validate
@@ -216,7 +217,7 @@ func (mm *MockManager) registerHandler(cfg *config.MockConfiguration) {
 // port binding fails. For other protocols (WebSocket, GraphQL, SOAP, OAuth),
 // errors are logged but not returned since they don't require exclusive ports.
 func (mm *MockManager) registerHandlerLocked(cfg *config.MockConfiguration) error {
-	if cfg == nil || !cfg.Enabled {
+	if cfg == nil || (cfg.Enabled != nil && !*cfg.Enabled) {
 		return nil
 	}
 
@@ -320,7 +321,7 @@ func (mm *MockManager) registerGraphQLMock(m *mock.Mock) error {
 		Schema:        gqlSpec.Schema,
 		SchemaFile:    gqlSpec.SchemaFile,
 		Introspection: gqlSpec.Introspection,
-		Enabled:       m.Enabled,
+		Enabled:       m.Enabled == nil || *m.Enabled,
 	}
 
 	// Convert resolvers
@@ -375,7 +376,7 @@ func (mm *MockManager) registerSOAPMock(m *mock.Mock) error {
 		Path:     soapSpec.Path,
 		WSDL:     soapSpec.WSDL,
 		WSDLFile: soapSpec.WSDLFile,
-		Enabled:  m.Enabled,
+		Enabled:  m.Enabled == nil || *m.Enabled,
 	}
 
 	// Convert operations
@@ -435,7 +436,7 @@ func (mm *MockManager) registerMQTTMock(m *mock.Mock) error {
 		ID:      m.ID,
 		Name:    m.Name,
 		Port:    mqttSpec.Port,
-		Enabled: m.Enabled,
+		Enabled: m.Enabled == nil || *m.Enabled,
 	}
 
 	// Convert TLS config
@@ -548,7 +549,7 @@ func (mm *MockManager) registerGRPCMock(m *mock.Mock) error {
 		ProtoFiles:  grpcSpec.ProtoFiles,
 		ImportPaths: grpcSpec.ImportPaths,
 		Reflection:  grpcSpec.Reflection,
-		Enabled:     m.Enabled,
+		Enabled:     m.Enabled == nil || *m.Enabled,
 	}
 
 	// Convert Services
@@ -618,7 +619,7 @@ func (mm *MockManager) registerOAuthMock(m *mock.Mock) error {
 		TokenExpiry:   oauthSpec.TokenExpiry,
 		RefreshExpiry: oauthSpec.RefreshExpiry,
 		DefaultScopes: oauthSpec.DefaultScopes,
-		Enabled:       m.Enabled,
+		Enabled:       m.Enabled == nil || *m.Enabled,
 	}
 
 	// Set defaults if not specified

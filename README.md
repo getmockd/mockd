@@ -93,17 +93,15 @@ mockd supports configuration files with the following precedence:
 
 1. Command-line flags (highest priority)
 2. Environment variables
-3. Local config `.mockdrc.json` (current directory)
-4. Global config `~/.config/mockd/config.json`
+3. Local config `.mockdrc.yaml` (current directory)
+4. Global config `~/.config/mockd/config.yaml`
 5. Default values
 
-Example `.mockdrc.json`:
-```json
-{
-  "port": 3000,
-  "adminPort": 4290,
-  "maxLogEntries": 500
-}
+Example `.mockdrc.yaml`:
+```yaml
+port: 3000
+adminPort: 4290
+maxLogEntries: 500
 ```
 
 ## Go Library Usage

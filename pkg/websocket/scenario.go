@@ -2,8 +2,11 @@ package websocket
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/template"
 )
 
 // ScenarioConfig defines configuration for a scripted message sequence.
@@ -258,26 +261,28 @@ func (s *ScenarioState) Info() *ScenarioStateInfo {
 
 // ScenarioExecutor runs a scenario on a connection.
 type ScenarioExecutor struct {
-	conn    *Connection
-	state   *ScenarioState
-	ctx     context.Context
-	cancel  context.CancelFunc
-	matchCh chan struct{} // signals when HandleMessage matches an "expect" step
+	conn           *Connection
+	state          *ScenarioState
+	templateEngine *template.Engine
+	ctx            context.Context
+	cancel         context.CancelFunc
+	matchCh        chan struct{} // signals when HandleMessage matches an "expect" step
 }
 
 // NewScenarioExecutor creates a new ScenarioExecutor.
-func NewScenarioExecutor(conn *Connection, scenario *Scenario) *ScenarioExecutor {
+func NewScenarioExecutor(conn *Connection, scenario *Scenario, templateEngine *template.Engine) *ScenarioExecutor {
 	ctx, cancel := context.WithCancel(conn.Context())
 
 	state := NewScenarioState(scenario)
 	conn.SetScenarioState(state)
 
 	return &ScenarioExecutor{
-		conn:    conn,
-		state:   state,
-		ctx:     ctx,
-		cancel:  cancel,
-		matchCh: make(chan struct{}, 1), // buffered to prevent blocking
+		conn:           conn,
+		state:          state,
+		templateEngine: templateEngine,
+		ctx:            ctx,
+		cancel:         cancel,
+		matchCh:        make(chan struct{}, 1), // buffered to prevent blocking
 	}
 }
 
@@ -299,6 +304,9 @@ func (e *ScenarioExecutor) HandleMessage(msgType MessageType, data []byte) bool 
 	if step.matcher != nil && !step.matcher.Match(msgType, data) {
 		return false
 	}
+
+	// Store the matched message for template context access
+	e.state.SetContextValue("lastMessage", data)
 
 	// Message matched - advance to next step
 	e.state.AdvanceStep()
@@ -393,7 +401,43 @@ func (e *ScenarioExecutor) executeSend(step *ScenarioStep) error {
 		return err
 	}
 
+	// Process template variables in text/json responses
+	if msgType == MessageText && e.templateEngine != nil {
+		ctx := e.createTemplateContext()
+		processed, processErr := e.templateEngine.Process(string(data), ctx)
+		if processErr == nil {
+			data = []byte(processed)
+		}
+	}
+
 	return e.conn.Send(msgType, data)
+}
+
+// createTemplateContext builds a template context for scenario responses.
+// Scenario sends are server-initiated, so there is no incoming message.
+// Built-in variables like {{now}}, {{uuid}}, {{timestamp}} are still available.
+func (e *ScenarioExecutor) createTemplateContext() *template.Context {
+	// Try to get last received message from scenario context for {{request.rawBody}}
+	var rawBody string
+	var body interface{}
+	if lastMsg := e.state.GetContextValue("lastMessage"); lastMsg != nil {
+		if msgBytes, ok := lastMsg.([]byte); ok {
+			rawBody = string(msgBytes)
+			_ = json.Unmarshal(msgBytes, &body)
+		}
+	}
+
+	return &template.Context{
+		Request: template.RequestContext{
+			RawBody:             rawBody,
+			Body:                body,
+			Query:               make(map[string][]string),
+			Headers:             make(map[string][]string),
+			PathParams:          make(map[string]string),
+			PathPatternCaptures: make(map[string]string),
+			JSONPath:            make(map[string]interface{}),
+		},
+	}
 }
 
 // Stop stops the scenario executor.

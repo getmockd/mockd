@@ -45,8 +45,8 @@ func TestRunInit_Defaults(t *testing.T) {
 	}
 
 	// Verify defaults
-	if cfg.Version != "1" {
-		t.Errorf("Expected version '1', got '%s'", cfg.Version)
+	if cfg.Version != "1.0" {
+		t.Errorf("Expected version '1.0', got '%s'", cfg.Version)
 	}
 	if len(cfg.Admins) != 1 {
 		t.Errorf("Expected 1 admin, got %d", len(cfg.Admins))
@@ -89,8 +89,8 @@ func TestRunInit_TemplateMinimal(t *testing.T) {
 	}
 
 	// Verify minimal template structure
-	if cfg.Version != "1" {
-		t.Errorf("Expected version '1', got '%s'", cfg.Version)
+	if cfg.Version != "1.0" {
+		t.Errorf("Expected version '1.0', got '%s'", cfg.Version)
 	}
 	if len(cfg.Admins) != 1 {
 		t.Errorf("Expected 1 admin, got %d", len(cfg.Admins))
@@ -371,8 +371,8 @@ func TestGenerateMinimalProjectConfig(t *testing.T) {
 	cfg := defaultInitConfig()
 	projectCfg := generateMinimalProjectConfig(cfg)
 
-	if projectCfg.Version != "1" {
-		t.Errorf("Expected version '1', got '%s'", projectCfg.Version)
+	if projectCfg.Version != "1.0" {
+		t.Errorf("Expected version '1.0', got '%s'", projectCfg.Version)
 	}
 	if len(projectCfg.Admins) != 1 {
 		t.Errorf("Expected 1 admin, got %d", len(projectCfg.Admins))
@@ -409,8 +409,8 @@ func TestGetProjectConfigTemplate_AllTemplates(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to get template %s: %v", tmpl, err)
 			}
-			if cfg.Version != "1" {
-				t.Errorf("Expected version '1' for template %s, got '%s'", tmpl, cfg.Version)
+			if cfg.Version != "1.0" {
+				t.Errorf("Expected version '1.0' for template %s, got '%s'", tmpl, cfg.Version)
 			}
 			if len(cfg.Admins) == 0 {
 				t.Errorf("Expected at least 1 admin for template %s", tmpl)

@@ -22,7 +22,7 @@
 // # Usage
 //
 // Protocol handlers create Entry instances and pass them to a Store implementation.
-// The TUI and Admin API query the Store to display request history to users.
+// The Admin API queries the Store to display request history to users.
 //
 //	store := requestlog.NewMemoryStore(1000)
 //	entry := &requestlog.Entry{

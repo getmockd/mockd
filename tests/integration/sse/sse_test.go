@@ -66,11 +66,12 @@ func TestSSEBasicStream(t *testing.T) {
 	}
 
 	delay := 10
+	sseEnabled := true
 	sseMock := &config.MockConfiguration{
 		ID:      "test-sse",
 		Name:    "Test SSE Mock",
 		Type:    mock.MockTypeHTTP,
-		Enabled: true,
+		Enabled: &sseEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -163,11 +164,12 @@ func TestSSEOpenAITemplate(t *testing.T) {
 		t.Fatalf("engine not ready: %v", err)
 	}
 
+	openaiEnabled := true
 	openaiMock := &config.MockConfiguration{
 		ID:      "openai-mock",
 		Name:    "OpenAI Streaming Mock",
 		Type:    mock.MockTypeHTTP,
-		Enabled: true,
+		Enabled: &openaiEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "POST",
@@ -268,11 +270,12 @@ func TestSSEWithEventTypes(t *testing.T) {
 	}
 
 	delay := 10
+	typedEnabled := true
 	typedMock := &config.MockConfiguration{
 		ID:      "typed-events",
 		Name:    "Typed Events Mock",
 		Type:    mock.MockTypeHTTP,
-		Enabled: true,
+		Enabled: &typedEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -359,11 +362,12 @@ func TestSSEChunkedResponse(t *testing.T) {
 		t.Fatalf("engine not ready: %v", err)
 	}
 
+	chunkedEnabled := true
 	chunkedMock := &config.MockConfiguration{
 		ID:      "chunked-mock",
 		Name:    "Chunked Response Mock",
 		Type:    mock.MockTypeHTTP,
-		Enabled: true,
+		Enabled: &chunkedEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -436,11 +440,12 @@ func TestSSENDJSONResponse(t *testing.T) {
 		t.Fatalf("engine not ready: %v", err)
 	}
 
+	ndjsonEnabled := true
 	ndjsonMock := &config.MockConfiguration{
 		ID:      "ndjson-mock",
 		Name:    "NDJSON Response Mock",
 		Type:    mock.MockTypeHTTP,
-		Enabled: true,
+		Enabled: &ndjsonEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -544,11 +549,12 @@ func TestSSE_FullServer_WithMiddleware(t *testing.T) {
 
 	// Add SSE mock via management API
 	fixedDelay := 100
+	sseMwEnabled := true
 	sseMock := &config.MockConfiguration{
 		ID:      "sse_middleware_test",
 		Type:    mock.MockTypeHTTP,
 		Name:    "SSE Middleware Test",
-		Enabled: true,
+		Enabled: &sseMwEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",

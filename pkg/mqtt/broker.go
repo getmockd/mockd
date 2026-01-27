@@ -62,6 +62,44 @@ type Broker struct {
 	responseHandler            *ResponseHandler
 	conditionalResponseHandler *ConditionalResponseHandler
 	sessionManager             *SessionManager
+	// mockResponseTopics tracks topics currently being published as mock responses
+	// to prevent infinite loops when a response triggers the same or related patterns.
+	mockResponseTopics   map[string]struct{}
+	mockResponseTopicsMu sync.Mutex
+}
+
+// markMockResponseTopic marks a topic as currently being published by a mock response.
+// Returns true if the topic was successfully marked (not already active).
+// Returns false if the topic is already active (loop detected).
+func (b *Broker) markMockResponseTopic(topic string) bool {
+	b.mockResponseTopicsMu.Lock()
+	defer b.mockResponseTopicsMu.Unlock()
+	if b.mockResponseTopics == nil {
+		b.mockResponseTopics = make(map[string]struct{})
+	}
+	if _, exists := b.mockResponseTopics[topic]; exists {
+		return false // loop detected
+	}
+	b.mockResponseTopics[topic] = struct{}{}
+	return true
+}
+
+// unmarkMockResponseTopic removes the active mock response marker for a topic.
+func (b *Broker) unmarkMockResponseTopic(topic string) {
+	b.mockResponseTopicsMu.Lock()
+	defer b.mockResponseTopicsMu.Unlock()
+	delete(b.mockResponseTopics, topic)
+}
+
+// isMockResponseActive checks if a topic is currently being published by a mock response.
+func (b *Broker) isMockResponseActive(topic string) bool {
+	b.mockResponseTopicsMu.Lock()
+	defer b.mockResponseTopicsMu.Unlock()
+	if b.mockResponseTopics == nil {
+		return false
+	}
+	_, exists := b.mockResponseTopics[topic]
+	return exists
 }
 
 // NewBroker creates a new MQTT broker

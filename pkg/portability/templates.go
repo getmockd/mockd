@@ -89,11 +89,12 @@ func (t *Template) Generate(params map[string]string) (*config.MockCollection, e
 
 // helper to create a mock with standard fields filled in.
 func newMock(id, name, method, path string, statusCode int, body string, now time.Time) *config.MockConfiguration {
+	enabled := true
 	return &config.MockConfiguration{
 		ID:        id,
 		Name:      name,
 		Type:      mock.MockTypeHTTP,
-		Enabled:   true,
+		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
 		HTTP: &mock.HTTPSpec{

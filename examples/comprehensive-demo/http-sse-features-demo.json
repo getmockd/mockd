@@ -579,7 +579,7 @@
             "fixedDelay": 5000
           },
           "lifecycle": {
-            "keepaliveInterval": 2
+            "keepaliveInterval": 5
           }
         }
       },

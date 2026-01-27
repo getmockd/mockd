@@ -1,15 +1,16 @@
 package cliconfig
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ContextConfigFileName is the name of the context configuration file.
-const ContextConfigFileName = "contexts.json"
+const ContextConfigFileName = "contexts.yaml"
 
 // ContextConfigVersion is the current version of the context config schema.
 const ContextConfigVersion = 1
@@ -22,13 +23,13 @@ const DefaultContextName = "local"
 // independent from server settings.
 type ContextConfig struct {
 	// Version is the config schema version for future migrations
-	Version int `json:"version"`
+	Version int `yaml:"version" json:"version"`
 
 	// CurrentContext is the name of the currently active context
-	CurrentContext string `json:"currentContext"`
+	CurrentContext string `yaml:"currentContext" json:"currentContext"`
 
 	// Contexts maps context names to their configuration
-	Contexts map[string]*Context `json:"contexts"`
+	Contexts map[string]*Context `yaml:"contexts" json:"contexts"`
 }
 
 // Context represents a named admin server + workspace pair.
@@ -36,19 +37,19 @@ type ContextConfig struct {
 // mockd deployments (local, staging, CI, etc.)
 type Context struct {
 	// AdminURL is the base URL of the admin API (e.g., "http://localhost:4290")
-	AdminURL string `json:"adminUrl"`
+	AdminURL string `yaml:"adminUrl" json:"adminUrl"`
 
 	// Workspace is the current workspace ID (empty = no workspace filtering)
-	Workspace string `json:"workspace,omitempty"`
+	Workspace string `yaml:"workspace,omitempty" json:"workspace,omitempty"`
 
 	// Description is an optional human-readable description
-	Description string `json:"description,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
 	// AuthToken is an optional authentication token for cloud/enterprise deployments
-	AuthToken string `json:"authToken,omitempty"`
+	AuthToken string `yaml:"authToken,omitempty" json:"authToken,omitempty"`
 
 	// TLSInsecure skips TLS certificate verification (for self-signed certs)
-	TLSInsecure bool `json:"tlsInsecure,omitempty"`
+	TLSInsecure bool `yaml:"tlsInsecure,omitempty" json:"tlsInsecure,omitempty"`
 }
 
 // NewDefaultContextConfig creates a new ContextConfig with default values.
@@ -92,10 +93,10 @@ func LoadContextConfig() (*ContextConfig, error) {
 	}
 
 	var cfg ContextConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, &ConfigError{
 			Path:    path,
-			Message: fmt.Sprintf("invalid JSON: %s", err.Error()),
+			Message: fmt.Sprintf("invalid YAML: %s", err.Error()),
 		}
 	}
 
@@ -131,7 +132,7 @@ func SaveContextConfig(cfg *ContextConfig) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to encode context config: %w", err)
 	}

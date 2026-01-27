@@ -10,21 +10,29 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 )
 
+// MockChecker can check if a request matches a user-defined mock.
+type MockChecker interface {
+	HasMatch(r *http.Request) bool
+}
+
 // CORSMiddleware wraps an http.Handler with CORS handling based on configuration.
 type CORSMiddleware struct {
 	handler http.Handler
 	config  *config.CORSConfig
+	checker MockChecker
 }
 
 // NewCORSMiddleware creates a new CORS middleware with the given configuration.
 // If config is nil, default secure settings (localhost only) are used.
-func NewCORSMiddleware(handler http.Handler, cfg *config.CORSConfig) *CORSMiddleware {
+// The optional checker allows user-defined OPTIONS mocks to take precedence over CORS preflight handling.
+func NewCORSMiddleware(handler http.Handler, cfg *config.CORSConfig, checker MockChecker) *CORSMiddleware {
 	if cfg == nil {
 		cfg = config.DefaultCORSConfig()
 	}
 	return &CORSMiddleware{
 		handler: handler,
 		config:  cfg,
+		checker: checker,
 	}
 }
 
@@ -74,8 +82,13 @@ func (m *CORSMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Max-Age", strconv.Itoa(maxAge))
 	}
 
-	// Handle preflight requests
+	// Handle preflight requests — but let user-defined OPTIONS mocks take precedence
 	if r.Method == http.MethodOptions {
+		if m.checker != nil && m.checker.HasMatch(r) {
+			// User has defined an OPTIONS mock for this path — pass through
+			m.handler.ServeHTTP(w, r)
+			return
+		}
 		if allowOrigin != "" {
 			w.WriteHeader(http.StatusOK)
 		} else {

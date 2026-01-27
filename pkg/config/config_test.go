@@ -871,12 +871,13 @@ func TestValidator_Timeouts(t *testing.T) {
 }
 
 func TestMockCollection_Validate_DuplicateIDs(t *testing.T) {
+	enabled := true
 	collection := &MockCollection{
 		Version: "1.0",
 		Mocks: []*MockConfiguration{
 			{
 				ID:      "duplicate-id",
-				Enabled: true,
+				Enabled: &enabled,
 				Type:    "http",
 				HTTP: &mock.HTTPSpec{
 					Matcher:  &mock.HTTPMatcher{Path: "/test1"},
@@ -885,7 +886,7 @@ func TestMockCollection_Validate_DuplicateIDs(t *testing.T) {
 			},
 			{
 				ID:      "duplicate-id",
-				Enabled: true,
+				Enabled: &enabled,
 				Type:    "http",
 				HTTP: &mock.HTTPSpec{
 					Matcher:  &mock.HTTPMatcher{Path: "/test2"},

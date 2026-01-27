@@ -508,10 +508,11 @@ func (m *StreamRecordingManager) addWebSocketMock(ctx context.Context, result *r
 	scenario.Name = scenarioName
 
 	// Create a unified WebSocket mock configuration
+	wsEnabled := true
 	wsMock := &config.MockConfiguration{
 		Name:    scenarioName,
 		Type:    mock.MockTypeWebSocket,
-		Enabled: true,
+		Enabled: &wsEnabled,
 		WebSocket: &mock.WebSocketSpec{
 			Path:     req.EndpointPath,
 			Scenario: scenario,
@@ -546,10 +547,11 @@ func (m *StreamRecordingManager) addSSEMock(ctx context.Context, result *recordi
 		mockName = fmt.Sprintf("SSE recording %s", endpointPath)
 	}
 
+	sseEnabled := true
 	sseMock := &config.MockConfiguration{
 		Name:    mockName,
 		Type:    mock.MockTypeHTTP,
-		Enabled: true,
+		Enabled: &sseEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",

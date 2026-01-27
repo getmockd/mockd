@@ -175,10 +175,11 @@ func ToMock(r *Recording, opts ConvertOptions) *config.MockConfiguration {
 	}
 
 	now := time.Now()
+	enabled := true
 	return &config.MockConfiguration{
 		ID:        id.Short(),
 		Type:      mock.MockTypeHTTP,
-		Enabled:   true,
+		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
 		HTTP: &mock.HTTPSpec{

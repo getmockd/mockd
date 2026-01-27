@@ -114,7 +114,7 @@ func outputMocksJSON(mocks []*mock.Mock) error {
 			ID:      m.ID,
 			Name:    m.Name,
 			Type:    string(m.Type),
-			Enabled: m.Enabled,
+			Enabled: m.Enabled == nil || *m.Enabled,
 		}
 		// Extract path/method/status based on type
 		path, method, status := extractMockDetails(m)
@@ -163,7 +163,7 @@ func outputMocksTable(mocks []*mock.Mock) error {
 		}
 
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\n",
-			id, mockType, path, method, statusStr, m.Enabled)
+			id, mockType, path, method, statusStr, m.Enabled == nil || *m.Enabled)
 	}
 
 	return w.Flush()

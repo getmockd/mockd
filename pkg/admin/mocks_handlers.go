@@ -72,7 +72,8 @@ func applyMockFilter(mocks []*mock.Mock, filter *MockFilter) []*mock.Mock {
 	if filter.Enabled != nil {
 		filtered := make([]*mock.Mock, 0, len(mocks))
 		for _, m := range mocks {
-			if m.Enabled == *filter.Enabled {
+			mEnabled := m.Enabled == nil || *m.Enabled
+			if mEnabled == *filter.Enabled {
 				filtered = append(filtered, m)
 			}
 		}
@@ -482,7 +483,7 @@ func applyMockPatch(m *mock.Mock, patch map[string]interface{}) {
 		m.Description = description
 	}
 	if enabled, ok := patch["enabled"].(bool); ok {
-		m.Enabled = enabled
+		m.Enabled = &enabled
 	}
 	if parentID, ok := patch["parentId"].(string); ok {
 		m.ParentID = parentID
@@ -1039,7 +1040,8 @@ func (a *AdminAPI) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		newEnabled := !existing.Enabled
+		currentEnabled := existing.Enabled == nil || *existing.Enabled
+		newEnabled := !currentEnabled
 		updated, err := a.localEngine.ToggleMock(r.Context(), id, newEnabled)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "toggle_error", err.Error())
@@ -1066,7 +1068,9 @@ func (a *AdminAPI) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	m.Enabled = !m.Enabled
+	currentEnabled := m.Enabled == nil || *m.Enabled
+	newEnabled := !currentEnabled
+	m.Enabled = &newEnabled
 	m.UpdatedAt = time.Now()
 
 	if err := mockStore.Update(r.Context(), m); err != nil {

@@ -95,8 +95,9 @@ func (m *MockServer) wrapHandler(h http.Handler) http.Handler {
 			if remaining <= 0 && m.engineClient != nil {
 				// Find and disable the mock via HTTP
 				mockCfg, err := m.engineClient.GetMock(context.Background(), id)
-				if err == nil && mockCfg != nil && mockCfg.Enabled {
-					mockCfg.Enabled = false
+				if err == nil && mockCfg != nil && (mockCfg.Enabled == nil || *mockCfg.Enabled) {
+					disabled := false
+					mockCfg.Enabled = &disabled
 					_, _ = m.engineClient.UpdateMock(context.Background(), id, mockCfg)
 				}
 			}
@@ -153,9 +154,10 @@ func (m *MockServer) URL() string {
 func (m *MockServer) Mock(method, path string) *MockBuilder {
 	m.t.Helper()
 
+	enabled := true
 	mockCfg := &config.MockConfiguration{
 		Type:    mock.MockTypeHTTP,
-		Enabled: true,
+		Enabled: &enabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: method,

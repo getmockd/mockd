@@ -90,9 +90,11 @@ type ErrorResponse struct {
 
 // ChaosConfig for chaos injection.
 type ChaosConfig struct {
-	Enabled   bool             `json:"enabled"`
-	Latency   *LatencyConfig   `json:"latency,omitempty"`
-	ErrorRate *ErrorRateConfig `json:"errorRate,omitempty"`
+	Enabled   bool              `json:"enabled"`
+	Latency   *LatencyConfig    `json:"latency,omitempty"`
+	ErrorRate *ErrorRateConfig  `json:"errorRate,omitempty"`
+	Bandwidth *BandwidthConfig  `json:"bandwidth,omitempty"`
+	Rules     []ChaosRuleConfig `json:"rules,omitempty"`
 }
 
 // LatencyConfig configures latency injection.
@@ -107,6 +109,19 @@ type ErrorRateConfig struct {
 	Probability float64 `json:"probability"`
 	StatusCodes []int   `json:"statusCodes,omitempty"`
 	DefaultCode int     `json:"defaultCode,omitempty"`
+}
+
+// BandwidthConfig configures bandwidth throttling.
+type BandwidthConfig struct {
+	BytesPerSecond int     `json:"bytesPerSecond"`
+	Probability    float64 `json:"probability"`
+}
+
+// ChaosRuleConfig represents a path-specific chaos rule.
+type ChaosRuleConfig struct {
+	PathPattern string   `json:"pathPattern"`
+	Methods     []string `json:"methods,omitempty"`
+	Probability float64  `json:"probability,omitempty"`
 }
 
 // StatefulResource represents a stateful resource.

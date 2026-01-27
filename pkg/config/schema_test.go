@@ -92,7 +92,7 @@ func TestExpandEnvVars(t *testing.T) {
 
 func TestLoadProjectConfigFromBytes(t *testing.T) {
 	yaml := `
-version: "1"
+version: "1.0"
 
 admins:
   - name: local
@@ -125,8 +125,8 @@ mocks:
 		t.Fatalf("LoadProjectConfigFromBytes failed: %v", err)
 	}
 
-	if cfg.Version != "1" {
-		t.Errorf("Version = %q, want %q", cfg.Version, "1")
+	if cfg.Version != "1.0" {
+		t.Errorf("Version = %q, want %q", cfg.Version, "1.0")
 	}
 
 	if len(cfg.Admins) != 1 {
@@ -168,7 +168,7 @@ func TestLoadProjectConfigFromBytes_WithEnvVars(t *testing.T) {
 	defer os.Unsetenv("API_KEY")
 
 	yaml := `
-version: "1"
+version: "1.0"
 
 admins:
   - name: production
@@ -193,7 +193,7 @@ engines:
 
 func TestMergeProjectConfigs(t *testing.T) {
 	base := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
 		},
@@ -214,8 +214,8 @@ func TestMergeProjectConfigs(t *testing.T) {
 
 	result := MergeProjectConfigs(base, overlay)
 
-	if result.Version != "1" {
-		t.Errorf("Version = %q, want %q", result.Version, "1")
+	if result.Version != "1.0" {
+		t.Errorf("Version = %q, want %q", result.Version, "1.0")
 	}
 
 	if len(result.Admins) != 1 {
@@ -241,7 +241,7 @@ func TestMergeProjectConfigs(t *testing.T) {
 
 func TestValidateProjectConfig_Valid(t *testing.T) {
 	cfg := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
 		},
@@ -307,7 +307,7 @@ func TestValidateProjectConfig_InvalidVersion(t *testing.T) {
 
 func TestValidateProjectConfig_DuplicateAdminName(t *testing.T) {
 	cfg := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
 			{Name: "local", Port: 4291}, // Duplicate
@@ -322,7 +322,7 @@ func TestValidateProjectConfig_DuplicateAdminName(t *testing.T) {
 
 func TestValidateProjectConfig_LocalAdminMissingPort(t *testing.T) {
 	cfg := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "local"}, // No port, no URL
 		},
@@ -336,7 +336,7 @@ func TestValidateProjectConfig_LocalAdminMissingPort(t *testing.T) {
 
 func TestValidateProjectConfig_RemoteAdmin(t *testing.T) {
 	cfg := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "remote", URL: "https://admin.example.com", APIKey: "secret"},
 		},
@@ -353,7 +353,7 @@ func TestValidateProjectConfig_RemoteAdmin(t *testing.T) {
 
 func TestValidateProjectConfig_EngineReferencesUnknownAdmin(t *testing.T) {
 	cfg := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
 		},
@@ -370,7 +370,7 @@ func TestValidateProjectConfig_EngineReferencesUnknownAdmin(t *testing.T) {
 
 func TestValidateProjectConfig_EngineMissingPorts(t *testing.T) {
 	cfg := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
 		},
@@ -387,7 +387,7 @@ func TestValidateProjectConfig_EngineMissingPorts(t *testing.T) {
 
 func TestValidateProjectConfig_MockFileRef(t *testing.T) {
 	cfg := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
 		},
@@ -407,7 +407,7 @@ func TestValidateProjectConfig_MockFileRef(t *testing.T) {
 
 func TestValidateProjectConfig_MockGlob(t *testing.T) {
 	cfg := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
 		},
@@ -427,7 +427,7 @@ func TestValidateProjectConfig_MockGlob(t *testing.T) {
 
 func TestValidatePortConflicts(t *testing.T) {
 	cfg := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4280}, // Same as engine HTTP
 		},
@@ -444,7 +444,7 @@ func TestValidatePortConflicts(t *testing.T) {
 
 func TestValidatePortConflicts_NoConflict(t *testing.T) {
 	cfg := &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{Name: "local", Port: 4290},
 		},
@@ -500,8 +500,8 @@ func TestMockEntry_TypeChecks(t *testing.T) {
 func TestDefaultProjectConfig(t *testing.T) {
 	cfg := DefaultProjectConfig()
 
-	if cfg.Version != "1" {
-		t.Errorf("Version = %q, want %q", cfg.Version, "1")
+	if cfg.Version != "1.0" {
+		t.Errorf("Version = %q, want %q", cfg.Version, "1.0")
 	}
 
 	if len(cfg.Admins) != 1 {

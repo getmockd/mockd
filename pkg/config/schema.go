@@ -22,7 +22,7 @@ import (
 
 // ProjectConfig is the root configuration structure for mockd.yaml files.
 type ProjectConfig struct {
-	// Version is the config format version (required, currently "1")
+	// Version is the config format version (required, currently "1.0")
 	Version string `json:"version" yaml:"version"`
 
 	// Admins defines control plane instances
@@ -302,7 +302,7 @@ type PIDFileService struct {
 // DefaultProjectConfig returns a ProjectConfig with sensible defaults for a minimal local setup.
 func DefaultProjectConfig() *ProjectConfig {
 	return &ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []AdminConfig{
 			{
 				Name: "local",
@@ -444,7 +444,7 @@ func MergeProjectConfigs(configs ...*ProjectConfig) *ProjectConfig {
 	}
 
 	result := &ProjectConfig{
-		Version:           "1",
+		Version:           "1.0",
 		Admins:            []AdminConfig{},
 		Engines:           []EngineConfig{},
 		Workspaces:        []WorkspaceConfig{},

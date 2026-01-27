@@ -30,7 +30,7 @@ func TestBinaryE2E_Validate(t *testing.T) {
 		configDir := t.TempDir()
 		configPath := filepath.Join(configDir, "mockd.yaml")
 
-		configContent := `version: "1"
+		configContent := `version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -69,7 +69,7 @@ engines:
 		configDir := t.TempDir()
 		configPath := filepath.Join(configDir, "mockd.yaml")
 
-		configContent := `version: "1"
+		configContent := `version: "1.0"
 admins:
   - name: local
     # missing port
@@ -103,7 +103,7 @@ admins:
 		configDir := t.TempDir()
 		configPath := filepath.Join(configDir, "mockd.yaml")
 
-		configContent := `version: "1"
+		configContent := `version: "1.0"
 admins:
   - name: local
     port: 4280
@@ -141,7 +141,7 @@ engines:
 		configDir := t.TempDir()
 		configPath := filepath.Join(configDir, "mockd.yaml")
 
-		configContent := `version: "1"
+		configContent := `version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -184,7 +184,7 @@ func TestBinaryE2E_UpDownLifecycle(t *testing.T) {
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "mockd.yaml")
 
-	configContent := fmt.Sprintf(`version: "1"
+	configContent := fmt.Sprintf(`version: "1.0"
 admins:
   - name: local
     port: %d
@@ -377,7 +377,7 @@ func TestBinaryE2E_Ps(t *testing.T) {
 		configDir := t.TempDir()
 		configPath := filepath.Join(configDir, "mockd.yaml")
 
-		configContent := fmt.Sprintf(`version: "1"
+		configContent := fmt.Sprintf(`version: "1.0"
 admins:
   - name: local
     port: %d
@@ -490,7 +490,7 @@ func TestBinaryE2E_Down(t *testing.T) {
 		configDir := t.TempDir()
 		configPath := filepath.Join(configDir, "mockd.yaml")
 
-		configContent := fmt.Sprintf(`version: "1"
+		configContent := fmt.Sprintf(`version: "1.0"
 admins:
   - name: local
     port: %d
@@ -572,7 +572,7 @@ func TestBinaryE2E_ConfigEnvVars(t *testing.T) {
 	configPath := filepath.Join(configDir, "mockd.yaml")
 
 	// Config using environment variables
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: ${MOCKD_ADMIN_PORT}
@@ -619,7 +619,7 @@ func TestBinaryE2E_ConfigDefaultValues(t *testing.T) {
 	configPath := filepath.Join(configDir, "mockd.yaml")
 
 	// Config using environment variable with default
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: ${MOCKD_ADMIN_PORT:-4290}
@@ -665,7 +665,7 @@ func TestBinaryE2E_ConfigMerge(t *testing.T) {
 	overridePath := filepath.Join(configDir, "override.yaml")
 
 	// Base config with placeholder port
-	baseContent := fmt.Sprintf(`version: "1"
+	baseContent := fmt.Sprintf(`version: "1.0"
 admins:
   - name: local
     port: %d
@@ -678,7 +678,7 @@ engines:
 `, adminPort, httpPort)
 
 	// Override config to disable auth
-	overrideContent := `version: "1"
+	overrideContent := `version: "1.0"
 admins:
   - name: local
     auth:
@@ -722,7 +722,7 @@ func TestBinaryE2E_ConfigDiscovery(t *testing.T) {
 	adminPort := GetFreePortSafe()
 	httpPort := GetFreePortSafe()
 
-	configContent := fmt.Sprintf(`version: "1"
+	configContent := fmt.Sprintf(`version: "1.0"
 admins:
   - name: local
     port: %d
@@ -770,7 +770,7 @@ func TestBinaryE2E_InlineMocks(t *testing.T) {
 	configPath := filepath.Join(configDir, "mockd.yaml")
 
 	// Config with inline mocks
-	configContent := fmt.Sprintf(`version: "1"
+	configContent := fmt.Sprintf(`version: "1.0"
 admins:
   - name: local
     port: %d

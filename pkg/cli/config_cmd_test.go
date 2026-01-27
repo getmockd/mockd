@@ -43,7 +43,7 @@ func TestRunConfigShow_WithConfigFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -102,7 +102,7 @@ func TestRunConfigShow_JSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -141,8 +141,8 @@ engines:
 	}
 
 	// Verify parsed content
-	if cfg.Version != "1" {
-		t.Errorf("expected version '1', got '%s'", cfg.Version)
+	if cfg.Version != "1.0" {
+		t.Errorf("expected version '1.0', got '%s'", cfg.Version)
 	}
 	if len(cfg.Admins) != 1 {
 		t.Fatalf("expected 1 admin, got %d", len(cfg.Admins))
@@ -160,7 +160,7 @@ func TestRunConfigShow_ServiceFilter_Admin(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -215,7 +215,7 @@ func TestRunConfigShow_ServiceFilter_Engine(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -271,7 +271,7 @@ func TestRunConfigShow_ServiceFilter_JSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -326,7 +326,7 @@ func TestRunConfigShow_ServiceNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: 4290
@@ -358,7 +358,7 @@ func TestRunConfigShow_EnvVarExpansion(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: ${TEST_MOCKD_PORT}
@@ -408,7 +408,7 @@ func TestRunConfigShow_EnvVarWithDefault(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: ${TEST_MOCKD_UNSET_PORT:-7777}
@@ -474,7 +474,7 @@ func TestRunConfigShow_NoConfigFile(t *testing.T) {
 
 func TestPrintFullConfig_YAML(t *testing.T) {
 	cfg := &config.ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []config.AdminConfig{
 			{Name: "local", Port: 4290},
 		},
@@ -513,7 +513,7 @@ func TestPrintFullConfig_YAML(t *testing.T) {
 
 func TestPrintFullConfig_JSON(t *testing.T) {
 	cfg := &config.ProjectConfig{
-		Version: "1",
+		Version: "1.0",
 		Admins: []config.AdminConfig{
 			{Name: "local", Port: 4290},
 		},
@@ -553,7 +553,7 @@ func TestRunConfigSubcommand_Show(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "mockd.yaml")
 
-	configContent := `version: "1"
+	configContent := `version: "1.0"
 admins:
   - name: local
     port: 4290

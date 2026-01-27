@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,6 +112,20 @@ func (m *mockEngine) ClearMocks() {
 func (m *mockEngine) GetRequestLogs(filter *RequestLogFilter) []*requestlog.Entry {
 	result := make([]*requestlog.Entry, 0, len(m.requestLogs))
 	for _, entry := range m.requestLogs {
+		if filter != nil {
+			// Filter by mock ID (matched filter)
+			if filter.MockID != "" && entry.MatchedMockID != filter.MockID {
+				continue
+			}
+			// Filter by method
+			if filter.Method != "" && entry.Method != filter.Method {
+				continue
+			}
+			// Filter by path (substring match)
+			if filter.Path != "" && !strings.Contains(entry.Path, filter.Path) {
+				continue
+			}
+		}
 		result = append(result, entry)
 	}
 	// Apply limit if set
@@ -130,6 +145,10 @@ func (m *mockEngine) RequestLogCount() int {
 
 func (m *mockEngine) ClearRequestLogs() {
 	m.requestLogs = make(map[string]*requestlog.Entry)
+}
+
+func (m *mockEngine) ClearRequestLogsByMockID(mockID string) int {
+	return 0
 }
 
 func (m *mockEngine) ProtocolStatus() map[string]ProtocolStatusInfo {
@@ -244,6 +263,9 @@ func (m *mockEngine) GetConfig() *ConfigResponse {
 	return m.configResp
 }
 
+// boolPtr returns a pointer to a bool value.
+func boolPtr(v bool) *bool { return &v }
+
 // Helper to create a server with a mock engine
 func newTestServer(engine *mockEngine) *Server {
 	return NewServer(engine, 0)
@@ -274,8 +296,8 @@ func TestHandleHealth(t *testing.T) {
 func TestHandleStatus(t *testing.T) {
 	t.Run("returns running status with mocks", func(t *testing.T) {
 		engine := newMockEngine()
-		engine.mocks["mock-1"] = &config.MockConfiguration{ID: "mock-1", Name: "Test Mock", Enabled: true}
-		engine.mocks["mock-2"] = &config.MockConfiguration{ID: "mock-2", Name: "Test Mock 2", Enabled: true}
+		engine.mocks["mock-1"] = &config.MockConfiguration{ID: "mock-1", Name: "Test Mock", Enabled: boolPtr(true)}
+		engine.mocks["mock-2"] = &config.MockConfiguration{ID: "mock-2", Name: "Test Mock 2", Enabled: boolPtr(true)}
 		engine.requestLogs["req-1"] = &requestlog.Entry{ID: "req-1"}
 		engine.requestLogs["req-2"] = &requestlog.Entry{ID: "req-2"}
 		server := newTestServer(engine)
@@ -502,13 +524,13 @@ func TestHandleListMocks(t *testing.T) {
 		engine.mocks["mock-1"] = &config.MockConfiguration{
 			ID:      "mock-1",
 			Name:    "Test Mock 1",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 		}
 		engine.mocks["mock-2"] = &config.MockConfiguration{
 			ID:      "mock-2",
 			Name:    "Test Mock 2",
-			Enabled: false,
+			Enabled: boolPtr(false),
 			Type:    mock.MockTypeHTTP,
 		}
 		server := newTestServer(engine)
@@ -535,7 +557,7 @@ func TestHandleGetMock(t *testing.T) {
 		testMock := &config.MockConfiguration{
 			ID:      "mock-123",
 			Name:    "Test Mock",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
@@ -564,7 +586,7 @@ func TestHandleGetMock(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "mock-123", resp.ID)
 		assert.Equal(t, "Test Mock", resp.Name)
-		assert.True(t, resp.Enabled)
+		assert.True(t, *resp.Enabled)
 	})
 
 	t.Run("returns 404 when mock not found", func(t *testing.T) {
@@ -594,7 +616,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		engine.mocks["mock-to-update"] = &config.MockConfiguration{
 			ID:      "mock-to-update",
 			Name:    "Original Name",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 		}
 		server := newTestServer(engine)
@@ -620,7 +642,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "mock-to-update", resp.ID)
 		assert.Equal(t, "Updated Name", resp.Name)
-		assert.False(t, resp.Enabled)
+		assert.False(t, *resp.Enabled)
 	})
 
 	t.Run("returns 404 for non-existent mock", func(t *testing.T) {
@@ -784,7 +806,7 @@ func TestHandleToggleMock(t *testing.T) {
 		engine.mocks["mock-toggle"] = &config.MockConfiguration{
 			ID:      "mock-toggle",
 			Name:    "Toggle Mock",
-			Enabled: false,
+			Enabled: boolPtr(false),
 			Type:    mock.MockTypeHTTP,
 		}
 		server := newTestServer(engine)
@@ -802,7 +824,7 @@ func TestHandleToggleMock(t *testing.T) {
 		var resp config.MockConfiguration
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
-		assert.True(t, resp.Enabled)
+		assert.True(t, *resp.Enabled)
 	})
 
 	t.Run("toggles mock to disabled", func(t *testing.T) {
@@ -810,7 +832,7 @@ func TestHandleToggleMock(t *testing.T) {
 		engine.mocks["mock-toggle"] = &config.MockConfiguration{
 			ID:      "mock-toggle",
 			Name:    "Toggle Mock",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 		}
 		server := newTestServer(engine)
@@ -828,7 +850,7 @@ func TestHandleToggleMock(t *testing.T) {
 		var resp config.MockConfiguration
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
-		assert.False(t, resp.Enabled)
+		assert.False(t, *resp.Enabled)
 	})
 
 	t.Run("returns 404 for non-existent mock", func(t *testing.T) {
@@ -1025,6 +1047,179 @@ func TestHandleListRequests(t *testing.T) {
 	})
 }
 
+// TestHandleListRequests_MatchedFilter tests filtering requests by matched mock ID.
+func TestHandleListRequests_MatchedFilter(t *testing.T) {
+	t.Run("filters by matched mock ID", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.requestLogs["req-1"] = &requestlog.Entry{
+			ID:             "req-1",
+			Timestamp:      time.Now(),
+			Protocol:       "http",
+			Method:         "GET",
+			Path:           "/api/users",
+			MatchedMockID:  "mock-1",
+			ResponseStatus: 200,
+			DurationMs:     10,
+		}
+		engine.requestLogs["req-2"] = &requestlog.Entry{
+			ID:             "req-2",
+			Timestamp:      time.Now(),
+			Protocol:       "http",
+			Method:         "POST",
+			Path:           "/api/orders",
+			MatchedMockID:  "mock-2",
+			ResponseStatus: 201,
+			DurationMs:     20,
+		}
+		engine.requestLogs["req-3"] = &requestlog.Entry{
+			ID:             "req-3",
+			Timestamp:      time.Now(),
+			Protocol:       "http",
+			Method:         "GET",
+			Path:           "/api/users/1",
+			MatchedMockID:  "mock-1",
+			ResponseStatus: 200,
+			DurationMs:     5,
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/requests?matched=mock-1", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListRequests(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp RequestListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, 2, resp.Count)
+		assert.Equal(t, 3, resp.Total)
+		for _, r := range resp.Requests {
+			assert.Equal(t, "mock-1", r.MatchedMockID)
+		}
+	})
+
+	t.Run("returns empty list when no requests match mock ID", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.requestLogs["req-1"] = &requestlog.Entry{
+			ID:            "req-1",
+			MatchedMockID: "mock-1",
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/requests?matched=nonexistent", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListRequests(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp RequestListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, 0, resp.Count)
+		assert.Equal(t, 1, resp.Total)
+		assert.Empty(t, resp.Requests)
+	})
+
+	t.Run("filters by method", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.requestLogs["req-1"] = &requestlog.Entry{
+			ID:     "req-1",
+			Method: "GET",
+			Path:   "/api/users",
+		}
+		engine.requestLogs["req-2"] = &requestlog.Entry{
+			ID:     "req-2",
+			Method: "POST",
+			Path:   "/api/users",
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/requests?method=GET", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListRequests(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp RequestListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, 1, resp.Count)
+		for _, r := range resp.Requests {
+			assert.Equal(t, "GET", r.Method)
+		}
+	})
+
+	t.Run("filters by path substring", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.requestLogs["req-1"] = &requestlog.Entry{
+			ID:   "req-1",
+			Path: "/api/users",
+		}
+		engine.requestLogs["req-2"] = &requestlog.Entry{
+			ID:   "req-2",
+			Path: "/api/orders",
+		}
+		engine.requestLogs["req-3"] = &requestlog.Entry{
+			ID:   "req-3",
+			Path: "/api/users/1",
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/requests?path=users", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListRequests(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp RequestListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, 2, resp.Count)
+		for _, r := range resp.Requests {
+			assert.Contains(t, r.Path, "users")
+		}
+	})
+
+	t.Run("combines matched and method filters", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.requestLogs["req-1"] = &requestlog.Entry{
+			ID:            "req-1",
+			Method:        "GET",
+			MatchedMockID: "mock-1",
+		}
+		engine.requestLogs["req-2"] = &requestlog.Entry{
+			ID:            "req-2",
+			Method:        "POST",
+			MatchedMockID: "mock-1",
+		}
+		engine.requestLogs["req-3"] = &requestlog.Entry{
+			ID:            "req-3",
+			Method:        "GET",
+			MatchedMockID: "mock-2",
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/requests?matched=mock-1&method=GET", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListRequests(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp RequestListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, 1, resp.Count)
+		assert.Equal(t, "mock-1", resp.Requests[0].MatchedMockID)
+		assert.Equal(t, "GET", resp.Requests[0].Method)
+	})
+}
+
 // TestHandleGetRequest tests the GET /requests/{id} handler.
 func TestHandleGetRequest(t *testing.T) {
 	t.Run("returns request when found", func(t *testing.T) {
@@ -1109,7 +1304,7 @@ func TestHandleExportMocks(t *testing.T) {
 		engine.mocks["mock-1"] = &config.MockConfiguration{
 			ID:      "mock-1",
 			Name:    "Export Test Mock",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 		}
 		server := newTestServer(engine)
@@ -1346,7 +1541,7 @@ func TestServerIntegration(t *testing.T) {
 		var updated config.MockConfiguration
 		json.Unmarshal(updateRec.Body.Bytes(), &updated)
 		assert.Equal(t, "Updated CRUD Test Mock", updated.Name)
-		assert.False(t, updated.Enabled)
+		assert.False(t, *updated.Enabled)
 
 		// Delete
 		deleteReq := httptest.NewRequest(http.MethodDelete, "/mocks/crud-test", nil)

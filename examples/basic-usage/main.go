@@ -49,12 +49,13 @@ func main() {
 	}
 
 	// Add mocks via the HTTP client
+	enabled := true
 	mocks := []*config.MockConfiguration{
 		{
 			ID:      "get-users",
 			Name:    "Get Users List",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: &enabled,
 			HTTP: &mock.HTTPSpec{
 				Priority: 0,
 				Matcher: &mock.HTTPMatcher{
@@ -74,7 +75,7 @@ func main() {
 			ID:      "create-user",
 			Name:    "Create User",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: &enabled,
 			HTTP: &mock.HTTPSpec{
 				Priority: 0,
 				Matcher: &mock.HTTPMatcher{
@@ -95,7 +96,7 @@ func main() {
 			ID:      "get-user-by-id",
 			Name:    "Get User by ID",
 			Type:    mock.MockTypeHTTP,
-			Enabled: true,
+			Enabled: &enabled,
 			HTTP: &mock.HTTPSpec{
 				Priority: 0,
 				Matcher: &mock.HTTPMatcher{

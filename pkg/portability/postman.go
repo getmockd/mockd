@@ -179,11 +179,12 @@ func (i *PostmanImporter) requestToMock(item PostmanItem, variables map[string]s
 	// Extract path from URL
 	path := i.extractPath(req.URL, variables)
 
+	enabled := true
 	m := &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
 		Name:      item.Name,
 		Type:      mock.MockTypeHTTP,
-		Enabled:   true,
+		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
 		HTTP: &mock.HTTPSpec{

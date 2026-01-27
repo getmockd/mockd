@@ -1,31 +1,49 @@
 package cliconfig
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
-	// LocalConfigFileName is the name of the local config file
-	LocalConfigFileName = ".mockdrc.json"
 	// GlobalConfigDir is the directory for global config
 	GlobalConfigDir = "mockd"
-	// GlobalConfigFileName is the name of the global config file
-	GlobalConfigFileName = "config.json"
 )
 
-// FindLocalConfig searches for .mockdrc.json in the current directory.
+// LocalConfigFileNames are the names to search for local config (in order).
+var LocalConfigFileNames = []string{".mockdrc.yaml", ".mockdrc.yml"}
+
+// GlobalConfigFileNames are the names to search for global config (in order).
+var GlobalConfigFileNames = []string{"config.yaml", "config.yml"}
+
+// FindLocalConfig searches for .mockdrc.yaml or .mockdrc.yml in the current directory.
 func FindLocalConfig() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(cwd, LocalConfigFileName)
-	if _, err := os.Stat(path); err == nil {
-		return path, nil
+	for _, name := range LocalConfigFileNames {
+		path := filepath.Join(cwd, name)
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
 	}
 	return "", nil
+}
+
+// GetLocalConfigSearchPaths returns the paths that will be searched for local config.
+func GetLocalConfigSearchPaths() []string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	paths := make([]string, len(LocalConfigFileNames))
+	for i, name := range LocalConfigFileNames {
+		paths[i] = filepath.Join(cwd, name)
+	}
+	return paths
 }
 
 // FindGlobalConfig returns the path to the global config file.
@@ -36,14 +54,29 @@ func FindGlobalConfig() (string, error) {
 		//nolint:nilerr // intentionally returning empty string when no config dir is available
 		return "", nil
 	}
-	path := filepath.Join(configDir, GlobalConfigDir, GlobalConfigFileName)
-	if _, err := os.Stat(path); err == nil {
-		return path, nil
+	for _, name := range GlobalConfigFileNames {
+		path := filepath.Join(configDir, GlobalConfigDir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
 	}
 	return "", nil
 }
 
-// LoadConfigFile loads a CLIConfig from a JSON file.
+// GetGlobalConfigSearchPaths returns the paths that will be searched for global config.
+func GetGlobalConfigSearchPaths() []string {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil
+	}
+	paths := make([]string, len(GlobalConfigFileNames))
+	for i, name := range GlobalConfigFileNames {
+		paths[i] = filepath.Join(configDir, GlobalConfigDir, name)
+	}
+	return paths
+}
+
+// LoadConfigFile loads a CLIConfig from a YAML file.
 func LoadConfigFile(path string) (*CLIConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -51,17 +84,7 @@ func LoadConfigFile(path string) (*CLIConfig, error) {
 	}
 
 	var cfg CLIConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		// Try to get line/column info from JSON error
-		if syntaxErr, ok := err.(*json.SyntaxError); ok {
-			line, col := FindLineColumn(data, syntaxErr.Offset)
-			return nil, &ConfigError{
-				Path:    path,
-				Line:    line,
-				Column:  col,
-				Message: syntaxErr.Error(),
-			}
-		}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, &ConfigError{
 			Path:    path,
 			Message: err.Error(),

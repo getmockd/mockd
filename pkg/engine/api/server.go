@@ -40,6 +40,7 @@ type EngineController interface {
 	GetRequestLog(id string) *requestlog.Entry
 	RequestLogCount() int
 	ClearRequestLogs()
+	ClearRequestLogsByMockID(mockID string) int
 
 	// Protocol status
 	ProtocolStatus() map[string]ProtocolStatusInfo
@@ -147,6 +148,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /requests", s.handleListRequests)
 	mux.HandleFunc("GET /requests/{id}", s.handleGetRequest)
 	mux.HandleFunc("DELETE /requests", s.handleClearRequests)
+	mux.HandleFunc("DELETE /requests/mock/{id}", s.handleClearRequestsByMockID)
 
 	// Protocols
 	mux.HandleFunc("GET /protocols", s.handleListProtocols)

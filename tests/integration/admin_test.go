@@ -20,6 +20,8 @@ import (
 	"github.com/getmockd/mockd/pkg/mock"
 )
 
+func boolPtr(b bool) *bool { return &b }
+
 // setupAdminTest creates a server with admin API for testing
 func setupAdminTest(t *testing.T) (*engine.Server, *admin.AdminAPI, int, int, func()) {
 	httpPort := getFreePort()
@@ -74,7 +76,7 @@ func TestAdminAPICreateMock(t *testing.T) {
 	// Create mock via engine client
 	mockCfg := &config.MockConfiguration{
 		Name:    "Test Mock",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -92,7 +94,8 @@ func TestAdminAPICreateMock(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, created.ID)
 	assert.Equal(t, "Test Mock", created.Name)
-	assert.True(t, created.Enabled)
+	assert.NotNil(t, created.Enabled)
+	assert.True(t, *created.Enabled)
 
 	// Verify mock works
 	mockResp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/test", httpPort))
@@ -116,7 +119,7 @@ func TestAdminAPIListMocks(t *testing.T) {
 	_, err := client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "mock-1",
 		Name:    "Mock 1",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/one"},
@@ -128,7 +131,7 @@ func TestAdminAPIListMocks(t *testing.T) {
 	_, err = client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "mock-2",
 		Name:    "Mock 2",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/two"},
@@ -320,7 +323,7 @@ func TestAdminAPIDuplicateIDReturns409(t *testing.T) {
 	// Create first mock
 	_, err := client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "duplicate-id",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/dup"},
@@ -391,7 +394,7 @@ func TestAdminAPIToggleMock(t *testing.T) {
 	// Create enabled mock
 	_, err := client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "toggle-test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/toggle"},
@@ -440,7 +443,7 @@ func TestAdminAPIFilterByEnabled(t *testing.T) {
 	// Add enabled mock
 	_, err := client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "enabled-mock",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/enabled"},
@@ -452,7 +455,7 @@ func TestAdminAPIFilterByEnabled(t *testing.T) {
 	// Add a mock that will be disabled
 	_, err = client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "disabled-mock",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/disabled"},

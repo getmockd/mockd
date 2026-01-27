@@ -241,7 +241,7 @@ func TestMockConfiguration_Validate_WithPatterns(t *testing.T) {
 			name: "valid mock with pathPattern",
 			mockCfg: &MockConfiguration{
 				ID:      "test-1",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
@@ -259,7 +259,7 @@ func TestMockConfiguration_Validate_WithPatterns(t *testing.T) {
 			name: "valid mock with bodyPattern",
 			mockCfg: &MockConfiguration{
 				ID:      "test-2",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
@@ -278,7 +278,7 @@ func TestMockConfiguration_Validate_WithPatterns(t *testing.T) {
 			name: "invalid mock with both path and pathPattern",
 			mockCfg: &MockConfiguration{
 				ID:      "test-3",
-				Enabled: true,
+				Enabled: boolPtr(true),
 				Type:    mock.MockTypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{

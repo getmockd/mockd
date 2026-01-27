@@ -12,6 +12,31 @@ import (
 type Context struct {
 	Request RequestContext
 	MTLS    MTLSContext
+	MQTT    MQTTContext
+}
+
+// MQTTContext holds MQTT-specific template data.
+type MQTTContext struct {
+	Topic        string
+	ClientID     string
+	Payload      map[string]any
+	WildcardVals []string
+	DeviceID     string
+	MessageNum   int64
+}
+
+// NewMQTTContext creates a template context pre-populated with MQTT data.
+// This allows MQTT payloads to use shared template variables like {{now}},
+// {{uuid}}, {{timestamp}}, etc.
+func NewMQTTContext(topic, clientID string, payload map[string]any, wildcardVals []string) *Context {
+	return &Context{
+		MQTT: MQTTContext{
+			Topic:        topic,
+			ClientID:     clientID,
+			Payload:      payload,
+			WildcardVals: wildcardVals,
+		},
+	}
 }
 
 // MTLSContext contains mTLS client certificate data available to templates.

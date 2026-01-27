@@ -1194,3 +1194,60 @@ func TestApplyVariables(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Configuration Tests - SkipOriginVerify
+// ============================================================================
+
+func TestSubscriptionHandler_SkipOriginVerify_DefaultTrue(t *testing.T) {
+	// Test that SkipOriginVerify defaults to true for development convenience
+	config := &GraphQLConfig{
+		Subscriptions: map[string]SubscriptionConfig{
+			"test": {Events: []EventConfig{{Data: "test"}}},
+		},
+	}
+
+	schema, _ := ParseSchema(`type Subscription { test: String }`)
+	handler := NewSubscriptionHandler(schema, config)
+
+	// The default should be true (InsecureSkipVerify in the upgrader)
+	if !handler.upgrader.InsecureSkipVerify {
+		t.Error("SkipOriginVerify should default to true")
+	}
+}
+
+func TestSubscriptionHandler_SkipOriginVerify_ExplicitFalse(t *testing.T) {
+	// Test that SkipOriginVerify can be explicitly set to false
+	skipVerify := false
+	config := &GraphQLConfig{
+		SkipOriginVerify: &skipVerify,
+		Subscriptions: map[string]SubscriptionConfig{
+			"test": {Events: []EventConfig{{Data: "test"}}},
+		},
+	}
+
+	schema, _ := ParseSchema(`type Subscription { test: String }`)
+	handler := NewSubscriptionHandler(schema, config)
+
+	if handler.upgrader.InsecureSkipVerify {
+		t.Error("SkipOriginVerify should be false when explicitly set")
+	}
+}
+
+func TestSubscriptionHandler_SkipOriginVerify_ExplicitTrue(t *testing.T) {
+	// Test that SkipOriginVerify can be explicitly set to true
+	skipVerify := true
+	config := &GraphQLConfig{
+		SkipOriginVerify: &skipVerify,
+		Subscriptions: map[string]SubscriptionConfig{
+			"test": {Events: []EventConfig{{Data: "test"}}},
+		},
+	}
+
+	schema, _ := ParseSchema(`type Subscription { test: String }`)
+	handler := NewSubscriptionHandler(schema, config)
+
+	if !handler.upgrader.InsecureSkipVerify {
+		t.Error("SkipOriginVerify should be true when explicitly set")
+	}
+}

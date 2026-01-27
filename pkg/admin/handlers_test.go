@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func boolPtr(b bool) *bool { return &b }
+
 // mockEngineServer creates a test server that simulates the engine API.
 // It allows tests to control responses for various endpoints.
 type mockEngineServer struct {
@@ -142,7 +144,7 @@ func newMockEngineServer() *mockEngineServer {
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid_json", Message: err.Error()})
 			return
 		}
-		m.Enabled = req.Enabled
+		m.Enabled = &req.Enabled
 		json.NewEncoder(w).Encode(m)
 	})
 
@@ -238,13 +240,13 @@ func TestHandleListMocks(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-1",
 			Name:    "Test Mock 1",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 		})
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-2",
 			Name:    "Test Mock 2",
-			Enabled: false,
+			Enabled: boolPtr(false),
 			Type:    mock.MockTypeHTTP,
 		})
 
@@ -270,13 +272,13 @@ func TestHandleListMocks(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-enabled",
 			Name:    "Enabled Mock",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 		})
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-disabled",
 			Name:    "Disabled Mock",
-			Enabled: false,
+			Enabled: boolPtr(false),
 			Type:    mock.MockTypeHTTP,
 		})
 
@@ -293,7 +295,8 @@ func TestHandleListMocks(t *testing.T) {
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.Equal(t, 1, resp.Count)
-		assert.True(t, resp.Mocks[0].Enabled)
+		assert.NotNil(t, resp.Mocks[0].Enabled)
+		assert.True(t, *resp.Mocks[0].Enabled)
 	})
 
 	t.Run("filters by parentId", func(t *testing.T) {
@@ -355,7 +358,7 @@ func TestHandleGetMock(t *testing.T) {
 		testMock := &config.MockConfiguration{
 			ID:      "mock-123",
 			Name:    "Test Mock",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
@@ -567,7 +570,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-to-update",
 			Name:    "Original Name",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 		})
 
@@ -765,7 +768,7 @@ func TestHandleToggleMock(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-toggle",
 			Name:    "Toggle Mock",
-			Enabled: false,
+			Enabled: boolPtr(false),
 			Type:    mock.MockTypeHTTP,
 		})
 
@@ -784,7 +787,8 @@ func TestHandleToggleMock(t *testing.T) {
 		var resp config.MockConfiguration
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
-		assert.True(t, resp.Enabled)
+		assert.NotNil(t, resp.Enabled)
+		assert.True(t, *resp.Enabled)
 	})
 
 	t.Run("toggles mock to disabled", func(t *testing.T) {
@@ -794,7 +798,7 @@ func TestHandleToggleMock(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-toggle",
 			Name:    "Toggle Mock",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 		})
 
@@ -813,7 +817,8 @@ func TestHandleToggleMock(t *testing.T) {
 		var resp config.MockConfiguration
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
-		assert.False(t, resp.Enabled)
+		assert.NotNil(t, resp.Enabled)
+		assert.False(t, *resp.Enabled)
 	})
 
 	t.Run("returns 404 for non-existent mock", func(t *testing.T) {
@@ -895,12 +900,12 @@ func TestHandleGetStatus(t *testing.T) {
 
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-1",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 		})
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-2",
-			Enabled: false,
+			Enabled: boolPtr(false),
 			Type:    mock.MockTypeHTTP,
 		})
 
@@ -943,7 +948,7 @@ func TestHandleExportConfig(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-1",
 			Name:    "Export Test Mock",
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 		})
 

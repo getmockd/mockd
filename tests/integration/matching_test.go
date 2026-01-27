@@ -62,7 +62,7 @@ func TestMatchingMultipleMocksCorrectSelection(t *testing.T) {
 	// Add generic mock
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "generic-users",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
@@ -81,7 +81,7 @@ func TestMatchingMultipleMocksCorrectSelection(t *testing.T) {
 	// Add specific mock with headers
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "v2-users",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
@@ -103,7 +103,7 @@ func TestMatchingMultipleMocksCorrectSelection(t *testing.T) {
 	// Add specific mock with query params
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "filtered-users",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
@@ -153,7 +153,7 @@ func TestMatchingPriorityTieBreaking(t *testing.T) {
 	// Both mocks have same matching criteria, different priorities
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "low-priority",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 1,
@@ -171,7 +171,7 @@ func TestMatchingPriorityTieBreaking(t *testing.T) {
 
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "high-priority",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 100,
@@ -202,7 +202,7 @@ func TestMatchingWithBody(t *testing.T) {
 	// Add mock that requires specific body content (higher priority due to more specific matching)
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "create-user",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 10,
@@ -222,7 +222,7 @@ func TestMatchingWithBody(t *testing.T) {
 	// Add fallback mock (lower priority)
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "post-users-fallback",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
@@ -270,7 +270,7 @@ func TestResponseDelay(t *testing.T) {
 	// Add mock with delay
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "delayed",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{

@@ -74,7 +74,7 @@ func TestHTTPSServerStarts(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "https-test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -99,7 +99,7 @@ func TestHTTPSRequestReturnsResponse(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "https-response",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -142,7 +142,7 @@ func TestHTTPAndHTTPSSimultaneously(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "dual-mock",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -217,7 +217,7 @@ func TestHTTPSWithCertificateFiles(t *testing.T) {
 
 	_, err = client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "cert-file-mock",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -255,7 +255,7 @@ func TestHTTPSTLSVersion(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "tls-version",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -291,7 +291,7 @@ func TestHTTPSMultipleMocks(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "users",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
@@ -309,7 +309,7 @@ func TestHTTPSMultipleMocks(t *testing.T) {
 
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "orders",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
@@ -354,7 +354,7 @@ func TestHTTPSPostRequest(t *testing.T) {
 
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "create-user",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{

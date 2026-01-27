@@ -74,11 +74,20 @@ func (h *AuthHook) OnACLCheck(cl *mqtt.Client, topic string, write bool) bool {
 			continue
 		}
 
-		// Check ACL rules for this user
+		// Check ACL rules - most restrictive wins
+		matched := false
+		allowed := true
 		for _, rule := range user.ACL {
 			if matchTopic(rule.Topic, topic) {
-				return checkAccess(rule.Access, write)
+				matched = true
+				if !checkAccess(rule.Access, write) {
+					allowed = false
+					break // Any deny is final
+				}
 			}
+		}
+		if matched {
+			return allowed
 		}
 
 		// If user has no ACL rules, allow all operations
@@ -121,12 +130,12 @@ func matchTopic(pattern, topic string) bool {
 
 // checkAccess verifies if the access level allows the operation
 func checkAccess(access string, write bool) bool {
-	switch access {
-	case "readwrite":
+	switch strings.ToLower(access) {
+	case "readwrite", "all":
 		return true
-	case "read":
+	case "read", "subscribe":
 		return !write
-	case "write":
+	case "write", "publish":
 		return write
 	default:
 		return false
@@ -205,15 +214,19 @@ func (h *MessageHook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Pac
 	// Notify test panel sessions
 	h.broker.notifyTestPanelPublish(topic, payload, int(pk.FixedHeader.Qos), pk.FixedHeader.Retain, cl.ID)
 
-	// Handle conditional responses first (they take priority)
-	conditionalHandled := false
-	if h.broker.conditionalResponseHandler != nil {
-		conditionalHandled = h.broker.conditionalResponseHandler.HandlePublish(topic, payload, cl.ID)
-	}
+	// Skip mock response handling if this topic is currently being published
+	// as a mock response (prevents infinite loops)
+	if !h.broker.isMockResponseActive(topic) {
+		// Handle conditional responses first (they take priority)
+		conditionalHandled := false
+		if h.broker.conditionalResponseHandler != nil {
+			conditionalHandled = h.broker.conditionalResponseHandler.HandlePublish(topic, payload, cl.ID)
+		}
 
-	// Handle regular mock responses only if no conditional response was triggered
-	if !conditionalHandled && h.broker.responseHandler != nil {
-		h.broker.responseHandler.HandlePublish(topic, payload, cl.ID)
+		// Handle regular mock responses only if no conditional response was triggered
+		if !conditionalHandled && h.broker.responseHandler != nil {
+			h.broker.responseHandler.HandlePublish(topic, payload, cl.ID)
+		}
 	}
 
 	// Check for configured publish handlers

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -90,6 +91,12 @@ func (h *Handler) SetStatefulStore(store *stateful.StateStore) {
 // SetStore sets the mock store for the handler.
 func (h *Handler) SetStore(store storage.MockStore) {
 	h.store = store
+}
+
+// HasMatch checks if any mock matches the given request without recording metrics.
+func (h *Handler) HasMatch(r *http.Request) bool {
+	mocks := h.store.ListByType(mock.MockTypeHTTP)
+	return SelectBestMatchWithCaptures(mocks, r) != nil
 }
 
 // ServeHTTP implements the http.Handler interface.
@@ -176,6 +183,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Find best matching mock using scoring algorithm (with regex captures)
 	matchResult := SelectBestMatchWithCaptures(mocks, r)
+
+	// HEAD fallback: if no match for HEAD, retry as GET
+	if matchResult == nil && r.Method == http.MethodHead {
+		getFallback := r.Clone(r.Context())
+		getFallback.Method = http.MethodGet
+		matchResult = SelectBestMatchWithCaptures(mocks, getFallback)
+	}
 
 	if matchResult != nil {
 		match := matchResult.Mock
@@ -309,9 +323,19 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 	// Write status code
 	w.WriteHeader(resp.StatusCode)
 
+	// Determine body content - check inline body first, then file
+	body := resp.Body
+	if body == "" && resp.BodyFile != "" {
+		data, err := os.ReadFile(resp.BodyFile)
+		if err != nil {
+			h.log.Error("failed to read body file", "file", resp.BodyFile, "error", err)
+		} else {
+			body = string(data)
+		}
+	}
+
 	// Write body with template processing
-	if resp.Body != "" {
-		body := resp.Body
+	if body != "" {
 		// Process template variables if the template engine is available
 		if h.templateEngine != nil {
 			ctx := template.NewContext(r, bodyBytes)

@@ -5,11 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"text/tabwriter"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/recording"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 // streamRecordingStore is the global file store for stream recordings.
@@ -21,23 +21,18 @@ func initStreamRecordingStore() error {
 		return nil
 	}
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
-	}
-
 	cfg := recording.StorageConfig{
-		DataDir:     filepath.Join(homeDir, ".config", "mockd", "recordings"),
+		DataDir:     store.DefaultRecordingsDir(),
 		MaxBytes:    recording.DefaultMaxStorageBytes,
 		WarnPercent: recording.DefaultWarnPercent,
 	}
 
-	store, err := recording.NewFileStore(cfg)
+	fileStore, err := recording.NewFileStore(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to initialize recording store: %w", err)
 	}
 
-	streamRecordingStore = store
+	streamRecordingStore = fileStore
 	return nil
 }
 

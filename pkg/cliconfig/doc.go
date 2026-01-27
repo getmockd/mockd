@@ -5,8 +5,8 @@
 //
 //  1. Command-line flags
 //  2. Environment variables (MOCKD_* prefix)
-//  3. Local config file (.mockdrc.json in current directory)
-//  4. Global config file (~/.config/mockd/config.json)
+//  3. Local config file (.mockdrc.yaml or .mockdrc.yml in current directory)
+//  4. Global config file (~/.config/mockd/config.yaml or config.yml)
 //  5. Default values
 //
 // The package handles configuration discovery, loading, merging, and validation.
@@ -20,7 +20,7 @@
 // Key functions:
 //
 //   - Load: Loads and merges configuration from all sources
-//   - FindLocalConfig: Locates .mockdrc.json in the current directory
+//   - FindLocalConfig: Locates .mockdrc.yaml in the current directory
 //   - FindGlobalConfig: Locates global config file
 //   - ApplyEnv: Applies environment variable overrides
 package cliconfig

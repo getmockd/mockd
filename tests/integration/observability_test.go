@@ -197,7 +197,7 @@ func TestObservability_PrometheusMetricsEndpoint(t *testing.T) {
 	// Create a mock and make a request so counters/histograms have data
 	testMock := &config.MockConfiguration{
 		Name:    "Metrics Endpoint Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -269,7 +269,7 @@ func TestObservability_RequestCounterMetrics(t *testing.T) {
 	// Create a simple mock
 	testMock := &config.MockConfiguration{
 		Name:    "Request Counter Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -322,7 +322,7 @@ func TestObservability_RequestDurationHistogram(t *testing.T) {
 	// Create mock with 100ms delay
 	delayedMock := &config.MockConfiguration{
 		Name:    "Delayed Response Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -389,7 +389,7 @@ func TestObservability_ErrorRateMetrics(t *testing.T) {
 	// Create mock returning 500 with unique path to avoid cross-test pollution
 	errorMock := &config.MockConfiguration{
 		Name:    "Error Response Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -506,7 +506,7 @@ func TestObservability_MockCountMetrics(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		testMock := &config.MockConfiguration{
 			Name:    fmt.Sprintf("Mock Count Test %d", i),
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
@@ -598,7 +598,7 @@ func TestObservability_OpenTelemetryTraces(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		ID:      "trace-test-mock",
 		Name:    "Trace Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -695,7 +695,7 @@ func TestObservability_TraceContextPropagation(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		ID:      "propagation-test-mock",
 		Name:    "Propagation Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -770,7 +770,7 @@ func TestObservability_HealthCheckMetrics(t *testing.T) {
 	// Create a mock so health check has something to report
 	testMock := &config.MockConfiguration{
 		Name:    "Health Check Test Mock",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -886,7 +886,7 @@ func TestObservability_ProtocolSpecificMetrics_SSE(t *testing.T) {
 	delay50 := 50
 	sseMock := &config.MockConfiguration{
 		Name:    "SSE Metrics Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -958,7 +958,7 @@ func TestObservability_MatchHitsMissesMetrics(t *testing.T) {
 	hitMock := &config.MockConfiguration{
 		ID:      "match-hit-test",
 		Name:    "Match Hit Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1115,7 +1115,7 @@ func TestObservability_MetricLabelCardinalityControl(t *testing.T) {
 	// Create a mock with wildcard path
 	wildcardMock := &config.MockConfiguration{
 		Name:    "Cardinality Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1190,7 +1190,7 @@ func TestObservability_ConcurrentMetricsUpdates(t *testing.T) {
 	// Create a simple mock
 	testMock := &config.MockConfiguration{
 		Name:    "Concurrent Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1252,7 +1252,7 @@ func TestObservability_ErrorMetricsTypes(t *testing.T) {
 	for _, code := range errorCodes {
 		errorMock := &config.MockConfiguration{
 			Name:    fmt.Sprintf("Error %d Test", code),
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
@@ -1305,7 +1305,7 @@ func TestObservability_MetricsPersistenceAcrossRequests(t *testing.T) {
 	// Create a mock
 	testMock := &config.MockConfiguration{
 		Name:    "Persistence Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1368,7 +1368,7 @@ func TestObservability_HistogramQuantileAccuracy(t *testing.T) {
 	delayMs := 50
 	testMock := &config.MockConfiguration{
 		Name:    "Quantile Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1500,7 +1500,7 @@ func TestObservability_TracingSkipPaths(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		ID:      "skip-path-test",
 		Name:    "Skip Path Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -1568,7 +1568,7 @@ func TestObservability_MultipleStatusCodeTracking(t *testing.T) {
 	for _, code := range successCodes {
 		mock := &config.MockConfiguration{
 			Name:    fmt.Sprintf("Status %d Test", code),
-			Enabled: true,
+			Enabled: boolPtr(true),
 			Type:    mock.MockTypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
@@ -1663,7 +1663,7 @@ func TestObservability_FullRequestLifecycle(t *testing.T) {
 	// Create a mock with delay to exercise timing
 	testMock := &config.MockConfiguration{
 		Name:    "Lifecycle Test",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{

@@ -677,7 +677,7 @@ func TestMQTT_US9_AutoStartFromMock(t *testing.T) {
 		ID:      "test-mqtt-mock",
 		Type:    mock.MockTypeMQTT,
 		Name:    "Test MQTT",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		MQTT: &mock.MQTTSpec{
 			Port: mqttPort,
 			Topics: []mock.TopicConfig{

@@ -241,6 +241,27 @@ func (c *Client) ClearRequests(ctx context.Context) (int, error) {
 	return result.Cleared, nil
 }
 
+// ClearRequestsByMockID clears request logs for a specific mock.
+func (c *Client) ClearRequestsByMockID(ctx context.Context, mockID string) (int, error) {
+	resp, err := c.delete(ctx, "/requests/mock/"+mockID)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, c.parseError(resp)
+	}
+
+	var result struct {
+		Cleared int `json:"cleared"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return result.Cleared, nil
+}
+
 // GetProtocols returns protocol status.
 func (c *Client) GetProtocols(ctx context.Context) (map[string]ProtocolStatus, error) {
 	resp, err := c.get(ctx, "/protocols")

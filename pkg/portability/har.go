@@ -296,11 +296,12 @@ func (i *HARImporter) entryToMock(entry HAREntry, id int, now time.Time) *config
 		respHeaders["Content-Type"] = entry.Response.Content.MimeType
 	}
 
+	enabled := true
 	m := &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
 		Type:      mock.MockTypeHTTP,
 		Name:      fmt.Sprintf("%s %s", entry.Request.Method, path),
-		Enabled:   true,
+		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
 		HTTP: &mock.HTTPSpec{

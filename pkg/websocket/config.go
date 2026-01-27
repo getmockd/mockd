@@ -20,6 +20,7 @@ func EndpointFromConfig(cfg *config.WebSocketEndpointConfig) (*Endpoint, error) 
 		MaxMessageSize:     cfg.MaxMessageSize,
 		MaxConnections:     cfg.MaxConnections,
 		EchoMode:           cfg.EchoMode,
+		SkipOriginVerify:   cfg.SkipOriginVerify,
 	}
 
 	// Parse idle timeout

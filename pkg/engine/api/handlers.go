@@ -174,7 +174,7 @@ func (s *Server) handleToggleMock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the mock with new enabled status
-	existing.Enabled = req.Enabled
+	existing.Enabled = &req.Enabled
 	if err := s.engine.UpdateMock(id, existing); err != nil {
 		writeError(w, http.StatusInternalServerError, "toggle_error", err.Error())
 		return
@@ -290,6 +290,20 @@ func (s *Server) handleClearRequests(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"cleared": count,
 		"message": "request logs cleared",
+	})
+}
+
+func (s *Server) handleClearRequestsByMockID(w http.ResponseWriter, r *http.Request) {
+	mockID := r.PathValue("id")
+	if mockID == "" {
+		http.Error(w, `{"error":"mock ID is required"}`, http.StatusBadRequest)
+		return
+	}
+	count := s.engine.ClearRequestLogsByMockID(mockID)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"cleared": count,
+		"mockId":  mockID,
+		"message": "invocations cleared",
 	})
 }
 

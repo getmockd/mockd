@@ -10,17 +10,6 @@ These flags apply to all commands:
 |------|-------------|
 | `-h, --help` | Show help message |
 | `-v, --version` | Show version information |
-| `--tui` | Launch interactive TUI |
-| `--ci, --no-tui` | Run in headless/CI mode |
-
-## TUI Flags
-
-When using `--tui`:
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--serve` | Start embedded mock server with TUI (hybrid mode) | |
-| `--admin <url>` | Admin API URL | `http://localhost:4290` |
 
 ---
 
@@ -924,7 +913,7 @@ mockd context [command]
 
 **Configuration:**
 
-Contexts are stored in `~/.config/mockd/contexts.json`. A default "local" context pointing to `http://localhost:4290` is created automatically.
+Contexts are stored in `~/.config/mockd/contexts.yaml`. A default "local" context pointing to `http://localhost:4290` is created automatically.
 
 ---
 
@@ -2793,24 +2782,6 @@ mockd version --json
 ```
 
 ---
-
-## TUI Mode
-
-Launch the interactive terminal UI:
-
-```bash
-# Connect to running server
-mockd --tui
-
-# Connect to specific admin URL
-mockd --tui --admin http://localhost:4290
-
-# Start server and TUI together (hybrid mode)
-mockd --tui --serve
-
-# Hybrid with custom ports
-mockd --tui --serve --port 3000 --admin-port 3001
-```
 
 ---
 

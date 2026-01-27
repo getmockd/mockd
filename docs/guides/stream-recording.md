@@ -354,14 +354,15 @@ recording:
 
 ```yaml
 recording:
-  dataDir: ~/.config/mockd/recordings
+  dataDir: ~/.local/share/mockd/recordings
   maxBytes: 524288000  # 500MB
   warnPercent: 80      # Warn at 80% capacity
 ```
 
 Storage location defaults:
-- Linux/macOS: `~/.config/mockd/recordings/`
-- Windows: `%APPDATA%\mockd\recordings\`
+- Linux: `~/.local/share/mockd/recordings/`
+- macOS: `~/Library/Application Support/mockd/recordings/`
+- Windows: `%LOCALAPPDATA%\mockd\recordings\`
 
 ## Use Cases
 

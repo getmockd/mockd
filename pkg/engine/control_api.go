@@ -103,6 +103,26 @@ func (a *ControlAPIAdapter) ClearRequestLogs() {
 	a.server.ClearRequestLogs()
 }
 
+// ClearRequestLogsByMockID implements api.EngineController.
+func (a *ControlAPIAdapter) ClearRequestLogsByMockID(mockID string) int {
+	logger := a.server.Logger()
+	if logger == nil {
+		return 0
+	}
+	// Check if logger supports ClearByMockID
+	if clearer, ok := logger.(interface{ ClearByMockID(string) }); ok {
+		// Get count before clearing
+		if counter, ok2 := logger.(interface{ CountByMockID(string) int }); ok2 {
+			count := counter.CountByMockID(mockID)
+			clearer.ClearByMockID(mockID)
+			return count
+		}
+		clearer.ClearByMockID(mockID)
+		return -1 // Unknown count
+	}
+	return 0
+}
+
 // ProtocolStatus implements api.EngineController.
 // Converts the engine status type to the api status type.
 func (a *ControlAPIAdapter) ProtocolStatus() map[string]api.ProtocolStatusInfo {

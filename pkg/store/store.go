@@ -162,6 +162,12 @@ func DefaultStateDir() string {
 	return filepath.Join(home, ".local", "state", "mockd")
 }
 
+// DefaultRecordingsDir returns the default recordings directory.
+// Recordings are user data, so they go in the data directory.
+func DefaultRecordingsDir() string {
+	return filepath.Join(DefaultDataDir(), "recordings")
+}
+
 // Store is the main interface for data persistence.
 type Store interface {
 	// Lifecycle

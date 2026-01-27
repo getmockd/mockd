@@ -315,11 +315,12 @@ func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, id
 		respDef.Body = generateDefaultBody(statusCode)
 	}
 
+	enabled := true
 	return &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
 		Type:      mock.MockTypeHTTP,
 		Name:      name,
-		Enabled:   true,
+		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
 		HTTP: &mock.HTTPSpec{
@@ -430,11 +431,12 @@ func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *Swagge
 		respBody = generateDefaultBody(statusCode)
 	}
 
+	enabled2 := true
 	return &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
 		Type:      mock.MockTypeHTTP,
 		Name:      name,
-		Enabled:   true,
+		Enabled:   &enabled2,
 		CreatedAt: now,
 		UpdatedAt: now,
 		HTTP: &mock.HTTPSpec{

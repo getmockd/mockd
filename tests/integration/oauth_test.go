@@ -146,7 +146,7 @@ func setupOAuthServer(t *testing.T) *oauthTestBundle {
 	oauthMock := &config.MockConfiguration{
 		ID:      "test-oauth-provider",
 		Name:    "Test OAuth Provider",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeOAuth,
 		OAuth: &mock.OAuthSpec{
 			Issuer:        oauthBaseURL,
@@ -1303,7 +1303,7 @@ func TestOAuth_MultipleProviders(t *testing.T) {
 	_, err = client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "oauth-provider-1",
 		Name:    "OAuth Provider 1",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeOAuth,
 		OAuth: &mock.OAuthSpec{
 			Issuer:      baseURL + "/oauth1",
@@ -1324,7 +1324,7 @@ func TestOAuth_MultipleProviders(t *testing.T) {
 	_, err = client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "oauth-provider-2",
 		Name:    "OAuth Provider 2",
-		Enabled: true,
+		Enabled: boolPtr(true),
 		Type:    mock.MockTypeOAuth,
 		OAuth: &mock.OAuthSpec{
 			Issuer:      baseURL + "/oauth2",

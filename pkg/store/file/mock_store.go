@@ -67,8 +67,11 @@ func (s *mockStore) matchesFilter(m *mock.Mock, filter *store.MockFilter) bool {
 	}
 
 	// Filter by enabled state
-	if filter.Enabled != nil && m.Enabled != *filter.Enabled {
-		return false
+	if filter.Enabled != nil {
+		mEnabled := m.Enabled == nil || *m.Enabled
+		if mEnabled != *filter.Enabled {
+			return false
+		}
 	}
 
 	// Filter by search query

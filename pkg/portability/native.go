@@ -337,11 +337,12 @@ func convertEndpointToMock(ep *NativeV1Endpoint, defaultDelay int, now time.Time
 		}
 	}
 
+	epEnabled := ep.Enabled
 	m := &config.MockConfiguration{
 		ID:        ep.ID,
 		Type:      mock.MockTypeHTTP,
 		Name:      ep.Name,
-		Enabled:   ep.Enabled,
+		Enabled:   &epEnabled,
 		CreatedAt: now,
 		UpdatedAt: now,
 		HTTP:      httpSpec,
@@ -421,7 +422,7 @@ func convertMockToEndpoint(m *config.MockConfiguration) (*NativeV1Endpoint, erro
 	ep := &NativeV1Endpoint{
 		ID:      m.ID,
 		Name:    m.Name,
-		Enabled: m.Enabled,
+		Enabled: m.Enabled == nil || *m.Enabled,
 	}
 
 	// Convert HTTP spec

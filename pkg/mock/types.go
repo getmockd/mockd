@@ -39,7 +39,7 @@ type Mock struct {
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
 	// Enabled indicates whether this mock is active
-	Enabled bool `json:"enabled" yaml:"enabled"`
+	Enabled *bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 
 	// ParentID is the folder ID this mock belongs to ("" = root level)
 	ParentID string `json:"parentId,omitempty" yaml:"parentId,omitempty"`
@@ -125,7 +125,7 @@ func (m *Mock) unmarshalLegacyHTTP(data []byte) error {
 	m.Type = MockTypeHTTP
 	m.Name = legacy.Name
 	m.Description = legacy.Description
-	m.Enabled = legacy.Enabled
+	m.Enabled = &legacy.Enabled
 	m.ParentID = legacy.ParentID
 	m.MetaSortKey = legacy.MetaSortKey
 	m.WorkspaceID = legacy.WorkspaceID

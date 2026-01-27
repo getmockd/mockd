@@ -272,7 +272,7 @@ func (s *Server) Start() error {
 	if corsConfig == nil {
 		corsConfig = config.DefaultCORSConfig()
 	}
-	s.httpHandler = NewCORSMiddleware(s.httpHandler, corsConfig)
+	s.httpHandler = NewCORSMiddleware(s.httpHandler, corsConfig, s.handler)
 
 	// Apply rate limiting middleware if enabled
 	if s.cfg.RateLimit != nil && s.cfg.RateLimit.Enabled {
