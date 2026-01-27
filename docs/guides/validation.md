@@ -486,4 +486,4 @@ mocks:
 ## Next Steps
 
 - [Stateful Mocking](./stateful-mocking.md) - Learn more about CRUD resources and state management
-- [Configuration](./configuration.md) - Explore all configuration options for your mock server
+- [Configuration](../reference/configuration.md) - Explore all configuration options for your mock server

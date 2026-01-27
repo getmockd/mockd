@@ -258,6 +258,6 @@ mockd list
 
 ## See Also
 
-- [CLI Reference: tunnel command](../reference/cli.md#tunnel)
+- [CLI Reference: cloud commands](../reference/cli.md#cloud-commands)
 - [WebSocket Mocking](websocket-mocking.md)
 - [SSE Streaming](sse-streaming.md)
