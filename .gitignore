@@ -97,3 +97,4 @@ mockd_bench
 # Internal audit files
 AUDIT_*.md
 *_AUDIT_*.md
+run_benchmarks
