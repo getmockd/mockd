@@ -1,0 +1,183 @@
+// Package protocol defines the wire protocol for QUIC relay communication.
+//
+// IMPORTANT: This file is the source of truth for the wire protocol.
+// The relay server at mockd-relay/internal/protocol/types.go must be kept in sync.
+// To sync: cp pkg/tunnel/protocol/types.go ../mockd-relay/internal/protocol/types.go
+package protocol
+
+import (
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"io"
+)
+
+// Protocol version
+const ProtocolVersion uint8 = 1
+
+// StreamType identifies the type of data being transmitted on a QUIC stream.
+type StreamType uint8
+
+const (
+	// StreamTypeControl is for control messages (auth, ping, config).
+	StreamTypeControl StreamType = 0
+	// StreamTypeHTTP is for HTTP request/response streams.
+	StreamTypeHTTP StreamType = 1
+)
+
+func (t StreamType) String() string {
+	switch t {
+	case StreamTypeControl:
+		return "control"
+	case StreamTypeHTTP:
+		return "http"
+	default:
+		return fmt.Sprintf("unknown(%d)", t)
+	}
+}
+
+// StreamHeader is the header sent at the beginning of each QUIC stream.
+// Binary format:
+//   - Version: 1 byte
+//   - Type: 1 byte
+//   - Flags: 1 byte
+//   - Reserved: 1 byte
+//   - MetadataLen: 4 bytes (big-endian)
+//   - Metadata: variable (JSON)
+type StreamHeader struct {
+	Version  uint8
+	Type     StreamType
+	Flags    uint8
+	Metadata []byte
+}
+
+// Header flags
+const (
+	FlagNone uint8 = 0
+)
+
+// EncodeHeader writes a stream header to the writer.
+func EncodeHeader(w io.Writer, h *StreamHeader) error {
+	// Fixed header: 8 bytes
+	buf := make([]byte, 8)
+	buf[0] = h.Version
+	buf[1] = byte(h.Type)
+	buf[2] = h.Flags
+	buf[3] = 0 // reserved
+	binary.BigEndian.PutUint32(buf[4:8], uint32(len(h.Metadata)))
+
+	if _, err := w.Write(buf); err != nil {
+		return fmt.Errorf("write header: %w", err)
+	}
+
+	if len(h.Metadata) > 0 {
+		if _, err := w.Write(h.Metadata); err != nil {
+			return fmt.Errorf("write metadata: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// DecodeHeader reads a stream header from the reader.
+func DecodeHeader(r io.Reader) (*StreamHeader, error) {
+	// Fixed header: 8 bytes
+	buf := make([]byte, 8)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return nil, fmt.Errorf("read header: %w", err)
+	}
+
+	h := &StreamHeader{
+		Version: buf[0],
+		Type:    StreamType(buf[1]),
+		Flags:   buf[2],
+	}
+
+	metadataLen := binary.BigEndian.Uint32(buf[4:8])
+	if metadataLen > 0 {
+		if metadataLen > 1024*64 { // 64KB max
+			return nil, fmt.Errorf("metadata too large: %d bytes", metadataLen)
+		}
+		h.Metadata = make([]byte, metadataLen)
+		if _, err := io.ReadFull(r, h.Metadata); err != nil {
+			return nil, fmt.Errorf("read metadata: %w", err)
+		}
+	}
+
+	return h, nil
+}
+
+// HTTPMetadata contains metadata for HTTP streams.
+type HTTPMetadata struct {
+	// Request fields
+	Method string            `json:"method,omitempty"`
+	Path   string            `json:"path,omitempty"`
+	Host   string            `json:"host,omitempty"`
+	Header map[string]string `json:"header,omitempty"`
+
+	// Response fields
+	StatusCode int `json:"status_code,omitempty"`
+}
+
+// EncodeHTTPMetadata encodes HTTP metadata to JSON bytes.
+func EncodeHTTPMetadata(m *HTTPMetadata) ([]byte, error) {
+	return json.Marshal(m)
+}
+
+// DecodeHTTPMetadata decodes HTTP metadata from JSON bytes.
+func DecodeHTTPMetadata(data []byte) (*HTTPMetadata, error) {
+	var m HTTPMetadata
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// ControlMessage types
+const (
+	ControlTypeAuth       = "auth"
+	ControlTypeAuthOK     = "auth_ok"
+	ControlTypeAuthError  = "auth_error"
+	ControlTypePing       = "ping"
+	ControlTypePong       = "pong"
+	ControlTypeDisconnect = "disconnect"
+)
+
+// ControlMessage is sent on the control stream (stream 0).
+type ControlMessage struct {
+	Type    string `json:"type"`
+	Payload any    `json:"payload,omitempty"`
+}
+
+// AuthPayload is the payload for auth messages.
+type AuthPayload struct {
+	Token     string `json:"token"`
+	LocalPort int    `json:"local_port"`
+}
+
+// AuthOKPayload is the payload for successful auth response.
+type AuthOKPayload struct {
+	SessionID string `json:"session_id"`
+	Subdomain string `json:"subdomain"`
+	PublicURL string `json:"public_url"`
+}
+
+// AuthErrorPayload is the payload for failed auth response.
+type AuthErrorPayload struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// EncodeControlMessage encodes a control message to JSON bytes.
+func EncodeControlMessage(msg *ControlMessage) ([]byte, error) {
+	return json.Marshal(msg)
+}
+
+// DecodeControlMessage decodes a control message from JSON bytes.
+func DecodeControlMessage(data []byte) (*ControlMessage, error) {
+	var msg ControlMessage
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}

@@ -2,12 +2,16 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
@@ -21,10 +25,18 @@ import (
 func RunTunnel(args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
+		case "enable":
+			return runTunnelEnable(args[1:])
+		case "disable":
+			return runTunnelDisable(args[1:])
 		case "status":
 			return runTunnelStatus(args[1:])
 		case "stop":
 			return runTunnelStop(args[1:])
+		case "list":
+			return runTunnelList(args[1:])
+		case "preview":
+			return runTunnelPreview(args[1:])
 		}
 	}
 
@@ -56,13 +68,20 @@ func runTunnelStart(args []string) error {
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd tunnel [flags]
-       mockd tunnel status
-       mockd tunnel stop
+       mockd tunnel <subcommand> [flags]
 
-Expose local mocks via the cloud relay. The tunnel creates a public URL that
-forwards requests to your local mock server.
+Expose local mocks via the cloud relay. Running 'mockd tunnel' without a
+subcommand starts a local mock server + tunnel in one shot.
 
-Flags:
+Subcommands:
+  enable    Enable tunnel on an engine (via admin API)
+  disable   Disable tunnel on an engine
+  status    Show tunnel connection status
+  list      List all active tunnels
+  preview   Preview which mocks would be exposed
+  stop      Alias for disable
+
+Direct Start Flags (mockd tunnel --token ...):
   -p, --port        HTTP server port (default: 4280)
       --admin-port  Admin API port (default: 4290)
   -c, --config      Path to mock configuration file
@@ -76,34 +95,21 @@ Authentication (optional - protect incoming requests):
       --auth-basic  Require HTTP Basic Auth (format: user:pass)
       --allow-ips   Allow only these IPs (comma-separated CIDR or IP)
 
-Subcommands:
-  status    Show current tunnel status and metrics
-  stop      Stop the running tunnel
-
 Examples:
-  # Start tunnel with auto-assigned subdomain
+  # Direct start: launch server + tunnel together
   mockd tunnel --token YOUR_TOKEN
 
-  # Start tunnel with custom subdomain
-  mockd tunnel --token YOUR_TOKEN --subdomain my-api
-
-  # Start tunnel with config file
-  mockd tunnel --config mocks.json --token YOUR_TOKEN
-
-  # Start tunnel with custom domain (must verify in cloud dashboard first)
-  mockd tunnel --token YOUR_TOKEN --domain mocks.acme.com
-
-  # Protect tunnel with token authentication
-  mockd tunnel --token YOUR_TOKEN --auth-token secret123
-
-  # Protect tunnel with HTTP Basic Auth
-  mockd tunnel --token YOUR_TOKEN --auth-basic admin:password
-
-  # Restrict tunnel access by IP
-  mockd tunnel --token YOUR_TOKEN --allow-ips "10.0.0.0/8,192.168.1.0/24"
+  # Enable tunnel on a running engine via admin API
+  mockd tunnel enable --subdomain my-api
 
   # Check tunnel status
   mockd tunnel status
+
+  # List all active tunnels
+  mockd tunnel list
+
+  # Preview what would be exposed
+  mockd tunnel preview --mode selected --types http
 
 Environment Variables:
   MOCKD_TOKEN       Authentication token (alternative to --token flag)
@@ -263,18 +269,180 @@ Environment Variables:
 	return nil
 }
 
-// runTunnelStatus shows the current tunnel status.
+// runTunnelEnable enables a tunnel on the local engine via the admin API.
+func runTunnelEnable(args []string) error {
+	fs := flag.NewFlagSet("tunnel enable", flag.ContinueOnError)
+	adminAddr := fs.String("admin-url", "", "Admin API address")
+	engineID := fs.String("engine", "local", "Engine ID (default: local)")
+	mode := fs.String("mode", "all", "Exposure mode: all, selected, none")
+	subdomain := fs.String("subdomain", "", "Custom subdomain (auto-assigned if empty)")
+	domain := fs.String("domain", "", "Custom domain")
+	authToken := fs.String("auth-token", "", "Require token for incoming requests")
+	authBasic := fs.String("auth-basic", "", "Require Basic Auth (user:pass)")
+	allowIPs := fs.String("allow-ips", "", "Restrict by IP (comma-separated CIDRs)")
+	workspaces := fs.String("workspaces", "", "Expose only these workspaces (comma-separated)")
+	types := fs.String("types", "", "Expose only these mock types (comma-separated)")
+
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, `Usage: mockd tunnel enable [flags]
+
+Enable tunnel on an engine, making mocks publicly accessible.
+
+Flags:
+      --admin-url    Admin API address (auto-detected from context)
+      --engine       Engine ID (default: local)
+      --mode         Exposure mode: all, selected, none (default: all)
+      --subdomain    Custom subdomain (auto-assigned if empty)
+      --domain       Custom domain
+      --auth-token   Require token for incoming requests
+      --auth-basic   Require Basic Auth (format: user:pass)
+      --allow-ips    Restrict by IP (comma-separated CIDRs)
+      --workspaces   Expose only these workspaces (comma-separated, requires --mode selected)
+      --types        Expose only these mock types (comma-separated, requires --mode selected)
+
+Examples:
+  # Enable tunnel with all mocks exposed
+  mockd tunnel enable
+
+  # Enable with custom subdomain
+  mockd tunnel enable --subdomain my-api
+
+  # Expose only HTTP mocks
+  mockd tunnel enable --mode selected --types http
+
+  # Protect with token authentication
+  mockd tunnel enable --auth-token secret123
+`)
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	client := tunnelHTTPClient(*adminAddr)
+
+	// Build enable request
+	reqBody := map[string]any{
+		"expose": map[string]any{
+			"mode": *mode,
+		},
+	}
+
+	expose := reqBody["expose"].(map[string]any)
+	if *workspaces != "" {
+		expose["workspaces"] = splitCSV(*workspaces)
+	}
+	if *types != "" {
+		expose["types"] = splitCSV(*types)
+	}
+	if *subdomain != "" {
+		reqBody["subdomain"] = *subdomain
+	}
+	if *domain != "" {
+		reqBody["customDomain"] = *domain
+	}
+
+	// Build auth config
+	if *authToken != "" {
+		reqBody["auth"] = map[string]any{"type": "token", "token": *authToken}
+	} else if *authBasic != "" {
+		parts := strings.SplitN(*authBasic, ":", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid --auth-basic format, expected user:pass")
+		}
+		reqBody["auth"] = map[string]any{"type": "basic", "username": parts[0], "password": parts[1]}
+	} else if *allowIPs != "" {
+		reqBody["auth"] = map[string]any{"type": "ip", "allowedIPs": splitCSV(*allowIPs)}
+	}
+
+	body, _ := json.Marshal(reqBody)
+	resp, err := client.post(fmt.Sprintf("/engines/%s/tunnel/enable", *engineID), body)
+	if err != nil {
+		return fmt.Errorf("failed to enable tunnel: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return parseHTTPError(resp)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	fmt.Printf("Tunnel enabled!\n")
+	if url, ok := result["publicUrl"].(string); ok && url != "" {
+		fmt.Printf("Public URL: %s\n", url)
+	}
+	if sub, ok := result["subdomain"].(string); ok && sub != "" {
+		fmt.Printf("Subdomain:  %s\n", sub)
+	}
+	if status, ok := result["status"].(string); ok {
+		fmt.Printf("Status:     %s\n", status)
+	}
+
+	return nil
+}
+
+// runTunnelDisable disables the tunnel on an engine via the admin API.
+func runTunnelDisable(args []string) error {
+	fs := flag.NewFlagSet("tunnel disable", flag.ContinueOnError)
+	adminAddr := fs.String("admin-url", "", "Admin API address")
+	engineID := fs.String("engine", "local", "Engine ID (default: local)")
+
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, `Usage: mockd tunnel disable [flags]
+
+Disable tunnel on an engine, removing public access.
+
+Flags:
+      --admin-url   Admin API address (auto-detected from context)
+      --engine      Engine ID (default: local)
+`)
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	client := tunnelHTTPClient(*adminAddr)
+
+	resp, err := client.post(fmt.Sprintf("/engines/%s/tunnel/disable", *engineID), nil)
+	if err != nil {
+		return fmt.Errorf("failed to disable tunnel: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return parseHTTPError(resp)
+	}
+
+	fmt.Println("Tunnel disabled.")
+	return nil
+}
+
+// runTunnelStatus shows the current tunnel status for an engine.
 func runTunnelStatus(args []string) error {
 	fs := flag.NewFlagSet("tunnel status", flag.ContinueOnError)
-	adminAddr := fs.String("admin-url", "http://localhost:4290", "Admin API address")
+	adminAddr := fs.String("admin-url", "", "Admin API address")
+	engineID := fs.String("engine", "local", "Engine ID (default: local)")
+	outputJSON := fs.Bool("json", false, "Output as JSON")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd tunnel status [flags]
 
-Show the current tunnel connection status.
+Show detailed tunnel status for an engine.
 
 Flags:
-      --admin-url   Admin API address (default: http://localhost:4290)
+      --admin-url   Admin API address (auto-detected from context)
+      --engine      Engine ID (default: local)
+      --json        Output as JSON
+
+Examples:
+  mockd tunnel status
+  mockd tunnel status --engine my-engine
+  mockd tunnel status --json
 `)
 	}
 
@@ -282,30 +450,77 @@ Flags:
 		return err
 	}
 
-	// Check if server is running
-	client := NewAdminClientWithAuth(*adminAddr)
-	if err := client.Health(); err != nil {
-		return fmt.Errorf("mockd server not running (admin API not reachable)")
+	client := tunnelHTTPClient(*adminAddr)
+
+	resp, err := client.get(fmt.Sprintf("/engines/%s/tunnel/status", *engineID))
+	if err != nil {
+		return fmt.Errorf("failed to get tunnel status: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return parseHTTPError(resp)
 	}
 
-	// TODO: Add tunnel status endpoint to admin API
-	fmt.Println("Server is running. Tunnel status check not yet implemented.")
-	fmt.Println("Use 'mockd tunnel' to start a new tunnel connection.")
+	var status map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if *outputJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(status)
+	}
+
+	enabled, _ := status["enabled"].(bool)
+	if !enabled {
+		fmt.Printf("Engine %s: tunnel not enabled\n", *engineID)
+		return nil
+	}
+
+	fmt.Printf("Engine:      %s\n", *engineID)
+	if s, ok := status["status"].(string); ok {
+		fmt.Printf("Status:      %s\n", s)
+	}
+	if url, ok := status["publicUrl"].(string); ok && url != "" {
+		fmt.Printf("Public URL:  %s\n", url)
+	}
+	if sub, ok := status["subdomain"].(string); ok && sub != "" {
+		fmt.Printf("Subdomain:   %s\n", sub)
+	}
+	if t, ok := status["transport"].(string); ok && t != "" {
+		fmt.Printf("Transport:   %s\n", t)
+	}
+	if sid, ok := status["sessionId"].(string); ok && sid != "" {
+		fmt.Printf("Session:     %s\n", sid)
+	}
+	if ct, ok := status["connectedAt"].(string); ok && ct != "" {
+		fmt.Printf("Connected:   %s\n", ct)
+	}
+
 	return nil
 }
 
-// runTunnelStop stops a running tunnel.
+// runTunnelStop disables the tunnel (alias for disable).
 func runTunnelStop(args []string) error {
-	fs := flag.NewFlagSet("tunnel stop", flag.ContinueOnError)
-	adminAddr := fs.String("admin-url", "http://localhost:4290", "Admin API address")
+	return runTunnelDisable(args)
+}
+
+// runTunnelList lists all active tunnels across all engines.
+func runTunnelList(args []string) error {
+	fs := flag.NewFlagSet("tunnel list", flag.ContinueOnError)
+	adminAddr := fs.String("admin-url", "", "Admin API address")
+	outputJSON := fs.Bool("json", false, "Output as JSON")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd tunnel stop [flags]
+		fmt.Fprint(os.Stderr, `Usage: mockd tunnel list [flags]
 
-Stop the running tunnel connection.
+List all active tunnels across all engines.
 
 Flags:
-      --admin-url   Admin API address (default: http://localhost:4290)
+      --admin-url   Admin API address (auto-detected from context)
+      --json        Output as JSON
 `)
 	}
 
@@ -313,14 +528,214 @@ Flags:
 		return err
 	}
 
-	// Check if server is running
-	client := NewAdminClientWithAuth(*adminAddr)
-	if err := client.Health(); err != nil {
-		return fmt.Errorf("mockd server not running (admin API not reachable)")
+	client := tunnelHTTPClient(*adminAddr)
+
+	resp, err := client.get("/tunnels")
+	if err != nil {
+		return fmt.Errorf("failed to list tunnels: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return parseHTTPError(resp)
 	}
 
-	// TODO: Add tunnel stop endpoint to admin API
-	fmt.Println("Tunnel stop not yet implemented via CLI.")
-	fmt.Println("Use Ctrl+C in the terminal where 'mockd tunnel' is running.")
+	var result struct {
+		Tunnels []map[string]any `json:"tunnels"`
+		Total   int              `json:"total"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if *outputJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(result)
+	}
+
+	if result.Total == 0 {
+		fmt.Println("No active tunnels.")
+		fmt.Println("Use 'mockd tunnel enable' to enable a tunnel.")
+		return nil
+	}
+
+	fmt.Printf("Active tunnels (%d):\n\n", result.Total)
+	fmt.Printf("%-12s %-15s %-40s %-12s %-10s %s\n",
+		"ENGINE ID", "NAME", "PUBLIC URL", "STATUS", "TRANSPORT", "UPTIME")
+	fmt.Println(strings.Repeat("-", 100))
+
+	for _, t := range result.Tunnels {
+		id, _ := t["engineId"].(string)
+		name, _ := t["engineName"].(string)
+		url, _ := t["publicUrl"].(string)
+		status, _ := t["status"].(string)
+		transport, _ := t["transport"].(string)
+		uptime, _ := t["uptime"].(string)
+
+		fmt.Printf("%-12s %-15s %-40s %-12s %-10s %s\n",
+			id, name, url, status, transport, uptime)
+	}
+
 	return nil
+}
+
+// runTunnelPreview shows a dry-run of what mocks would be exposed through a tunnel.
+func runTunnelPreview(args []string) error {
+	fs := flag.NewFlagSet("tunnel preview", flag.ContinueOnError)
+	adminAddr := fs.String("admin-url", "", "Admin API address")
+	engineID := fs.String("engine", "local", "Engine ID (default: local)")
+	mode := fs.String("mode", "all", "Exposure mode: all, selected, none")
+	workspaces := fs.String("workspaces", "", "Expose only these workspaces (comma-separated)")
+	types := fs.String("types", "", "Expose only these mock types (comma-separated)")
+	outputJSON := fs.Bool("json", false, "Output as JSON")
+
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, `Usage: mockd tunnel preview [flags]
+
+Preview which mocks would be exposed through a tunnel.
+
+This is a dry-run -- no tunnel is created. Use this to verify exposure
+settings before enabling a tunnel.
+
+Flags:
+      --admin-url    Admin API address (auto-detected from context)
+      --engine       Engine ID (default: local)
+      --mode         Exposure mode: all, selected, none (default: all)
+      --workspaces   Expose only these workspaces (comma-separated)
+      --types        Expose only these mock types (comma-separated)
+      --json         Output as JSON
+
+Examples:
+  # Preview all mocks
+  mockd tunnel preview
+
+  # Preview only HTTP mocks
+  mockd tunnel preview --mode selected --types http
+
+  # Preview specific workspace
+  mockd tunnel preview --mode selected --workspaces default
+`)
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	client := tunnelHTTPClient(*adminAddr)
+
+	reqBody := map[string]any{
+		"expose": map[string]any{
+			"mode": *mode,
+		},
+	}
+	expose := reqBody["expose"].(map[string]any)
+	if *workspaces != "" {
+		expose["workspaces"] = splitCSV(*workspaces)
+	}
+	if *types != "" {
+		expose["types"] = splitCSV(*types)
+	}
+
+	body, _ := json.Marshal(reqBody)
+	resp, err := client.post(fmt.Sprintf("/engines/%s/tunnel/preview", *engineID), body)
+	if err != nil {
+		return fmt.Errorf("failed to preview tunnel: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return parseHTTPError(resp)
+	}
+
+	var result struct {
+		MockCount int              `json:"mockCount"`
+		Mocks     []map[string]any `json:"mocks"`
+		Protocols map[string]int   `json:"protocols"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if *outputJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(result)
+	}
+
+	fmt.Printf("Tunnel preview (engine: %s, mode: %s)\n\n", *engineID, *mode)
+
+	if result.MockCount == 0 {
+		fmt.Println("No mocks would be exposed with these settings.")
+		return nil
+	}
+
+	fmt.Printf("Total mocks: %d\n", result.MockCount)
+	fmt.Printf("Protocols:   ")
+	first := true
+	for proto, count := range result.Protocols {
+		if !first {
+			fmt.Print(", ")
+		}
+		fmt.Printf("%s (%d)", proto, count)
+		first = false
+	}
+	fmt.Println()
+
+	if len(result.Mocks) > 0 {
+		fmt.Printf("\n%-36s %-10s %-30s %s\n", "ID", "TYPE", "NAME", "WORKSPACE")
+		fmt.Println(strings.Repeat("-", 85))
+		for _, m := range result.Mocks {
+			id, _ := m["id"].(string)
+			mType, _ := m["type"].(string)
+			name, _ := m["name"].(string)
+			ws, _ := m["workspace"].(string)
+			fmt.Printf("%-36s %-10s %-30s %s\n", id, mType, name, ws)
+		}
+	}
+
+	return nil
+}
+
+// ============================================================================
+// Tunnel CLI helpers
+// ============================================================================
+
+// tunnelHTTPClient creates a raw HTTP client for tunnel operations.
+func tunnelHTTPClient(adminURL string) *adminClient {
+	cfg := cliconfig.ResolveClientConfigSimple(adminURL)
+	c := &adminClient{
+		baseURL: cfg.AdminURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		apiKey: cfg.APIKey,
+	}
+	return c
+}
+
+// splitCSV splits a comma-separated string into a trimmed slice.
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+// parseHTTPError parses an error response into a readable error.
+func parseHTTPError(resp *http.Response) error {
+	body, _ := io.ReadAll(resp.Body)
+	var errResp struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
+		return fmt.Errorf("%s (HTTP %d)", errResp.Message, resp.StatusCode)
+	}
+	return fmt.Errorf("request failed with HTTP %d: %s", resp.StatusCode, string(body))
 }

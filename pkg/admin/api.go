@@ -77,6 +77,10 @@ type AdminAPI struct {
 	// AllowLocalhostBypass allows unauthenticated access from localhost (dev mode only)
 	// Default is false - authentication is always required
 	allowLocalhostBypass bool
+
+	// Tunnel state for local engine
+	localTunnel *store.TunnelConfig
+	tunnelMu    sync.RWMutex
 }
 
 // NewAdminAPI creates a new AdminAPI.

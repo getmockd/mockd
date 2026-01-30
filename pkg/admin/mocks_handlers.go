@@ -1222,6 +1222,20 @@ func (a *AdminAPI) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	// If replace=true, delete existing mocks with matching IDs first.
+	// This enables idempotent `mockd up` — re-running with the same config works.
+	if r.URL.Query().Get("replace") == "true" {
+		for _, m := range mocks {
+			if m.ID != "" {
+				_ = mockStore.Delete(r.Context(), m.ID) // Ignore not-found errors
+				// Also remove from engine so it re-creates cleanly
+				if a.localEngine != nil {
+					_ = a.localEngine.DeleteMock(r.Context(), m.ID)
+				}
+			}
+		}
+	}
+
 	// Check for port conflicts within the batch and against existing mocks
 	if conflicts := a.checkBulkPortConflicts(r.Context(), mocks); len(conflicts) > 0 {
 		writeJSON(w, http.StatusConflict, map[string]interface{}{

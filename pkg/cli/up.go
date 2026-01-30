@@ -17,6 +17,9 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/logging"
+	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/getmockd/mockd/pkg/store"
+	"github.com/getmockd/mockd/pkg/tunnel"
 )
 
 // upContext holds runtime state for the up command.
@@ -28,9 +31,19 @@ type upContext struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 
-	// Running services
+	// Running services (process-level)
 	admins  map[string]*admin.AdminAPI
 	engines map[string]*engine.Server
+	tunnels map[string]*tunnel.TunnelManager // engine name -> tunnel manager
+
+	// HTTP clients for admin APIs (used for all control-plane operations)
+	adminClients map[string]AdminClient // admin name -> HTTP client
+
+	// Engine registration info (populated after HTTP registration)
+	engineIDs map[string]string // engine name -> registered engine ID
+
+	// Workspace IDs created via HTTP (workspace config name -> workspace ID)
+	workspaceIDs map[string]string
 }
 
 // RunUp starts local admins and engines defined in the config file.
@@ -124,13 +137,17 @@ Examples:
 	ctx, cancel := context.WithCancel(context.Background())
 
 	uctx := &upContext{
-		cfg:        cfg,
-		configPath: configPath,
-		detach:     *detach,
-		ctx:        ctx,
-		cancel:     cancel,
-		admins:     make(map[string]*admin.AdminAPI),
-		engines:    make(map[string]*engine.Server),
+		cfg:          cfg,
+		configPath:   configPath,
+		detach:       *detach,
+		ctx:          ctx,
+		cancel:       cancel,
+		admins:       make(map[string]*admin.AdminAPI),
+		engines:      make(map[string]*engine.Server),
+		tunnels:      make(map[string]*tunnel.TunnelManager),
+		adminClients: make(map[string]AdminClient),
+		engineIDs:    make(map[string]string),
+		workspaceIDs: make(map[string]string),
 	}
 
 	// Initialize logger
@@ -246,6 +263,17 @@ func printUpSummary(cfg *config.ProjectConfig) {
 		}
 		fmt.Println()
 	}
+
+	tunnelCount := 0
+	for _, e := range cfg.Engines {
+		if e.Tunnel != nil && e.Tunnel.Enabled {
+			tunnelCount++
+		}
+	}
+	if tunnelCount > 0 {
+		fmt.Printf("  Tunnels: %d\n", tunnelCount)
+	}
+
 	fmt.Println()
 }
 
@@ -344,26 +372,179 @@ func (uctx *upContext) startAll() error {
 		}
 	}
 
-	// Start engines and connect them to their admins
+	// Build admin HTTP clients for all admins (local and remote)
+	for _, adminCfg := range uctx.cfg.Admins {
+		adminURL := uctx.resolveAdminURL(adminCfg)
+		client := NewAdminClient(adminURL)
+		uctx.adminClients[adminCfg.Name] = client
+	}
+
+	// Wait briefly for local admins to accept connections
+	for _, adminCfg := range uctx.cfg.Admins {
+		if !adminCfg.IsLocal() {
+			continue
+		}
+		client := uctx.adminClients[adminCfg.Name]
+		if err := uctx.waitForAdminHealth(client, 10*time.Second); err != nil {
+			return fmt.Errorf("admin '%s' did not become healthy: %w", adminCfg.Name, err)
+		}
+	}
+
+	// Start engines and register them with their admins via HTTP
 	for _, engineCfg := range uctx.cfg.Engines {
 		if err := uctx.startEngine(engineCfg); err != nil {
 			return fmt.Errorf("starting engine '%s': %w", engineCfg.Name, err)
 		}
 
-		// Connect the engine to its admin
+		// Register the engine with its admin via HTTP
 		if err := uctx.connectEngineToAdmin(engineCfg); err != nil {
 			return fmt.Errorf("connecting engine '%s' to admin: %w", engineCfg.Name, err)
+		}
+	}
+
+	// Create workspaces via HTTP and assign to engines
+	if err := uctx.createWorkspaces(); err != nil {
+		return fmt.Errorf("creating workspaces: %w", err)
+	}
+
+	// Start tunnels for engines that have tunnel config
+	for _, engineCfg := range uctx.cfg.Engines {
+		if engineCfg.Tunnel != nil && engineCfg.Tunnel.Enabled {
+			if err := uctx.startTunnel(engineCfg); err != nil {
+				// Tunnel failure is non-fatal -- log and continue
+				fmt.Fprintf(os.Stderr, "Warning: tunnel for engine '%s' failed: %v\n", engineCfg.Name, err)
+			}
 		}
 	}
 
 	return nil
 }
 
+// resolveAdminURL returns the HTTP base URL for an admin.
+func (uctx *upContext) resolveAdminURL(adminCfg config.AdminConfig) string {
+	if adminCfg.URL != "" {
+		return adminCfg.URL
+	}
+	return fmt.Sprintf("http://localhost:%d", adminCfg.Port)
+}
+
+// waitForAdminHealth waits for an admin API to report healthy status.
+func (uctx *upContext) waitForAdminHealth(client AdminClient, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := client.Health(); err == nil {
+			return nil
+		}
+		select {
+		case <-uctx.ctx.Done():
+			return uctx.ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+			// Retry
+		}
+	}
+	return fmt.Errorf("timeout waiting for admin health")
+}
+
+// createWorkspaces creates workspaces via HTTP and assigns them to engines.
+func (uctx *upContext) createWorkspaces() error {
+	if len(uctx.cfg.Workspaces) == 0 {
+		return nil
+	}
+
+	for _, wsCfg := range uctx.cfg.Workspaces {
+		// Find an admin to create the workspace on.
+		// Use the admin of the first engine assigned to this workspace,
+		// or the first local admin as fallback.
+		adminName := uctx.findAdminForWorkspace(wsCfg)
+		if adminName == "" {
+			uctx.log.Warn("no admin found for workspace, skipping", "workspace", wsCfg.Name)
+			continue
+		}
+
+		client, ok := uctx.adminClients[adminName]
+		if !ok {
+			continue
+		}
+
+		// Create workspace via HTTP: POST /workspaces
+		result, err := client.CreateWorkspace(wsCfg.Name)
+		if err != nil {
+			// If workspace already exists (409), try to continue
+			if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 409 {
+				uctx.log.Debug("workspace already exists, continuing", "name", wsCfg.Name)
+				continue
+			}
+			return fmt.Errorf("creating workspace '%s': %w", wsCfg.Name, err)
+		}
+		uctx.workspaceIDs[wsCfg.Name] = result.ID
+		fmt.Printf("Created workspace '%s' (id=%s)\n", wsCfg.Name, result.ID)
+
+		// Assign workspace to its engines
+		for _, engineName := range wsCfg.Engines {
+			engineID, ok := uctx.engineIDs[engineName]
+			if !ok {
+				uctx.log.Warn("engine not registered, cannot assign workspace", "engine", engineName, "workspace", wsCfg.Name)
+				continue
+			}
+
+			// Find the admin client for this engine
+			engineAdmin := ""
+			for _, eCfg := range uctx.cfg.Engines {
+				if eCfg.Name == engineName {
+					engineAdmin = eCfg.Admin
+					break
+				}
+			}
+			if engineAdmin == "" {
+				continue
+			}
+			engAdminClient, ok := uctx.adminClients[engineAdmin]
+			if !ok {
+				continue
+			}
+
+			// Add workspace to engine via HTTP: POST /engines/{id}/workspaces
+			if err := engAdminClient.AddEngineWorkspace(engineID, result.ID, wsCfg.Name); err != nil {
+				uctx.log.Warn("failed to assign workspace to engine", "workspace", wsCfg.Name, "engine", engineName, "error", err)
+			} else {
+				fmt.Printf("Assigned workspace '%s' to engine '%s'\n", wsCfg.Name, engineName)
+			}
+		}
+	}
+
+	return nil
+}
+
+// findAdminForWorkspace finds an appropriate admin name for creating a workspace.
+func (uctx *upContext) findAdminForWorkspace(wsCfg config.WorkspaceConfig) string {
+	// If workspace has engines, use the admin of the first engine
+	for _, engineName := range wsCfg.Engines {
+		for _, eCfg := range uctx.cfg.Engines {
+			if eCfg.Name == engineName {
+				return eCfg.Admin
+			}
+		}
+	}
+
+	// Fallback: use first local admin
+	for _, aCfg := range uctx.cfg.Admins {
+		if aCfg.IsLocal() {
+			return aCfg.Name
+		}
+	}
+	return ""
+}
+
 func (uctx *upContext) startAdmin(adminCfg config.AdminConfig) error {
 	fmt.Printf("Starting admin '%s' on port %d... ", adminCfg.Name, adminCfg.Port)
 
 	// Build admin options
-	opts := []admin.Option{}
+	opts := []admin.Option{
+		// Enable localhost bypass so `mockd up` can register engines and
+		// push workspaces/mocks via HTTP from the same machine.
+		admin.WithAllowLocalhostBypass(true),
+		admin.WithAPIKeyAllowLocalhost(true),
+	}
 
 	// Disable auth if configured
 	if adminCfg.Auth != nil && adminCfg.Auth.Type == "none" {
@@ -444,10 +625,10 @@ func (uctx *upContext) startEngine(engineCfg config.EngineConfig) error {
 }
 
 func (uctx *upContext) connectEngineToAdmin(engineCfg config.EngineConfig) error {
-	// Find the admin this engine should connect to
-	adminAPI, ok := uctx.admins[engineCfg.Admin]
+	// Get the admin HTTP client
+	client, ok := uctx.adminClients[engineCfg.Admin]
 	if !ok {
-		// Admin might be remote, skip connection
+		// Admin might be remote and not yet configured, skip
 		return nil
 	}
 
@@ -457,19 +638,31 @@ func (uctx *upContext) connectEngineToAdmin(engineCfg config.EngineConfig) error
 		return fmt.Errorf("engine '%s' not found", engineCfg.Name)
 	}
 
-	// Connect admin to engine via the engine's management port
-	engineURL := fmt.Sprintf("http://localhost:%d", srv.ManagementPort())
-	engClient := engineclient.New(engineURL)
+	// Register engine via HTTP: POST /engines/register
+	mgmtPort := srv.ManagementPort()
+	result, err := client.RegisterEngine(engineCfg.Name, "localhost", mgmtPort)
+	if err != nil {
+		return fmt.Errorf("registering engine via HTTP: %w", err)
+	}
 
-	// Set the engine client on the admin
-	adminAPI.SetLocalEngine(engClient)
+	uctx.engineIDs[engineCfg.Name] = result.ID
 
-	fmt.Printf("Connected engine '%s' to admin '%s'\n", engineCfg.Name, engineCfg.Admin)
+	fmt.Printf("Registered engine '%s' with admin '%s' (id=%s)\n", engineCfg.Name, engineCfg.Admin, result.ID)
 	return nil
 }
 
 func (uctx *upContext) stopAll() {
-	// Stop engines first
+	// Stop tunnels first
+	for name, tm := range uctx.tunnels {
+		fmt.Printf("Stopping tunnel '%s'... ", name)
+		if err := tm.Close(); err != nil {
+			fmt.Printf("✗ (%v)\n", err)
+		} else {
+			fmt.Println("✓")
+		}
+	}
+
+	// Stop engines
 	for name, srv := range uctx.engines {
 		fmt.Printf("Stopping engine '%s'... ", name)
 		if err := srv.Stop(); err != nil {
@@ -488,6 +681,91 @@ func (uctx *upContext) stopAll() {
 			fmt.Println("✓")
 		}
 	}
+}
+
+// startTunnel starts a tunnel for an engine based on its YAML config.
+func (uctx *upContext) startTunnel(engineCfg config.EngineConfig) error {
+	srv, ok := uctx.engines[engineCfg.Name]
+	if !ok {
+		return fmt.Errorf("engine '%s' not started", engineCfg.Name)
+	}
+
+	tc := engineCfg.Tunnel
+
+	// Resolve relay address
+	relayAddr := "relay.mockd.io:443"
+	if tc.Relay != "" {
+		relayAddr = tc.Relay
+		if !strings.Contains(relayAddr, ":") {
+			relayAddr += ":443"
+		}
+	}
+
+	// Build store tunnel config for the admin
+	tunnelCfg := &store.TunnelConfig{
+		Enabled:      true,
+		Subdomain:    tc.Subdomain,
+		CustomDomain: tc.Domain,
+		Expose: store.TunnelExposure{
+			Mode: "all",
+		},
+	}
+
+	// Apply exposure config from YAML
+	if tc.Expose != nil {
+		if tc.Expose.Mode != "" {
+			tunnelCfg.Expose.Mode = tc.Expose.Mode
+		}
+		tunnelCfg.Expose.Workspaces = tc.Expose.Workspaces
+		tunnelCfg.Expose.Folders = tc.Expose.Folders
+		tunnelCfg.Expose.Mocks = tc.Expose.Mocks
+		tunnelCfg.Expose.Types = tc.Expose.Types
+	}
+
+	// Apply auth config from YAML
+	if tc.Auth != nil {
+		tunnelCfg.Auth = &store.TunnelAuth{
+			Type:       tc.Auth.Type,
+			Token:      tc.Auth.Token,
+			Username:   tc.Auth.Username,
+			Password:   tc.Auth.Password,
+			AllowedIPs: tc.Auth.AllowedIPs,
+		}
+	}
+
+	// Store tunnel config on the admin (for local engine)
+	if adminAPI, ok := uctx.admins[engineCfg.Admin]; ok {
+		// The admin stores tunnel config so status queries work
+		_ = adminAPI // Config stored via handleEnableTunnel; for up flow we set it directly below
+	}
+
+	fmt.Printf("Starting tunnel for engine '%s' (relay: %s)... ", engineCfg.Name, relayAddr)
+
+	// Create tunnel manager
+	tm := tunnel.NewTunnelManager(&tunnel.TunnelManagerConfig{
+		Handler:   srv.Handler(),
+		RelayAddr: relayAddr,
+		Insecure:  tc.Insecure,
+		Logger:    uctx.log.With("component", "tunnel", "engine", engineCfg.Name),
+		OnStatusChange: func(status, publicURL, sessionID, transport string) {
+			if status == "connected" {
+				uctx.log.Info("tunnel connected",
+					"engine", engineCfg.Name,
+					"publicURL", publicURL,
+				)
+			}
+		},
+	})
+
+	// Enable the tunnel
+	if err := tm.Enable(tunnelCfg); err != nil {
+		fmt.Println("✗")
+		return err
+	}
+
+	uctx.tunnels[engineCfg.Name] = tm
+	fmt.Println("✓")
+	return nil
 }
 
 func (uctx *upContext) printRunningStatus() {
@@ -509,6 +787,16 @@ func (uctx *upContext) printRunningStatus() {
 			port = engineCfg.GRPCPort
 		}
 		fmt.Printf("  engine/%s   :%d  ready\n", engineCfg.Name, port)
+	}
+
+	// Show tunnel status
+	for name, tm := range uctx.tunnels {
+		connected, publicURL, _, _ := tm.Status()
+		if connected {
+			fmt.Printf("  tunnel/%s   %s  connected\n", name, publicURL)
+		} else {
+			fmt.Printf("  tunnel/%s   connecting...\n", name)
+		}
 	}
 
 	fmt.Println()
@@ -535,8 +823,8 @@ func (uctx *upContext) waitForHealth(client *engineclient.Client, timeout time.D
 	return fmt.Errorf("timeout waiting for engine health")
 }
 
-// loadAndApplyMocks loads mocks from the config (including file references and globs)
-// and applies them to the appropriate engines via the admin API.
+// loadAndApplyMocks loads mocks from the config (including file references and globs),
+// converts them to the runtime mock format, and pushes them to the admin via HTTP.
 func (uctx *upContext) loadAndApplyMocks() error {
 	if len(uctx.cfg.Mocks) == 0 {
 		return nil
@@ -546,25 +834,83 @@ func (uctx *upContext) loadAndApplyMocks() error {
 	baseDir := config.GetMockFileBaseDir(uctx.configPath)
 
 	// Load all mocks (expanding file refs and globs)
-	mocks, err := config.LoadAllMocks(uctx.cfg.Mocks, baseDir)
+	entries, err := config.LoadAllMocks(uctx.cfg.Mocks, baseDir)
 	if err != nil {
 		return err
 	}
 
-	if len(mocks) == 0 {
+	if len(entries) == 0 {
 		return nil
 	}
 
-	fmt.Printf("Loading %d mocks...\n", len(mocks))
+	fmt.Printf("Loading %d mocks...\n", len(entries))
 
-	// TODO: Apply mocks to engines via admin API
-	// For now, just log the loaded mocks
-	for _, m := range mocks {
-		if m.IsInline() {
-			uctx.log.Debug("loaded mock", "id", m.ID, "type", m.Type, "workspace", m.Workspace)
+	// Convert config mock entries to runtime mock.Mock objects
+	var converted []*mock.Mock
+	for _, entry := range entries {
+		if !entry.IsInline() {
+			continue
+		}
+
+		m, err := config.ConvertMockEntry(entry)
+		if err != nil {
+			uctx.log.Warn("failed to convert mock entry", "id", entry.ID, "error", err)
+			continue
+		}
+
+		// Map workspace name to workspace ID
+		if m.WorkspaceID != "" {
+			if wsID, ok := uctx.workspaceIDs[m.WorkspaceID]; ok {
+				m.WorkspaceID = wsID
+			}
+			// If workspace name doesn't map to an ID, keep the name —
+			// the admin will use its default workspace handling
+		}
+
+		converted = append(converted, m)
+	}
+
+	if len(converted) == 0 {
+		fmt.Println("No inline mocks to apply")
+		return nil
+	}
+
+	// Group mocks by workspace to send them to the right admin
+	// For now, send all mocks to the first available admin
+	adminClient := uctx.findFirstAdminClient()
+	if adminClient == nil {
+		return fmt.Errorf("no admin client available to push mocks")
+	}
+
+	// Push mocks via HTTP: POST /mocks/bulk
+	result, err := adminClient.BulkCreateMocks(converted, "")
+	if err != nil {
+		return fmt.Errorf("bulk creating mocks: %w", err)
+	}
+
+	fmt.Printf("Applied %d mocks via admin API\n", result.Created)
+	if len(result.Warnings) > 0 {
+		for _, w := range result.Warnings {
+			fmt.Fprintf(os.Stderr, "  Warning: %s\n", w)
 		}
 	}
 
-	fmt.Printf("Loaded %d mocks\n", len(mocks))
+	return nil
+}
+
+// findFirstAdminClient returns the first available admin HTTP client.
+func (uctx *upContext) findFirstAdminClient() AdminClient {
+	// Prefer local admins
+	for _, aCfg := range uctx.cfg.Admins {
+		if aCfg.IsLocal() {
+			if client, ok := uctx.adminClients[aCfg.Name]; ok {
+				return client
+			}
+		}
+	}
+	// Fallback to any admin
+	for _, client := range uctx.adminClients {
+		return client
+	}
 	return nil
 }

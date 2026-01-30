@@ -3,9 +3,11 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/store"
 )
@@ -242,6 +244,15 @@ func (a *AdminAPI) handleRegisterEngine(w http.ResponseWriter, r *http.Request) 
 		a.removeEngineToken(id) // Clean up the token on failure
 		writeError(w, http.StatusInternalServerError, "registration_failed", "Failed to register engine: "+err.Error())
 		return
+	}
+
+	// Auto-set localEngine for the first registered engine.
+	// This allows all existing handler code that uses a.localEngine to work
+	// when engines register via HTTP (e.g. from `mockd up`).
+	if a.localEngine == nil {
+		engineURL := fmt.Sprintf("http://%s:%d", req.Host, req.Port)
+		a.localEngine = engineclient.New(engineURL)
+		a.log.Info("auto-set localEngine from registration", "engineId", id, "url", engineURL)
 	}
 
 	writeJSON(w, http.StatusCreated, RegisterEngineResponse{

@@ -127,6 +127,54 @@ type EngineConfig struct {
 
 	// TLS configures TLS settings for the engine's HTTPS server
 	TLS *TLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
+
+	// Tunnel configures tunnel exposure for this engine
+	Tunnel *TunnelYAMLConfig `json:"tunnel,omitempty" yaml:"tunnel,omitempty"`
+}
+
+// TunnelYAMLConfig is the tunnel section in mockd.yaml engine config.
+type TunnelYAMLConfig struct {
+	// Enabled enables tunnel for this engine (default: false)
+	Enabled bool `json:"enabled" yaml:"enabled"`
+
+	// Relay is the relay server address (default: relay.mockd.io)
+	Relay string `json:"relay,omitempty" yaml:"relay,omitempty"`
+
+	// Token is the authentication token (supports ${ENV_VAR} syntax)
+	Token string `json:"token,omitempty" yaml:"token,omitempty"`
+
+	// Subdomain is a custom subdomain (Pro+)
+	Subdomain string `json:"subdomain,omitempty" yaml:"subdomain,omitempty"`
+
+	// Domain is a custom domain (Pro+)
+	Domain string `json:"domain,omitempty" yaml:"domain,omitempty"`
+
+	// Insecure skips TLS certificate verification (for local dev with mkcert)
+	Insecure bool `json:"insecure,omitempty" yaml:"insecure,omitempty"`
+
+	// Expose configures what to expose through the tunnel (nil = mode "all")
+	Expose *TunnelYAMLExposure `json:"expose,omitempty" yaml:"expose,omitempty"`
+
+	// Auth configures authentication for incoming tunnel requests
+	Auth *TunnelYAMLAuth `json:"auth,omitempty" yaml:"auth,omitempty"`
+}
+
+// TunnelYAMLExposure defines exposure config in mockd.yaml.
+type TunnelYAMLExposure struct {
+	Mode       string   `json:"mode,omitempty" yaml:"mode,omitempty"` // "all", "selected", "none"
+	Workspaces []string `json:"workspaces,omitempty" yaml:"workspaces,omitempty"`
+	Folders    []string `json:"folders,omitempty" yaml:"folders,omitempty"`
+	Mocks      []string `json:"mocks,omitempty" yaml:"mocks,omitempty"`
+	Types      []string `json:"types,omitempty" yaml:"types,omitempty"`
+}
+
+// TunnelYAMLAuth defines auth config in mockd.yaml.
+type TunnelYAMLAuth struct {
+	Type       string   `json:"type,omitempty" yaml:"type,omitempty"` // "none","token","basic","ip"
+	Token      string   `json:"token,omitempty" yaml:"token,omitempty"`
+	Username   string   `json:"username,omitempty" yaml:"username,omitempty"`
+	Password   string   `json:"password,omitempty" yaml:"password,omitempty"`
+	AllowedIPs []string `json:"allowedIPs,omitempty" yaml:"allowedIPs,omitempty"`
 }
 
 // EngineRegistrationConfig defines registration settings for engines connecting to remote admins.
@@ -559,6 +607,9 @@ func mergeEngine(base, overlay EngineConfig) EngineConfig {
 	}
 	if overlay.TLS != nil {
 		base.TLS = overlay.TLS
+	}
+	if overlay.Tunnel != nil {
+		base.Tunnel = overlay.Tunnel
 	}
 	return base
 }

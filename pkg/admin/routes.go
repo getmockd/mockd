@@ -187,6 +187,17 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /engines/{id}/workspace", a.handleAssignWorkspace)
 	mux.HandleFunc("GET /engines/{id}/config", a.handleGetEngineConfig)
 
+	// Engine tunnel management
+	mux.HandleFunc("POST /engines/{id}/tunnel/enable", a.handleEnableTunnel)
+	mux.HandleFunc("POST /engines/{id}/tunnel/disable", a.handleDisableTunnel)
+	mux.HandleFunc("GET /engines/{id}/tunnel/config", a.handleGetTunnelConfig)
+	mux.HandleFunc("PUT /engines/{id}/tunnel/config", a.handleUpdateTunnelConfig)
+	mux.HandleFunc("GET /engines/{id}/tunnel/status", a.handleGetTunnelStatus)
+	mux.HandleFunc("POST /engines/{id}/tunnel/preview", a.handleTunnelPreview)
+
+	// Global tunnel listing
+	mux.HandleFunc("GET /tunnels", a.handleListTunnels)
+
 	// Engine workspace management
 	mux.HandleFunc("POST /engines/{id}/workspaces", a.handleAddEngineWorkspace)
 	mux.HandleFunc("DELETE /engines/{id}/workspaces/{workspaceId}", a.handleRemoveEngineWorkspace)

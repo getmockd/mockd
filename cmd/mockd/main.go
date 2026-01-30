@@ -103,6 +103,8 @@ func run(args []string) error {
 		return cli.RunRecordings(cmdArgs)
 	case "tunnel":
 		return cli.RunTunnel(cmdArgs)
+	case "tunnel-quic":
+		return cli.RunTunnelQUIC(cmdArgs)
 	case "templates":
 		return cli.RunTemplates(cmdArgs)
 	case "stream-recordings":
@@ -224,7 +226,12 @@ Template Commands:
   templates   List and add templates from the official library
 
 Cloud Commands:
-  tunnel      Expose local mocks via secure tunnel
+  tunnel              Expose local mocks via secure tunnel
+  tunnel enable       Enable tunnel on an engine
+  tunnel disable      Disable tunnel on an engine
+  tunnel status       Show tunnel connection status
+  tunnel list         List all active tunnels
+  tunnel preview      Preview which mocks would be exposed
 
 Global Flags:
   -h, --help      Show this help message
@@ -292,7 +299,7 @@ func isCommand(s string) bool {
 		"import", "export", "logs", "config", "completion", "version",
 		"proxy", "recordings", "convert", "generate", "enhance",
 		"stream-recordings", "graphql", "chaos", "grpc", "mqtt", "soap",
-		"templates", "tunnel", "init", "help", "status", "stop", "doctor",
+		"templates", "tunnel", "tunnel-quic", "init", "help", "status", "stop", "doctor",
 		"websocket", "context", "workspace", "ports", "validate", "up", "down", "ps",
 	}
 	return slices.Contains(commands, s)

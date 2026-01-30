@@ -38,6 +38,66 @@ type EngineWorkspace struct {
 	LastSynced    time.Time `json:"lastSynced,omitempty"`
 }
 
+// TunnelConfig defines tunnel settings for an engine.
+// Stored by admin, delivered to engine, presented to relay via JWT.
+type TunnelConfig struct {
+	Enabled      bool           `json:"enabled"`
+	Subdomain    string         `json:"subdomain,omitempty"`    // Custom subdomain (Pro+)
+	CustomDomain string         `json:"customDomain,omitempty"` // Custom domain (Pro+)
+	Expose       TunnelExposure `json:"expose"`
+	Auth         *TunnelAuth    `json:"auth,omitempty"` // Incoming request auth
+
+	// Runtime state (read-only, set by relay/engine)
+	PublicURL   string     `json:"publicUrl,omitempty"`
+	Status      string     `json:"status,omitempty"` // "connected","disconnected","connecting","error"
+	ConnectedAt *time.Time `json:"connectedAt,omitempty"`
+	SessionID   string     `json:"sessionId,omitempty"`
+	Transport   string     `json:"transport,omitempty"` // "quic","websocket"
+}
+
+// TunnelExposure defines what to expose through the tunnel.
+type TunnelExposure struct {
+	// Mode controls the exposure strategy.
+	//   "all"      - expose everything on the engine
+	//   "selected" - apply include/exclude filters
+	//   "none"     - tunnel connected but nothing routed
+	Mode string `json:"mode"` // "all", "selected", "none"
+
+	// Include filters (union -- mock matches ANY of these)
+	Workspaces []string `json:"workspaces,omitempty"` // Workspace IDs or names
+	Folders    []string `json:"folders,omitempty"`    // Folder IDs (recursive into subfolders)
+	Mocks      []string `json:"mocks,omitempty"`      // Specific mock IDs
+	Types      []string `json:"types,omitempty"`      // MockType filter: "http","grpc","mqtt","websocket","graphql","soap","oauth"
+
+	// Exclude filters (applied after includes)
+	Exclude *TunnelExclude `json:"exclude,omitempty"`
+}
+
+// TunnelExclude defines what to exclude from tunnel exposure.
+type TunnelExclude struct {
+	Workspaces []string `json:"workspaces,omitempty"`
+	Folders    []string `json:"folders,omitempty"`
+	Mocks      []string `json:"mocks,omitempty"`
+}
+
+// TunnelAuth protects incoming requests through the tunnel.
+type TunnelAuth struct {
+	Type       string   `json:"type"`                 // "none","token","basic","ip"
+	Token      string   `json:"token,omitempty"`      // For type=token: required header value
+	Username   string   `json:"username,omitempty"`   // For type=basic
+	Password   string   `json:"password,omitempty"`   // For type=basic
+	AllowedIPs []string `json:"allowedIPs,omitempty"` // For type=ip: CIDR ranges
+}
+
+// TunnelStats holds runtime statistics for an active tunnel.
+type TunnelStats struct {
+	RequestsServed    int64  `json:"requestsServed"`
+	BytesIn           int64  `json:"bytesIn"`
+	BytesOut          int64  `json:"bytesOut"`
+	Uptime            string `json:"uptime"`
+	ActiveConnections int    `json:"activeConnections"`
+}
+
 // Engine represents a registered mock engine.
 type Engine struct {
 	ID             string            `json:"id"`
@@ -54,6 +114,7 @@ type Engine struct {
 	RegisteredAt   time.Time         `json:"registeredAt"`
 	Fingerprint    string            `json:"fingerprint,omitempty"` // Machine fingerprint for identity verification
 	Token          string            `json:"-"`                     // Engine-specific token, not exposed in JSON
+	Tunnel         *TunnelConfig     `json:"tunnel,omitempty"`      // Tunnel configuration
 }
 
 // EngineRegistry manages registered engines in memory.
@@ -148,6 +209,51 @@ func (e *Engine) Copy() *Engine {
 	if e.Workspaces != nil {
 		engineCopy.Workspaces = make([]EngineWorkspace, len(e.Workspaces))
 		copy(engineCopy.Workspaces, e.Workspaces)
+	}
+	if e.Tunnel != nil {
+		tunnelCopy := *e.Tunnel
+		if e.Tunnel.Auth != nil {
+			authCopy := *e.Tunnel.Auth
+			if e.Tunnel.Auth.AllowedIPs != nil {
+				authCopy.AllowedIPs = make([]string, len(e.Tunnel.Auth.AllowedIPs))
+				copy(authCopy.AllowedIPs, e.Tunnel.Auth.AllowedIPs)
+			}
+			tunnelCopy.Auth = &authCopy
+		}
+		// Deep copy exposure slices
+		if e.Tunnel.Expose.Workspaces != nil {
+			tunnelCopy.Expose.Workspaces = make([]string, len(e.Tunnel.Expose.Workspaces))
+			copy(tunnelCopy.Expose.Workspaces, e.Tunnel.Expose.Workspaces)
+		}
+		if e.Tunnel.Expose.Folders != nil {
+			tunnelCopy.Expose.Folders = make([]string, len(e.Tunnel.Expose.Folders))
+			copy(tunnelCopy.Expose.Folders, e.Tunnel.Expose.Folders)
+		}
+		if e.Tunnel.Expose.Mocks != nil {
+			tunnelCopy.Expose.Mocks = make([]string, len(e.Tunnel.Expose.Mocks))
+			copy(tunnelCopy.Expose.Mocks, e.Tunnel.Expose.Mocks)
+		}
+		if e.Tunnel.Expose.Types != nil {
+			tunnelCopy.Expose.Types = make([]string, len(e.Tunnel.Expose.Types))
+			copy(tunnelCopy.Expose.Types, e.Tunnel.Expose.Types)
+		}
+		if e.Tunnel.Expose.Exclude != nil {
+			excludeCopy := *e.Tunnel.Expose.Exclude
+			if e.Tunnel.Expose.Exclude.Workspaces != nil {
+				excludeCopy.Workspaces = make([]string, len(e.Tunnel.Expose.Exclude.Workspaces))
+				copy(excludeCopy.Workspaces, e.Tunnel.Expose.Exclude.Workspaces)
+			}
+			if e.Tunnel.Expose.Exclude.Folders != nil {
+				excludeCopy.Folders = make([]string, len(e.Tunnel.Expose.Exclude.Folders))
+				copy(excludeCopy.Folders, e.Tunnel.Expose.Exclude.Folders)
+			}
+			if e.Tunnel.Expose.Exclude.Mocks != nil {
+				excludeCopy.Mocks = make([]string, len(e.Tunnel.Expose.Exclude.Mocks))
+				copy(excludeCopy.Mocks, e.Tunnel.Expose.Exclude.Mocks)
+			}
+			tunnelCopy.Expose.Exclude = &excludeCopy
+		}
+		engineCopy.Tunnel = &tunnelCopy
 	}
 	return &engineCopy
 }
@@ -459,6 +565,84 @@ func (r *EngineRegistry) GetSiblingWorkspaceIDs(workspaceID string) []string {
 		siblings = append(siblings, wsID)
 	}
 	return siblings
+}
+
+// SetTunnelConfig sets the tunnel configuration for an engine.
+func (r *EngineRegistry) SetTunnelConfig(engineID string, cfg *TunnelConfig) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	engine, exists := r.engines[engineID]
+	if !exists {
+		return ErrNotFound
+	}
+
+	engine.Tunnel = cfg
+	return nil
+}
+
+// GetTunnelConfig returns the tunnel configuration for an engine.
+func (r *EngineRegistry) GetTunnelConfig(engineID string) (*TunnelConfig, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	engine, exists := r.engines[engineID]
+	if !exists {
+		return nil, ErrNotFound
+	}
+
+	if engine.Tunnel == nil {
+		return nil, nil
+	}
+
+	// Return a deep copy
+	cfg := *engine.Tunnel
+	return &cfg, nil
+}
+
+// UpdateTunnelStatus updates the runtime tunnel status for an engine.
+func (r *EngineRegistry) UpdateTunnelStatus(engineID, status, publicURL, sessionID, transport string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	engine, exists := r.engines[engineID]
+	if !exists {
+		return ErrNotFound
+	}
+
+	if engine.Tunnel == nil {
+		return ErrNotFound
+	}
+
+	engine.Tunnel.Status = status
+	if publicURL != "" {
+		engine.Tunnel.PublicURL = publicURL
+	}
+	if sessionID != "" {
+		engine.Tunnel.SessionID = sessionID
+	}
+	if transport != "" {
+		engine.Tunnel.Transport = transport
+	}
+	if status == "connected" {
+		now := time.Now()
+		engine.Tunnel.ConnectedAt = &now
+	}
+	return nil
+}
+
+// ListTunnels returns all engines that have tunnel configurations.
+func (r *EngineRegistry) ListTunnels() []*Engine {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var engines []*Engine
+	for _, engine := range r.engines {
+		if engine.Tunnel != nil && engine.Tunnel.Enabled {
+			engines = append(engines, engine.Copy())
+		}
+	}
+	return engines
 }
 
 // UpdateWorkspaceStatus updates the status of a workspace in an engine.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/requestlog"
 )
 
@@ -56,6 +57,15 @@ type AdminClient interface {
 	GetPorts() ([]PortInfo, error)
 	// GetPortsVerbose returns all ports with optional extended info.
 	GetPortsVerbose(verbose bool) ([]PortInfo, error)
+
+	// CreateWorkspace creates a new workspace on the admin.
+	CreateWorkspace(name string) (*WorkspaceResult, error)
+	// RegisterEngine registers an engine with the admin.
+	RegisterEngine(name, host string, port int) (*RegisterEngineResult, error)
+	// AddEngineWorkspace assigns a workspace to an engine.
+	AddEngineWorkspace(engineID, workspaceID, workspaceName string) error
+	// BulkCreateMocks creates multiple mocks in a single request.
+	BulkCreateMocks(mocks []*mock.Mock, workspaceID string) (*BulkCreateResult, error)
 }
 
 // LogFilter specifies filtering criteria for request logs.
@@ -105,6 +115,27 @@ type StatsResult struct {
 	Uptime        int   `json:"uptime"`
 	TotalRequests int64 `json:"totalRequests"`
 	MockCount     int   `json:"mockCount"`
+}
+
+// WorkspaceResult contains the result of creating a workspace.
+type WorkspaceResult struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// RegisterEngineResult contains the result of registering an engine.
+type RegisterEngineResult struct {
+	ID             string `json:"id"`
+	Token          string `json:"token,omitempty"`
+	ConfigEndpoint string `json:"configEndpoint"`
+}
+
+// BulkCreateResult contains the result of a bulk mock creation.
+type BulkCreateResult struct {
+	Created  int          `json:"created"`
+	Mocks    []*mock.Mock `json:"mocks"`
+	Warnings []string     `json:"warnings,omitempty"`
 }
 
 // APIError represents an error response from the admin API.
@@ -634,6 +665,112 @@ func (c *adminClient) GetPortsVerbose(verbose bool) ([]PortInfo, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	return result.Ports, nil
+}
+
+// CreateWorkspace creates a new workspace on the admin.
+func (c *adminClient) CreateWorkspace(name string) (*WorkspaceResult, error) {
+	body, err := json.Marshal(map[string]string{"name": name})
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode request: %w", err)
+	}
+
+	resp, err := c.post("/workspaces", body)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, c.parseError(resp)
+	}
+
+	var result WorkspaceResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// RegisterEngine registers an engine with the admin.
+func (c *adminClient) RegisterEngine(name, host string, port int) (*RegisterEngineResult, error) {
+	body, err := json.Marshal(map[string]interface{}{
+		"name": name,
+		"host": host,
+		"port": port,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode request: %w", err)
+	}
+
+	resp, err := c.post("/engines/register", body)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, c.parseError(resp)
+	}
+
+	var result RegisterEngineResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// AddEngineWorkspace assigns a workspace to an engine.
+func (c *adminClient) AddEngineWorkspace(engineID, workspaceID, workspaceName string) error {
+	body, err := json.Marshal(map[string]string{
+		"workspaceId":   workspaceID,
+		"workspaceName": workspaceName,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to encode request: %w", err)
+	}
+
+	resp, err := c.post("/engines/"+url.PathEscape(engineID)+"/workspaces", body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// BulkCreateMocks creates multiple mocks in a single request.
+// Uses replace=true for idempotent behavior (re-running mockd up works).
+func (c *adminClient) BulkCreateMocks(mocks []*mock.Mock, workspaceID string) (*BulkCreateResult, error) {
+	body, err := json.Marshal(mocks)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode mocks: %w", err)
+	}
+
+	params := url.Values{}
+	params.Set("replace", "true")
+	if workspaceID != "" {
+		params.Set("workspaceId", workspaceID)
+	}
+	path := "/mocks/bulk?" + params.Encode()
+
+	resp, err := c.post(path, body)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, c.parseError(resp)
+	}
+
+	var result BulkCreateResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
 }
 
 // get performs an HTTP GET request.
