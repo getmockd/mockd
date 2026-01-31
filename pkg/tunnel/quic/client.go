@@ -50,6 +50,7 @@ type Client struct {
 	OnConnect    func(publicURL string)
 	OnDisconnect func(err error)
 	OnRequest    func(method, path string)
+	OnGoaway     func(payload protocol.GoawayPayload)
 }
 
 // ClientConfig configures the QUIC client.
@@ -184,6 +185,9 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.publicURL = okPayload.PublicURL
 	c.connected.Store(true)
 
+	// Start control stream reader for GOAWAY, ping/pong, etc.
+	go c.readControlStream()
+
 	c.logger.Info("connected to relay",
 		"session", c.sessionID,
 		"subdomain", c.subdomain,
@@ -301,6 +305,76 @@ func (c *Client) sendErrorResponse(stream quic.Stream, status int, message strin
 
 	protocol.EncodeHeader(stream, header)
 	stream.Write([]byte(message))
+}
+
+// readControlStream reads control messages from the relay after auth.
+// Runs as a goroutine for the lifetime of the connection.
+func (c *Client) readControlStream() {
+	for {
+		if c.closed.Load() || !c.connected.Load() {
+			return
+		}
+
+		header, err := protocol.DecodeHeader(c.controlStream)
+		if err != nil {
+			if c.closed.Load() {
+				return // Expected during shutdown
+			}
+			c.logger.Debug("control stream read error", "error", err)
+			return
+		}
+
+		if header.Type != protocol.StreamTypeControl {
+			c.logger.Warn("unexpected type on control stream", "type", header.Type)
+			continue
+		}
+
+		msg, err := protocol.DecodeControlMessage(header.Metadata)
+		if err != nil {
+			c.logger.Warn("failed to decode control message", "error", err)
+			continue
+		}
+
+		switch msg.Type {
+		case protocol.ControlTypeGoaway:
+			c.handleGoaway(msg)
+		case protocol.ControlTypePing:
+			// Future: respond with pong
+			c.logger.Debug("received ping")
+		case protocol.ControlTypeDisconnect:
+			c.logger.Info("relay requested disconnect")
+			c.handleDisconnect(fmt.Errorf("relay disconnect"))
+			return
+		default:
+			c.logger.Debug("unhandled control message", "type", msg.Type)
+		}
+	}
+}
+
+// handleGoaway processes a GOAWAY control message from the relay.
+func (c *Client) handleGoaway(msg *protocol.ControlMessage) {
+	// Parse the payload
+	payloadBytes, err := json.Marshal(msg.Payload)
+	if err != nil {
+		c.logger.Warn("failed to marshal goaway payload", "error", err)
+		return
+	}
+
+	var payload protocol.GoawayPayload
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		c.logger.Warn("failed to decode goaway payload", "error", err)
+		return
+	}
+
+	c.logger.Info("received GOAWAY from relay",
+		"reason", payload.Reason,
+		"drain_timeout_ms", payload.DrainTimeoutMs,
+		"message", payload.Message,
+	)
+
+	if c.OnGoaway != nil {
+		c.OnGoaway(payload)
+	}
 }
 
 // handleDisconnect handles disconnection.

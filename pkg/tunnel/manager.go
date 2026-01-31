@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/store"
+	"github.com/getmockd/mockd/pkg/tunnel/protocol"
 	quicclient "github.com/getmockd/mockd/pkg/tunnel/quic"
 )
 
@@ -119,11 +120,19 @@ func (m *TunnelManager) Enable(cfg *store.TunnelConfig) error {
 	client.OnDisconnect = func(err error) {
 		if err != nil {
 			m.logger.Warn("tunnel disconnected", "error", err)
-			m.notifyStatus("disconnected", "", "", "")
 		} else {
 			m.logger.Info("tunnel disconnected cleanly")
-			m.notifyStatus("disconnected", "", "", "")
 		}
+		m.notifyStatus("disconnected", "", "", "")
+	}
+
+	client.OnGoaway = func(payload protocol.GoawayPayload) {
+		m.logger.Info("received GOAWAY, will reconnect",
+			"reason", payload.Reason,
+			"drain_timeout_ms", payload.DrainTimeoutMs,
+		)
+		// Reconnect in background after a short delay
+		go m.reconnectAfterGoaway(payload)
 	}
 
 	// Connect in background
@@ -132,19 +141,7 @@ func (m *TunnelManager) Enable(cfg *store.TunnelConfig) error {
 	m.client = client
 	m.running = true
 
-	go func() {
-		if err := client.Connect(ctx); err != nil {
-			m.logger.Error("tunnel connect failed", "error", err)
-			m.notifyStatus("error", "", "", "")
-			return
-		}
-
-		// Run until cancelled
-		if err := client.Run(ctx); err != nil && err != context.Canceled {
-			m.logger.Error("tunnel run error", "error", err)
-			m.notifyStatus("error", "", "", "")
-		}
-	}()
+	go m.connectAndRun(ctx, client)
 
 	return nil
 }
@@ -211,6 +208,118 @@ func (m *TunnelManager) Stats() *store.TunnelStats {
 		RequestsServed: m.client.RequestCount(),
 		Uptime:         uptime,
 	}
+}
+
+// connectAndRun connects and runs the tunnel client. Used by Enable and reconnect.
+func (m *TunnelManager) connectAndRun(ctx context.Context, client *quicclient.Client) {
+	if err := client.Connect(ctx); err != nil {
+		if ctx.Err() != nil {
+			return // Context cancelled, expected
+		}
+		m.logger.Error("tunnel connect failed", "error", err)
+		m.notifyStatus("error", "", "", "")
+		return
+	}
+
+	// Run until cancelled or disconnected
+	if err := client.Run(ctx); err != nil && err != context.Canceled {
+		m.logger.Error("tunnel run error", "error", err)
+		m.notifyStatus("error", "", "", "")
+	}
+}
+
+// reconnectAfterGoaway handles reconnection after receiving a GOAWAY message.
+// Uses exponential backoff with a short initial delay.
+func (m *TunnelManager) reconnectAfterGoaway(payload protocol.GoawayPayload) {
+	m.mu.Lock()
+	if !m.running || m.config == nil {
+		m.mu.Unlock()
+		return
+	}
+	cfg := m.config
+	m.mu.Unlock()
+
+	// Wait a short delay before reconnecting to give the relay time to shut down
+	// and a new instance to come up
+	baseDelay := 500 * time.Millisecond
+	maxDelay := 30 * time.Second
+	delay := baseDelay
+
+	for attempt := 1; attempt <= 10; attempt++ {
+		m.logger.Info("reconnecting after GOAWAY", "attempt", attempt, "delay", delay)
+		time.Sleep(delay)
+
+		m.mu.Lock()
+		if !m.running {
+			m.mu.Unlock()
+			return // Manager was disabled while we were waiting
+		}
+
+		// Stop old client
+		if m.client != nil {
+			_ = m.client.Close()
+		}
+
+		// Build token from saved config
+		token := ""
+		if cfg.Auth != nil && cfg.Auth.Type == "token" {
+			token = cfg.Auth.Token
+		}
+
+		// Create fresh client
+		client := quicclient.NewClient(&quicclient.ClientConfig{
+			RelayAddr:   m.relayAddr,
+			Token:       token,
+			LocalPort:   0,
+			Handler:     m.handler,
+			TLSInsecure: m.insecure,
+			Logger:      m.logger,
+		})
+
+		client.OnConnect = func(publicURL string) {
+			m.logger.Info("tunnel reconnected",
+				"publicURL", publicURL,
+				"subdomain", client.Subdomain(),
+			)
+			m.notifyStatus("connected", publicURL, client.SessionID(), "quic")
+		}
+
+		client.OnDisconnect = func(err error) {
+			if err != nil {
+				m.logger.Warn("tunnel disconnected after reconnect", "error", err)
+			}
+			m.notifyStatus("disconnected", "", "", "")
+		}
+
+		client.OnGoaway = func(p protocol.GoawayPayload) {
+			go m.reconnectAfterGoaway(p)
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		m.cancel = cancel
+		m.client = client
+		m.mu.Unlock()
+
+		m.notifyStatus("connecting", "", "", "")
+		m.connectAndRun(ctx, client)
+
+		// If we get here, the connection ended. Check if it was intentional.
+		m.mu.Lock()
+		if !m.running {
+			m.mu.Unlock()
+			return
+		}
+		m.mu.Unlock()
+
+		// Exponential backoff
+		delay = delay * 2
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+	}
+
+	m.logger.Error("failed to reconnect after GOAWAY, max attempts reached")
+	m.notifyStatus("error", "", "", "")
 }
 
 // Close shuts down the tunnel manager.

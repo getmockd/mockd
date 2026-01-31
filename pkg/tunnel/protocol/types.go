@@ -141,6 +141,7 @@ const (
 	ControlTypePing       = "ping"
 	ControlTypePong       = "pong"
 	ControlTypeDisconnect = "disconnect"
+	ControlTypeGoaway     = "goaway"
 )
 
 // ControlMessage is sent on the control stream (stream 0).
@@ -166,6 +167,20 @@ type AuthOKPayload struct {
 type AuthErrorPayload struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// GoawayPayload is the payload for GOAWAY control messages.
+// Sent by the relay when it is shutting down gracefully.
+type GoawayPayload struct {
+	// Reason describes why the relay is shutting down ("shutdown", "deploy", "maintenance").
+	Reason string `json:"reason"`
+
+	// DrainTimeout is the maximum time the relay will wait for in-flight requests
+	// to complete before force-closing, in milliseconds.
+	DrainTimeoutMs int64 `json:"drain_timeout_ms"`
+
+	// Message is a human-readable message for logging.
+	Message string `json:"message,omitempty"`
 }
 
 // EncodeControlMessage encodes a control message to JSON bytes.
