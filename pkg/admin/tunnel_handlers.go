@@ -482,19 +482,7 @@ func (a *AdminAPI) previewExposedMocks(r *http.Request, expose store.TunnelExpos
 			mockType = string(m.Type)
 		}
 
-		// For "all" mode, include everything
-		if expose.Mode == "all" {
-			result = append(result, TunnelPreviewMock{
-				ID:        m.ID,
-				Type:      mockType,
-				Name:      m.Name,
-				Workspace: m.WorkspaceID,
-				Folder:    m.ParentID,
-			})
-			continue
-		}
-
-		// For "selected" mode, apply filters
+		// For "selected" mode, apply include filters first
 		if expose.Mode == "selected" {
 			included := false
 
@@ -538,50 +526,47 @@ func (a *AdminAPI) previewExposedMocks(r *http.Request, expose store.TunnelExpos
 				}
 			}
 
-			// If no filters specified at all, include nothing
+			// If no include filters matched, skip this mock
 			if !included {
 				continue
 			}
-
-			// Check exclusions
-			if expose.Exclude != nil {
-				excluded := false
-				for _, ws := range expose.Exclude.Workspaces {
-					if m.WorkspaceID == ws {
-						excluded = true
-						break
-					}
-				}
-				if !excluded {
-					for _, f := range expose.Exclude.Folders {
-						if m.ParentID == f {
-							excluded = true
-							break
-						}
-					}
-				}
-				if !excluded {
-					for _, id := range expose.Exclude.Mocks {
-						if m.ID == id {
-							excluded = true
-							break
-						}
-					}
-				}
-				if excluded {
-					continue
-				}
-			}
-
-			result = append(result, TunnelPreviewMock{
-				ID:        m.ID,
-				Type:      mockType,
-				Name:      m.Name,
-				Workspace: m.WorkspaceID,
-				Folder:    m.ParentID,
-			})
 		}
+
+		// Apply exclusions (for both "all" and "selected" modes)
+		if expose.Exclude != nil {
+			if isExcluded(expose.Exclude, m.WorkspaceID, m.ParentID, m.ID) {
+				continue
+			}
+		}
+
+		result = append(result, TunnelPreviewMock{
+			ID:        m.ID,
+			Type:      mockType,
+			Name:      m.Name,
+			Workspace: m.WorkspaceID,
+			Folder:    m.ParentID,
+		})
 	}
 
 	return result
+}
+
+// isExcluded checks whether a mock matches any exclusion rule.
+func isExcluded(excl *store.TunnelExclude, workspaceID, parentID, mockID string) bool {
+	for _, ws := range excl.Workspaces {
+		if workspaceID == ws {
+			return true
+		}
+	}
+	for _, f := range excl.Folders {
+		if parentID == f {
+			return true
+		}
+	}
+	for _, id := range excl.Mocks {
+		if mockID == id {
+			return true
+		}
+	}
+	return false
 }
