@@ -34,15 +34,16 @@ type TunnelEnableResponse struct {
 
 // TunnelStatusResponse is the response for GET /engines/{id}/tunnel/status.
 type TunnelStatusResponse struct {
-	Enabled     bool                  `json:"enabled"`
-	Status      string                `json:"status"` // "connected","disconnected","connecting","error"
-	PublicURL   string                `json:"publicUrl,omitempty"`
-	Subdomain   string                `json:"subdomain,omitempty"`
-	SessionID   string                `json:"sessionId,omitempty"`
-	ConnectedAt *time.Time            `json:"connectedAt,omitempty"`
-	Transport   string                `json:"transport,omitempty"` // "quic","websocket"
-	Stats       *store.TunnelStats    `json:"stats,omitempty"`
-	Expose      *store.TunnelExposure `json:"expose,omitempty"`
+	Enabled           bool                  `json:"enabled"`
+	Status            string                `json:"status"` // "connected","disconnected","connecting","error"
+	PublicURL         string                `json:"publicUrl,omitempty"`
+	Subdomain         string                `json:"subdomain,omitempty"`
+	SessionID         string                `json:"sessionId,omitempty"`
+	ConnectedAt       *time.Time            `json:"connectedAt,omitempty"`
+	Transport         string                `json:"transport,omitempty"` // "quic","websocket"
+	Stats             *store.TunnelStats    `json:"stats,omitempty"`
+	Expose            *store.TunnelExposure `json:"expose,omitempty"`
+	ResolvedMockCount int                   `json:"resolvedMockCount,omitempty"`
 }
 
 // TunnelConfigUpdateRequest is the body for PUT /engines/{id}/tunnel/config.
@@ -299,6 +300,9 @@ func (a *AdminAPI) handleGetTunnelStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Count resolved mocks for the current exposure config
+	resolvedMocks := a.previewExposedMocks(r, cfg.Expose)
+
 	writeJSON(w, http.StatusOK, TunnelStatusResponse{
 		Enabled:     cfg.Enabled,
 		Status:      cfg.Status,
@@ -307,7 +311,9 @@ func (a *AdminAPI) handleGetTunnelStatus(w http.ResponseWriter, r *http.Request)
 		SessionID:   cfg.SessionID,
 		ConnectedAt: cfg.ConnectedAt,
 		Transport:   cfg.Transport,
-		Expose:      &cfg.Expose,
+		// Stats will be populated when TunnelManager reports them
+		Expose:            &cfg.Expose,
+		ResolvedMockCount: len(resolvedMocks),
 	})
 }
 
@@ -365,12 +371,14 @@ func (a *AdminAPI) handleListTunnels(w http.ResponseWriter, r *http.Request) {
 			if cfg.ConnectedAt != nil {
 				uptime = time.Since(*cfg.ConnectedAt).Round(time.Second).String()
 			}
+			mockCount := len(a.previewExposedMocks(r, cfg.Expose))
 			items = append(items, TunnelListItem{
 				EngineID:   LocalEngineID,
 				EngineName: "Local Engine",
 				PublicURL:  cfg.PublicURL,
 				Status:     cfg.Status,
 				Transport:  cfg.Transport,
+				MockCount:  mockCount,
 				Uptime:     uptime,
 			})
 		}
@@ -386,12 +394,14 @@ func (a *AdminAPI) handleListTunnels(w http.ResponseWriter, r *http.Request) {
 		if eng.Tunnel.ConnectedAt != nil {
 			uptime = time.Since(*eng.Tunnel.ConnectedAt).Round(time.Second).String()
 		}
+		mockCount := len(a.previewExposedMocks(r, eng.Tunnel.Expose))
 		items = append(items, TunnelListItem{
 			EngineID:   eng.ID,
 			EngineName: eng.Name,
 			PublicURL:  eng.Tunnel.PublicURL,
 			Status:     eng.Tunnel.Status,
 			Transport:  eng.Tunnel.Transport,
+			MockCount:  mockCount,
 			Uptime:     uptime,
 		})
 	}

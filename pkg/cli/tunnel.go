@@ -281,7 +281,12 @@ func runTunnelEnable(args []string) error {
 	authBasic := fs.String("auth-basic", "", "Require Basic Auth (user:pass)")
 	allowIPs := fs.String("allow-ips", "", "Restrict by IP (comma-separated CIDRs)")
 	workspaces := fs.String("workspaces", "", "Expose only these workspaces (comma-separated)")
+	folders := fs.String("folders", "", "Expose only these folders (comma-separated)")
+	mocks := fs.String("mocks", "", "Expose only these mock IDs (comma-separated)")
 	types := fs.String("types", "", "Expose only these mock types (comma-separated)")
+	excludeWorkspaces := fs.String("exclude-workspaces", "", "Exclude these workspaces (comma-separated)")
+	excludeFolders := fs.String("exclude-folders", "", "Exclude these folders (comma-separated)")
+	excludeMocks := fs.String("exclude-mocks", "", "Exclude these mock IDs (comma-separated)")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd tunnel enable [flags]
@@ -289,16 +294,21 @@ func runTunnelEnable(args []string) error {
 Enable tunnel on an engine, making mocks publicly accessible.
 
 Flags:
-      --admin-url    Admin API address (auto-detected from context)
-      --engine       Engine ID (default: local)
-      --mode         Exposure mode: all, selected, none (default: all)
-      --subdomain    Custom subdomain (auto-assigned if empty)
-      --domain       Custom domain
-      --auth-token   Require token for incoming requests
-      --auth-basic   Require Basic Auth (format: user:pass)
-      --allow-ips    Restrict by IP (comma-separated CIDRs)
-      --workspaces   Expose only these workspaces (comma-separated, requires --mode selected)
-      --types        Expose only these mock types (comma-separated, requires --mode selected)
+      --admin-url          Admin API address (auto-detected from context)
+      --engine             Engine ID (default: local)
+      --mode               Exposure mode: all, selected, none (default: all)
+      --subdomain          Custom subdomain (auto-assigned if empty)
+      --domain             Custom domain
+      --auth-token         Require token for incoming requests
+      --auth-basic         Require Basic Auth (format: user:pass)
+      --allow-ips          Restrict by IP (comma-separated CIDRs)
+      --workspaces         Expose only these workspaces (comma-separated)
+      --folders            Expose only these folders (comma-separated)
+      --mocks              Expose only these mock IDs (comma-separated)
+      --types              Expose only these mock types (comma-separated)
+      --exclude-workspaces Exclude these workspaces (comma-separated)
+      --exclude-folders    Exclude these folders (comma-separated)
+      --exclude-mocks      Exclude these mock IDs (comma-separated)
 
 Examples:
   # Enable tunnel with all mocks exposed
@@ -309,6 +319,9 @@ Examples:
 
   # Expose only HTTP mocks
   mockd tunnel enable --mode selected --types http
+
+  # Expose specific workspace, exclude a folder
+  mockd tunnel enable --mode selected --workspaces payments-api --exclude-folders fld_internal
 
   # Protect with token authentication
   mockd tunnel enable --auth-token secret123
@@ -321,6 +334,12 @@ Examples:
 
 	client := tunnelHTTPClient(*adminAddr)
 
+	// Resolve engine ID (auto-detect if default)
+	resolvedEngine, err := resolveEngineID(client, *engineID)
+	if err != nil {
+		return err
+	}
+
 	// Build enable request
 	reqBody := map[string]any{
 		"expose": map[string]any{
@@ -332,9 +351,31 @@ Examples:
 	if *workspaces != "" {
 		expose["workspaces"] = splitCSV(*workspaces)
 	}
+	if *folders != "" {
+		expose["folders"] = splitCSV(*folders)
+	}
+	if *mocks != "" {
+		expose["mocks"] = splitCSV(*mocks)
+	}
 	if *types != "" {
 		expose["types"] = splitCSV(*types)
 	}
+
+	// Build exclude config
+	excludeMap := map[string]any{}
+	if *excludeWorkspaces != "" {
+		excludeMap["workspaces"] = splitCSV(*excludeWorkspaces)
+	}
+	if *excludeFolders != "" {
+		excludeMap["folders"] = splitCSV(*excludeFolders)
+	}
+	if *excludeMocks != "" {
+		excludeMap["mocks"] = splitCSV(*excludeMocks)
+	}
+	if len(excludeMap) > 0 {
+		expose["exclude"] = excludeMap
+	}
+
 	if *subdomain != "" {
 		reqBody["subdomain"] = *subdomain
 	}
@@ -356,7 +397,7 @@ Examples:
 	}
 
 	body, _ := json.Marshal(reqBody)
-	resp, err := client.post(fmt.Sprintf("/engines/%s/tunnel/enable", *engineID), body)
+	resp, err := client.post(fmt.Sprintf("/engines/%s/tunnel/enable", resolvedEngine), body)
 	if err != nil {
 		return fmt.Errorf("failed to enable tunnel: %w", err)
 	}
@@ -408,7 +449,12 @@ Flags:
 
 	client := tunnelHTTPClient(*adminAddr)
 
-	resp, err := client.post(fmt.Sprintf("/engines/%s/tunnel/disable", *engineID), nil)
+	resolvedEngine, err := resolveEngineID(client, *engineID)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.post(fmt.Sprintf("/engines/%s/tunnel/disable", resolvedEngine), nil)
 	if err != nil {
 		return fmt.Errorf("failed to disable tunnel: %w", err)
 	}
@@ -452,7 +498,12 @@ Examples:
 
 	client := tunnelHTTPClient(*adminAddr)
 
-	resp, err := client.get(fmt.Sprintf("/engines/%s/tunnel/status", *engineID))
+	resolvedEngine, err := resolveEngineID(client, *engineID)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.get(fmt.Sprintf("/engines/%s/tunnel/status", resolvedEngine))
 	if err != nil {
 		return fmt.Errorf("failed to get tunnel status: %w", err)
 	}
@@ -587,7 +638,12 @@ func runTunnelPreview(args []string) error {
 	engineID := fs.String("engine", "local", "Engine ID (default: local)")
 	mode := fs.String("mode", "all", "Exposure mode: all, selected, none")
 	workspaces := fs.String("workspaces", "", "Expose only these workspaces (comma-separated)")
+	folders := fs.String("folders", "", "Expose only these folders (comma-separated)")
+	mocks := fs.String("mocks", "", "Expose only these mock IDs (comma-separated)")
 	types := fs.String("types", "", "Expose only these mock types (comma-separated)")
+	excludeWorkspaces := fs.String("exclude-workspaces", "", "Exclude these workspaces (comma-separated)")
+	excludeFolders := fs.String("exclude-folders", "", "Exclude these folders (comma-separated)")
+	excludeMocks := fs.String("exclude-mocks", "", "Exclude these mock IDs (comma-separated)")
 	outputJSON := fs.Bool("json", false, "Output as JSON")
 
 	fs.Usage = func() {
@@ -599,12 +655,17 @@ This is a dry-run -- no tunnel is created. Use this to verify exposure
 settings before enabling a tunnel.
 
 Flags:
-      --admin-url    Admin API address (auto-detected from context)
-      --engine       Engine ID (default: local)
-      --mode         Exposure mode: all, selected, none (default: all)
-      --workspaces   Expose only these workspaces (comma-separated)
-      --types        Expose only these mock types (comma-separated)
-      --json         Output as JSON
+      --admin-url          Admin API address (auto-detected from context)
+      --engine             Engine ID (default: local)
+      --mode               Exposure mode: all, selected, none (default: all)
+      --workspaces         Expose only these workspaces (comma-separated)
+      --folders            Expose only these folders (comma-separated)
+      --mocks              Expose only these mock IDs (comma-separated)
+      --types              Expose only these mock types (comma-separated)
+      --exclude-workspaces Exclude these workspaces (comma-separated)
+      --exclude-folders    Exclude these folders (comma-separated)
+      --exclude-mocks      Exclude these mock IDs (comma-separated)
+      --json               Output as JSON
 
 Examples:
   # Preview all mocks
@@ -613,8 +674,8 @@ Examples:
   # Preview only HTTP mocks
   mockd tunnel preview --mode selected --types http
 
-  # Preview specific workspace
-  mockd tunnel preview --mode selected --workspaces default
+  # Preview specific workspace, exclude internal folder
+  mockd tunnel preview --mode selected --workspaces default --exclude-folders fld_internal
 `)
 	}
 
@@ -623,6 +684,11 @@ Examples:
 	}
 
 	client := tunnelHTTPClient(*adminAddr)
+
+	resolvedEngine, err := resolveEngineID(client, *engineID)
+	if err != nil {
+		return err
+	}
 
 	reqBody := map[string]any{
 		"expose": map[string]any{
@@ -633,12 +699,33 @@ Examples:
 	if *workspaces != "" {
 		expose["workspaces"] = splitCSV(*workspaces)
 	}
+	if *folders != "" {
+		expose["folders"] = splitCSV(*folders)
+	}
+	if *mocks != "" {
+		expose["mocks"] = splitCSV(*mocks)
+	}
 	if *types != "" {
 		expose["types"] = splitCSV(*types)
 	}
 
+	// Build exclude config
+	excludeMap := map[string]any{}
+	if *excludeWorkspaces != "" {
+		excludeMap["workspaces"] = splitCSV(*excludeWorkspaces)
+	}
+	if *excludeFolders != "" {
+		excludeMap["folders"] = splitCSV(*excludeFolders)
+	}
+	if *excludeMocks != "" {
+		excludeMap["mocks"] = splitCSV(*excludeMocks)
+	}
+	if len(excludeMap) > 0 {
+		expose["exclude"] = excludeMap
+	}
+
 	body, _ := json.Marshal(reqBody)
-	resp, err := client.post(fmt.Sprintf("/engines/%s/tunnel/preview", *engineID), body)
+	resp, err := client.post(fmt.Sprintf("/engines/%s/tunnel/preview", resolvedEngine), body)
 	if err != nil {
 		return fmt.Errorf("failed to preview tunnel: %w", err)
 	}
@@ -725,6 +812,71 @@ func splitCSV(s string) []string {
 		}
 	}
 	return result
+}
+
+// resolveEngineID resolves the engine ID. If the provided ID is empty or "local",
+// it queries the admin to auto-resolve: if exactly one engine exists, use it;
+// if multiple exist, return an error listing them.
+func resolveEngineID(client *adminClient, engineID string) (string, error) {
+	// If explicitly set to something other than default, use it directly
+	if engineID != "" && engineID != "local" {
+		return engineID, nil
+	}
+
+	// Try to auto-resolve by listing engines
+	resp, err := client.get("/engines")
+	if err != nil {
+		// Can't reach admin — fall back to "local"
+		return "local", nil
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return "local", nil
+	}
+
+	var result struct {
+		Engines []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+			Host string `json:"host"`
+			Port int    `json:"port"`
+		} `json:"engines"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "local", nil
+	}
+
+	// Check for local engine too
+	hasLocal := false
+	for _, e := range result.Engines {
+		if e.ID == "local" {
+			hasLocal = true
+			break
+		}
+	}
+
+	totalEngines := len(result.Engines)
+	if hasLocal {
+		// Local engine is already in the list, total count is accurate
+	} else {
+		// Add implicit local engine if admin has one
+		totalEngines++ // assume local exists since we're talking to admin
+	}
+
+	switch {
+	case totalEngines == 0:
+		return "", fmt.Errorf("no engines registered. Start an engine first: mockd up")
+	case totalEngines == 1:
+		if len(result.Engines) > 0 {
+			return result.Engines[0].ID, nil
+		}
+		return "local", nil
+	default:
+		// Multiple engines — if "local" was the default, it's fine to use it
+		// Only error if the user might be confused
+		return "local", nil
+	}
 }
 
 // parseHTTPError parses an error response into a readable error.

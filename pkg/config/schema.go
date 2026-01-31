@@ -161,11 +161,19 @@ type TunnelYAMLConfig struct {
 
 // TunnelYAMLExposure defines exposure config in mockd.yaml.
 type TunnelYAMLExposure struct {
-	Mode       string   `json:"mode,omitempty" yaml:"mode,omitempty"` // "all", "selected", "none"
+	Mode       string             `json:"mode,omitempty" yaml:"mode,omitempty"` // "all", "selected", "none"
+	Workspaces []string           `json:"workspaces,omitempty" yaml:"workspaces,omitempty"`
+	Folders    []string           `json:"folders,omitempty" yaml:"folders,omitempty"`
+	Mocks      []string           `json:"mocks,omitempty" yaml:"mocks,omitempty"`
+	Types      []string           `json:"types,omitempty" yaml:"types,omitempty"`
+	Exclude    *TunnelYAMLExclude `json:"exclude,omitempty" yaml:"exclude,omitempty"`
+}
+
+// TunnelYAMLExclude defines exclusion rules in mockd.yaml.
+type TunnelYAMLExclude struct {
 	Workspaces []string `json:"workspaces,omitempty" yaml:"workspaces,omitempty"`
 	Folders    []string `json:"folders,omitempty" yaml:"folders,omitempty"`
 	Mocks      []string `json:"mocks,omitempty" yaml:"mocks,omitempty"`
-	Types      []string `json:"types,omitempty" yaml:"types,omitempty"`
 }
 
 // TunnelYAMLAuth defines auth config in mockd.yaml.

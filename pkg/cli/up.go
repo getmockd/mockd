@@ -720,6 +720,13 @@ func (uctx *upContext) startTunnel(engineCfg config.EngineConfig) error {
 		tunnelCfg.Expose.Folders = tc.Expose.Folders
 		tunnelCfg.Expose.Mocks = tc.Expose.Mocks
 		tunnelCfg.Expose.Types = tc.Expose.Types
+		if tc.Expose.Exclude != nil {
+			tunnelCfg.Expose.Exclude = &store.TunnelExclude{
+				Workspaces: tc.Expose.Exclude.Workspaces,
+				Folders:    tc.Expose.Exclude.Folders,
+				Mocks:      tc.Expose.Exclude.Mocks,
+			}
+		}
 	}
 
 	// Apply auth config from YAML
