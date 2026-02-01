@@ -123,34 +123,34 @@ jobs:
             echo "PASS: HTTP throughput $RPS req/s >= 50K claim"
           fi
 
-          # Memory: <25MB (using 30MB threshold for CI variance)
+          # Memory: website claims <30MB
           RSS=$(jq -r '.rss_mb' /tmp/memory_benchmark.json)
           if (( $(echo "$RSS > 30" | bc -l) )); then
-            echo "FAIL: Memory $RSS MB > 30MB CI threshold"
+            echo "FAIL: Memory $RSS MB > 30MB claim"
             FAILED=1
           else
-            echo "PASS: Memory $RSS MB <= 30MB CI threshold"
+            echo "PASS: Memory $RSS MB <= 30MB claim"
           fi
 
-          # CLI Startup: <10ms (check from Go benchmark results)
+          # CLI Startup: website claims <10ms
           CLI_NS=$(jq -r '.protocols.startup.benchmarks[] | select(.name == "BenchmarkCLIStartup") | .ns_per_op' benchmarks/results/latest.json)
           CLI_MS=$(echo "scale=2; $CLI_NS / 1000000" | bc)
-          if (( $(echo "$CLI_MS > 15" | bc -l) )); then
-            echo "FAIL: CLI startup ${CLI_MS}ms > 15ms CI threshold"
+          if (( $(echo "$CLI_MS > 10" | bc -l) )); then
+            echo "FAIL: CLI startup ${CLI_MS}ms > 10ms claim"
             FAILED=1
           else
-            echo "PASS: CLI startup ${CLI_MS}ms <= 15ms CI threshold"
+            echo "PASS: CLI startup ${CLI_MS}ms <= 10ms claim"
           fi
 
-          # MQTT QoS0: 100K+ msg/s (using 80K threshold for CI variance)
+          # MQTT QoS0: website claims 50K+ msg/s
           MQTT_OPS=$(jq -r '.protocols.mqtt.benchmarks[] | select(.name == "BenchmarkMQTT_PublishQoS0") | .ops_per_sec' benchmarks/results/latest.json)
           if [ "$MQTT_OPS" != "null" ] && [ -n "$MQTT_OPS" ]; then
             MQTT_K=$(echo "scale=0; $MQTT_OPS / 1000" | bc)
-            if (( $(echo "$MQTT_OPS < 80000" | bc -l) )); then
-              echo "FAIL: MQTT QoS0 ${MQTT_K}K msg/s < 80K CI threshold"
+            if (( $(echo "$MQTT_OPS < 50000" | bc -l) )); then
+              echo "FAIL: MQTT QoS0 ${MQTT_K}K msg/s < 50K claim"
               FAILED=1
             else
-              echo "PASS: MQTT QoS0 ${MQTT_K}K msg/s >= 80K CI threshold"
+              echo "PASS: MQTT QoS0 ${MQTT_K}K msg/s >= 50K claim"
             fi
           else
             echo "SKIP: MQTT QoS0 benchmark not available"
@@ -158,9 +158,8 @@ jobs:
 
           echo ""
           if [ $FAILED -eq 1 ]; then
-            echo "WARNING: Some claims may not hold on CI hardware (shared 4-core runner)."
-            echo "CI thresholds are relaxed vs website claims to account for noisy neighbors."
-            echo "Review results manually before updating marketing numbers."
+            echo "FAIL: One or more website claims did not pass on CI hardware."
+            echo "Review results and consider if this is a real regression or CI noise."
           else
             echo "All claims validated on CI hardware."
           fi
