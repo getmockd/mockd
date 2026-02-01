@@ -16,7 +16,7 @@ import (
 )
 
 // ServerVersion is the mockd server version.
-const ServerVersion = "0.2.0"
+const ServerVersion = "0.2.3"
 
 // Server is the MCP protocol server.
 type Server struct {

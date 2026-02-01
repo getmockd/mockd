@@ -84,7 +84,7 @@ func (h *Handler) Metadata() protocol.Metadata {
 		ID:                   id,
 		Name:                 name,
 		Protocol:             protocol.ProtocolGraphQL,
-		Version:              "0.2.0",
+		Version:              "0.2.3",
 		TransportType:        protocol.TransportHTTP1,
 		ConnectionModel:      protocol.ConnectionModelStateless,
 		CommunicationPattern: protocol.PatternRequestResponse,

@@ -689,7 +689,7 @@ func (m *ConnectionManager) Metadata() protocol.Metadata {
 	return protocol.Metadata{
 		ID:                   m.id,
 		Protocol:             protocol.ProtocolWebSocket,
-		Version:              "0.2.0",
+		Version:              "0.2.3",
 		TransportType:        protocol.TransportWebSocket,
 		ConnectionModel:      protocol.ConnectionModelUpgrade,
 		CommunicationPattern: protocol.PatternBidirectional,
