@@ -80,9 +80,16 @@ func newAPIKeyAuth(config APIKeyConfig, logFn func(msg string, args ...any)) (*a
 		return auth, nil
 	}
 
-	// If key is provided, use it
+	// If key is provided via config, use it
 	if config.Key != "" {
 		auth.setKey(config.Key)
+		return auth, nil
+	}
+
+	// Check MOCKD_API_KEY environment variable (idiomatic for Docker / CI)
+	if envKey := os.Getenv("MOCKD_API_KEY"); envKey != "" {
+		auth.setKey(envKey)
+		auth.log("Using API key from MOCKD_API_KEY environment variable")
 		return auth, nil
 	}
 
@@ -109,6 +116,11 @@ func newAPIKeyAuth(config APIKeyConfig, logFn func(msg string, args ...any)) (*a
 	} else {
 		auth.log("Generated and saved new API key", "path", keyPath)
 	}
+
+	// Print the key to stdout so users can discover it (especially in Docker)
+	fmt.Fprintf(os.Stderr, "Admin API key: %s\n", key)
+	fmt.Fprintf(os.Stderr, "  Set MOCKD_API_KEY env var or use --no-auth to skip authentication.\n")
+	fmt.Fprintf(os.Stderr, "  Key saved to: %s\n", keyPath)
 
 	return auth, nil
 }
@@ -280,8 +292,8 @@ func generateAPIKey() (string, error) {
 
 // APIKeyInfo contains information about the current API key.
 type APIKeyInfo struct {
-	Key         string    `json:"key,omitempty"`    // Only included when explicitly requested
-	KeyPrefix   string    `json:"keyPrefix"`        // First 8 chars for identification
+	Key         string    `json:"key,omitempty"` // Only included when explicitly requested
+	KeyPrefix   string    `json:"keyPrefix"`     // First 8 chars for identification
 	Enabled     bool      `json:"enabled"`
 	KeyFilePath string    `json:"keyFilePath"`
 	CreatedAt   time.Time `json:"createdAt,omitempty"`
