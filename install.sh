@@ -1,14 +1,20 @@
 #!/bin/sh
 # mockd installer script
-# Usage: curl -sSL https://get.mockd.io | sh
 #
-# This script detects your OS and architecture, downloads the latest
-# mockd binary from GitHub releases, and installs it to /usr/local/bin.
+# Usage:
+#   curl -sSL https://get.mockd.io | sh                    # latest stable
+#   curl -sSL https://get.mockd.io | VERSION=v0.2.1 sh     # specific version
+#   curl -sSL https://get.mockd.io | INSTALL_DIR=./bin sh   # custom location
+#
+# Environment variables:
+#   VERSION           - Version to install (default: latest release)
+#   INSTALL_DIR       - Install directory (default: /usr/local/bin)
+#   MOCKD_NO_TELEMETRY - Set to 1 to disable anonymous install analytics
 
 set -e
 
 REPO="getmockd/mockd"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY_NAME="mockd"
 TELEMETRY_URL="https://api.mockd.io/api/telemetry/install"
 
@@ -80,12 +86,21 @@ main() {
     ARCH=$(detect_arch)
     info "Detected: ${OS}/${ARCH}"
 
-    # Get latest version
-    VERSION=$(get_latest_version)
-    if [ -z "$VERSION" ]; then
-        error "Failed to determine latest version. Check your internet connection."
+    # Determine version (user-specified or latest)
+    if [ -n "${VERSION:-}" ]; then
+        # Ensure it has the v prefix
+        case "$VERSION" in
+            v*) ;;
+            *)  VERSION="v${VERSION}" ;;
+        esac
+        info "Requested version: ${VERSION}"
+    else
+        VERSION=$(get_latest_version)
+        if [ -z "$VERSION" ]; then
+            error "Failed to determine latest version. Check your internet connection."
+        fi
+        info "Latest version: ${VERSION}"
     fi
-    info "Latest version: ${VERSION}"
 
     # Build download URL
     FILENAME="${BINARY_NAME}-${OS}-${ARCH}"
@@ -127,6 +142,14 @@ main() {
 
     # Install
     chmod +x "${TMPDIR}/${BINARY_NAME}"
+
+    # Create install dir if needed
+    if [ ! -d "$INSTALL_DIR" ]; then
+        mkdir -p "$INSTALL_DIR" 2>/dev/null || {
+            info "Creating ${INSTALL_DIR} (requires sudo)..."
+            sudo mkdir -p "$INSTALL_DIR"
+        }
+    fi
 
     if [ -w "$INSTALL_DIR" ]; then
         mv "${TMPDIR}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
