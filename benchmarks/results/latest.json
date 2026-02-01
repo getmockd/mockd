@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-01-10T19:54:56Z",
+  "timestamp": "2026-02-01T04:00:11Z",
   "environment": {
     "os": "linux",
     "arch": "amd64",
@@ -9,68 +9,269 @@
   },
   "protocols": {
     "admin": {
-      "benchmarks": null,
+      "benchmarks": [
+        {
+          "name": "BenchmarkAdminAPIHealth",
+          "ns_per_op": 102161,
+          "ops_per_sec": 9788.471138692848,
+          "bytes_per_op": 5351,
+          "allocs_per_op": 74
+        },
+        {
+          "name": "BenchmarkAdminAPIListMocks",
+          "ns_per_op": 136829,
+          "ops_per_sec": 7308.392226794028,
+          "bytes_per_op": 5353,
+          "allocs_per_op": 74
+        }
+      ],
       "smoke_test_passed": true
     },
     "grpc": {
-      "benchmarks": null,
+      "benchmarks": [
+        {
+          "name": "BenchmarkGRPC_UnaryLatency",
+          "ns_per_op": 147964,
+          "ops_per_sec": 6758.4006920602305,
+          "bytes_per_op": 16377,
+          "allocs_per_op": 306
+        },
+        {
+          "name": "BenchmarkGRPC_ConnectionEstablishment",
+          "ns_per_op": 22103,
+          "ops_per_sec": 45242.72723159752,
+          "bytes_per_op": 7691,
+          "allocs_per_op": 159
+        },
+        {
+          "name": "BenchmarkGRPC_ConcurrentUnary",
+          "ns_per_op": 34049,
+          "ops_per_sec": 29369.438162647948,
+          "bytes_per_op": 15865,
+          "allocs_per_op": 306
+        },
+        {
+          "name": "BenchmarkGRPC_Throughput/unary",
+          "ns_per_op": 148351,
+          "ops_per_sec": 6740.770200403098,
+          "bytes_per_op": 16434,
+          "allocs_per_op": 305
+        }
+      ],
       "smoke_test_passed": true
     },
     "mqtt": {
-      "benchmarks": null,
+      "benchmarks": [
+        {
+          "name": "BenchmarkMQTT_PublishQoS0",
+          "ns_per_op": 9684,
+          "ops_per_sec": 103263.11441553077,
+          "bytes_per_op": 1360,
+          "allocs_per_op": 31
+        },
+        {
+          "name": "BenchmarkMQTT_PublishQoS1",
+          "ns_per_op": 51425,
+          "ops_per_sec": 19445.794846864366,
+          "bytes_per_op": 2667,
+          "allocs_per_op": 52
+        },
+        {
+          "name": "BenchmarkMQTT_PublishQoS2",
+          "ns_per_op": 87622,
+          "ops_per_sec": 11412.658921275479,
+          "bytes_per_op": 3252,
+          "allocs_per_op": 74
+        },
+        {
+          "name": "BenchmarkMQTT_PubSubLatency",
+          "ns_per_op": 80356,
+          "ops_per_sec": 12444.62143461596,
+          "bytes_per_op": 7284,
+          "allocs_per_op": 98
+        },
+        {
+          "name": "BenchmarkMQTT_ConnectionEstablishment",
+          "ns_per_op": 241294,
+          "ops_per_sec": 4144.321864613294,
+          "bytes_per_op": 80880,
+          "allocs_per_op": 245
+        },
+        {
+          "name": "BenchmarkMQTT_ConcurrentPublishers",
+          "ns_per_op": 3590,
+          "ops_per_sec": 278551.53203342616,
+          "bytes_per_op": 1417,
+          "allocs_per_op": 31
+        },
+        {
+          "name": "BenchmarkMQTT_Fanout",
+          "ns_per_op": 1370630,
+          "ops_per_sec": 729.5915017181879,
+          "bytes_per_op": 37733,
+          "allocs_per_op": 468
+        },
+        {
+          "name": "BenchmarkMQTT_MessageSizes/64B",
+          "ns_per_op": 10062,
+          "ops_per_sec": 99383.82031405288,
+          "bytes_per_op": 1592,
+          "allocs_per_op": 32
+        },
+        {
+          "name": "BenchmarkMQTT_MessageSizes/1KB",
+          "ns_per_op": 12960,
+          "ops_per_sec": 77160.49382716049,
+          "bytes_per_op": 5720,
+          "allocs_per_op": 32
+        },
+        {
+          "name": "BenchmarkMQTT_MessageSizes/10KB",
+          "ns_per_op": 24919,
+          "ops_per_sec": 40130.021268911274,
+          "bytes_per_op": 44118,
+          "allocs_per_op": 32
+        },
+        {
+          "name": "BenchmarkMQTT_MessageSizes/64KB",
+          "ns_per_op": 110712,
+          "ops_per_sec": 9032.444540790519,
+          "bytes_per_op": 287721,
+          "allocs_per_op": 32
+        }
+      ],
       "smoke_test_passed": true
     },
     "soap": {
-      "benchmarks": null,
+      "benchmarks": [
+        {
+          "name": "BenchmarkSOAP_RequestLatency",
+          "ns_per_op": 106320,
+          "ops_per_sec": 9405.568096313018,
+          "bytes_per_op": 23082,
+          "allocs_per_op": 224
+        },
+        {
+          "name": "BenchmarkSOAP_ConcurrentRequests",
+          "ns_per_op": 39912,
+          "ops_per_sec": 25055.12126678693,
+          "bytes_per_op": 24117,
+          "allocs_per_op": 236
+        },
+        {
+          "name": "BenchmarkSOAP_MessageSizes/small_500B",
+          "ns_per_op": 107676,
+          "ops_per_sec": 9287.120621122627,
+          "bytes_per_op": 23621,
+          "allocs_per_op": 233
+        },
+        {
+          "name": "BenchmarkSOAP_MessageSizes/medium_2KB",
+          "ns_per_op": 151472,
+          "ops_per_sec": 6601.88021548537,
+          "bytes_per_op": 38209,
+          "allocs_per_op": 246
+        },
+        {
+          "name": "BenchmarkSOAP_MessageSizes/large_10KB",
+          "ns_per_op": 393117,
+          "ops_per_sec": 2543.7719559316947,
+          "bytes_per_op": 155673,
+          "allocs_per_op": 263
+        },
+        {
+          "name": "BenchmarkSOAP_XMLParsing",
+          "ns_per_op": 128463,
+          "ops_per_sec": 7784.342573347968,
+          "bytes_per_op": 31083,
+          "allocs_per_op": 332
+        },
+        {
+          "name": "BenchmarkSOAP_SOAP12",
+          "ns_per_op": 106612,
+          "ops_per_sec": 9379.807151164972,
+          "bytes_per_op": 23272,
+          "allocs_per_op": 220
+        },
+        {
+          "name": "BenchmarkSOAP_ConnectionReuse",
+          "ns_per_op": 106228,
+          "ops_per_sec": 9413.713898407199,
+          "bytes_per_op": 24338,
+          "allocs_per_op": 225
+        },
+        {
+          "name": "BenchmarkSOAP_HighConcurrency",
+          "ns_per_op": 32945,
+          "ops_per_sec": 30353.619669145544,
+          "bytes_per_op": 23113,
+          "allocs_per_op": 226
+        }
+      ],
       "smoke_test_passed": true
     },
     "startup": {
-      "benchmarks": null,
+      "benchmarks": [
+        {
+          "name": "BenchmarkCLIStartup",
+          "ns_per_op": 9669596,
+          "ops_per_sec": 103.41693696406757,
+          "bytes_per_op": 17609,
+          "allocs_per_op": 46
+        },
+        {
+          "name": "BenchmarkServerStartup",
+          "ns_per_op": 103624953,
+          "ops_per_sec": 9.650185317816259,
+          "bytes_per_op": 46409,
+          "allocs_per_op": 338
+        }
+      ],
       "smoke_test_passed": true
     },
     "websocket": {
       "benchmarks": [
         {
           "name": "BenchmarkWS_EchoLatency",
-          "ns_per_op": 60643,
-          "ops_per_sec": 16489.949375855416,
-          "bytes_per_op": 3501,
-          "allocs_per_op": 46
+          "ns_per_op": 34509,
+          "ops_per_sec": 28977.947781738098,
+          "bytes_per_op": 3581,
+          "allocs_per_op": 50
         },
         {
           "name": "BenchmarkWS_ConnectionEstablishment",
-          "ns_per_op": 411256,
-          "ops_per_sec": 2431.5754663761745,
-          "bytes_per_op": 41917,
-          "allocs_per_op": 360
+          "ns_per_op": 307544,
+          "ops_per_sec": 3251.567255417111,
+          "bytes_per_op": 41264,
+          "allocs_per_op": 348
         },
         {
           "name": "BenchmarkWS_ConcurrentConnections",
-          "ns_per_op": 17423931,
-          "ops_per_sec": 57.3923301234377,
-          "bytes_per_op": 4240723,
-          "allocs_per_op": 36889
+          "ns_per_op": 14687295,
+          "ops_per_sec": 68.08605669049338,
+          "bytes_per_op": 4196943,
+          "allocs_per_op": 35834
         },
         {
           "name": "BenchmarkWS_MatcherPerformance",
-          "ns_per_op": 38621,
-          "ops_per_sec": 25892.64907692706,
-          "bytes_per_op": 3898,
-          "allocs_per_op": 53
+          "ns_per_op": 40690,
+          "ops_per_sec": 24576.06291472106,
+          "bytes_per_op": 5058,
+          "allocs_per_op": 76
         },
         {
           "name": "BenchmarkWS_MessageThroughput/small_64B",
-          "ns_per_op": 33598,
-          "ops_per_sec": 29763.67640931008,
-          "bytes_per_op": 3464,
-          "allocs_per_op": 46
+          "ns_per_op": 34662,
+          "ops_per_sec": 28850.037505048756,
+          "bytes_per_op": 3560,
+          "allocs_per_op": 50
         },
         {
           "name": "BenchmarkWS_MessageThroughput/medium_1KB",
-          "ns_per_op": 41592,
-          "ops_per_sec": 24043.08520869398,
-          "bytes_per_op": 10974,
-          "allocs_per_op": 74
+          "ns_per_op": 43061,
+          "ops_per_sec": 23222.86988226005,
+          "bytes_per_op": 11070,
+          "allocs_per_op": 78
         }
       ],
       "smoke_test_passed": true
@@ -83,30 +284,30 @@
       "claim": "See run_all.sh results"
     },
     "websocket": {
-      "throughput_ops_per_sec": 16489.949375855416,
-      "latency_ns": 60643,
-      "claim": "13K+ msg/s"
+      "throughput_ops_per_sec": 28977.947781738098,
+      "latency_ns": 34509,
+      "claim": "23K+ msg/s"
     },
     "grpc": {
-      "throughput_ops_per_sec": 0,
-      "latency_ns": 0,
-      "claim": "0K+ calls/s"
+      "throughput_ops_per_sec": 29369.438162647948,
+      "latency_ns": 147964,
+      "claim": "21K+ calls/s"
     },
     "mqtt": {
-      "qos0_ops_per_sec": 0,
-      "qos1_ops_per_sec": 0,
-      "qos2_ops_per_sec": 0,
-      "claim": "100K+ msg/s (QoS 0)"
+      "qos0_ops_per_sec": 103263.11441553077,
+      "qos1_ops_per_sec": 19445.794846864366,
+      "qos2_ops_per_sec": 11412.658921275479,
+      "claim": "93K+ QoS0, 14K+ QoS1, 9K+ QoS2"
     },
     "soap": {
-      "throughput_ops_per_sec": 0,
-      "latency_ns": 0,
-      "claim": "0K+ req/s"
+      "throughput_ops_per_sec": 25055.12126678693,
+      "latency_ns": 106320,
+      "claim": "20K+ req/s"
     },
     "startup": {
-      "server_ns": 0,
-      "cli_ns": 0,
-      "claim": "\u003c1ms server, \u003c5ms CLI"
+      "server_ns": 103624953,
+      "cli_ns": 9669596,
+      "claim": "\u003c105ms server, \u003c15ms CLI"
     },
     "memory": {
       "idle_mb": 25,

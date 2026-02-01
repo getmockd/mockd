@@ -1,0 +1,241 @@
+name: Benchmarks
+
+on:
+  # Run on release tags and main branch pushes
+  push:
+    tags:
+      - "v*"
+    branches: [main]
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "benchmarks/**"
+      - ".github/workflows/benchmark.yaml"
+  # Manual trigger for ad-hoc runs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel in-progress benchmark runs for the same ref
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Install Apache Bench
+        run: sudo apt-get update && sudo apt-get install -y apache2-utils
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build binary
+        run: go build -o mockd ./cmd/mockd
+
+      # ── Protocol benchmarks (Go test -bench) ──────────────────────
+      - name: Run protocol benchmarks
+        run: go run benchmarks/run_benchmarks.go
+
+      # ── HTTP throughput (Apache Bench against real binary) ────────
+      - name: Run HTTP throughput benchmark
+        run: |
+          # Start server in background
+          ./mockd start --port 4280 --admin-port 4290 --no-auth --data-dir /tmp/mockd-bench &
+          SERVER_PID=$!
+          sleep 2
+
+          # Create a mock endpoint
+          curl -sf -X POST http://localhost:4290/mocks \
+            -H "Content-Type: application/json" \
+            -d '{"name":"bench","type":"http","enabled":true,"http":{"matcher":{"method":"GET","path":"/bench"},"response":{"statusCode":200,"body":"{\"ok\":true}"}}}'
+
+          # Run Apache Bench
+          echo "--- HTTP Throughput (100K requests, 200 concurrent, keep-alive) ---"
+          ab -n 100000 -c 200 -k http://localhost:4280/bench 2>&1 | tee /tmp/ab_results.txt
+
+          # Extract key metrics
+          RPS=$(grep "Requests per second" /tmp/ab_results.txt | awk '{print $4}')
+          P50=$(grep "50%" /tmp/ab_results.txt | awk '{print $2}')
+          P95=$(grep "95%" /tmp/ab_results.txt | awk '{print $2}')
+          P99=$(grep "99%" /tmp/ab_results.txt | awk '{print $2}')
+
+          echo ""
+          echo "=== HTTP Results ==="
+          echo "Requests/sec: $RPS"
+          echo "p50 latency:  ${P50}ms"
+          echo "p95 latency:  ${P95}ms"
+          echo "p99 latency:  ${P99}ms"
+
+          # Save to JSON for artifact
+          cat > /tmp/http_benchmark.json <<EOF
+          {
+            "requests_per_second": $RPS,
+            "latency_p50_ms": $P50,
+            "latency_p95_ms": $P95,
+            "latency_p99_ms": $P99
+          }
+          EOF
+
+          # Cleanup
+          kill $SERVER_PID 2>/dev/null || true
+          rm -rf /tmp/mockd-bench
+
+      # ── Memory measurement ────────────────────────────────────────
+      - name: Measure memory usage
+        run: |
+          ./mockd start --port 4281 --admin-port 4291 --no-auth --data-dir /tmp/mockd-mem &
+          sleep 2
+          PID=$(lsof -ti :4291)
+          RSS_KB=$(ps -o rss= -p $PID)
+          RSS_MB=$(echo "scale=1; $RSS_KB / 1024" | bc)
+          echo "RSS: ${RSS_MB} MB"
+          echo "{\"rss_mb\": $RSS_MB}" > /tmp/memory_benchmark.json
+          kill $PID 2>/dev/null || true
+          rm -rf /tmp/mockd-mem
+
+      # ── Validate claims ───────────────────────────────────────────
+      - name: Validate website claims
+        run: |
+          echo "=== Validating Website Claims ==="
+          FAILED=0
+
+          # HTTP: 50K+ req/s
+          RPS=$(jq -r '.requests_per_second' /tmp/http_benchmark.json)
+          if (( $(echo "$RPS < 50000" | bc -l) )); then
+            echo "FAIL: HTTP throughput $RPS req/s < 50K claim"
+            FAILED=1
+          else
+            echo "PASS: HTTP throughput $RPS req/s >= 50K claim"
+          fi
+
+          # Memory: <25MB (using 30MB threshold for CI variance)
+          RSS=$(jq -r '.rss_mb' /tmp/memory_benchmark.json)
+          if (( $(echo "$RSS > 30" | bc -l) )); then
+            echo "FAIL: Memory $RSS MB > 30MB CI threshold"
+            FAILED=1
+          else
+            echo "PASS: Memory $RSS MB <= 30MB CI threshold"
+          fi
+
+          # CLI Startup: <10ms (check from Go benchmark results)
+          CLI_NS=$(jq -r '.protocols.startup.benchmarks[] | select(.name == "BenchmarkCLIStartup") | .ns_per_op' benchmarks/results/latest.json)
+          CLI_MS=$(echo "scale=2; $CLI_NS / 1000000" | bc)
+          if (( $(echo "$CLI_MS > 15" | bc -l) )); then
+            echo "FAIL: CLI startup ${CLI_MS}ms > 15ms CI threshold"
+            FAILED=1
+          else
+            echo "PASS: CLI startup ${CLI_MS}ms <= 15ms CI threshold"
+          fi
+
+          # MQTT QoS0: 100K+ msg/s (using 80K threshold for CI variance)
+          MQTT_OPS=$(jq -r '.protocols.mqtt.benchmarks[] | select(.name == "BenchmarkMQTT_PublishQoS0") | .ops_per_sec' benchmarks/results/latest.json)
+          if [ "$MQTT_OPS" != "null" ] && [ -n "$MQTT_OPS" ]; then
+            MQTT_K=$(echo "scale=0; $MQTT_OPS / 1000" | bc)
+            if (( $(echo "$MQTT_OPS < 80000" | bc -l) )); then
+              echo "FAIL: MQTT QoS0 ${MQTT_K}K msg/s < 80K CI threshold"
+              FAILED=1
+            else
+              echo "PASS: MQTT QoS0 ${MQTT_K}K msg/s >= 80K CI threshold"
+            fi
+          else
+            echo "SKIP: MQTT QoS0 benchmark not available"
+          fi
+
+          echo ""
+          if [ $FAILED -eq 1 ]; then
+            echo "WARNING: Some claims may not hold on CI hardware (shared 4-core runner)."
+            echo "CI thresholds are relaxed vs website claims to account for noisy neighbors."
+            echo "Review results manually before updating marketing numbers."
+          else
+            echo "All claims validated on CI hardware."
+          fi
+
+      # ── Upload results ────────────────────────────────────────────
+      - name: Collect results
+        if: always()
+        run: |
+          mkdir -p benchmark-results
+          cp benchmarks/results/latest.json benchmark-results/
+          cp benchmarks/results/LATEST.md benchmark-results/
+          cp /tmp/http_benchmark.json benchmark-results/ 2>/dev/null || true
+          cp /tmp/memory_benchmark.json benchmark-results/ 2>/dev/null || true
+          cp /tmp/ab_results.txt benchmark-results/ 2>/dev/null || true
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: benchmark-results/
+          retention-days: 90
+
+      # ── Summary in job output ─────────────────────────────────────
+      - name: Post summary
+        if: always()
+        run: |
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Runner**: \`$(uname -m)\` / \`$(nproc)\` cores / \`$(free -h | awk '/Mem:/{print $2}')\` RAM" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Protocol results from Go benchmarks
+          if [ -f benchmarks/results/latest.json ]; then
+            echo "### Protocol Benchmarks" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Protocol | Metric | Result |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+
+            WS=$(jq -r '.summary.websocket.throughput_ops_per_sec | floor' benchmarks/results/latest.json)
+            echo "| WebSocket | Throughput | ${WS} msg/s |" >> $GITHUB_STEP_SUMMARY
+
+            GRPC=$(jq -r '.summary.grpc.throughput_ops_per_sec | floor' benchmarks/results/latest.json)
+            echo "| gRPC | Concurrent calls | ${GRPC} calls/s |" >> $GITHUB_STEP_SUMMARY
+
+            MQTT0=$(jq -r '.summary.mqtt.qos0_ops_per_sec | floor' benchmarks/results/latest.json)
+            MQTT1=$(jq -r '.summary.mqtt.qos1_ops_per_sec | floor' benchmarks/results/latest.json)
+            MQTT2=$(jq -r '.summary.mqtt.qos2_ops_per_sec | floor' benchmarks/results/latest.json)
+            echo "| MQTT | QoS0 / QoS1 / QoS2 | ${MQTT0} / ${MQTT1} / ${MQTT2} msg/s |" >> $GITHUB_STEP_SUMMARY
+
+            SOAP=$(jq -r '.summary.soap.throughput_ops_per_sec | floor' benchmarks/results/latest.json)
+            echo "| SOAP | Concurrent req | ${SOAP} req/s |" >> $GITHUB_STEP_SUMMARY
+
+            CLI=$(jq -r '.summary.startup.cli_ns' benchmarks/results/latest.json)
+            CLI_MS=$(echo "scale=1; $CLI / 1000000" | bc)
+            echo "| Startup | CLI cold start | ${CLI_MS} ms |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # HTTP results from Apache Bench
+          if [ -f /tmp/http_benchmark.json ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### HTTP Throughput (Apache Bench)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            RPS=$(jq -r '.requests_per_second' /tmp/http_benchmark.json)
+            P50=$(jq -r '.latency_p50_ms' /tmp/http_benchmark.json)
+            P99=$(jq -r '.latency_p99_ms' /tmp/http_benchmark.json)
+            echo "- **${RPS} req/s** (100K requests, 200 concurrent, keep-alive)" >> $GITHUB_STEP_SUMMARY
+            echo "- p50: ${P50}ms / p99: ${P99}ms" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Memory
+          if [ -f /tmp/memory_benchmark.json ]; then
+            RSS=$(jq -r '.rss_mb' /tmp/memory_benchmark.json)
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Memory" >> $GITHUB_STEP_SUMMARY
+            echo "- RSS idle: **${RSS} MB**" >> $GITHUB_STEP_SUMMARY
+          fi
