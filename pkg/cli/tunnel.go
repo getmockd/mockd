@@ -341,13 +341,12 @@ Examples:
 	}
 
 	// Build enable request
-	reqBody := map[string]any{
-		"expose": map[string]any{
-			"mode": *mode,
-		},
+	expose := map[string]any{
+		"mode": *mode,
 	}
-
-	expose := reqBody["expose"].(map[string]any)
+	reqBody := map[string]any{
+		"expose": expose,
+	}
 	if *workspaces != "" {
 		expose["workspaces"] = splitCSV(*workspaces)
 	}
@@ -690,12 +689,12 @@ Examples:
 		return err
 	}
 
-	reqBody := map[string]any{
-		"expose": map[string]any{
-			"mode": *mode,
-		},
+	expose := map[string]any{
+		"mode": *mode,
 	}
-	expose := reqBody["expose"].(map[string]any)
+	reqBody := map[string]any{
+		"expose": expose,
+	}
 	if *workspaces != "" {
 		expose["workspaces"] = splitCSV(*workspaces)
 	}
@@ -864,10 +863,10 @@ func resolveEngineID(client *adminClient, engineID string) (string, error) {
 		totalEngines++ // assume local exists since we're talking to admin
 	}
 
-	switch {
-	case totalEngines == 0:
+	switch totalEngines {
+	case 0:
 		return "", fmt.Errorf("no engines registered. Start an engine first: mockd up")
-	case totalEngines == 1:
+	case 1:
 		if len(result.Engines) > 0 {
 			return result.Engines[0].ID, nil
 		}

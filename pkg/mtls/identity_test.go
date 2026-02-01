@@ -97,6 +97,7 @@ func TestExtractIdentity(t *testing.T) {
 
 		if identity == nil {
 			t.Fatal("expected identity, got nil")
+			return
 		}
 
 		if identity.CommonName != "test-client" {
@@ -209,6 +210,7 @@ func TestFromContext(t *testing.T) {
 
 		if retrieved == nil {
 			t.Fatal("expected identity, got nil")
+			return
 		}
 
 		if retrieved.CommonName != "test-client" {
@@ -279,6 +281,7 @@ func TestExtractFromRequest(t *testing.T) {
 
 		if identity == nil {
 			t.Fatal("expected identity, got nil")
+			return
 		}
 
 		if identity.CommonName != "test-client" {
@@ -329,6 +332,7 @@ func TestExtractFromRequest(t *testing.T) {
 
 		if identity == nil {
 			t.Fatal("expected identity, got nil")
+			return
 		}
 
 		if identity.Verified {

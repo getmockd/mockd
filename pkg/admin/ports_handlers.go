@@ -58,12 +58,12 @@ func (a *AdminAPI) handleListPorts(w http.ResponseWriter, r *http.Request) {
 
 		if err == nil {
 			// Helper to create port info with engine metadata
-			makePortInfo := func(port int, protocol, component, portStatus string, tls bool) PortInfo {
+			makePortInfo := func(port int, protocol, component string, tls bool) PortInfo {
 				p := PortInfo{
 					Port:      port,
 					Protocol:  protocol,
 					Component: component,
-					Status:    portStatus,
+					Status:    "running",
 					TLS:       tls,
 				}
 				if verbose {
@@ -75,22 +75,22 @@ func (a *AdminAPI) handleListPorts(w http.ResponseWriter, r *http.Request) {
 
 			// Check for HTTP protocol handler
 			if httpStatus, ok := status.Protocols["http"]; ok && httpStatus.Enabled && httpStatus.Port > 0 {
-				ports = append(ports, makePortInfo(httpStatus.Port, "HTTP", "Mock Engine", "running", false))
+				ports = append(ports, makePortInfo(httpStatus.Port, "HTTP", "Mock Engine", false))
 			}
 
 			// Check for HTTPS protocol handler
 			if httpsStatus, ok := status.Protocols["https"]; ok && httpsStatus.Enabled && httpsStatus.Port > 0 {
-				ports = append(ports, makePortInfo(httpsStatus.Port, "HTTPS", "Mock Engine", "running", true))
+				ports = append(ports, makePortInfo(httpsStatus.Port, "HTTPS", "Mock Engine", true))
 			}
 
 			// Check for gRPC handler
 			if grpcStatus, ok := status.Protocols["grpc"]; ok && grpcStatus.Enabled && grpcStatus.Port > 0 {
-				ports = append(ports, makePortInfo(grpcStatus.Port, "gRPC", "gRPC Server", "running", false))
+				ports = append(ports, makePortInfo(grpcStatus.Port, "gRPC", "gRPC Server", false))
 			}
 
 			// Check for MQTT handler
 			if mqttStatus, ok := status.Protocols["mqtt"]; ok && mqttStatus.Enabled && mqttStatus.Port > 0 {
-				ports = append(ports, makePortInfo(mqttStatus.Port, "MQTT", "MQTT Broker", "running", false))
+				ports = append(ports, makePortInfo(mqttStatus.Port, "MQTT", "MQTT Broker", false))
 			}
 		}
 

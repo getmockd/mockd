@@ -16,6 +16,7 @@ func TestRateLimiter_New(t *testing.T) {
 	limiter := NewRateLimiter(config)
 	if limiter == nil {
 		t.Fatal("expected limiter to be created")
+		return
 	}
 
 	if limiter.maxTokens != 5 {

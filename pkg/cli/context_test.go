@@ -210,6 +210,7 @@ func TestRunContext_Add(t *testing.T) {
 	cloudCtx := loaded.Contexts["cloud"]
 	if cloudCtx == nil {
 		t.Fatal("cloud context not found")
+		return
 	}
 	if cloudCtx.AuthToken != "secret-token" {
 		t.Errorf("AuthToken = %q, want %q", cloudCtx.AuthToken, "secret-token")

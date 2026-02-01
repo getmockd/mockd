@@ -257,7 +257,7 @@ func TestSOAP_US1_BasicSOAP11Request(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Send SOAP 1.1 request
-	resp, body := soapRequest(t, bundle.BaseURL, "http://example.com/GetUser",
+	resp, body := soapRequest(t, bundle.BaseURL, "http://example.com/GetUser", //nolint:bodyclose // helper closes body
 		`<GetUser xmlns="http://example.com/"><userId>123</userId></GetUser>`)
 
 	// Verify response
@@ -291,7 +291,7 @@ func TestSOAP_US1_SOAP11WithoutSOAPAction(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Send SOAP 1.1 request without SOAPAction header
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser xmlns="http://example.com/"><userId>456</userId></GetUser>`)
 
 	// Should match by operation element name
@@ -321,7 +321,7 @@ func TestSOAP_US2_BasicSOAP12Request(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Send SOAP 1.2 request
-	resp, body := soap12Request(t, bundle.BaseURL, "http://example.com/GetUser",
+	resp, body := soap12Request(t, bundle.BaseURL, "http://example.com/GetUser", //nolint:bodyclose // helper closes body
 		`<GetUser xmlns="http://example.com/"><userId>789</userId></GetUser>`)
 
 	// Verify response
@@ -354,7 +354,7 @@ func TestSOAP_US2_SOAP12ActionInContentType(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// SOAP 1.2 action is in Content-Type header
-	resp, body := soap12Request(t, bundle.BaseURL, "http://example.com/CreateUser",
+	resp, body := soap12Request(t, bundle.BaseURL, "http://example.com/CreateUser", //nolint:bodyclose // helper closes body
 		`<CreateUser xmlns="http://example.com/"><name>New User</name><email>new@example.com</email></CreateUser>`)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -475,14 +475,14 @@ func TestSOAP_US4_OperationMatchingBySOAPAction(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Test GetUser operation
-	resp1, body1 := soapRequest(t, bundle.BaseURL, "http://example.com/GetUser",
+	resp1, body1 := soapRequest(t, bundle.BaseURL, "http://example.com/GetUser", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>123</userId></GetUser>`)
 	assert.Equal(t, http.StatusOK, resp1.StatusCode)
 	assert.Contains(t, string(body1), "<type>get</type>")
 	assert.Contains(t, string(body1), "<id>user-123</id>")
 
 	// Test CreateUser operation
-	resp2, body2 := soapRequest(t, bundle.BaseURL, "http://example.com/CreateUser",
+	resp2, body2 := soapRequest(t, bundle.BaseURL, "http://example.com/CreateUser", //nolint:bodyclose // helper closes body
 		`<CreateUser><name>New User</name></CreateUser>`)
 	assert.Equal(t, http.StatusOK, resp2.StatusCode)
 	assert.Contains(t, string(body2), "<type>create</type>")
@@ -508,12 +508,12 @@ func TestSOAP_US4_OperationMatchingByElementName(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Match by element name
-	resp1, body1 := soapRequest(t, bundle.BaseURL, "",
+	resp1, body1 := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>123</userId></GetUser>`)
 	assert.Equal(t, http.StatusOK, resp1.StatusCode)
 	assert.Contains(t, string(body1), "<source>element-match</source>")
 
-	resp2, body2 := soapRequest(t, bundle.BaseURL, "",
+	resp2, body2 := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<DeleteUser><userId>456</userId></DeleteUser>`)
 	assert.Equal(t, http.StatusOK, resp2.StatusCode)
 	assert.Contains(t, string(body2), "<deleted>true</deleted>")
@@ -535,7 +535,7 @@ func TestSOAP_US4_UnknownOperation(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Request unknown operation
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<UnknownOperation><data>test</data></UnknownOperation>`)
 
 	// Should return SOAP Fault
@@ -569,7 +569,7 @@ func TestSOAP_US5_XPathMatching(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Request with matching userId
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>123</userId></GetUser>`)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -598,7 +598,7 @@ func TestSOAP_US5_XPathNoMatch(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Request with non-matching userId - should return unknown operation fault
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>456</userId></GetUser>`)
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
@@ -628,7 +628,7 @@ func TestSOAP_US5_MultipleXPathConditions(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Both conditions must match
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>123</userId><role>admin</role></GetUser>`)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -658,7 +658,7 @@ func TestSOAP_US6_SOAPFault11(t *testing.T) {
 
 	bundle := setupSOAPServer(t, cfg)
 
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>nonexistent</userId></GetUser>`)
 
 	// Verify fault response
@@ -689,7 +689,7 @@ func TestSOAP_US6_SOAPFault12(t *testing.T) {
 
 	bundle := setupSOAPServer(t, cfg)
 
-	resp, body := soap12Request(t, bundle.BaseURL, "",
+	resp, body := soap12Request(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>invalid</userId></GetUser>`)
 
 	// Verify fault response
@@ -721,13 +721,13 @@ func TestSOAP_US6_ServerFault(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// SOAP 1.1 Server fault
-	resp1, body1 := soapRequest(t, bundle.BaseURL, "",
+	resp1, body1 := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>123</userId></GetUser>`)
 	assert.Equal(t, http.StatusInternalServerError, resp1.StatusCode)
 	assert.Contains(t, string(body1), "<faultcode>soap:Server</faultcode>")
 
 	// SOAP 1.2 Server -> Receiver fault
-	resp2, body2 := soap12Request(t, bundle.BaseURL, "",
+	resp2, body2 := soap12Request(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>123</userId></GetUser>`)
 	assert.Equal(t, http.StatusInternalServerError, resp2.StatusCode)
 	assert.Contains(t, string(body2), "soap:Receiver")
@@ -753,7 +753,7 @@ func TestSOAP_US7_NamespaceInRequest(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Request with namespace prefix
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<tns:GetUser xmlns:tns="http://example.com/userservice"><tns:userId>123</tns:userId></tns:GetUser>`)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -778,7 +778,7 @@ func TestSOAP_US7_MultipleNamespaces(t *testing.T) {
 
 	bundle := setupSOAPServer(t, cfg)
 
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser xmlns="http://example.com/" xmlns:custom="http://custom.example.com/">
 			<userId>123</userId>
 			<custom:metadata>test</custom:metadata>
@@ -810,7 +810,7 @@ func TestSOAP_US8_XPathTemplating(t *testing.T) {
 
 	bundle := setupSOAPServer(t, cfg)
 
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>ABC123</userId><name>Test User</name></GetUser>`)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -836,7 +836,7 @@ func TestSOAP_US8_XPathTemplatingNestedElements(t *testing.T) {
 
 	bundle := setupSOAPServer(t, cfg)
 
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<CreateUser>
 			<user>
 				<id>user-001</id>
@@ -867,7 +867,7 @@ func TestSOAP_US8_XPathMissingValue(t *testing.T) {
 
 	bundle := setupSOAPServer(t, cfg)
 
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>ABC123</userId></GetUser>`)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -897,7 +897,7 @@ func TestSOAP_US9_ResponseDelay(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	start := time.Now()
-	resp, body := soapRequest(t, bundle.BaseURL, "",
+	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<SlowOperation><data>test</data></SlowOperation>`)
 	elapsed := time.Since(start)
 
@@ -922,7 +922,7 @@ func TestSOAP_US9_NoDelay(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	start := time.Now()
-	resp, _ := soapRequest(t, bundle.BaseURL, "",
+	resp, _ := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<FastOperation><data>test</data></FastOperation>`)
 	elapsed := time.Since(start)
 
@@ -947,7 +947,7 @@ func TestSOAP_US9_DelayInSeconds(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	start := time.Now()
-	resp, _ := soapRequest(t, bundle.BaseURL, "",
+	resp, _ := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<SlowOp/>`)
 	elapsed := time.Since(start)
 
@@ -985,21 +985,21 @@ func TestSOAP_US10_MultipleOperations(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Test GetUser
-	resp1, body1 := soapRequest(t, bundle.BaseURL, "http://example.com/GetUser",
+	resp1, body1 := soapRequest(t, bundle.BaseURL, "http://example.com/GetUser", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>user-001</userId></GetUser>`)
 	assert.Equal(t, http.StatusOK, resp1.StatusCode)
 	assert.Contains(t, string(body1), "<operation>get</operation>")
 	assert.Contains(t, string(body1), "<id>user-001</id>")
 
 	// Test CreateUser
-	resp2, body2 := soapRequest(t, bundle.BaseURL, "http://example.com/CreateUser",
+	resp2, body2 := soapRequest(t, bundle.BaseURL, "http://example.com/CreateUser", //nolint:bodyclose // helper closes body
 		`<CreateUser><name>New User</name><email>new@example.com</email></CreateUser>`)
 	assert.Equal(t, http.StatusOK, resp2.StatusCode)
 	assert.Contains(t, string(body2), "<operation>create</operation>")
 	assert.Contains(t, string(body2), "<userId>new-user</userId>")
 
 	// Test DeleteUser
-	resp3, body3 := soapRequest(t, bundle.BaseURL, "http://example.com/DeleteUser",
+	resp3, body3 := soapRequest(t, bundle.BaseURL, "http://example.com/DeleteUser", //nolint:bodyclose // helper closes body
 		`<DeleteUser><userId>user-001</userId></DeleteUser>`)
 	assert.Equal(t, http.StatusOK, resp3.StatusCode)
 	assert.Contains(t, string(body3), "<operation>delete</operation>")
@@ -1113,7 +1113,7 @@ func TestSOAP_EmptyBody(t *testing.T) {
 	bundle := setupSOAPServer(t, cfg)
 
 	// Send envelope with empty body
-	resp, body := soapRequest(t, bundle.BaseURL, "", "")
+	resp, body := soapRequest(t, bundle.BaseURL, "", "") //nolint:bodyclose // helper closes body
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	assert.Contains(t, string(body), "Fault")
@@ -1139,7 +1139,7 @@ func TestSOAP_ConcurrentRequests(t *testing.T) {
 
 	for i := 0; i < numRequests; i++ {
 		go func(reqNum int) {
-			resp, _ := soapRequest(t, bundle.BaseURL, "",
+			resp, _ := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 				fmt.Sprintf(`<GetUser><userId>%d</userId></GetUser>`, reqNum))
 			results <- resp.StatusCode
 		}(i)

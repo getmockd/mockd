@@ -125,6 +125,7 @@ func TestEventBuffer_GetEvent(t *testing.T) {
 	event := buffer.GetEvent("b")
 	if event == nil {
 		t.Fatal("expected to find event 'b'")
+		return
 	}
 	if event.Event.Data != "beta" {
 		t.Errorf("expected data 'beta', got %v", event.Event.Data)

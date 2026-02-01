@@ -41,6 +41,7 @@ func TestRecordingsConvertToMocks(t *testing.T) {
 	// Verify mock structure
 	if mock == nil {
 		t.Fatal("Expected mock to be non-nil")
+		return
 	}
 
 	if mock.HTTP == nil || mock.HTTP.Matcher == nil {
@@ -100,6 +101,7 @@ func TestRecordingSessionManagement(t *testing.T) {
 	session1 := store.CreateSession("session-1", nil)
 	if session1 == nil {
 		t.Fatal("Expected session to be created")
+		return
 	}
 
 	if session1.Name != "session-1" {
@@ -160,6 +162,7 @@ func TestRecordingSessionManagement(t *testing.T) {
 	retrieved := store.GetSession(session1.ID)
 	if retrieved == nil {
 		t.Fatalf("Failed to get session: not found")
+		return
 	}
 	if retrieved.Name != "session-1" {
 		t.Errorf("Expected name 'session-1', got '%s'", retrieved.Name)
@@ -234,6 +237,7 @@ func TestRecordingStoreOperations(t *testing.T) {
 	retrievedRec := store.GetRecording(rec1.ID)
 	if retrievedRec == nil {
 		t.Fatalf("Failed to get recording: not found")
+		return
 	}
 	if retrievedRec.Request.Path != "/api/users" {
 		t.Errorf("Expected path /api/users, got %s", retrievedRec.Request.Path)

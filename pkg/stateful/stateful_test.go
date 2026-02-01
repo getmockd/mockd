@@ -14,6 +14,7 @@ func TestNewStateStore(t *testing.T) {
 	store := NewStateStore()
 	if store == nil {
 		t.Fatal("NewStateStore returned nil")
+		return
 	}
 	if store.resources == nil {
 		t.Error("resources map not initialized")
@@ -406,6 +407,7 @@ func TestStatefulResource_CRUD(t *testing.T) {
 	got := resource.Get(item.ID)
 	if got == nil {
 		t.Fatal("Get returned nil for existing item")
+		return
 	}
 	if got.Data["name"] != "John Doe" {
 		t.Errorf("name = %v, want %q", got.Data["name"], "John Doe")
@@ -1234,7 +1236,8 @@ func TestResource_EdgeCase_EmptyResource(t *testing.T) {
 	// List should return response with empty data, not nil
 	response := resource.List(nil)
 	if response == nil {
-		t.Error("List should return response, not nil")
+		t.Fatal("List should return response, not nil")
+		return
 	}
 	if len(response.Data) != 0 {
 		t.Errorf("expected 0 items, got %d", len(response.Data))
@@ -1286,7 +1289,8 @@ func TestResource_EdgeCase_NegativeOffset(t *testing.T) {
 	response := resource.List(filter)
 	// Implementation should handle gracefully
 	if response == nil {
-		t.Error("List with negative offset should not return nil")
+		t.Fatal("List with negative offset should not return nil")
+		return
 	}
 	// Should still return items (treating -5 as 0 or clamping)
 	if len(response.Data) == 0 {
@@ -1332,7 +1336,8 @@ func TestResource_EdgeCase_LargeOffset(t *testing.T) {
 	filter := &QueryFilter{Offset: 1000, Limit: 10}
 	response := resource.List(filter)
 	if response == nil {
-		t.Error("List with large offset should return response, not nil")
+		t.Fatal("List with large offset should return response, not nil")
+		return
 	}
 	if len(response.Data) != 0 {
 		t.Errorf("expected 0 items with large offset, got %d", len(response.Data))
@@ -1408,6 +1413,7 @@ func TestResource_EdgeCase_EmptyUpdate(t *testing.T) {
 	item := resource.Get("1")
 	if item == nil {
 		t.Fatal("item should still exist")
+		return
 	}
 
 	// ID should be preserved (system field)

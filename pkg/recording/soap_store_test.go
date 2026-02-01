@@ -10,6 +10,7 @@ func TestNewSOAPStore(t *testing.T) {
 		store := NewSOAPStore(100)
 		if store == nil {
 			t.Fatal("Expected store to be created")
+			return
 		}
 		if store.maxSize != 100 {
 			t.Errorf("Expected maxSize 100, got %d", store.maxSize)
@@ -134,6 +135,7 @@ func TestSOAPStoreGet(t *testing.T) {
 		got := store.Get(rec.ID)
 		if got == nil {
 			t.Fatal("Expected to get recording")
+			return
 		}
 		if got.ID != rec.ID {
 			t.Errorf("Expected ID '%s', got '%s'", rec.ID, got.ID)

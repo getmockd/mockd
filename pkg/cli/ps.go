@@ -103,7 +103,7 @@ func printPsTable(pidInfo *config.PIDFile, running bool) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tTYPE\tPORT\tSTATUS")
+	_, _ = fmt.Fprintln(w, "NAME\tTYPE\tPORT\tSTATUS")
 
 	for _, svc := range pidInfo.Services {
 		svcStatus := "running"
@@ -112,7 +112,7 @@ func printPsTable(pidInfo *config.PIDFile, running bool) error {
 		} else if svc.PID > 0 && !processExists(svc.PID) {
 			svcStatus = "stopped"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", svc.Name, svc.Type, svc.Port, svcStatus)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", svc.Name, svc.Type, svc.Port, svcStatus)
 	}
 
 	return w.Flush()

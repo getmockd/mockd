@@ -257,6 +257,7 @@ func BenchmarkWS_MessageThroughput(b *testing.B) {
 			resp.Body.Close()
 		}
 		defer conn.Close(ws.StatusNormalClosure, "")
+		conn.SetReadLimit(128 * 1024) // Allow reading 64KB echo responses
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {

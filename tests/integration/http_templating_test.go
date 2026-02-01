@@ -1,4 +1,4 @@
-package integration
+package integration //nolint:bodyclose // httpGet/httpPost/httpGetWithHeaders helpers close the body internally
 
 import (
 	"bytes"
@@ -158,7 +158,7 @@ func TestHTTPTemplating_ComputedValues(t *testing.T) {
 		`{"id": "{{uuid}}", "ts": "{{timestamp}}", "now": "{{now}}"}`, 0)
 
 	// Make HTTP request
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/computed")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/computed") //nolint:bodyclose // body is read and closed inside httpGet
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Parse response
@@ -195,7 +195,7 @@ func TestHTTPTemplating_ComputedValues_UniquePerRequest(t *testing.T) {
 	// Make multiple requests
 	var uuids []string
 	for i := 0; i < 5; i++ {
-		_, body := httpGet(t, bundle.HTTPPort, "/api/uuid")
+		_, body := httpGet(t, bundle.HTTPPort, "/api/uuid") //nolint:bodyclose // httpGet reads and closes body
 		var result map[string]interface{}
 		err := json.Unmarshal(body, &result)
 		require.NoError(t, err)
@@ -222,7 +222,7 @@ func TestHTTPTemplating_RequestDataAccess(t *testing.T) {
 		`{"echo": "{{request.body.name}}", "method": "{{request.method}}", "path": "{{request.path}}"}`, 0)
 
 	// POST with JSON body
-	resp, body := httpPost(t, bundle.HTTPPort, "/api/users", map[string]interface{}{
+	resp, body := httpPost(t, bundle.HTTPPort, "/api/users", map[string]interface{}{ //nolint:bodyclose // httpPost reads and closes body
 		"name": "John",
 	})
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -265,7 +265,7 @@ func TestHTTPTemplating_RequestRawBody(t *testing.T) {
 	require.NoError(t, err)
 
 	// POST with JSON body
-	_, body := httpPost(t, bundle.HTTPPort, "/api/raw", map[string]interface{}{
+	_, body := httpPost(t, bundle.HTTPPort, "/api/raw", map[string]interface{}{ //nolint:bodyclose // httpPost reads and closes body
 		"test": "value",
 	})
 
@@ -288,7 +288,7 @@ func TestHTTPTemplating_QueryParameters(t *testing.T) {
 		`{"filter": "{{request.query.status}}", "page": "{{request.query.page}}"}`, 0)
 
 	// GET with query parameters
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/items?status=active&page=2")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/items?status=active&page=2") //nolint:bodyclose // httpGet reads and closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Parse and verify
@@ -308,7 +308,7 @@ func TestHTTPTemplating_QueryParameters_Missing(t *testing.T) {
 		`{"q": "{{request.query.q}}", "limit": "{{request.query.limit}}"}`, 0)
 
 	// GET with only one query parameter
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/search?q=test")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/search?q=test") //nolint:bodyclose // httpGet reads and closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Parse and verify
@@ -332,7 +332,7 @@ func TestHTTPTemplating_Headers(t *testing.T) {
 		`{"auth": "{{request.header.Authorization}}", "agent": "{{request.header.User-Agent}}"}`, 0)
 
 	// GET with custom headers
-	resp, body := httpGetWithHeaders(t, bundle.HTTPPort, "/api/headers", map[string]string{
+	resp, body := httpGetWithHeaders(t, bundle.HTTPPort, "/api/headers", map[string]string{ //nolint:bodyclose // httpGetWithHeaders reads and closes body
 		"Authorization": "Bearer xyz123",
 		"User-Agent":    "TestClient/1.0",
 	})
@@ -355,7 +355,7 @@ func TestHTTPTemplating_Headers_CaseInsensitive(t *testing.T) {
 		`{"contentType": "{{request.header.Content-Type}}"}`, 0)
 
 	// GET with header in different case
-	resp, body := httpGetWithHeaders(t, bundle.HTTPPort, "/api/headers-case", map[string]string{
+	resp, body := httpGetWithHeaders(t, bundle.HTTPPort, "/api/headers-case", map[string]string{ //nolint:bodyclose // helper closes body
 		"content-type": "application/xml",
 	})
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -380,7 +380,7 @@ func TestHTTPTemplating_PathParameters(t *testing.T) {
 		`{"user": "{{request.pathPattern.userId}}", "order": "{{request.pathPattern.orderId}}"}`, 0)
 
 	// GET with path parameters
-	resp, body := httpGet(t, bundle.HTTPPort, "/users/123/orders/456")
+	resp, body := httpGet(t, bundle.HTTPPort, "/users/123/orders/456") //nolint:bodyclose // helper closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Parse and verify
@@ -400,7 +400,7 @@ func TestHTTPTemplating_PathParameters_Mixed(t *testing.T) {
 		`{"productId": "{{request.pathPattern.productId}}", "path": "{{request.path}}"}`, 0)
 
 	// GET with alphanumeric product ID
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/v1/products/abc-123-xyz/reviews")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/v1/products/abc-123-xyz/reviews") //nolint:bodyclose // helper closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Parse and verify
@@ -425,10 +425,9 @@ func TestHTTPTemplating_RandomValues(t *testing.T) {
 
 	// Make multiple requests to verify randomness
 	var randomValues []string
-	var randomInts []int
 
 	for i := 0; i < 5; i++ {
-		resp, body := httpGet(t, bundle.HTTPPort, "/api/random")
+		resp, body := httpGet(t, bundle.HTTPPort, "/api/random") //nolint:bodyclose // helper closes body
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var result map[string]interface{}
@@ -444,7 +443,6 @@ func TestHTTPTemplating_RandomValues(t *testing.T) {
 		require.NoError(t, err, "randomInt should be parseable")
 		assert.GreaterOrEqual(t, randomInt, 1, "randomInt should be >= 1")
 		assert.LessOrEqual(t, randomInt, 100, "randomInt should be <= 100")
-		randomInts = append(randomInts, randomInt)
 
 		// Verify randomFloat is a valid float
 		randomFloatStr := result["randomFloat"].(string)
@@ -471,7 +469,7 @@ func TestHTTPTemplating_RandomInt_EdgeCases(t *testing.T) {
 	createHTTPMock(t, bundle, "random-same-test", "GET", "/api/random-same", "",
 		`{"value": "{{random.int 42 42}}"}`, 0)
 
-	_, body := httpGet(t, bundle.HTTPPort, "/api/random-same")
+	_, body := httpGet(t, bundle.HTTPPort, "/api/random-same") //nolint:bodyclose // helper closes body
 	var result map[string]interface{}
 	err := json.Unmarshal(body, &result)
 	require.NoError(t, err)
@@ -491,7 +489,7 @@ func TestHTTPTemplating_StringFunctions(t *testing.T) {
 		`{"upper": "{{upper request.body.name}}", "lower": "{{lower request.body.name}}"}`, 0)
 
 	// POST with mixed case name
-	resp, body := httpPost(t, bundle.HTTPPort, "/api/strings", map[string]interface{}{
+	resp, body := httpPost(t, bundle.HTTPPort, "/api/strings", map[string]interface{}{ //nolint:bodyclose // helper closes body
 		"name": "JoHn DoE",
 	})
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -513,7 +511,7 @@ func TestHTTPTemplating_StringFunctions_WithSpecialChars(t *testing.T) {
 		`{"upper": "{{upper request.body.text}}"}`, 0)
 
 	// POST with special characters
-	resp, body := httpPost(t, bundle.HTTPPort, "/api/strings-special", map[string]interface{}{
+	resp, body := httpPost(t, bundle.HTTPPort, "/api/strings-special", map[string]interface{}{ //nolint:bodyclose // helper closes body
 		"text": "hello123!@#",
 	})
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -538,7 +536,7 @@ func TestHTTPTemplating_DefaultValues_WithValue(t *testing.T) {
 		`{"name": "{{default request.body.name 'Anonymous'}}"}`, 0)
 
 	// POST with name provided
-	resp, body := httpPost(t, bundle.HTTPPort, "/api/default-test", map[string]interface{}{
+	resp, body := httpPost(t, bundle.HTTPPort, "/api/default-test", map[string]interface{}{ //nolint:bodyclose // helper closes body
 		"name": "Alice",
 	})
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -559,7 +557,7 @@ func TestHTTPTemplating_DefaultValues_WithoutValue(t *testing.T) {
 		`{"name": "{{default request.body.name 'Anonymous'}}"}`, 0)
 
 	// POST with empty body
-	resp, body := httpPost(t, bundle.HTTPPort, "/api/default-empty", map[string]interface{}{})
+	resp, body := httpPost(t, bundle.HTTPPort, "/api/default-empty", map[string]interface{}{}) //nolint:bodyclose // helper closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Parse and verify
@@ -578,7 +576,7 @@ func TestHTTPTemplating_DefaultValues_EmptyString(t *testing.T) {
 		`{"name": "{{default request.body.name 'Guest'}}"}`, 0)
 
 	// POST with empty string name
-	resp, body := httpPost(t, bundle.HTTPPort, "/api/default-empty-str", map[string]interface{}{
+	resp, body := httpPost(t, bundle.HTTPPort, "/api/default-empty-str", map[string]interface{}{ //nolint:bodyclose // helper closes body
 		"name": "",
 	})
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -603,7 +601,7 @@ func TestHTTPTemplating_NestedJSONBody(t *testing.T) {
 		`{"userName": "{{request.body.user.name}}", "city": "{{request.body.user.address.city}}"}`, 0)
 
 	// POST with nested JSON
-	resp, body := httpPost(t, bundle.HTTPPort, "/api/nested", map[string]interface{}{
+	resp, body := httpPost(t, bundle.HTTPPort, "/api/nested", map[string]interface{}{ //nolint:bodyclose // helper closes body
 		"user": map[string]interface{}{
 			"name": "Bob",
 			"address": map[string]interface{}{
@@ -631,7 +629,7 @@ func TestHTTPTemplating_NestedJSONBody_MissingPath(t *testing.T) {
 		`{"value": "{{request.body.does.not.exist}}"}`, 0)
 
 	// POST with some JSON
-	resp, body := httpPost(t, bundle.HTTPPort, "/api/nested-missing", map[string]interface{}{
+	resp, body := httpPost(t, bundle.HTTPPort, "/api/nested-missing", map[string]interface{}{ //nolint:bodyclose // helper closes body
 		"foo": "bar",
 	})
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -652,7 +650,7 @@ func TestHTTPTemplating_NestedJSONBody_DeepNesting(t *testing.T) {
 		`{"value": "{{request.body.level1.level2.level3.value}}"}`, 0)
 
 	// POST with deeply nested JSON
-	resp, body := httpPost(t, bundle.HTTPPort, "/api/deep", map[string]interface{}{
+	resp, body := httpPost(t, bundle.HTTPPort, "/api/deep", map[string]interface{}{ //nolint:bodyclose // helper closes body
 		"level1": map[string]interface{}{
 			"level2": map[string]interface{}{
 				"level3": map[string]interface{}{
@@ -684,7 +682,7 @@ func TestHTTPTemplating_ResponseDelay(t *testing.T) {
 
 	// Measure request time
 	start := time.Now()
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/delayed")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/delayed") //nolint:bodyclose // helper closes body
 	elapsed := time.Since(start)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -709,7 +707,7 @@ func TestHTTPTemplating_ResponseDelay_Zero(t *testing.T) {
 
 	// Measure request time
 	start := time.Now()
-	resp, _ := httpGet(t, bundle.HTTPPort, "/api/no-delay")
+	resp, _ := httpGet(t, bundle.HTTPPort, "/api/no-delay") //nolint:bodyclose // helper closes body
 	elapsed := time.Since(start)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -789,7 +787,7 @@ func TestHTTPTemplating_InvalidTemplate_GracefulDegradation(t *testing.T) {
 		`{"value": "{{request.body.unknown}}", "literal": "text"}`, 0)
 
 	// Request should still work, unknown expressions become empty
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/invalid")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/invalid") //nolint:bodyclose // helper closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Should have the literal text and empty for unknown
@@ -808,7 +806,7 @@ func TestHTTPTemplating_NoTemplates_PlainText(t *testing.T) {
 	createHTTPMock(t, bundle, "plain-text", "GET", "/api/plain", "",
 		`{"message": "Hello, World!"}`, 0)
 
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/plain")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/plain") //nolint:bodyclose // helper closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, `{"message": "Hello, World!"}`, string(body))
 }
@@ -820,7 +818,7 @@ func TestHTTPTemplating_EscapedBraces(t *testing.T) {
 	createHTTPMock(t, bundle, "braces-test", "GET", "/api/braces", "",
 		`{"template": "{{uuid}}", "literal": "{not_a_template}"}`, 0)
 
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/braces")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/braces") //nolint:bodyclose // helper closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var result map[string]interface{}
@@ -846,17 +844,17 @@ func TestHTTPTemplating_UUIDShort(t *testing.T) {
 	createHTTPMock(t, bundle, "uuid-short-test", "GET", "/api/uuid-short", "",
 		`{"shortId": "{{uuid.short}}"}`, 0)
 
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/uuid-short")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/uuid-short") //nolint:bodyclose // helper closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var result map[string]interface{}
 	err := json.Unmarshal(body, &result)
 	require.NoError(t, err)
 
-	shortId := result["shortId"].(string)
-	assert.Len(t, shortId, 8, "uuid.short should be 8 characters")
+	shortID := result["shortId"].(string)
+	assert.Len(t, shortID, 8, "uuid.short should be 8 characters")
 	// Should be hex characters
-	matched, _ := regexp.MatchString(`^[0-9a-f]{8}$`, shortId)
+	matched, _ := regexp.MatchString(`^[0-9a-f]{8}$`, shortID)
 	assert.True(t, matched, "uuid.short should be hex characters")
 }
 
@@ -871,7 +869,7 @@ func TestHTTPTemplating_RequestURL(t *testing.T) {
 	createHTTPMock(t, bundle, "url-test", "GET", "/api/url", "",
 		`{"url": "{{request.url}}"}`, 0)
 
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/url?foo=bar&baz=qux")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/url?foo=bar&baz=qux") //nolint:bodyclose // helper closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var result map[string]interface{}
@@ -896,7 +894,7 @@ func TestHTTPTemplating_MultiValueQueryParams(t *testing.T) {
 		`{"tag": "{{request.query.tag}}"}`, 0)
 
 	// GET with multiple values for same param
-	resp, body := httpGet(t, bundle.HTTPPort, "/api/multi-query?tag=first&tag=second&tag=third")
+	resp, body := httpGet(t, bundle.HTTPPort, "/api/multi-query?tag=first&tag=second&tag=third") //nolint:bodyclose // helper closes body
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var result map[string]interface{}

@@ -100,6 +100,7 @@ func TestStartRecording(t *testing.T) {
 
 		if session == nil {
 			t.Fatal("expected session, got nil")
+			return
 		}
 		if session.recording.Protocol != ProtocolWebSocket {
 			t.Errorf("expected protocol=%s, got %s", ProtocolWebSocket, session.recording.Protocol)

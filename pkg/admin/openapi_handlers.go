@@ -26,10 +26,7 @@ func (a *AdminAPI) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 
 	// Determine format from path or query param
-	asYAML := false
-	if r.URL.Path == "/openapi.yaml" || r.URL.Path == "/openapi.yml" {
-		asYAML = true
-	}
+	asYAML := r.URL.Path == "/openapi.yaml" || r.URL.Path == "/openapi.yml"
 	if r.URL.Query().Get("format") == "yaml" {
 		asYAML = true
 	}
@@ -187,7 +184,7 @@ type insomniaResource struct {
 	SettingStoreCookies             *bool          `json:"settingStoreCookies,omitempty"`
 	SettingSendCookies              *bool          `json:"settingSendCookies,omitempty"`
 	SettingDisableRenderRequestBody *bool          `json:"settingDisableRenderRequestBody,omitempty"`
-	SettingEncodeUrl                *bool          `json:"settingEncodeUrl,omitempty"`
+	SettingEncodeUrl                *bool          `json:"settingEncodeUrl,omitempty"` //nolint:revive,staticcheck // JSON API compatibility
 	SettingRebuildPath              *bool          `json:"settingRebuildPath,omitempty"`
 	SettingFollowRedirects          string         `json:"settingFollowRedirects,omitempty"`
 
@@ -590,14 +587,14 @@ func buildInsomniaV5Export(mocks []*config.MockConfiguration, statefulResources 
 	}
 
 	// Build YAML manually for precise control
-	var sb strings.Builder
+	sb := &strings.Builder{}
 	sb.WriteString("type: collection.insomnia.rest/5.0\n")
 	sb.WriteString("schema_version: \"5.1\"\n")
 	sb.WriteString("name: mockd Collection\n")
 	sb.WriteString("meta:\n")
 	sb.WriteString("  id: wrk_mockd\n")
-	sb.WriteString(fmt.Sprintf("  created: %d\n", now))
-	sb.WriteString(fmt.Sprintf("  modified: %d\n", now))
+	fmt.Fprintf(sb, "  created: %d\n", now)
+	fmt.Fprintf(sb, "  modified: %d\n", now)
 	sb.WriteString("  description: Exported from mockd\n")
 
 	// Collection (folders and requests)
@@ -608,13 +605,13 @@ func buildInsomniaV5Export(mocks []*config.MockConfiguration, statefulResources 
 		sb.WriteString("  - name: HTTP Mocks\n")
 		sb.WriteString("    meta:\n")
 		sb.WriteString("      id: fld_http\n")
-		sb.WriteString(fmt.Sprintf("      created: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      modified: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      sortKey: %d\n", -now))
+		fmt.Fprintf(sb, "      created: %d\n", now)
+		fmt.Fprintf(sb, "      modified: %d\n", now)
+		fmt.Fprintf(sb, "      sortKey: %d\n", -now)
 		sb.WriteString("      description: \"\"\n")
 		sb.WriteString("    children:\n")
 		for _, m := range httpMocks {
-			writeHTTPRequestV5(&sb, m, now)
+			writeHTTPRequestV5(sb, m, now)
 		}
 	}
 
@@ -623,13 +620,13 @@ func buildInsomniaV5Export(mocks []*config.MockConfiguration, statefulResources 
 		sb.WriteString("  - name: gRPC Mocks\n")
 		sb.WriteString("    meta:\n")
 		sb.WriteString("      id: fld_grpc\n")
-		sb.WriteString(fmt.Sprintf("      created: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      modified: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      sortKey: %d\n", -now-1))
+		fmt.Fprintf(sb, "      created: %d\n", now)
+		fmt.Fprintf(sb, "      modified: %d\n", now)
+		fmt.Fprintf(sb, "      sortKey: %d\n", -now-1)
 		sb.WriteString("      description: \"\"\n")
 		sb.WriteString("    children:\n")
 		for _, m := range grpcMocks {
-			writeGRPCRequestV5(&sb, m, now)
+			writeGRPCRequestV5(sb, m, now)
 		}
 	}
 
@@ -638,13 +635,13 @@ func buildInsomniaV5Export(mocks []*config.MockConfiguration, statefulResources 
 		sb.WriteString("  - name: WebSocket Mocks\n")
 		sb.WriteString("    meta:\n")
 		sb.WriteString("      id: fld_ws\n")
-		sb.WriteString(fmt.Sprintf("      created: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      modified: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      sortKey: %d\n", -now-2))
+		fmt.Fprintf(sb, "      created: %d\n", now)
+		fmt.Fprintf(sb, "      modified: %d\n", now)
+		fmt.Fprintf(sb, "      sortKey: %d\n", -now-2)
 		sb.WriteString("      description: \"\"\n")
 		sb.WriteString("    children:\n")
 		for _, m := range wsMocks {
-			writeWebSocketRequestV5(&sb, m, now)
+			writeWebSocketRequestV5(sb, m, now)
 		}
 	}
 
@@ -653,13 +650,13 @@ func buildInsomniaV5Export(mocks []*config.MockConfiguration, statefulResources 
 		sb.WriteString("  - name: GraphQL Mocks\n")
 		sb.WriteString("    meta:\n")
 		sb.WriteString("      id: fld_graphql\n")
-		sb.WriteString(fmt.Sprintf("      created: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      modified: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      sortKey: %d\n", -now-3))
+		fmt.Fprintf(sb, "      created: %d\n", now)
+		fmt.Fprintf(sb, "      modified: %d\n", now)
+		fmt.Fprintf(sb, "      sortKey: %d\n", -now-3)
 		sb.WriteString("      description: \"\"\n")
 		sb.WriteString("    children:\n")
 		for _, m := range graphqlMocks {
-			writeGraphQLRequestV5(&sb, m, now)
+			writeGraphQLRequestV5(sb, m, now)
 		}
 	}
 
@@ -668,13 +665,13 @@ func buildInsomniaV5Export(mocks []*config.MockConfiguration, statefulResources 
 		sb.WriteString("  - name: SOAP Mocks\n")
 		sb.WriteString("    meta:\n")
 		sb.WriteString("      id: fld_soap\n")
-		sb.WriteString(fmt.Sprintf("      created: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      modified: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      sortKey: %d\n", -now-4))
+		fmt.Fprintf(sb, "      created: %d\n", now)
+		fmt.Fprintf(sb, "      modified: %d\n", now)
+		fmt.Fprintf(sb, "      sortKey: %d\n", -now-4)
 		sb.WriteString("      description: \"\"\n")
 		sb.WriteString("    children:\n")
 		for _, m := range soapMocks {
-			writeSOAPRequestV5(&sb, m, now)
+			writeSOAPRequestV5(sb, m, now)
 		}
 	}
 
@@ -683,13 +680,13 @@ func buildInsomniaV5Export(mocks []*config.MockConfiguration, statefulResources 
 		sb.WriteString("  - name: Stateful Resources (CRUD)\n")
 		sb.WriteString("    meta:\n")
 		sb.WriteString("      id: fld_stateful\n")
-		sb.WriteString(fmt.Sprintf("      created: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      modified: %d\n", now))
-		sb.WriteString(fmt.Sprintf("      sortKey: %d\n", -now-5))
+		fmt.Fprintf(sb, "      created: %d\n", now)
+		fmt.Fprintf(sb, "      modified: %d\n", now)
+		fmt.Fprintf(sb, "      sortKey: %d\n", -now-5)
 		sb.WriteString("      description: \"In-memory CRUD resources with seed data. Use POST /state/reset to restore.\"\n")
 		sb.WriteString("    children:\n")
 		for _, res := range statefulResources {
-			writeStatefulResourceRequestsV5(&sb, res, now)
+			writeStatefulResourceRequestsV5(sb, res, now)
 		}
 	}
 
@@ -698,20 +695,20 @@ func buildInsomniaV5Export(mocks []*config.MockConfiguration, statefulResources 
 	sb.WriteString("  name: Default Jar\n")
 	sb.WriteString("  meta:\n")
 	sb.WriteString("    id: jar_mockd\n")
-	sb.WriteString(fmt.Sprintf("    created: %d\n", now))
-	sb.WriteString(fmt.Sprintf("    modified: %d\n", now))
+	fmt.Fprintf(sb, "    created: %d\n", now)
+	fmt.Fprintf(sb, "    modified: %d\n", now)
 
 	// Environments
 	sb.WriteString("environments:\n")
 	sb.WriteString("  name: Base Environment\n")
 	sb.WriteString("  meta:\n")
 	sb.WriteString("    id: env_mockd_base\n")
-	sb.WriteString(fmt.Sprintf("    created: %d\n", now))
-	sb.WriteString(fmt.Sprintf("    modified: %d\n", now))
+	fmt.Fprintf(sb, "    created: %d\n", now)
+	fmt.Fprintf(sb, "    modified: %d\n", now)
 	sb.WriteString("    isPrivate: false\n")
 	sb.WriteString("  data:\n")
-	sb.WriteString(fmt.Sprintf("    base_url: %s\n", baseURL))
-	sb.WriteString(fmt.Sprintf("    admin_url: http://localhost:%d\n", adminPort))
+	fmt.Fprintf(sb, "    base_url: %s\n", baseURL)
+	fmt.Fprintf(sb, "    admin_url: http://localhost:%d\n", adminPort)
 
 	return sb.String()
 }
@@ -733,16 +730,16 @@ func writeHTTPRequestV5(sb *strings.Builder, m *config.MockConfiguration, now in
 		path = "/"
 	}
 
-	sb.WriteString(fmt.Sprintf("      - url: \"{{ _.base_url }}%s\"\n", path))
-	sb.WriteString(fmt.Sprintf("        name: %s\n", name))
+	fmt.Fprintf(sb, "      - url: \"{{ _.base_url }}%s\"\n", path)
+	fmt.Fprintf(sb, "        name: %s\n", name)
 	sb.WriteString("        meta:\n")
-	sb.WriteString(fmt.Sprintf("          id: req_%s\n", m.ID))
-	sb.WriteString(fmt.Sprintf("          created: %d\n", now))
-	sb.WriteString(fmt.Sprintf("          modified: %d\n", now))
+	fmt.Fprintf(sb, "          id: req_%s\n", m.ID)
+	fmt.Fprintf(sb, "          created: %d\n", now)
+	fmt.Fprintf(sb, "          modified: %d\n", now)
 	sb.WriteString("          isPrivate: false\n")
 	sb.WriteString("          description: \"\"\n")
-	sb.WriteString(fmt.Sprintf("          sortKey: %d\n", -now))
-	sb.WriteString(fmt.Sprintf("        method: %s\n", method))
+	fmt.Fprintf(sb, "          sortKey: %d\n", -now)
+	fmt.Fprintf(sb, "        method: %s\n", method)
 
 	// Add sample body for methods that typically have request bodies
 	if method == "POST" || method == "PUT" || method == "PATCH" {
@@ -759,7 +756,7 @@ func writeHTTPRequestV5(sb *strings.Builder, m *config.MockConfiguration, now in
 		}
 		sb.WriteString("        body:\n")
 		sb.WriteString("          mimeType: application/json\n")
-		sb.WriteString(fmt.Sprintf("          text: '%s'\n", yamlEscapeString(sampleBody)))
+		fmt.Fprintf(sb, "          text: '%s'\n", yamlEscapeString(sampleBody))
 		sb.WriteString("        headers:\n")
 		sb.WriteString("          - name: Content-Type\n")
 		sb.WriteString("            value: application/json\n")
@@ -783,7 +780,7 @@ func writeGRPCRequestV5(sb *strings.Builder, m *config.MockConfiguration, now in
 	url := fmt.Sprintf("localhost:%d", port)
 
 	var protoMethod string
-	var bodyText string = "{}"
+	bodyText := "{}"
 	for svcName, svc := range m.GRPC.Services {
 		for methodName, method := range svc.Methods {
 			protoMethod = fmt.Sprintf("/%s/%s", svcName, methodName)
@@ -797,19 +794,19 @@ func writeGRPCRequestV5(sb *strings.Builder, m *config.MockConfiguration, now in
 		break
 	}
 
-	sb.WriteString(fmt.Sprintf("      - url: %s\n", url))
-	sb.WriteString(fmt.Sprintf("        name: %s\n", name))
+	fmt.Fprintf(sb, "      - url: %s\n", url)
+	fmt.Fprintf(sb, "        name: %s\n", name)
 	sb.WriteString("        meta:\n")
-	sb.WriteString(fmt.Sprintf("          id: greq_%s\n", m.ID))
-	sb.WriteString(fmt.Sprintf("          created: %d\n", now))
-	sb.WriteString(fmt.Sprintf("          modified: %d\n", now))
+	fmt.Fprintf(sb, "          id: greq_%s\n", m.ID)
+	fmt.Fprintf(sb, "          created: %d\n", now)
+	fmt.Fprintf(sb, "          modified: %d\n", now)
 	sb.WriteString("          isPrivate: false\n")
-	sb.WriteString(fmt.Sprintf("          description: \"gRPC service on port %d\"\n", port))
-	sb.WriteString(fmt.Sprintf("          sortKey: %d\n", -now))
+	fmt.Fprintf(sb, "          description: \"gRPC service on port %d\"\n", port)
+	fmt.Fprintf(sb, "          sortKey: %d\n", -now)
 	sb.WriteString("        body:\n")
-	sb.WriteString(fmt.Sprintf("          text: '%s'\n", yamlEscapeString(bodyText)))
+	fmt.Fprintf(sb, "          text: '%s'\n", yamlEscapeString(bodyText))
 	sb.WriteString("        protoFileId: \"\"\n")
-	sb.WriteString(fmt.Sprintf("        protoMethodName: %s\n", protoMethod))
+	fmt.Fprintf(sb, "        protoMethodName: %s\n", protoMethod)
 	// reflectionApi is for Buf Schema Registry, not direct server reflection
 	// For server reflection, Insomnia uses the main 'url' field directly
 	// We leave reflectionApi disabled since mockd uses direct server reflection
@@ -832,15 +829,15 @@ func writeWebSocketRequestV5(sb *strings.Builder, m *config.MockConfiguration, n
 	// Build description with sample payloads from matchers
 	description := buildWSDescription(m)
 
-	sb.WriteString(fmt.Sprintf("      - url: ws://localhost:4280%s\n", m.WebSocket.Path))
-	sb.WriteString(fmt.Sprintf("        name: %s\n", name))
+	fmt.Fprintf(sb, "      - url: ws://localhost:4280%s\n", m.WebSocket.Path)
+	fmt.Fprintf(sb, "        name: %s\n", name)
 	sb.WriteString("        meta:\n")
-	sb.WriteString(fmt.Sprintf("          id: ws-req_%s\n", m.ID)) // Must start with ws-req for Insomnia v5
-	sb.WriteString(fmt.Sprintf("          created: %d\n", now))
-	sb.WriteString(fmt.Sprintf("          modified: %d\n", now))
+	fmt.Fprintf(sb, "          id: ws-req_%s\n", m.ID) // Must start with ws-req for Insomnia v5
+	fmt.Fprintf(sb, "          created: %d\n", now)
+	fmt.Fprintf(sb, "          modified: %d\n", now)
 	sb.WriteString("          isPrivate: false\n")
-	sb.WriteString(fmt.Sprintf("          description: \"%s\"\n", description))
-	sb.WriteString(fmt.Sprintf("          sortKey: %d\n", -now))
+	fmt.Fprintf(sb, "          description: \"%s\"\n", description)
+	fmt.Fprintf(sb, "          sortKey: %d\n", -now)
 	sb.WriteString("        settings:\n")
 	sb.WriteString("          encodeUrl: true\n")
 	sb.WriteString("          followRedirects: global\n")
@@ -934,19 +931,19 @@ func writeGraphQLRequestV5(sb *strings.Builder, m *config.MockConfiguration, now
 		}
 	}
 
-	sb.WriteString(fmt.Sprintf("      - url: \"{{ _.base_url }}%s\"\n", path))
-	sb.WriteString(fmt.Sprintf("        name: %s\n", name))
+	fmt.Fprintf(sb, "      - url: \"{{ _.base_url }}%s\"\n", path)
+	fmt.Fprintf(sb, "        name: %s\n", name)
 	sb.WriteString("        meta:\n")
-	sb.WriteString(fmt.Sprintf("          id: req_%s\n", m.ID))
-	sb.WriteString(fmt.Sprintf("          created: %d\n", now))
-	sb.WriteString(fmt.Sprintf("          modified: %d\n", now))
+	fmt.Fprintf(sb, "          id: req_%s\n", m.ID)
+	fmt.Fprintf(sb, "          created: %d\n", now)
+	fmt.Fprintf(sb, "          modified: %d\n", now)
 	sb.WriteString("          isPrivate: false\n")
-	sb.WriteString(fmt.Sprintf("          description: \"%s\"\n", description))
-	sb.WriteString(fmt.Sprintf("          sortKey: %d\n", -now))
+	fmt.Fprintf(sb, "          description: \"%s\"\n", description)
+	fmt.Fprintf(sb, "          sortKey: %d\n", -now)
 	sb.WriteString("        method: POST\n")
 	sb.WriteString("        body:\n")
 	sb.WriteString("          mimeType: application/json\n")
-	sb.WriteString(fmt.Sprintf("          text: '%s'\n", yamlEscapeString(fmt.Sprintf(`{"query": "%s"}`, sampleQuery))))
+	fmt.Fprintf(sb, "          text: '%s'\n", yamlEscapeString(fmt.Sprintf(`{"query": "%s"}`, sampleQuery)))
 	sb.WriteString("        headers:\n")
 	sb.WriteString("          - name: Content-Type\n")
 	sb.WriteString("            value: application/json\n")
@@ -981,25 +978,25 @@ func writeSOAPRequestV5(sb *strings.Builder, m *config.MockConfiguration, now in
 	// Build sample SOAP request body using single quotes (simpler YAML escaping)
 	soapBody := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><%s xmlns="http://example.com/"></%s></soap:Body></soap:Envelope>`, firstOp, firstOp)
 
-	sb.WriteString(fmt.Sprintf("      - url: \"{{ _.base_url }}%s\"\n", path))
-	sb.WriteString(fmt.Sprintf("        name: %s\n", name))
+	fmt.Fprintf(sb, "      - url: \"{{ _.base_url }}%s\"\n", path)
+	fmt.Fprintf(sb, "        name: %s\n", name)
 	sb.WriteString("        meta:\n")
-	sb.WriteString(fmt.Sprintf("          id: req_%s\n", m.ID))
-	sb.WriteString(fmt.Sprintf("          created: %d\n", now))
-	sb.WriteString(fmt.Sprintf("          modified: %d\n", now))
+	fmt.Fprintf(sb, "          id: req_%s\n", m.ID)
+	fmt.Fprintf(sb, "          created: %d\n", now)
+	fmt.Fprintf(sb, "          modified: %d\n", now)
 	sb.WriteString("          isPrivate: false\n")
-	sb.WriteString(fmt.Sprintf("          description: \"SOAP operation: %s\"\n", firstOp))
-	sb.WriteString(fmt.Sprintf("          sortKey: %d\n", -now))
+	fmt.Fprintf(sb, "          description: \"SOAP operation: %s\"\n", firstOp)
+	fmt.Fprintf(sb, "          sortKey: %d\n", -now)
 	sb.WriteString("        method: POST\n")
 	sb.WriteString("        body:\n")
 	sb.WriteString("          mimeType: application/xml\n")
-	sb.WriteString(fmt.Sprintf("          text: '%s'\n", yamlEscapeString(soapBody)))
+	fmt.Fprintf(sb, "          text: '%s'\n", yamlEscapeString(soapBody))
 	sb.WriteString("        headers:\n")
 	sb.WriteString("          - name: Content-Type\n")
 	sb.WriteString("            value: text/xml; charset=utf-8\n")
 	if soapAction != "" {
 		sb.WriteString("          - name: SOAPAction\n")
-		sb.WriteString(fmt.Sprintf("            value: \"%s\"\n", soapAction))
+		fmt.Fprintf(sb, "            value: \"%s\"\n", soapAction)
 	}
 	writeInsomniaSettings(sb, "        ")
 }
@@ -1021,13 +1018,13 @@ func writeStatefulResourceRequestsV5(sb *strings.Builder, res statefulResourceIn
 	safeID := strings.ReplaceAll(res.Name, "-", "_")
 
 	// Folder header
-	sb.WriteString(fmt.Sprintf("      - name: %s\n", res.Name))
+	fmt.Fprintf(sb, "      - name: %s\n", res.Name)
 	sb.WriteString("        meta:\n")
-	sb.WriteString(fmt.Sprintf("          id: fld_state_%s\n", safeID))
-	sb.WriteString(fmt.Sprintf("          created: %d\n", now))
-	sb.WriteString(fmt.Sprintf("          modified: %d\n", now))
-	sb.WriteString(fmt.Sprintf("          sortKey: %d\n", -now))
-	sb.WriteString(fmt.Sprintf("          description: \"CRUD operations for %s\"\n", res.Name))
+	fmt.Fprintf(sb, "          id: fld_state_%s\n", safeID)
+	fmt.Fprintf(sb, "          created: %d\n", now)
+	fmt.Fprintf(sb, "          modified: %d\n", now)
+	fmt.Fprintf(sb, "          sortKey: %d\n", -now)
+	fmt.Fprintf(sb, "          description: \"CRUD operations for %s\"\n", res.Name)
 	sb.WriteString("        children:\n")
 
 	ops := []crudOperation{
@@ -1039,21 +1036,21 @@ func writeStatefulResourceRequestsV5(sb *strings.Builder, res statefulResourceIn
 	}
 
 	for i, op := range ops {
-		sb.WriteString(fmt.Sprintf("          - url: \"{{ _.base_url }}%s%s\"\n", res.BasePath, op.suffix))
-		sb.WriteString(fmt.Sprintf("            name: %s %s\n", op.name, res.Name))
+		fmt.Fprintf(sb, "          - url: \"{{ _.base_url }}%s%s\"\n", res.BasePath, op.suffix)
+		fmt.Fprintf(sb, "            name: %s %s\n", op.name, res.Name)
 		sb.WriteString("            meta:\n")
-		sb.WriteString(fmt.Sprintf("              id: req_state_%s_%s\n", safeID, op.idSuffix))
-		sb.WriteString(fmt.Sprintf("              created: %d\n", now))
-		sb.WriteString(fmt.Sprintf("              modified: %d\n", now))
+		fmt.Fprintf(sb, "              id: req_state_%s_%s\n", safeID, op.idSuffix)
+		fmt.Fprintf(sb, "              created: %d\n", now)
+		fmt.Fprintf(sb, "              modified: %d\n", now)
 		sb.WriteString("              isPrivate: false\n")
-		sb.WriteString(fmt.Sprintf("              description: \"%s\"\n", op.desc))
-		sb.WriteString(fmt.Sprintf("              sortKey: %d\n", -now-int64(i)))
-		sb.WriteString(fmt.Sprintf("            method: %s\n", op.method))
+		fmt.Fprintf(sb, "              description: \"%s\"\n", op.desc)
+		fmt.Fprintf(sb, "              sortKey: %d\n", -now-int64(i))
+		fmt.Fprintf(sb, "            method: %s\n", op.method)
 
 		if op.hasBody {
 			sb.WriteString("            body:\n")
 			sb.WriteString("              mimeType: application/json\n")
-			sb.WriteString(fmt.Sprintf("              text: '%s'\n", op.bodyText))
+			fmt.Fprintf(sb, "              text: '%s'\n", op.bodyText)
 			sb.WriteString("            headers:\n")
 			sb.WriteString("              - name: Content-Type\n")
 			sb.WriteString("                value: application/json\n")
@@ -1065,13 +1062,13 @@ func writeStatefulResourceRequestsV5(sb *strings.Builder, res statefulResourceIn
 			sb.WriteString("            pathParameters:\n")
 			// Add parent path params first (e.g., postId)
 			for paramName, paramValue := range res.PathParams {
-				sb.WriteString(fmt.Sprintf("              - name: %s\n", paramName))
-				sb.WriteString(fmt.Sprintf("                value: \"%s\"\n", paramValue))
+				fmt.Fprintf(sb, "              - name: %s\n", paramName)
+				fmt.Fprintf(sb, "                value: \"%s\"\n", paramValue)
 			}
 			// Add item ID param if this operation uses it
 			if op.hasID {
 				sb.WriteString("              - name: id\n")
-				sb.WriteString(fmt.Sprintf("                value: \"%s\"\n", res.SampleID))
+				fmt.Fprintf(sb, "                value: \"%s\"\n", res.SampleID)
 			}
 		}
 

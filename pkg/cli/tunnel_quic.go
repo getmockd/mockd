@@ -151,7 +151,7 @@ Environment Variables:
 	}
 
 	// Close client
-	client.Close()
+	_ = client.Close()
 
 	// Print stats
 	fmt.Printf("\nSession stats:\n")

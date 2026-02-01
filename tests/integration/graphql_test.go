@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -64,7 +65,7 @@ func setupGraphQLServer(t *testing.T, cfg *graphql.GraphQLConfig) *graphqlTestBu
 	// Start server in background
 	go func() {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			// Server closed intentionally, ignore error
+			log.Printf("graphql test server error: %v", err)
 		}
 	}()
 

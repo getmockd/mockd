@@ -13,6 +13,7 @@ func TestNew(t *stdtesting.T) {
 	mock := New(t)
 	if mock == nil {
 		t.Fatal("New() returned nil")
+		return
 	}
 	if mock.t != t {
 		t.Error("New() did not set testing.TB")

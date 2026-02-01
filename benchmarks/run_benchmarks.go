@@ -434,7 +434,7 @@ func writeMarkdown(results BenchmarkResults, path string) {
 	sb.WriteString("## Summary\n\n")
 	sb.WriteString("| Protocol | Throughput | Latency | Claim | Status |\n")
 	sb.WriteString("|----------|------------|---------|-------|--------|\n")
-	sb.WriteString(fmt.Sprintf("| HTTP | See `run_all.sh` | ~2ms p50 | 50K+ req/s | Measured via `ab` |\n"))
+	sb.WriteString("| HTTP | See `run_all.sh` | ~2ms p50 | 50K+ req/s | Measured via `ab` |\n")
 	sb.WriteString(fmt.Sprintf("| WebSocket | %.0f ops/s | %.2fμs | %s | Measured |\n",
 		results.Summary.WebSocket.ThroughputOpsPerSec,
 		results.Summary.WebSocket.LatencyNs/1000,
@@ -452,7 +452,7 @@ func writeMarkdown(results BenchmarkResults, path string) {
 		results.Summary.SOAP.Claim))
 	sb.WriteString(fmt.Sprintf("| Startup (CLI) | - | %.2fms | <10ms | Measured |\n",
 		results.Summary.Startup.CLINs/1e6))
-	sb.WriteString(fmt.Sprintf("| Memory | - | - | <25MB | Measured (RSS) |\n"))
+	sb.WriteString("| Memory | - | - | <25MB | Measured (RSS) |\n")
 	sb.WriteString("\n")
 
 	// Detailed results per protocol

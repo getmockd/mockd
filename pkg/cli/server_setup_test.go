@@ -189,6 +189,7 @@ func TestBuildChaosConfig_WithLatency(t *testing.T) {
 
 	if cfg == nil {
 		t.Fatal("Expected non-nil chaos config")
+		return
 	}
 	if !cfg.Enabled {
 		t.Error("Expected chaos enabled")
@@ -217,12 +218,15 @@ func TestBuildChaosConfig_WithErrorRate(t *testing.T) {
 
 	if cfg == nil {
 		t.Fatal("Expected non-nil chaos config")
+		return
 	}
 	if cfg.GlobalRules == nil {
 		t.Fatal("Expected global rules")
+		return
 	}
 	if cfg.GlobalRules.ErrorRate == nil {
 		t.Fatal("Expected error rate fault")
+		return
 	}
 	if cfg.GlobalRules.ErrorRate.Probability != 0.5 {
 		t.Errorf("Expected error probability 0.5, got %f", cfg.GlobalRules.ErrorRate.Probability)

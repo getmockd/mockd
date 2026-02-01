@@ -125,6 +125,7 @@ func TestToWebSocketScenario(t *testing.T) {
 
 		if metadata == nil {
 			t.Fatal("expected metadata to be set")
+			return
 		}
 
 		if metadata.SourceRecordingID != recording.ID {
@@ -257,6 +258,7 @@ func TestToSSEConfig(t *testing.T) {
 
 		if metadata == nil {
 			t.Fatal("expected metadata to be set")
+			return
 		}
 
 		if metadata.SourceRecordingID != recording.ID {

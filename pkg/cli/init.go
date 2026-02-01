@@ -54,7 +54,7 @@ func runInitWithIO(args []string, stdin io.Reader, stdout, stderr io.Writer) err
 	fs.StringVar(template, "t", "", "Use predefined template (shorthand)")
 
 	fs.Usage = func() {
-		fmt.Fprint(stderr, `Usage: mockd init [flags]
+		_, _ = fmt.Fprint(stderr, `Usage: mockd init [flags]
 
 Create a starter mockd.yaml configuration file.
 
@@ -134,8 +134,8 @@ Examples:
 		cfg = generateMinimalProjectConfig(defaultInitConfig())
 	} else {
 		// Interactive wizard
-		fmt.Fprintln(stdout, "Creating new mockd configuration...")
-		fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Creating new mockd configuration...")
+		_, _ = fmt.Fprintln(stdout)
 
 		initCfg, err := runInteractiveWizard(stdin, stdout)
 		if err != nil {
@@ -166,46 +166,48 @@ Examples:
 	}
 
 	// Print success message
-	fmt.Fprintf(stdout, "\nWriting %s...\n", *output)
-	fmt.Fprintln(stdout, "Done! Run 'mockd up' to start.")
+	_, _ = fmt.Fprintf(stdout, "\nWriting %s...\n", *output)
+	_, _ = fmt.Fprintln(stdout, "Done! Run 'mockd up' to start.")
 
 	return nil
 }
 
 // runInteractiveWizard prompts the user for configuration options.
+//
+//nolint:unparam // error return reserved for future validation
 func runInteractiveWizard(stdin io.Reader, stdout io.Writer) (*initConfig, error) {
 	reader := bufio.NewReader(stdin)
 	cfg := defaultInitConfig()
 
 	// Admin port
-	fmt.Fprintf(stdout, "Admin port [%d]: ", cfg.AdminPort)
+	_, _ = fmt.Fprintf(stdout, "Admin port [%d]: ", cfg.AdminPort)
 	if val, err := readIntWithDefault(reader, cfg.AdminPort); err == nil {
 		cfg.AdminPort = val
 	}
 
 	// Engine HTTP port
-	fmt.Fprintf(stdout, "Engine HTTP port [%d]: ", cfg.HTTPPort)
+	_, _ = fmt.Fprintf(stdout, "Engine HTTP port [%d]: ", cfg.HTTPPort)
 	if val, err := readIntWithDefault(reader, cfg.HTTPPort); err == nil {
 		cfg.HTTPPort = val
 	}
 
 	// Enable HTTPS?
-	fmt.Fprint(stdout, "Enable HTTPS? (y/N): ")
+	_, _ = fmt.Fprint(stdout, "Enable HTTPS? (y/N): ")
 	if val, _ := readBoolWithDefault(reader, false); val {
 		cfg.EnableHTTPS = true
-		fmt.Fprintf(stdout, "Engine HTTPS port [%d]: ", cfg.HTTPSPort)
+		_, _ = fmt.Fprintf(stdout, "Engine HTTPS port [%d]: ", cfg.HTTPSPort)
 		if val, err := readIntWithDefault(reader, cfg.HTTPSPort); err == nil {
 			cfg.HTTPSPort = val
 		}
 	}
 
 	// Auth type
-	fmt.Fprintf(stdout, "Auth type (none/api-key) [%s]: ", cfg.AuthType)
+	_, _ = fmt.Fprintf(stdout, "Auth type (none/api-key) [%s]: ", cfg.AuthType)
 	if val, _ := readStringWithDefault(reader, cfg.AuthType); val == "api-key" || val == "none" {
 		cfg.AuthType = val
 	}
 
-	fmt.Fprintln(stdout)
+	_, _ = fmt.Fprintln(stdout)
 
 	return cfg, nil
 }
@@ -221,6 +223,8 @@ func readIntWithDefault(reader *bufio.Reader, defaultVal int) (int, error) {
 }
 
 // readBoolWithDefault reads a boolean (y/n) from the reader, returning the default if empty.
+//
+//nolint:unparam // error return reserved for future validation
 func readBoolWithDefault(reader *bufio.Reader, defaultVal bool) (bool, error) {
 	input, _ := reader.ReadString('\n')
 	input = strings.ToLower(strings.TrimSpace(input))
@@ -231,6 +235,8 @@ func readBoolWithDefault(reader *bufio.Reader, defaultVal bool) (bool, error) {
 }
 
 // readStringWithDefault reads a string from the reader, returning the default if empty.
+//
+//nolint:unparam // error return reserved for future validation
 func readStringWithDefault(reader *bufio.Reader, defaultVal string) (string, error) {
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)

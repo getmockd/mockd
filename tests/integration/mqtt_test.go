@@ -980,9 +980,9 @@ drainLoop:
 			err := json.Unmarshal([]byte(msg), &data)
 			require.NoError(t, err, "Should be valid JSON")
 
-			eventId, ok := data["eventId"].(float64)
+			eventID, ok := data["eventId"].(float64)
 			require.True(t, ok, "eventId should be a number")
-			eventIds = append(eventIds, int64(eventId))
+			eventIds = append(eventIds, int64(eventID))
 		default:
 			break drainLoop
 		}

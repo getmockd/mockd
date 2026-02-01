@@ -302,7 +302,10 @@ func TestChaosTimeoutSimulation(t *testing.T) {
 	}
 
 	// Request should timeout
-	_, err := client.Get(url)
+	resp, err := client.Get(url)
+	if resp != nil {
+		resp.Body.Close()
+	}
 	require.Error(t, err)
 
 	// Verify it's a timeout error (could be "timeout" or "deadline exceeded")
@@ -1169,7 +1172,10 @@ func TestChaosNetworkErrorTypes(t *testing.T) {
 			Timeout: 1 * time.Second,
 		}
 
-		_, err := client.Get(url)
+		resp, err := client.Get(url)
+		if resp != nil {
+			resp.Body.Close()
+		}
 		require.Error(t, err)
 
 		// Should be a connection error

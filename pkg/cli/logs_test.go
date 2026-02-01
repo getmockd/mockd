@@ -402,7 +402,7 @@ func TestReadNewLines(t *testing.T) {
 	}
 
 	// Read from end (should get no new lines)
-	lines, newOffset, err = readNewLines(logPath, initialOffset)
+	lines, _, err = readNewLines(logPath, initialOffset)
 	if err != nil {
 		t.Fatalf("readNewLines failed: %v", err)
 	}

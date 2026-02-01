@@ -857,7 +857,8 @@ func TestParseRequest_InvalidJSON_ReturnsError(t *testing.T) {
 			_, err := ParseRequest(reader)
 
 			if err == nil {
-				t.Error("ParseRequest() should return error for invalid JSON")
+				t.Fatal("ParseRequest() should return error for invalid JSON")
+				return
 			}
 			if err.Code != ErrCodeParseError {
 				t.Errorf("error code = %d, want %d (ParseError)",
@@ -888,7 +889,8 @@ func TestValidateRequest_InvalidRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateRequest(&tt.req)
 			if err == nil {
-				t.Error("ValidateRequest() should return error")
+				t.Fatal("ValidateRequest() should return error")
+				return
 			}
 			if err.Code != ErrCodeInvalidRequest {
 				t.Errorf("error code = %d, want %d (InvalidRequest)",
@@ -986,7 +988,8 @@ func TestUnmarshalParamsRequired(t *testing.T) {
 		_, err := UnmarshalParamsRequired[ResourceReadParams](params)
 
 		if err == nil {
-			t.Error("UnmarshalParamsRequired() should return error for empty params")
+			t.Fatal("UnmarshalParamsRequired() should return error for empty params")
+			return
 		}
 		if err.Code != ErrCodeInvalidParams {
 			t.Errorf("error code = %d, want %d", err.Code, ErrCodeInvalidParams)

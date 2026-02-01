@@ -44,6 +44,7 @@ func TestNew(t *testing.T) {
 	gen := New(provider)
 	if gen == nil {
 		t.Fatal("expected generator to be created")
+		return
 	}
 	if gen.provider != provider {
 		t.Error("expected provider to be set")

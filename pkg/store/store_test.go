@@ -143,6 +143,7 @@ func TestNewEngineRegistry(t *testing.T) {
 	reg := NewEngineRegistry()
 	if reg == nil {
 		t.Fatal("NewEngineRegistry returned nil")
+		return
 	}
 	if reg.engines == nil {
 		t.Error("engines map not initialized")
@@ -442,6 +443,7 @@ func TestEngine_GetWorkspace(t *testing.T) {
 	ws := engine.GetWorkspace("ws-1")
 	if ws == nil {
 		t.Fatal("GetWorkspace returned nil")
+		return
 	}
 	if ws.HTTPPort != 9001 {
 		t.Errorf("HTTPPort = %d, want 9001", ws.HTTPPort)
@@ -521,6 +523,7 @@ func TestEngine_UpdateWorkspace(t *testing.T) {
 	ws := engine.UpdateWorkspace("ws-1", 9001, 9002, 9003)
 	if ws == nil {
 		t.Fatal("UpdateWorkspace returned nil")
+		return
 	}
 	if ws.HTTPPort != 9001 {
 		t.Errorf("HTTPPort = %d, want 9001", ws.HTTPPort)
@@ -547,6 +550,7 @@ func TestEngine_SyncWorkspace(t *testing.T) {
 	ws := engine.SyncWorkspace("ws-1")
 	if ws == nil {
 		t.Fatal("SyncWorkspace returned nil")
+		return
 	}
 	if ws.LastSynced.IsZero() {
 		t.Error("LastSynced should be set")

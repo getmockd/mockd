@@ -24,9 +24,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
-	v1reflectiongrpc "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	v1reflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
-	v1alphareflectiongrpc "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	v1alphareflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -274,30 +272,30 @@ func (s *Server) registerReflectionService() {
 
 	// Register both v1 and v1alpha reflection services for maximum compatibility
 	// Some clients (like Insomnia) use v1alpha, others use v1
-	v1reflectiongrpc.RegisterServerReflectionServer(s.grpcServer, reflectionServer)
-	v1alphareflectiongrpc.RegisterServerReflectionServer(s.grpcServer, asV1Alpha(reflectionServer))
+	v1reflectionpb.RegisterServerReflectionServer(s.grpcServer, reflectionServer)
+	v1alphareflectionpb.RegisterServerReflectionServer(s.grpcServer, asV1Alpha(reflectionServer))
 }
 
 // v1AlphaServerImpl adapts a v1 reflection server to the v1alpha interface.
 // This is needed because some clients (like Insomnia) still use the older v1alpha API.
 type v1AlphaServerImpl struct {
-	v1alphareflectiongrpc.UnimplementedServerReflectionServer
-	svr v1reflectiongrpc.ServerReflectionServer
+	v1alphareflectionpb.UnimplementedServerReflectionServer
+	svr v1reflectionpb.ServerReflectionServer
 }
 
 // asV1Alpha wraps a v1 server to implement the v1alpha interface.
-func asV1Alpha(svr v1reflectiongrpc.ServerReflectionServer) v1alphareflectiongrpc.ServerReflectionServer {
+func asV1Alpha(svr v1reflectionpb.ServerReflectionServer) v1alphareflectionpb.ServerReflectionServer {
 	return &v1AlphaServerImpl{svr: svr}
 }
 
 // ServerReflectionInfo implements the v1alpha streaming RPC by delegating to v1.
-func (s *v1AlphaServerImpl) ServerReflectionInfo(stream v1alphareflectiongrpc.ServerReflection_ServerReflectionInfoServer) error {
+func (s *v1AlphaServerImpl) ServerReflectionInfo(stream v1alphareflectionpb.ServerReflection_ServerReflectionInfoServer) error {
 	return s.svr.ServerReflectionInfo(&v1AlphaStreamAdapter{stream: stream})
 }
 
 // v1AlphaStreamAdapter adapts v1alpha stream to v1 stream interface.
 type v1AlphaStreamAdapter struct {
-	stream v1alphareflectiongrpc.ServerReflection_ServerReflectionInfoServer
+	stream v1alphareflectionpb.ServerReflection_ServerReflectionInfoServer
 }
 
 func (a *v1AlphaStreamAdapter) Send(resp *v1reflectionpb.ServerReflectionResponse) error {

@@ -91,7 +91,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	// Configure TLS
 	tlsConfig := &tls.Config{
 		NextProtos:         []string{"mockd-relay"},
-		InsecureSkipVerify: c.tlsInsecure,
+		InsecureSkipVerify: c.tlsInsecure, //nolint:gosec // InsecureSkipVerify is intentionally configurable for dev/testing
 	}
 
 	// Configure QUIC
@@ -112,7 +112,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	// Open control stream
 	controlStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
-		conn.CloseWithError(1, "failed to open control stream")
+		_ = conn.CloseWithError(1, "failed to open control stream")
 		return fmt.Errorf("open control stream: %w", err)
 	}
 
@@ -131,7 +131,7 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	msgBytes, err := protocol.EncodeControlMessage(authMsg)
 	if err != nil {
-		conn.CloseWithError(2, "failed to encode auth")
+		_ = conn.CloseWithError(2, "failed to encode auth")
 		return fmt.Errorf("encode auth: %w", err)
 	}
 
@@ -142,33 +142,33 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 
 	if err := protocol.EncodeHeader(controlStream, header); err != nil {
-		conn.CloseWithError(3, "failed to send auth")
+		_ = conn.CloseWithError(3, "failed to send auth")
 		return fmt.Errorf("send auth: %w", err)
 	}
 
 	// Read auth response
 	respHeader, err := protocol.DecodeHeader(controlStream)
 	if err != nil {
-		conn.CloseWithError(4, "failed to read auth response")
+		_ = conn.CloseWithError(4, "failed to read auth response")
 		return fmt.Errorf("read auth response: %w", err)
 	}
 
 	respMsg, err := protocol.DecodeControlMessage(respHeader.Metadata)
 	if err != nil {
-		conn.CloseWithError(5, "invalid auth response")
+		_ = conn.CloseWithError(5, "invalid auth response")
 		return fmt.Errorf("decode auth response: %w", err)
 	}
 
 	if respMsg.Type == protocol.ControlTypeAuthError {
 		payloadBytes, _ := json.Marshal(respMsg.Payload)
 		var errPayload protocol.AuthErrorPayload
-		json.Unmarshal(payloadBytes, &errPayload)
-		conn.CloseWithError(6, "auth failed")
+		_ = json.Unmarshal(payloadBytes, &errPayload)
+		_ = conn.CloseWithError(6, "auth failed")
 		return fmt.Errorf("auth failed: %s - %s", errPayload.Code, errPayload.Message)
 	}
 
 	if respMsg.Type != protocol.ControlTypeAuthOK {
-		conn.CloseWithError(7, "unexpected response")
+		_ = conn.CloseWithError(7, "unexpected response")
 		return fmt.Errorf("unexpected auth response: %s", respMsg.Type)
 	}
 
@@ -176,7 +176,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	payloadBytes, _ := json.Marshal(respMsg.Payload)
 	var okPayload protocol.AuthOKPayload
 	if err := json.Unmarshal(payloadBytes, &okPayload); err != nil {
-		conn.CloseWithError(8, "invalid auth ok payload")
+		_ = conn.CloseWithError(8, "invalid auth ok payload")
 		return fmt.Errorf("decode auth ok: %w", err)
 	}
 
@@ -231,7 +231,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 // handleStream processes an incoming QUIC stream (HTTP request from relay).
 func (c *Client) handleStream(ctx context.Context, stream quic.Stream) {
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	// Read request header
 	header, err := protocol.DecodeHeader(stream)
@@ -303,8 +303,8 @@ func (c *Client) sendErrorResponse(stream quic.Stream, status int, message strin
 		Metadata: metaBytes,
 	}
 
-	protocol.EncodeHeader(stream, header)
-	stream.Write([]byte(message))
+	_ = protocol.EncodeHeader(stream, header)
+	_, _ = stream.Write([]byte(message))
 }
 
 // readControlStream reads control messages from the relay after auth.
@@ -397,10 +397,10 @@ func (c *Client) Close() error {
 	defer c.mu.Unlock()
 
 	if c.controlStream != nil {
-		c.controlStream.Close()
+		_ = c.controlStream.Close()
 	}
 	if c.conn != nil {
-		c.conn.CloseWithError(0, "client closing")
+		_ = c.conn.CloseWithError(0, "client closing")
 	}
 
 	c.handleDisconnect(nil)
@@ -471,7 +471,7 @@ func (w *responseWriter) WriteHeader(statusCode int) {
 		Metadata: metaBytes,
 	}
 
-	protocol.EncodeHeader(w.stream, header)
+	_ = protocol.EncodeHeader(w.stream, header)
 }
 
 func (w *responseWriter) Write(data []byte) (int, error) {

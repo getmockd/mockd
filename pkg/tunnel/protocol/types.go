@@ -12,7 +12,7 @@ import (
 	"io"
 )
 
-// Protocol version
+// ProtocolVersion is the protocol version.
 const ProtocolVersion uint8 = 1
 
 // StreamType identifies the type of data being transmitted on a QUIC stream.

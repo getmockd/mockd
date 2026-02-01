@@ -231,6 +231,8 @@ func (m *TunnelManager) connectAndRun(ctx context.Context, client *quicclient.Cl
 // reconnectAfterGoaway handles reconnection after receiving a GOAWAY message.
 // Uses exponential backoff with a short initial delay.
 func (m *TunnelManager) reconnectAfterGoaway(payload protocol.GoawayPayload) {
+	_ = payload // payload reserved for future use (e.g., reconnect hints from relay)
+
 	m.mu.Lock()
 	if !m.running || m.config == nil {
 		m.mu.Unlock()

@@ -176,17 +176,6 @@ func sumMetricValues(metrics map[string]float64, namePrefix string) float64 {
 	return sum
 }
 
-// countMetricsByPrefix counts metrics matching the prefix.
-func countMetricsByPrefix(metrics map[string]float64, prefix string) int {
-	count := 0
-	for name := range metrics {
-		if strings.HasPrefix(name, prefix) {
-			count++
-		}
-	}
-	return count
-}
-
 // ============================================================================
 // Test 1: Prometheus Metrics Endpoint
 // ============================================================================

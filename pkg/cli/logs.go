@@ -281,7 +281,7 @@ func displayLogs(logFiles []string, numLines int, jsonOutput bool) error {
 			File      string `json:"file"`
 			Message   string `json:"message"`
 		}
-		var output []jsonLine
+		output := make([]jsonLine, 0, len(allLines))
 		for _, l := range allLines {
 			output = append(output, jsonLine{
 				Timestamp: l.timestamp.Format(time.RFC3339),
@@ -308,7 +308,7 @@ func readLastLines(filePath string, n int) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Read all lines (for simplicity; could optimize with reverse reading for large files)
 	var lines []string
@@ -444,7 +444,7 @@ func readNewLines(filePath string, offset int64) ([]string, int64, error) {
 	if err != nil {
 		return nil, offset, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Get current file size
 	info, err := file.Stat()

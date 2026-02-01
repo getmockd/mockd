@@ -272,7 +272,7 @@ func inferPathParamPattern(paramName string, seedData []map[string]interface{}) 
 }
 
 // inferPatternFromSamples determines a regex pattern from sample values
-func inferPatternFromSamples(samples []string, fieldName string) string {
+func inferPatternFromSamples(samples []string, _ string) string {
 	if len(samples) == 0 {
 		return `^[a-zA-Z0-9_-]+$`
 	}

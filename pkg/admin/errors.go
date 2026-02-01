@@ -52,7 +52,8 @@ const (
 func sanitizeError(err error, log *slog.Logger, operation string, details ...any) string {
 	// Log full error details server-side
 	if log != nil {
-		args := []any{"operation", operation, "error", err}
+		args := make([]any, 0, 4+len(details))
+		args = append(args, "operation", operation, "error", err)
 		args = append(args, details...)
 		log.Error("operation failed", args...)
 	}
@@ -96,13 +97,4 @@ func sanitizeJSONError(err error, log *slog.Logger) string {
 		log.Debug("JSON parsing failed", "error", err)
 	}
 	return ErrMsgInvalidJSON
-}
-
-// logAndSanitize is a convenience function that logs an error and returns
-// a sanitized message. Use this for one-line error handling.
-func logAndSanitize(log *slog.Logger, err error, operation string) string {
-	if log != nil {
-		log.Error(operation+" failed", "error", err)
-	}
-	return ErrMsgOperationFailed
 }

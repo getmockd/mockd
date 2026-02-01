@@ -72,6 +72,7 @@ func TestConnectionManager_Get(t *testing.T) {
 	found := manager.Get("test-1")
 	if found == nil {
 		t.Fatal("expected to find stream")
+		return
 	}
 	if found.ID != "test-1" {
 		t.Errorf("expected ID 'test-1', got %q", found.ID)
