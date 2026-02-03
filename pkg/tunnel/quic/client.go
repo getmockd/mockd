@@ -27,6 +27,7 @@ type Client struct {
 	token       string
 	localPort   int
 	tlsInsecure bool
+	tunnelAuth  *protocol.TunnelAuth
 
 	// Connection info (set after auth)
 	sessionID string
@@ -55,11 +56,12 @@ type Client struct {
 
 // ClientConfig configures the QUIC client.
 type ClientConfig struct {
-	RelayAddr   string       // e.g., "relay.mockd.io:4443"
-	Token       string       // Auth token
-	LocalPort   int          // Local port being tunneled
-	Handler     http.Handler // HTTP handler for incoming requests
-	TLSInsecure bool         // Skip TLS verification (for testing)
+	RelayAddr   string               // e.g., "relay.mockd.io:4443"
+	Token       string               // Auth token
+	LocalPort   int                  // Local port being tunneled
+	Handler     http.Handler         // HTTP handler for incoming requests
+	TLSInsecure bool                 // Skip TLS verification (for testing)
+	TunnelAuth  *protocol.TunnelAuth // Incoming request auth config (optional)
 	Logger      *slog.Logger
 }
 
@@ -76,6 +78,7 @@ func NewClient(cfg *ClientConfig) *Client {
 		localPort:   cfg.LocalPort,
 		handler:     cfg.Handler,
 		tlsInsecure: cfg.TLSInsecure,
+		tunnelAuth:  cfg.TunnelAuth,
 		logger:      logger,
 	}
 }
@@ -120,8 +123,9 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	// Send auth message
 	authPayload := protocol.AuthPayload{
-		Token:     c.token,
-		LocalPort: c.localPort,
+		Token:      c.token,
+		LocalPort:  c.localPort,
+		TunnelAuth: c.tunnelAuth,
 	}
 
 	authMsg := &protocol.ControlMessage{

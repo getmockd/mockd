@@ -152,8 +152,43 @@ type ControlMessage struct {
 
 // AuthPayload is the payload for auth messages.
 type AuthPayload struct {
-	Token     string `json:"token"`
-	LocalPort int    `json:"local_port"`
+	Token      string      `json:"token"`
+	LocalPort  int         `json:"local_port"`
+	TunnelAuth *TunnelAuth `json:"tunnel_auth,omitempty"`
+}
+
+// TunnelAuth configures authentication for incoming requests to a tunnel URL.
+// In relay-terminated mode, the relay enforces this. In E2E mode, the agent enforces it.
+type TunnelAuth struct {
+	// Type is the auth mode: "none", "token", "basic", "ip".
+	Type string `json:"type"`
+
+	// Token is the secret value for type=token.
+	Token string `json:"token,omitempty"`
+
+	// TokenHeader is the HTTP header name to check for the token.
+	// Default: "X-Tunnel-Token". Configurable to avoid conflicts with mock headers.
+	TokenHeader string `json:"token_header,omitempty"`
+
+	// Username is the username for type=basic.
+	Username string `json:"username,omitempty"`
+
+	// Password is the password for type=basic.
+	Password string `json:"password,omitempty"`
+
+	// AllowedIPs is a list of CIDR ranges for type=ip (e.g., ["10.0.0.0/8", "192.168.1.0/24"]).
+	AllowedIPs []string `json:"allowed_ips,omitempty"`
+}
+
+// DefaultTokenHeader is the default HTTP header name for tunnel token auth.
+const DefaultTokenHeader = "X-Tunnel-Token"
+
+// EffectiveTokenHeader returns the token header name, falling back to the default.
+func (a *TunnelAuth) EffectiveTokenHeader() string {
+	if a.TokenHeader != "" {
+		return a.TokenHeader
+	}
+	return DefaultTokenHeader
 }
 
 // AuthOKPayload is the payload for successful auth response.
