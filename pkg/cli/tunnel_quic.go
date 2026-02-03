@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
@@ -12,6 +14,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/getmockd/mockd/pkg/tunnel/protocol"
 	quicclient "github.com/getmockd/mockd/pkg/tunnel/quic"
@@ -90,6 +93,17 @@ Environment Variables:
 	// Default to port 443 if no port specified
 	if !strings.Contains(*relayAddr, ":") {
 		*relayAddr = *relayAddr + ":443"
+	}
+
+	// Auto-fetch anonymous JWT if no token provided
+	if *token == "" {
+		fmt.Println("No token provided, fetching anonymous tunnel token...")
+		anonymousToken, err := fetchAnonymousToken()
+		if err != nil {
+			return fmt.Errorf("failed to fetch anonymous token: %w", err)
+		}
+		*token = anonymousToken
+		fmt.Println("Anonymous token acquired (2h session, 100MB bandwidth)")
 	}
 
 	// Build local target URL
@@ -223,4 +237,45 @@ Environment Variables:
 
 	fmt.Println("Goodbye!")
 	return nil
+}
+
+// tokenAPIURL is the endpoint for anonymous tunnel token requests.
+const tokenAPIURL = "https://api.mockd.io/api/v1/tunnels/anonymous"
+
+// tokenResponse matches the JSON response from the tunnel token API.
+type tokenResponse struct {
+	Token     string `json:"token"`
+	ExpiresAt string `json:"expires_at"`
+	Tier      string `json:"tier"`
+}
+
+// fetchAnonymousToken calls the mockd API to get a free anonymous tunnel JWT.
+func fetchAnonymousToken() (string, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	resp, err := client.Post(tokenAPIURL, "application/json", nil)
+	if err != nil {
+		return "", fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024))
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResp tokenResponse
+	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if tokenResp.Token == "" {
+		return "", fmt.Errorf("API returned empty token")
+	}
+
+	return tokenResp.Token, nil
 }
