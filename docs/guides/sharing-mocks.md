@@ -8,30 +8,91 @@ mockd supports several ways to share your mocks publicly:
 
 | Method | Cost | Protocols | Best For |
 |--------|------|-----------|----------|
-| [Third-party tunnels](#third-party-tunnels) | Free | HTTP, WebSocket, SSE | Quick testing, OSS users |
-| [mockd Cloud Relay](#mockd-cloud-relay) | Paid | HTTP, WebSocket, SSE | Production use, custom domains |
+| [mockd tunnel (built-in)](#mockd-tunnel) | Free | All 7 protocols | Recommended for all users |
+| [Third-party tunnels](#third-party-tunnels) | Free | HTTP, WebSocket, SSE | Alternative if UDP/QUIC is blocked |
 | [Self-hosted relay](#self-hosted-relay) | Your infra | All protocols | Enterprise, air-gapped environments |
 
 ## Protocol Support
 
-### Currently Supported (HTTP-based)
+mockd's built-in tunnel supports **all seven protocols** through a single QUIC connection on port 443:
 
-These protocols work over standard HTTPS (port 443) and are fully supported by all relay methods:
+| Protocol | Tunnel Support | How It Works |
+|----------|---------------|--------------|
+| HTTP/HTTPS | Yes | Standard HTTPS |
+| gRPC | Yes | Native HTTP/2 with trailers (not gRPC-web) |
+| WebSocket | Yes | Upgrade proxied, bidirectional streaming |
+| MQTT | Yes | TLS ALPN routing (`mqtt`) on port 443 |
+| SSE | Yes | Streaming responses |
+| GraphQL | Yes | Over HTTP |
+| SOAP | Yes | Over HTTP |
 
-- **HTTP/HTTPS** - REST APIs, webhooks
-- **WebSocket** - Real-time bidirectional communication  
-- **SSE** - Server-sent events, streaming responses
-- **GraphQL** - Query/mutation endpoints (runs over HTTP)
-- **SOAP** - XML web services (runs over HTTP)
+## mockd Tunnel
 
-### Future Consideration (TCP-based)
+mockd includes a built-in QUIC tunnel that exposes your local mocks to the internet with a single command. No signup required for anonymous tunnels (2-hour session, 100MB bandwidth).
 
-These protocols require raw TCP connections on custom ports. Support will be considered based on community demand:
+### Quick Start
 
-- **gRPC** - Requires HTTP/2 or dedicated port (typically 50051)
-- **MQTT** - Requires broker port (typically 1883/8883)
+```bash
+# Start your mock server
+mockd serve --config mocks.yaml
 
-> **Want TCP protocol support?** [Open an issue](https://github.com/getmockd/mockd/issues) or join the discussion on Discord. We're evaluating approaches like gRPC-web proxying and TCP-over-WebSocket tunneling.
+# In another terminal, expose it to the internet
+mockd tunnel-quic --port 4280
+
+# Output:
+# Tunnel connected!
+#   HTTP:  https://a1b2c3d4.tunnel.mockd.io -> http://localhost:4280
+#   Auth:  none (tunnel URL is public)
+```
+
+Your mocks are now accessible at `https://a1b2c3d4.tunnel.mockd.io`.
+
+### Multi-Protocol Tunneling
+
+All protocols are tunneled automatically. For MQTT, specify the broker port:
+
+```bash
+# Tunnel HTTP + MQTT
+mockd tunnel-quic --port 4280 --mqtt 1883
+
+# Output:
+# Tunnel connected!
+#   HTTP:  https://a1b2c3d4.tunnel.mockd.io -> http://localhost:4280
+#   MQTT:  mqtts://a1b2c3d4.tunnel.mockd.io:443 -> localhost:1883 (ALPN: mqtt)
+
+# Tunnel a gRPC server directly
+mockd tunnel-quic --port 50051
+
+# Test gRPC through the tunnel
+grpcurl -d '{"name": "World"}' a1b2c3d4.tunnel.mockd.io:443 helloworld.Greeter/SayHello
+
+# Test MQTT through the tunnel (requires TLS ALPN client)
+mosquitto_pub -h a1b2c3d4.tunnel.mockd.io -p 443 --alpn mqtt \
+  --capath /etc/ssl/certs -t test/hello -m "Hello!"
+```
+
+### Tunnel Authentication
+
+Protect your tunnel from unauthorized access:
+
+```bash
+# Require bearer token
+mockd tunnel-quic --port 4280 --auth-token secret123
+
+# Require HTTP Basic Auth
+mockd tunnel-quic --port 4280 --auth-basic admin:password
+
+# Restrict by IP range
+mockd tunnel-quic --port 4280 --allow-ips "10.0.0.0/8,192.168.1.0/24"
+```
+
+### Use Cases
+
+- **Webhook development**: Expose mocks to receive webhooks from Stripe, GitHub, etc.
+- **Team sharing**: Share mocks with remote teammates without deploying
+- **Client demos**: Show API mocks to stakeholders with a public URL
+- **CI/CD integration**: Use tunneled endpoints in integration test pipelines
+- **Mobile testing**: Test mobile apps against mocks on a real device
 
 ## Third-Party Tunnels
 
@@ -119,40 +180,16 @@ cloudflared tunnel run mockd
 | TCP tunnels | No | Paid only | No |
 | Request inspection | No | Yes | Yes |
 
-## mockd Cloud Relay
+## Tunnel Tiers
 
-> **Coming Soon** - The mockd Cloud Relay provides a managed tunnel service with custom domains, team sharing, and usage analytics.
+| Tier | Session Duration | Bandwidth | Subdomain | Signup |
+|------|-----------------|-----------|-----------|--------|
+| Anonymous | 2 hours | 100 MB | Random | No |
+| Free | 8 hours | 1 GB | Random | Yes |
+| Pro ($19/mo) | 24 hours | 5 GB/mo | Custom | Yes |
+| Team ($49/seat/mo) | Unlimited | 50 GB/mo | Custom + domain | Yes |
 
-### Features (Planned)
-
-- **Custom subdomains**: `your-name.mockd.dev`
-- **Custom domains**: `mocks.yourcompany.com`
-- **Team sharing**: Share tunnel access with teammates
-- **Usage analytics**: Request counts, bandwidth
-- **Auto-reconnect**: Survives network interruptions
-
-### Usage
-
-```bash
-# Login to mockd cloud
-mockd auth login
-
-# Start tunnel
-mockd tunnel
-
-# Output:
-# Tunnel connected!
-# Public URL: https://your-name.mockd.dev
-# Local server: http://localhost:4280
-```
-
-### Pricing
-
-| Tier | Tunnel Access | Bandwidth | Custom Domain |
-|------|---------------|-----------|---------------|
-| Free | No | - | - |
-| Pro | Yes | 5 GB/mo | No |
-| Team | Yes | 50 GB/mo | Yes |
+Anonymous tunnels require no signup or token — just run `mockd tunnel-quic --port 4280`.
 
 ## Self-Hosted Relay
 
@@ -213,9 +250,10 @@ mockd tunnel --allow-ips "10.0.0.0/8,192.168.1.0/24"
 ### What Gets Exposed
 
 When you create a tunnel:
-- **Exposed**: All enabled mocks on your HTTP port (default 4280)
-- **NOT exposed**: Admin API (port 4290) - unless explicitly tunneled
-- **NOT exposed**: Other protocol ports (gRPC, MQTT) - HTTP tunnel only
+- **Exposed**: The local port you specify with `--port` (HTTP, gRPC, WebSocket, SSE)
+- **Exposed**: MQTT broker ports specified with `--mqtt` (via TLS ALPN)
+- **NOT exposed**: Admin API (port 4290) — unless explicitly tunneled
+- **NOT exposed**: Other local services
 
 ### Best Practices
 
@@ -258,6 +296,9 @@ mockd list
 
 ## See Also
 
-- [CLI Reference: cloud commands](../reference/cli.md#cloud-commands)
+- [CLI Reference: tunnel-quic](../reference/cli.md#mockd-tunnel-quic)
+- [CLI Reference: tunnel](../reference/cli.md#mockd-tunnel)
+- [gRPC Mocking](grpc-mocking.md)
+- [MQTT Mocking](mqtt-mocking.md)
 - [WebSocket Mocking](websocket-mocking.md)
 - [SSE Streaming](sse-streaming.md)

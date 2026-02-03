@@ -1,22 +1,25 @@
 # mockd
 
-![CI](https://github.com/getmockd/mockd/actions/workflows/ci.yaml/badge.svg) ![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go) ![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg) ![Release](https://img.shields.io/github/v/release/getmockd/mockd?include_prereleases)
+![CI](https://github.com/getmockd/mockd/actions/workflows/ci.yaml/badge.svg) ![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go) ![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg) ![Release](https://img.shields.io/github/v/release/getmockd/mockd?include_prereleases)
 
-A high-performance, local-first HTTP/HTTPS mock server with CLI and Go API.
+A high-performance, multi-protocol mock server with built-in cloud tunneling. Mock HTTP, gRPC, WebSocket, MQTT, SSE, GraphQL, and SOAP APIs locally or share them instantly via a single command.
 
 ## Features
 
+- **Multi-Protocol**: Mock HTTP, gRPC, WebSocket, MQTT, SSE, GraphQL, and SOAP from a single tool
+- **Cloud Tunnel**: Expose local mocks to the internet with one command — all protocols tunneled through a single QUIC connection
 - **Local-First**: Zero external dependencies, works completely offline
 - **High Performance**: Handles 1000+ concurrent requests with sub-2-second startup
-- **CLI Tool**: Full command-line interface for managing mocks
-- **Flexible Matching**: Match requests by method, path, headers, query params, and body
-- **HTTPS Support**: Auto-generated self-signed certificates for secure testing
+- **CLI Tool**: Full command-line interface with 30+ commands
+- **Flexible Matching**: Match requests by method, path, headers, query params, body, and protocol-specific fields
+- **HTTPS & mTLS**: Auto-generated certificates with mutual TLS support
 - **Admin API**: RESTful API for dynamic mock configuration
 - **Stateful Mocking**: Simulate CRUD operations with persistent state
-- **Request Validation**: Field-level validation with type checking, patterns, formats, and nested field support
+- **Chaos Engineering**: Fault injection, latency simulation, and error responses
 - **Proxy Recording**: Record real API traffic for replay
+- **AI Mock Generation**: Generate mocks from natural language via MCP server
 - **Request Logging**: Full request inspection for debugging
-- **Shell Completion**: Bash, Zsh, and Fish completion support
+- **Import/Export**: OpenAPI, Postman, WireMock, HAR, and cURL formats
 
 ## Installation
 
@@ -71,6 +74,41 @@ mockd config
 # Generate shell completion
 mockd completion bash > /etc/bash_completion.d/mockd
 ```
+
+## Cloud Tunnel
+
+Share your local mocks with anyone on the internet. mockd's built-in QUIC tunnel forwards all protocols (HTTP, gRPC, WebSocket, MQTT, SSE) through a single encrypted connection on port 443.
+
+```bash
+# Expose your local mock server to the internet (no signup required)
+mockd tunnel-quic --port 4280
+
+# Output:
+# Tunnel connected!
+#   HTTP:  https://a1b2c3d4.tunnel.mockd.io -> http://localhost:4280
+#   Auth:  none (tunnel URL is public)
+
+# Tunnel a gRPC server
+mockd tunnel-quic --port 50051
+
+# Tunnel with MQTT broker support
+mockd tunnel-quic --port 4280 --mqtt 1883
+
+# Protect with token auth
+mockd tunnel-quic --port 4280 --auth-token secret123
+```
+
+All seven protocols work through the tunnel automatically:
+
+| Protocol | How It Works |
+|----------|-------------|
+| HTTP/HTTPS | Standard HTTPS on port 443 |
+| gRPC | Native HTTP/2 with trailers (not gRPC-web) |
+| WebSocket | Upgrade proxied, bidirectional streaming |
+| MQTT | TLS ALPN routing on port 443 |
+| SSE | Streaming responses |
+| GraphQL | Over HTTP |
+| SOAP | Over HTTP |
 
 ## Environment Variables
 

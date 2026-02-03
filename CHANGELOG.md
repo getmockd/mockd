@@ -9,12 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Multi-protocol QUIC tunnel** (`mockd tunnel-quic`) - Expose local mocks to the internet through a single QUIC connection. All 7 protocols (HTTP, gRPC, WebSocket, MQTT, SSE, GraphQL, SOAP) are tunneled through port 443 with zero configuration. Anonymous tunnels work with no signup.
+- **gRPC tunnel support** - Native HTTP/2 with trailer forwarding via streaming chunked body framing. Supports unary RPCs, server streaming, and gRPC reflection through the tunnel.
+- **MQTT tunnel support** - MQTT connections routed via TLS ALPN on port 443. `--mqtt PORT[:NAME]` flag supports multiple named brokers.
+- **WebSocket tunnel support** - Bidirectional WebSocket frames proxied through QUIC with HTTP/1.1 upgrade handling.
+- **Tunnel authentication** - Protect tunnel URLs with token auth (`--auth-token`), HTTP Basic Auth (`--auth-basic`), or IP allowlists (`--allow-ips`).
 - **Field-level validation for stateful resources and HTTP mocks** - Validate request bodies with type checking, string/number constraints, patterns, formats (email, uuid, date, datetime, uri, ipv4, ipv6, hostname), enums, nested object validation, and dot-notation for nested fields
 - **OAuth token introspection endpoint** (`POST /introspect`) - RFC 7662 compliant endpoint for validating access tokens
 - **YAML export for proxy recordings** - Export recordings in YAML format via `format: "yaml"` option
 - **SSE rate limiting** - Rate limiter now integrated into SSE streaming (configurable events per second)
-- Sharing mocks guide with third-party tunnel support (localtunnel, ngrok, Cloudflare)
-- Protocol support table documenting tunnel compatibility (HTTP, WebSocket, SSE supported; gRPC, MQTT deferred)
 - Auto-initialization of stream recording manager on server start
 
 ### Changed

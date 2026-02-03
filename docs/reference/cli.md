@@ -2602,31 +2602,88 @@ mockd templates add services/stripe/webhooks --dry-run
 
 ## Cloud Commands
 
+### mockd tunnel-quic
+
+Expose a local service to the internet via QUIC tunnel. All protocols are tunneled through a single encrypted QUIC connection on port 443. No signup required for anonymous tunnels.
+
+```bash
+mockd tunnel-quic [flags]
+```
+
+**Supported Protocols:**
+
+| Protocol | Supported | How It Works |
+|----------|-----------|--------------|
+| HTTP/HTTPS | Yes | Standard HTTPS on port 443 |
+| gRPC | Yes | Native HTTP/2 with trailers |
+| WebSocket | Yes | Upgrade proxied, bidirectional streaming |
+| MQTT | Yes | TLS ALPN routing on port 443 |
+| SSE | Yes | Streaming responses |
+| GraphQL | Yes | Over HTTP |
+| SOAP | Yes | Over HTTP |
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--port` | `-p` | Local port to tunnel | `4280` |
+| `--relay` | | Relay server address | `relay.mockd.io:443` |
+| `--token` | | Authentication token (or MOCKD_TOKEN env var) | auto-fetched |
+| `--mqtt` | | MQTT broker port(s) to expose (format: PORT or PORT:NAME) | |
+| `--insecure` | | Skip TLS verification (for testing) | `false` |
+
+**Authentication Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--auth-token` | Require this token in X-Tunnel-Token header |
+| `--auth-basic` | Require HTTP Basic Auth (format: user:pass) |
+| `--allow-ips` | Allow only these IPs (comma-separated CIDR or IP) |
+
+**Environment Variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `MOCKD_TOKEN` | Authentication token (alternative to --token flag) |
+
+**Examples:**
+
+```bash
+# Expose local HTTP server (anonymous, no signup)
+mockd tunnel-quic --port 4280
+
+# Expose local gRPC server
+mockd tunnel-quic --port 50051
+
+# Expose HTTP + MQTT
+mockd tunnel-quic --port 4280 --mqtt 1883
+
+# Expose multiple MQTT brokers with names
+mockd tunnel-quic --port 4280 --mqtt 1883:sensors --mqtt 1884:control
+
+# Protect tunnel with token auth
+mockd tunnel-quic --port 4280 --auth-token secret123
+
+# Protect tunnel with HTTP Basic Auth
+mockd tunnel-quic --port 4280 --auth-basic admin:password
+
+# Restrict tunnel access by IP
+mockd tunnel-quic --port 4280 --allow-ips "10.0.0.0/8,192.168.1.0/24"
+```
+
+---
+
 ### mockd tunnel
 
-Expose local mocks via secure cloud tunnel.
+Expose local mocks via WebSocket-based cloud tunnel. Starts a mock server and tunnel in a single command.
+
+> **Note**: For most users, [`mockd tunnel-quic`](#mockd-tunnel-quic) is recommended. It supports all protocols, has better performance (QUIC transport), and can tunnel to any existing local service.
 
 ```bash
 mockd tunnel [flags]
 mockd tunnel status
 mockd tunnel stop
 ```
-
-**Supported Protocols:**
-
-The tunnel relays HTTP-based traffic over port 443:
-
-| Protocol | Supported | Notes |
-|----------|-----------|-------|
-| HTTP/HTTPS | Yes | Full support |
-| WebSocket | Yes | Upgrade handled automatically |
-| SSE | Yes | Streaming responses work |
-| GraphQL | Yes | Runs over HTTP |
-| SOAP | Yes | Runs over HTTP |
-| gRPC | Planned | Considering gRPC-web proxy approach |
-| MQTT | Planned | Considering TCP-over-WebSocket approach |
-
-> **Note**: TCP-based protocols (native gRPC, MQTT) require dedicated ports and are being evaluated for future releases based on community interest. See [Sharing Mocks](../guides/sharing-mocks.md) for alternatives like ngrok TCP tunnels.
 
 **Flags:**
 
