@@ -98,3 +98,7 @@ mockd_bench
 AUDIT_*.md
 *_AUDIT_*.md
 run_benchmarks
+
+# Cross-compiled binaries
+mockd-arm64
+mockd-amd64
