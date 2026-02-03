@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -19,6 +20,51 @@ import (
 	"github.com/getmockd/mockd/pkg/tunnel/protocol"
 	quicclient "github.com/getmockd/mockd/pkg/tunnel/quic"
 )
+
+// mqttFlag implements flag.Value for repeatable --mqtt flags.
+// Accepts "PORT" or "PORT:NAME" format (e.g., "1883" or "1883:sensors").
+type mqttFlag []protocol.ProtocolPort
+
+func (f *mqttFlag) String() string {
+	if f == nil {
+		return ""
+	}
+	var parts []string
+	for _, p := range *f {
+		if p.Name != "" {
+			parts = append(parts, fmt.Sprintf("%d:%s", p.Port, p.Name))
+		} else {
+			parts = append(parts, strconv.Itoa(p.Port))
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+func (f *mqttFlag) Set(s string) error {
+	parts := strings.SplitN(s, ":", 2)
+
+	port, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return fmt.Errorf("invalid MQTT port %q: %w", parts[0], err)
+	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("MQTT port %d out of range (1-65535)", port)
+	}
+
+	pp := protocol.ProtocolPort{
+		Type: "mqtt",
+		Port: port,
+	}
+	if len(parts) == 2 {
+		pp.Name = parts[1]
+		if pp.Name == "" {
+			return fmt.Errorf("MQTT broker name cannot be empty after ':'")
+		}
+	}
+
+	*f = append(*f, pp)
+	return nil
+}
 
 // RunTunnelQUIC handles the tunnel-quic command.
 func RunTunnelQUIC(args []string) error {
@@ -39,6 +85,10 @@ func RunTunnelQUIC(args []string) error {
 	allowIPs := fs.String("allow-ips", "", "Restrict access to these IPs/CIDRs (comma-separated, e.g. 10.0.0.0/8,192.168.1.50)")
 	authHeader := fs.String("auth-header", "", "Custom header name for token auth (default: X-Tunnel-Token)")
 
+	// MQTT broker ports (repeatable)
+	var mqttPorts mqttFlag
+	fs.Var(&mqttPorts, "mqtt", "MQTT broker port (repeatable, format: PORT or PORT:NAME)")
+
 	// TLS options
 	tlsInsecure := fs.Bool("insecure", false, "Skip TLS certificate verification (for testing)")
 
@@ -51,10 +101,14 @@ This is a lightweight tunnel that forwards traffic to a local port.
 Unlike 'mockd tunnel', this doesn't start a mock server - it just
 forwards requests to an existing local service.
 
+All protocols (HTTP, gRPC, WebSocket, SSE, MQTT) are tunneled through
+a single port (443) using ALPN-based routing.
+
 Flags:
       --relay        Relay server address (default: relay.mockd.io)
       --token        Authentication token (or set MOCKD_TOKEN)
-  -p, --port         Local port to tunnel (default: 4280)
+  -p, --port         Local HTTP/gRPC/WebSocket port (default: 4280)
+      --mqtt         Local MQTT broker port (repeatable, format: PORT or PORT:NAME)
       --local-host   Local host to forward to (default: localhost)
       --insecure     Skip TLS verification (for testing)
 
@@ -65,21 +119,27 @@ Tunnel Auth (protect your tunnel URL from unauthorized callers):
       --auth-header  Custom header name for token auth (default: X-Tunnel-Token)
 
 Examples:
-  # Tunnel local port 4280 to the relay
-  mockd tunnel-quic --relay relay.mockd.io --port 4280
+  # Tunnel local port 4280 (HTTP, gRPC, WebSocket all work automatically)
+  mockd tunnel-quic --port 4280
 
-  # Tunnel with agent authentication
-  mockd tunnel-quic --relay relay.mockd.io --token YOUR_TOKEN
+  # Tunnel HTTP + MQTT broker
+  mockd tunnel-quic --port 8080 --mqtt 1883
+
+  # Multiple named MQTT brokers (each gets a subdomain)
+  mockd tunnel-quic --port 8080 --mqtt 1883:sensors --mqtt 1884:alerts
+  # sensors.abc123.tunnel.mockd.io:443 (ALPN: mqtt) → localhost:1883
+  # alerts.abc123.tunnel.mockd.io:443  (ALPN: mqtt) → localhost:1884
 
   # Protect tunnel URL with token auth
-  mockd tunnel-quic --token YOUR_TOKEN --auth-token SECRET123
-  # Callers must include: curl -H "X-Tunnel-Token: SECRET123" https://abc.tunnel.mockd.io
-
-  # Protect with IP allowlist
-  mockd tunnel-quic --token YOUR_TOKEN --allow-ips 10.0.0.0/8,192.168.1.0/24
+  mockd tunnel-quic --auth-token SECRET123
+  # curl -H "X-Tunnel-Token: SECRET123" https://abc123.tunnel.mockd.io
 
   # For local testing with self-signed certs
   mockd tunnel-quic --relay localhost:4443 --insecure
+
+MQTT clients connect with ALPN negotiation:
+  mosquitto_pub -h abc123.tunnel.mockd.io -p 443 --alpn mqtt \
+    --capath /etc/ssl/certs -t sensors/temp -m '{"val":22}'
 
 Environment Variables:
   MOCKD_TOKEN       Authentication token (alternative to --token flag)
@@ -155,6 +215,14 @@ Environment Variables:
 		}
 	}
 
+	// Build protocol list from flags
+	var protocols []protocol.ProtocolPort
+	protocols = append(protocols, protocol.ProtocolPort{
+		Type: "http",
+		Port: *localPort,
+	})
+	protocols = append(protocols, mqttPorts...)
+
 	// Create QUIC client
 	client := quicclient.NewClient(&quicclient.ClientConfig{
 		RelayAddr:   *relayAddr,
@@ -163,25 +231,38 @@ Environment Variables:
 		Handler:     proxy,
 		TLSInsecure: *tlsInsecure,
 		TunnelAuth:  tunnelAuth,
+		Protocols:   protocols,
 		Logger:      logger,
 	})
 
 	client.OnConnect = func(publicURL string) {
 		fmt.Printf("\nTunnel connected!\n")
-		fmt.Printf("Public URL: %s\n", publicURL)
-		fmt.Printf("Local target: %s\n", targetURL)
+		fmt.Printf("  HTTP:  %s → %s\n", publicURL, targetURL)
+
+		// Show MQTT endpoints
+		for _, p := range mqttPorts {
+			// Extract the hostname from the public URL for MQTT display
+			mqttHost := strings.TrimPrefix(publicURL, "https://")
+			mqttHost = strings.TrimPrefix(mqttHost, "http://")
+			if p.Name != "" {
+				fmt.Printf("  MQTT:  mqtts://%s.%s:443 → localhost:%d (ALPN: mqtt)\n", p.Name, mqttHost, p.Port)
+			} else {
+				fmt.Printf("  MQTT:  mqtts://%s:443 → localhost:%d (ALPN: mqtt)\n", mqttHost, p.Port)
+			}
+		}
+
 		if tunnelAuth != nil {
 			switch tunnelAuth.Type {
 			case "token":
 				h := tunnelAuth.EffectiveTokenHeader()
-				fmt.Printf("Auth: token (header: %s)\n", h)
+				fmt.Printf("  Auth:  token (header: %s)\n", h)
 			case "basic":
-				fmt.Printf("Auth: basic (user: %s)\n", tunnelAuth.Username)
+				fmt.Printf("  Auth:  basic (user: %s)\n", tunnelAuth.Username)
 			case "ip":
-				fmt.Printf("Auth: IP allowlist (%s)\n", strings.Join(tunnelAuth.AllowedIPs, ", "))
+				fmt.Printf("  Auth:  IP allowlist (%s)\n", strings.Join(tunnelAuth.AllowedIPs, ", "))
 			}
 		} else {
-			fmt.Printf("Auth: none (tunnel URL is public)\n")
+			fmt.Printf("  Auth:  none (tunnel URL is public)\n")
 		}
 		fmt.Println("\nPress Ctrl+C to stop")
 	}
