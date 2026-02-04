@@ -348,11 +348,11 @@ func TestObservability_RequestDurationHistogram(t *testing.T) {
 		parsed := parsePrometheusMetrics(metricsBody)
 
 		var found bool
-		bucket01, found = getMetricValue(parsed, "mockd_request_duration_seconds_bucket", `le="0.1"`)
+		bucket01, found = getMetricValue(parsed, "mockd_request_duration_seconds_bucket", `le="0.1",method="GET",path="/api/delayed"`)
 		if !found {
 			return false
 		}
-		bucket025, found = getMetricValue(parsed, "mockd_request_duration_seconds_bucket", `le="0.25"`)
+		bucket025, found = getMetricValue(parsed, "mockd_request_duration_seconds_bucket", `le="0.25",method="GET",path="/api/delayed"`)
 		return found
 	}, 2*time.Second, 50*time.Millisecond, "histogram buckets should be populated")
 

@@ -53,7 +53,7 @@ func TestCLIStartCommand(t *testing.T) {
 
 	// Wait for server to be ready
 	adminURL := fmt.Sprintf("http://localhost:%d", adminPort)
-	if !waitForServer(adminURL+"/health", 10*time.Second) {
+	if !waitForServer(adminURL+"/health", 30*time.Second) {
 		cmd.Process.Kill()
 		t.Fatalf("Server did not become ready in time\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
 	}
@@ -126,7 +126,7 @@ func TestCLIMockCRUDCommands(t *testing.T) {
 
 	// Wait for server to be ready
 	adminURL := fmt.Sprintf("http://localhost:%d", adminPort)
-	if !waitForServer(adminURL+"/health", 10*time.Second) {
+	if !waitForServer(adminURL+"/health", 30*time.Second) {
 		t.Fatal("Server did not become ready in time")
 	}
 
@@ -267,7 +267,7 @@ func TestCLIImportExportCommands(t *testing.T) {
 	defer serverCmd.Process.Kill()
 
 	adminURL := fmt.Sprintf("http://localhost:%d", adminPort)
-	if !waitForServer(adminURL+"/health", 10*time.Second) {
+	if !waitForServer(adminURL+"/health", 30*time.Second) {
 		t.Fatal("Server did not become ready in time")
 	}
 

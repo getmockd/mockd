@@ -143,7 +143,7 @@ MQTT clients connect with ALPN negotiation:
 
 Environment Variables:
   MOCKD_TOKEN       Authentication token (alternative to --token flag)
-`)
+`) //nolint:misspell // mosquitto is the Eclipse Mosquitto MQTT broker name
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -216,7 +216,7 @@ Environment Variables:
 	}
 
 	// Build protocol list from flags
-	var protocols []protocol.ProtocolPort
+	protocols := make([]protocol.ProtocolPort, 0, 1+len(mqttPorts))
 	protocols = append(protocols, protocol.ProtocolPort{
 		Type: "http",
 		Port: *localPort,

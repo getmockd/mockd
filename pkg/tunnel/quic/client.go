@@ -397,7 +397,7 @@ func (c *Client) handleRawBidirectionalStream(_ context.Context, stream *quic.St
 
 	// Read the HTTP response from the local service (status + headers)
 	localBuf := bufio.NewReader(localConn)
-	localResp, err := http.ReadResponse(localBuf, nil)
+	localResp, err := http.ReadResponse(localBuf, nil) //nolint:bodyclose // Body flows raw through localBuf/localConn into bridgeRawBidir; closing it would sever the connection.
 	if err != nil {
 		c.logger.Error("failed to read response from local service", "error", err)
 		c.sendErrorResponse(stream, http.StatusBadGateway, "Failed to read response from local service")
