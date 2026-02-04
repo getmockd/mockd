@@ -643,10 +643,18 @@ func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Generate ID if not provided
+	// Generate ID if not provided (needed before Validate since ID is required)
 	if m.ID == "" {
 		m.ID = generateMockID(m.Type)
-	} else if a.localEngine != nil {
+	}
+
+	// Validate the full mock configuration
+	if err := m.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
+	if a.localEngine != nil {
 		// Check engine for duplicate ID (engine is the runtime truth)
 		if existing, err := a.localEngine.GetMock(r.Context(), m.ID); err == nil && existing != nil {
 			writeError(w, http.StatusConflict, "duplicate_id", "Mock with this ID already exists")

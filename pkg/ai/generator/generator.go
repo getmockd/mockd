@@ -289,6 +289,9 @@ func (g *Generator) parseMockResponse(response string) ([]*config.MockConfigurat
 			statusCode = 200
 		}
 
+		// Normalize path: convert Express-style :param to mockd-style {param}
+		path := normalizePathParams(ep.Path)
+
 		enabled := true
 		mocks[i] = &config.MockConfiguration{
 			ID:        fmt.Sprintf("ai-generated-%d", i+1),
@@ -300,7 +303,7 @@ func (g *Generator) parseMockResponse(response string) ([]*config.MockConfigurat
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: strings.ToUpper(ep.Method),
-					Path:   ep.Path,
+					Path:   path,
 				},
 				Response: &mock.HTTPResponse{
 					StatusCode: statusCode,
@@ -372,4 +375,17 @@ func (g *Generator) EnhanceMock(ctx context.Context, m *config.MockConfiguration
 	}
 
 	return nil
+}
+
+// normalizePathParams converts Express-style :param path segments to mockd-style {param}.
+// For example, "/users/:id/posts/:postId" becomes "/users/{id}/posts/{postId}".
+// LLMs frequently generate Express/Rails-style params since they're common in training data.
+func normalizePathParams(path string) string {
+	segments := strings.Split(path, "/")
+	for i, seg := range segments {
+		if strings.HasPrefix(seg, ":") && len(seg) > 1 {
+			segments[i] = "{" + seg[1:] + "}"
+		}
+	}
+	return strings.Join(segments, "/")
 }

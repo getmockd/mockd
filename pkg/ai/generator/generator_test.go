@@ -489,3 +489,27 @@ func TestFallbackValues(t *testing.T) {
 		}
 	})
 }
+
+func TestNormalizePathParams(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"/api/users", "/api/users"},
+		{"/api/users/:id", "/api/users/{id}"},
+		{"/api/users/:userId/posts/:postId", "/api/users/{userId}/posts/{postId}"},
+		{"/api/users/{id}", "/api/users/{id}"}, // already correct
+		{"/:version/api", "/{version}/api"},
+		{"/", "/"},
+		{"/api/users/:id/comments", "/api/users/{id}/comments"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := normalizePathParams(tt.input)
+			if result != tt.expected {
+				t.Errorf("normalizePathParams(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}

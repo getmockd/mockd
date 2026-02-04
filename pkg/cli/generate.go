@@ -242,6 +242,20 @@ func generateFromPrompt(prompt, outputFile, providerName, model string, dryRun b
 }
 
 func outputMocks(collection *config.MockCollection, outputFile string, dryRun bool, _ string) error {
+	// Validate all generated mocks before output
+	var validMocks []*config.MockConfiguration
+	for _, m := range collection.Mocks {
+		if err := m.Validate(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: skipping invalid mock %q: %v\n", m.Name, err)
+			continue
+		}
+		validMocks = append(validMocks, m)
+	}
+	if len(validMocks) < len(collection.Mocks) {
+		fmt.Fprintf(os.Stderr, "Validated %d/%d mocks (%d skipped)\n", len(validMocks), len(collection.Mocks), len(collection.Mocks)-len(validMocks))
+	}
+	collection.Mocks = validMocks
+
 	if dryRun {
 		fmt.Println("\nDry run - mocks that would be created:")
 		for _, mock := range collection.Mocks {
