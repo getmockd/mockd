@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"sync"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/cli"
 )
 
 // MCPSession represents a single client session.
@@ -35,6 +37,20 @@ type MCPSession struct {
 
 	// LastActiveAt is the timestamp of the last request.
 	LastActiveAt time.Time
+
+	// Session-scoped context (initialized from CLI resolution, not persisted to disk).
+
+	// contextName is the active context name (e.g., "local", "staging").
+	contextName string
+
+	// adminURL is the active admin server URL for this session.
+	adminURL string
+
+	// workspace is the active workspace ID (empty = no filtering).
+	workspace string
+
+	// adminClient is the per-session admin client, rewired on switch_context.
+	adminClient cli.AdminClient
 
 	mu sync.RWMutex
 }
@@ -98,6 +114,80 @@ func (s *MCPSession) SetClientData(protocolVersion string, clientInfo ClientInfo
 	s.Capabilities = capabilities
 }
 
+// =============================================================================
+// Context / Workspace Accessors (thread-safe)
+// =============================================================================
+
+// GetAdminClient returns the session-scoped admin client.
+func (s *MCPSession) GetAdminClient() cli.AdminClient {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.adminClient
+}
+
+// SetAdminClient replaces the session's admin client (e.g., on switch_context).
+func (s *MCPSession) SetAdminClient(c cli.AdminClient) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.adminClient = c
+}
+
+// GetContextName returns the active context name.
+func (s *MCPSession) GetContextName() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.contextName
+}
+
+// SetContextName sets the active context name.
+func (s *MCPSession) SetContextName(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.contextName = name
+}
+
+// GetAdminURL returns the active admin URL.
+func (s *MCPSession) GetAdminURL() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.adminURL
+}
+
+// SetAdminURL sets the active admin URL.
+func (s *MCPSession) SetAdminURL(url string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.adminURL = url
+}
+
+// GetWorkspace returns the active workspace ID.
+func (s *MCPSession) GetWorkspace() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.workspace
+}
+
+// SetWorkspace sets the active workspace ID.
+func (s *MCPSession) SetWorkspace(ws string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.workspace = ws
+}
+
+// SetContext sets all context fields atomically.
+func (s *MCPSession) SetContext(name, adminURL, workspace string, client cli.AdminClient) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.contextName = name
+	s.adminURL = adminURL
+	s.workspace = workspace
+	s.adminClient = client
+}
+
+// =============================================================================
+// Subscriptions
+// =============================================================================
+
 // Subscribe adds a resource URI to subscriptions.
 func (s *MCPSession) Subscribe(uri string) {
 	s.mu.Lock()
@@ -148,6 +238,10 @@ func (s *MCPSession) Close() {
 	s.State = SessionStateExpired
 	close(s.EventChannel)
 }
+
+// =============================================================================
+// SessionManager
+// =============================================================================
 
 // SessionManager manages all active MCP sessions.
 type SessionManager struct {

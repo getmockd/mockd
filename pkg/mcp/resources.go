@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/cli"
+	"github.com/getmockd/mockd/pkg/cliconfig"
+	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/stateful"
 )
 
@@ -26,32 +28,19 @@ func NewResourceProvider(client cli.AdminClient, store *stateful.StateStore) *Re
 func (p *ResourceProvider) List() []ResourceDefinition {
 	resources := make([]ResourceDefinition, 0)
 
-	// Add mock endpoint resources
+	// Add mock endpoint resources (all protocol types)
 	if p.adminClient != nil {
 		mocks, err := p.adminClient.ListMocks()
 		if err == nil {
-			for _, mock := range mocks {
-				if mock.HTTP == nil || mock.HTTP.Matcher == nil {
+			for _, m := range mocks {
+				uri, name, desc := mockResourceInfo(m)
+				if uri == "" {
 					continue
 				}
-
-				// Create URI with method fragment
-				method := mock.HTTP.Matcher.Method
-				if method == "" {
-					method = "GET"
-				}
-				uri := "mock://" + mock.HTTP.Matcher.Path + "#" + method
-
-				name := method + " " + mock.HTTP.Matcher.Path
-				description := mock.Name
-				if description == "" {
-					description = "Mock endpoint for " + mock.HTTP.Matcher.Path
-				}
-
 				resources = append(resources, ResourceDefinition{
 					URI:         uri,
 					Name:        name,
-					Description: description,
+					Description: desc,
 					MimeType:    "application/json",
 				})
 			}
@@ -97,23 +86,32 @@ func (p *ResourceProvider) List() []ResourceDefinition {
 		MimeType:    "application/json",
 	})
 
+	resources = append(resources, ResourceDefinition{
+		URI:         "mock://context",
+		Name:        "Current Context",
+		Description: "Active context (admin server connection) and available contexts",
+		MimeType:    "application/json",
+	})
+
 	return resources
 }
 
 // Read reads the contents of a resource.
 func (p *ResourceProvider) Read(uri string) ([]ResourceContent, *JSONRPCError) {
 	// Parse the URI
-	resourceType, path, method := parseResourceURI(uri)
+	resourceType, path, _ := parseResourceURI(uri)
 
 	switch resourceType {
 	case "mock":
-		return p.readMockResource(path, method)
+		return p.readMockResource(uri)
 	case "stateful":
 		return p.readStatefulResource(path)
 	case "logs":
 		return p.readLogsResource()
 	case "config":
 		return p.readConfigResource()
+	case "context":
+		return p.readContextResource()
 	default:
 		return nil, ResourceNotFoundError(uri)
 	}
@@ -138,6 +136,9 @@ func parseResourceURI(uri string) (resourceType, path, method string) {
 	if rest == "config" {
 		return "config", "", ""
 	}
+	if rest == "context" {
+		return "context", "", ""
+	}
 
 	// Regular mock endpoint - path starts with /
 	// May have #METHOD fragment
@@ -155,76 +156,36 @@ func parseResourceURI(uri string) (resourceType, path, method string) {
 	return "mock", rest, method
 }
 
-// readMockResource reads a mock endpoint resource.
-func (p *ResourceProvider) readMockResource(path, method string) ([]ResourceContent, *JSONRPCError) {
+// readMockResource reads a mock endpoint resource by matching the full URI
+// against all known mocks (any protocol type).
+func (p *ResourceProvider) readMockResource(requestedURI string) ([]ResourceContent, *JSONRPCError) {
 	if p.adminClient == nil {
 		return nil, InternalError(nil)
 	}
 
-	// Find the matching mock
 	mocks, err := p.adminClient.ListMocks()
 	if err != nil {
 		return nil, InternalError(err)
 	}
-	for _, mock := range mocks {
-		if mock.HTTP == nil || mock.HTTP.Matcher == nil {
+
+	for _, m := range mocks {
+		uri, _, _ := mockResourceInfo(m)
+		if uri == "" || uri != requestedURI {
 			continue
 		}
 
-		mockMethod := mock.HTTP.Matcher.Method
-		if mockMethod == "" {
-			mockMethod = "GET"
-		}
-
-		if mock.HTTP.Matcher.Path == path && mockMethod == method {
-			// Build content
-			content := map[string]interface{}{
-				"id":       mock.ID,
-				"method":   mockMethod,
-				"path":     path,
-				"enabled":  mock.Enabled,
-				"priority": mock.HTTP.Priority,
-			}
-
-			if mock.Name != "" {
-				content["description"] = mock.Name
-			}
-
-			if mock.HTTP.Matcher != nil {
-				content["request"] = map[string]interface{}{
-					"headers":     mock.HTTP.Matcher.Headers,
-					"queryParams": mock.HTTP.Matcher.QueryParams,
-				}
-			}
-
-			if mock.HTTP.Response != nil {
-				content["response"] = map[string]interface{}{
-					"status":  mock.HTTP.Response.StatusCode,
-					"headers": mock.HTTP.Response.Headers,
-					"body":    mock.HTTP.Response.Body,
-					"delay":   formatDuration(mock.HTTP.Response.DelayMs),
-				}
-			}
-
-			if !mock.CreatedAt.IsZero() {
-				content["createdAt"] = mock.CreatedAt.Format("2006-01-02T15:04:05Z")
-			}
-			if !mock.UpdatedAt.IsZero() {
-				content["updatedAt"] = mock.UpdatedAt.Format("2006-01-02T15:04:05Z")
-			}
-
-			text, _ := json.Marshal(content)
-			return []ResourceContent{
-				{
-					URI:      "mock://" + path + "#" + method,
-					MimeType: "application/json",
-					Text:     string(text),
-				},
-			}, nil
-		}
+		// Return the full mock as JSON
+		data, _ := json.Marshal(m)
+		return []ResourceContent{
+			{
+				URI:      uri,
+				MimeType: "application/json",
+				Text:     string(data),
+			},
+		}, nil
 	}
 
-	return nil, ResourceNotFoundError("mock://" + path + "#" + method)
+	return nil, ResourceNotFoundError(requestedURI)
 }
 
 // readStatefulResource reads a stateful resource.
@@ -377,6 +338,128 @@ func formatInt(n int) string {
 	}
 
 	return string(digits[i:])
+}
+
+// readContextResource reads the context resource (available contexts from config).
+func (p *ResourceProvider) readContextResource() ([]ResourceContent, *JSONRPCError) {
+	ctxConfig, _ := cliconfig.LoadContextConfig()
+
+	content := map[string]interface{}{
+		"currentContext": "",
+	}
+
+	if ctxConfig != nil {
+		content["currentContext"] = ctxConfig.CurrentContext
+
+		contexts := make(map[string]interface{})
+		for name, ctx := range ctxConfig.Contexts {
+			// AuthToken intentionally omitted for security
+			info := map[string]interface{}{
+				"adminUrl": ctx.AdminURL,
+			}
+			if ctx.Workspace != "" {
+				info["workspace"] = ctx.Workspace
+			}
+			if ctx.Description != "" {
+				info["description"] = ctx.Description
+			}
+			contexts[name] = info
+		}
+		content["contexts"] = contexts
+	}
+
+	text, _ := json.Marshal(content)
+	return []ResourceContent{
+		{
+			URI:      "mock://context",
+			MimeType: "application/json",
+			Text:     string(text),
+		},
+	}, nil
+}
+
+// mockResourceInfo returns the URI, display name, and description for a mock resource.
+// Works for all protocol types, not just HTTP.
+func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
+	switch m.Type {
+	case mock.MockTypeHTTP:
+		if m.HTTP == nil || m.HTTP.Matcher == nil {
+			return "", "", ""
+		}
+		method := m.HTTP.Matcher.Method
+		if method == "" {
+			method = "GET"
+		}
+		uri = "mock://" + m.HTTP.Matcher.Path + "#" + method
+		name = method + " " + m.HTTP.Matcher.Path
+		desc = m.Name
+		if desc == "" {
+			desc = "Mock endpoint for " + m.HTTP.Matcher.Path
+		}
+	case mock.MockTypeWebSocket:
+		if m.WebSocket == nil {
+			return "", "", ""
+		}
+		uri = "mock://websocket" + m.WebSocket.Path
+		name = "WS " + m.WebSocket.Path
+		desc = m.Name
+		if desc == "" {
+			desc = "WebSocket endpoint " + m.WebSocket.Path
+		}
+	case mock.MockTypeGraphQL:
+		if m.GraphQL == nil {
+			return "", "", ""
+		}
+		uri = "mock://graphql" + m.GraphQL.Path
+		name = "GraphQL " + m.GraphQL.Path
+		desc = m.Name
+		if desc == "" {
+			desc = "GraphQL endpoint " + m.GraphQL.Path
+		}
+	case mock.MockTypeGRPC:
+		if m.GRPC == nil {
+			return "", "", ""
+		}
+		uri = "mock://grpc/" + m.ID
+		name = "gRPC :" + formatInt(m.GRPC.Port)
+		desc = m.Name
+		if desc == "" {
+			desc = "gRPC mock on port " + formatInt(m.GRPC.Port)
+		}
+	case mock.MockTypeSOAP:
+		if m.SOAP == nil {
+			return "", "", ""
+		}
+		uri = "mock://soap" + m.SOAP.Path
+		name = "SOAP " + m.SOAP.Path
+		desc = m.Name
+		if desc == "" {
+			desc = "SOAP endpoint " + m.SOAP.Path
+		}
+	case mock.MockTypeMQTT:
+		if m.MQTT == nil {
+			return "", "", ""
+		}
+		uri = "mock://mqtt/" + m.ID
+		name = "MQTT :" + formatInt(m.MQTT.Port)
+		desc = m.Name
+		if desc == "" {
+			desc = "MQTT broker on port " + formatInt(m.MQTT.Port)
+		}
+	case mock.MockTypeOAuth:
+		if m.OAuth == nil {
+			return "", "", ""
+		}
+		uri = "mock://oauth/" + m.ID
+		name = "OAuth " + m.OAuth.Issuer
+		desc = m.Name
+		if desc == "" {
+			desc = "OAuth provider " + m.OAuth.Issuer
+		}
+	default:
+		return "", "", ""
+	}
+	return uri, name, desc
 }
 
 // GenerateURI generates a mock:// URI for a mock configuration.

@@ -202,86 +202,95 @@ type SSEEvent struct {
 	Retry int    `json:"retry,omitempty"`
 }
 
-// Tool-Specific Parameter Types
+// =============================================================================
+// Tool Parameter Types — Mock CRUD
+// =============================================================================
 
-// GetMockDataParams are parameters for get_mock_data tool.
-type GetMockDataParams struct {
-	Path        string            `json:"path"`
-	Method      string            `json:"method,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty"`
-	QueryParams map[string]string `json:"queryParams,omitempty"`
-	Body        string            `json:"body,omitempty"`
+// ListMocksParams are parameters for list_mocks tool.
+type ListMocksParams struct {
+	Type    string `json:"type,omitempty"`
+	Enabled *bool  `json:"enabled,omitempty"`
 }
 
-// ListEndpointsParams are parameters for list_endpoints tool.
-type ListEndpointsParams struct {
-	Method     string `json:"method,omitempty"`
-	PathPrefix string `json:"pathPrefix,omitempty"`
-	Enabled    *bool  `json:"enabled,omitempty"`
-}
-
-// CreateEndpointParams are parameters for create_endpoint tool.
-type CreateEndpointParams struct {
-	Path        string         `json:"path"`
-	Method      string         `json:"method"`
-	Response    ResponseConfig `json:"response"`
-	Description string         `json:"description,omitempty"`
-	Priority    int            `json:"priority,omitempty"`
-}
-
-// ResponseConfig defines the response for a mock endpoint.
-type ResponseConfig struct {
-	Status  int               `json:"status,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Body    interface{}       `json:"body"`
-	Delay   string            `json:"delay,omitempty"`
-}
-
-// UpdateEndpointParams are parameters for update_endpoint tool.
-type UpdateEndpointParams struct {
-	ID          string          `json:"id"`
-	Response    *ResponseConfig `json:"response,omitempty"`
-	Description string          `json:"description,omitempty"`
-	Priority    *int            `json:"priority,omitempty"`
-}
-
-// DeleteEndpointParams are parameters for delete_endpoint tool.
-type DeleteEndpointParams struct {
+// GetMockParams are parameters for get_mock tool.
+type GetMockParams struct {
 	ID string `json:"id"`
 }
 
-// ToggleEndpointParams are parameters for toggle_endpoint tool.
-type ToggleEndpointParams struct {
+// CreateMockParams are parameters for create_mock tool.
+// The protocol-specific fields (http, websocket, etc.) are passed through
+// as-is to the admin API's POST /mocks endpoint.
+type CreateMockParams struct {
+	Type      string          `json:"type"`
+	Name      string          `json:"name,omitempty"`
+	HTTP      json.RawMessage `json:"http,omitempty"`
+	WebSocket json.RawMessage `json:"websocket,omitempty"`
+	GraphQL   json.RawMessage `json:"graphql,omitempty"`
+	GRPC      json.RawMessage `json:"grpc,omitempty"`
+	SOAP      json.RawMessage `json:"soap,omitempty"`
+	MQTT      json.RawMessage `json:"mqtt,omitempty"`
+	OAuth     json.RawMessage `json:"oauth,omitempty"`
+}
+
+// UpdateMockParams are parameters for update_mock tool.
+type UpdateMockParams struct {
+	ID        string          `json:"id"`
+	Name      string          `json:"name,omitempty"`
+	Enabled   *bool           `json:"enabled,omitempty"`
+	HTTP      json.RawMessage `json:"http,omitempty"`
+	WebSocket json.RawMessage `json:"websocket,omitempty"`
+	GraphQL   json.RawMessage `json:"graphql,omitempty"`
+	GRPC      json.RawMessage `json:"grpc,omitempty"`
+	SOAP      json.RawMessage `json:"soap,omitempty"`
+	MQTT      json.RawMessage `json:"mqtt,omitempty"`
+	OAuth     json.RawMessage `json:"oauth,omitempty"`
+}
+
+// DeleteMockParams are parameters for delete_mock tool.
+type DeleteMockParams struct {
+	ID string `json:"id"`
+}
+
+// ToggleMockParams are parameters for toggle_mock tool.
+type ToggleMockParams struct {
 	ID      string `json:"id"`
 	Enabled bool   `json:"enabled"`
 }
 
-// StatefulListParams are parameters for stateful_list tool.
-type StatefulListParams struct {
-	Resource string            `json:"resource"`
-	Limit    int               `json:"limit,omitempty"`
-	Offset   int               `json:"offset,omitempty"`
-	Filter   map[string]string `json:"filter,omitempty"`
-	Sort     string            `json:"sort,omitempty"`
-	Order    string            `json:"order,omitempty"`
+// =============================================================================
+// Tool Parameter Types — Context / Workspace
+// =============================================================================
+
+// SwitchContextParams are parameters for switch_context tool.
+type SwitchContextParams struct {
+	Name string `json:"name"`
 }
 
-// StatefulGetParams are parameters for stateful_get tool.
-type StatefulGetParams struct {
-	Resource string `json:"resource"`
-	ID       string `json:"id"`
+// SwitchWorkspaceParams are parameters for switch_workspace tool.
+type SwitchWorkspaceParams struct {
+	ID string `json:"id"`
 }
 
-// StatefulCreateParams are parameters for stateful_create tool.
-type StatefulCreateParams struct {
-	Resource string                 `json:"resource"`
-	Data     map[string]interface{} `json:"data"`
+// =============================================================================
+// Tool Parameter Types — Import / Export
+// =============================================================================
+
+// ImportMocksParams are parameters for import_mocks tool.
+type ImportMocksParams struct {
+	Content string `json:"content"`
+	Format  string `json:"format,omitempty"`
+	Replace bool   `json:"replace,omitempty"`
+	DryRun  bool   `json:"dryRun,omitempty"`
 }
 
-// StatefulResetParams are parameters for stateful_reset tool.
-type StatefulResetParams struct {
-	Resource string `json:"resource,omitempty"`
+// ExportMocksParams are parameters for export_mocks tool.
+type ExportMocksParams struct {
+	Format string `json:"format,omitempty"`
 }
+
+// =============================================================================
+// Tool Parameter Types — Observability
+// =============================================================================
 
 // GetRequestLogsParams are parameters for get_request_logs tool.
 type GetRequestLogsParams struct {
@@ -290,11 +299,93 @@ type GetRequestLogsParams struct {
 	Method     string `json:"method,omitempty"`
 	PathPrefix string `json:"pathPrefix,omitempty"`
 	MockID     string `json:"mockId,omitempty"`
-	StatusCode int    `json:"statusCode,omitempty"`
 }
 
-// ClearLogsParams are parameters for clear_logs tool.
-type ClearLogsParams struct{}
+// =============================================================================
+// Tool Parameter Types — Stateful Resources
+// =============================================================================
+
+// ListStatefulItemsParams are parameters for list_stateful_items tool.
+type ListStatefulItemsParams struct {
+	Resource string `json:"resource"`
+	Limit    int    `json:"limit,omitempty"`
+	Offset   int    `json:"offset,omitempty"`
+	Sort     string `json:"sort,omitempty"`
+	Order    string `json:"order,omitempty"`
+}
+
+// GetStatefulItemParams are parameters for get_stateful_item tool.
+type GetStatefulItemParams struct {
+	Resource string `json:"resource"`
+	ID       string `json:"id"`
+}
+
+// CreateStatefulItemParams are parameters for create_stateful_item tool.
+type CreateStatefulItemParams struct {
+	Resource string                 `json:"resource"`
+	Data     map[string]interface{} `json:"data"`
+}
+
+// ResetStatefulDataParams are parameters for reset_stateful_data tool.
+// Resource is required — no accidental full resets.
+type ResetStatefulDataParams struct {
+	Resource string `json:"resource"`
+}
+
+// =============================================================================
+// Response Types
+// =============================================================================
+
+// MockSummary represents a protocol-agnostic mock summary for list_mocks.
+type MockSummary struct {
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Name    string `json:"name,omitempty"`
+	Enabled bool   `json:"enabled"`
+	Summary string `json:"summary"` // Human-readable: "GET /api/users", "gRPC :50051", etc.
+}
+
+// ContextInfo represents context information returned by get_current_context.
+// AuthToken is intentionally omitted to prevent credential leakage.
+type ContextInfo struct {
+	Name        string `json:"name"`
+	AdminURL    string `json:"adminUrl"`
+	Workspace   string `json:"workspace,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// ContextResult is returned by get_current_context and switch_context.
+type ContextResult struct {
+	Current   string        `json:"current"`
+	AdminURL  string        `json:"adminUrl"`
+	Workspace string        `json:"workspace,omitempty"`
+	Contexts  []ContextInfo `json:"contexts,omitempty"`
+}
+
+// StatefulListResult represents the result of a list_stateful_items operation.
+type StatefulListResult struct {
+	Data []map[string]interface{} `json:"data"`
+	Meta PaginationMeta           `json:"meta"`
+}
+
+// PaginationMeta contains pagination information.
+type PaginationMeta struct {
+	Total  int `json:"total"`
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+	Count  int `json:"count"`
+}
+
+// RequestLogEntry represents a captured request log entry.
+type RequestLogEntry struct {
+	ID        string    `json:"id"`
+	Method    string    `json:"method"`
+	Path      string    `json:"path"`
+	Status    int       `json:"status"`
+	Duration  string    `json:"duration"`
+	Timestamp time.Time `json:"timestamp"`
+	MockID    string    `json:"mockId,omitempty"`
+}
 
 // Notification Types
 
@@ -332,44 +423,4 @@ func (s SessionState) String() string {
 	default:
 		return "unknown"
 	}
-}
-
-// EndpointInfo represents information about a mock endpoint.
-type EndpointInfo struct {
-	ID          string    `json:"id"`
-	Method      string    `json:"method"`
-	Path        string    `json:"path"`
-	Enabled     bool      `json:"enabled"`
-	Description string    `json:"description,omitempty"`
-	Priority    int       `json:"priority,omitempty"`
-	CreatedAt   time.Time `json:"createdAt,omitempty"`
-	UpdatedAt   time.Time `json:"updatedAt,omitempty"`
-}
-
-// StatefulListResult represents the result of a stateful_list operation.
-type StatefulListResult struct {
-	Data []map[string]interface{} `json:"data"`
-	Meta PaginationMeta           `json:"meta"`
-}
-
-// PaginationMeta contains pagination information.
-type PaginationMeta struct {
-	Total  int `json:"total"`
-	Limit  int `json:"limit"`
-	Offset int `json:"offset"`
-	Count  int `json:"count"`
-}
-
-// RequestLogEntry represents a captured request log entry.
-type RequestLogEntry struct {
-	ID          string              `json:"id"`
-	Method      string              `json:"method"`
-	Path        string              `json:"path"`
-	Status      int                 `json:"status"`
-	Duration    string              `json:"duration"`
-	Timestamp   time.Time           `json:"timestamp"`
-	MockID      string              `json:"mockId,omitempty"`
-	Headers     map[string][]string `json:"headers,omitempty"`
-	QueryParams map[string]string   `json:"queryParams,omitempty"`
-	Body        string              `json:"body,omitempty"`
 }

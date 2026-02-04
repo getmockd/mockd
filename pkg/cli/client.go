@@ -58,6 +58,8 @@ type AdminClient interface {
 	// GetPortsVerbose returns all ports with optional extended info.
 	GetPortsVerbose(verbose bool) ([]PortInfo, error)
 
+	// ListWorkspaces returns all workspaces on the admin server.
+	ListWorkspaces() ([]*WorkspaceDTO, error)
 	// CreateWorkspace creates a new workspace on the admin.
 	CreateWorkspace(name string) (*WorkspaceResult, error)
 	// RegisterEngine registers an engine with the admin.
@@ -668,6 +670,26 @@ func (c *adminClient) GetPortsVerbose(verbose bool) ([]PortInfo, error) {
 }
 
 // CreateWorkspace creates a new workspace on the admin.
+func (c *adminClient) ListWorkspaces() ([]*WorkspaceDTO, error) {
+	resp, err := c.doRequest("GET", "/workspaces", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result struct {
+		Workspaces []*WorkspaceDTO `json:"workspaces"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result.Workspaces, nil
+}
+
 func (c *adminClient) CreateWorkspace(name string) (*WorkspaceResult, error) {
 	body, err := json.Marshal(map[string]string{"name": name})
 	if err != nil {

@@ -18,11 +18,16 @@ import (
 // ServerVersion is the mockd server version.
 const ServerVersion = "0.2.3"
 
+// ClientFactory creates an AdminClient for a given admin URL.
+// Injected at wiring time to keep pkg/mcp testable.
+type ClientFactory func(adminURL string) cli.AdminClient
+
 // Server is the MCP protocol server.
 type Server struct {
 	config        *Config
-	adminClient   cli.AdminClient
+	adminClient   cli.AdminClient // default/initial client
 	statefulStore *stateful.StateStore
+	clientFactory ClientFactory // creates new clients on context switch
 	sessions      *SessionManager
 	tools         *ToolRegistry
 	resources     *ResourceProvider
@@ -32,10 +37,15 @@ type Server struct {
 	mu            sync.RWMutex
 	running       bool
 	log           *slog.Logger
+
+	// Initial context state (used to seed new sessions).
+	initialContext   string
+	initialAdminURL  string
+	initialWorkspace string
 }
 
 // NewServer creates a new MCP server.
-// The adminClient is used for mock operations via HTTP.
+// The adminClient is used as the default for mock operations via HTTP.
 // statefulStore is optional and used for stateful resource operations.
 func NewServer(cfg *Config, adminClient cli.AdminClient, statefulStore *stateful.StateStore) *Server {
 	if cfg == nil {
@@ -48,12 +58,18 @@ func NewServer(cfg *Config, adminClient cli.AdminClient, statefulStore *stateful
 	}
 
 	s := &Server{
-		config:        cfg,
-		adminClient:   adminClient,
-		statefulStore: statefulStore,
-		sessions:      NewSessionManager(cfg),
-		stopCh:        make(chan struct{}),
-		log:           logging.Nop(),
+		config:          cfg,
+		adminClient:     adminClient,
+		statefulStore:   statefulStore,
+		sessions:        NewSessionManager(cfg),
+		stopCh:          make(chan struct{}),
+		log:             logging.Nop(),
+		initialAdminURL: cfg.AdminURL,
+	}
+
+	// Default client factory
+	s.clientFactory = func(adminURL string) cli.AdminClient {
+		return cli.NewAdminClient(adminURL)
 	}
 
 	// Initialize tool registry with handlers
@@ -63,6 +79,31 @@ func NewServer(cfg *Config, adminClient cli.AdminClient, statefulStore *stateful
 	s.resources = NewResourceProvider(adminClient, statefulStore)
 
 	return s
+}
+
+// SetClientFactory sets the factory used to create AdminClients on context switch.
+func (s *Server) SetClientFactory(f ClientFactory) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if f != nil {
+		s.clientFactory = f
+	}
+}
+
+// SetInitialContext sets the initial context state for new sessions.
+func (s *Server) SetInitialContext(name, adminURL, workspace string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.initialContext = name
+	s.initialAdminURL = adminURL
+	s.initialWorkspace = workspace
+}
+
+// initSession seeds a new session with the server's initial context state.
+func (s *Server) initSession(session *MCPSession) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	session.SetContext(s.initialContext, s.initialAdminURL, s.initialWorkspace, s.adminClient)
 }
 
 // Start starts the MCP HTTP server.
@@ -127,7 +168,6 @@ func (s *Server) Stop() error {
 }
 
 // Handler returns the HTTP handler for the MCP server.
-// This is useful for testing without starting the HTTP server.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(s.config.Path, s.handleMCP)
@@ -137,7 +177,6 @@ func (s *Server) Handler() http.Handler {
 // withMiddleware wraps the handler with CORS and origin validation.
 func (s *Server) withMiddleware(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Localhost check if remote not allowed
 		if !s.config.AllowRemote {
 			if !isLocalhost(r.RemoteAddr) {
 				http.Error(w, "Remote access not allowed", http.StatusForbidden)
@@ -145,14 +184,12 @@ func (s *Server) withMiddleware(handler http.Handler) http.Handler {
 			}
 		}
 
-		// Origin validation
 		origin := r.Header.Get("Origin")
 		if origin != "" && !s.isOriginAllowed(origin) {
 			http.Error(w, "Origin not allowed", http.StatusForbidden)
 			return
 		}
 
-		// CORS headers
 		if origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		} else {
@@ -162,7 +199,6 @@ func (s *Server) withMiddleware(handler http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID")
 		w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
 
-		// Handle preflight
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -172,26 +208,19 @@ func (s *Server) withMiddleware(handler http.Handler) http.Handler {
 	})
 }
 
-// isLocalhost checks if the remote address is localhost.
 func isLocalhost(remoteAddr string) bool {
-	// Empty address is allowed (test environment or internal calls)
 	if remoteAddr == "" {
 		return true
 	}
-
-	// Remove port if present
 	host := remoteAddr
 	if idx := strings.LastIndex(remoteAddr, ":"); idx != -1 {
 		host = remoteAddr[:idx]
 	}
-	// Handle IPv6 addresses in brackets
 	host = strings.TrimPrefix(host, "[")
 	host = strings.TrimSuffix(host, "]")
-
 	return host == "127.0.0.1" || host == "localhost" || host == "::1"
 }
 
-// isOriginAllowed checks if the origin is in the allowed list.
 func (s *Server) isOriginAllowed(origin string) bool {
 	for _, allowed := range s.config.AllowedOrigins {
 		if allowed == "*" {
@@ -204,19 +233,14 @@ func (s *Server) isOriginAllowed(origin string) bool {
 	return false
 }
 
-// matchOrigin matches an origin against a pattern (supports * wildcard for port).
 func matchOrigin(origin, pattern string) bool {
 	if origin == pattern {
 		return true
 	}
-
-	// Handle wildcard patterns like "http://localhost:*"
 	if strings.HasSuffix(pattern, ":*") {
 		prefix := strings.TrimSuffix(pattern, "*")
-		// Match origin starting with prefix followed by digits
 		if strings.HasPrefix(origin, prefix) {
 			rest := origin[len(prefix):]
-			// Check if rest is all digits (port number)
 			for _, c := range rest {
 				if c < '0' || c > '9' {
 					return false
@@ -225,41 +249,32 @@ func matchOrigin(origin, pattern string) bool {
 			return len(rest) > 0
 		}
 	}
-
 	return false
 }
 
-// handleMCP is the main handler for MCP requests.
 func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		// SSE stream
 		s.handleSSE(w, r)
 	case "POST":
-		// JSON-RPC request
 		s.handleJSONRPC(w, r)
 	case "DELETE":
-		// Session termination
 		s.handleSessionDelete(w, r)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-// handleJSONRPC handles JSON-RPC POST requests.
 func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
-	// Parse the request
 	req, parseErr := ParseRequest(r.Body)
 	if parseErr != nil {
 		s.writeError(w, nil, parseErr)
 		return
 	}
 
-	// Get or create session
 	sessionID := r.Header.Get("Mcp-Session-Id")
 	var session *MCPSession
 
-	// Initialize is special - creates a new session
 	if req.Method == "initialize" {
 		var err error
 		session, err = s.sessions.Create()
@@ -267,10 +282,9 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 			s.writeError(w, req.ID, InternalError(err))
 			return
 		}
-		// Return session ID in header
+		s.initSession(session)
 		w.Header().Set("Mcp-Session-Id", session.ID)
 	} else {
-		// All other methods require an existing session
 		if sessionID == "" {
 			s.writeError(w, req.ID, SessionRequiredError())
 			return
@@ -283,43 +297,33 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 		session.Touch()
 	}
 
-	// Dispatch the request
 	result, err := s.dispatch(session, req)
 
-	// Handle notification (no response needed)
 	if req.IsNotification() {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
-	// Handle error
 	if err != nil {
 		s.writeError(w, req.ID, err)
 		return
 	}
 
-	// Write success response
 	s.writeSuccess(w, req.ID, result)
 }
 
-// dispatch routes the request to the appropriate handler.
 func (s *Server) dispatch(session *MCPSession, req *JSONRPCRequest) (interface{}, *JSONRPCError) {
 	switch req.Method {
-	// Lifecycle methods
 	case "initialize":
 		return s.handleInitialize(session, req.Params)
 	case "initialized":
 		return s.handleInitialized(session)
 	case "ping":
 		return s.handlePing()
-
-	// Tool methods
 	case "tools/list":
 		return s.handleToolsList(session)
 	case "tools/call":
 		return s.handleToolsCall(session, req.Params)
-
-	// Resource methods
 	case "resources/list":
 		return s.handleResourcesList(session)
 	case "resources/read":
@@ -328,48 +332,31 @@ func (s *Server) dispatch(session *MCPSession, req *JSONRPCRequest) (interface{}
 		return s.handleResourcesSubscribe(session, req.Params)
 	case "resources/unsubscribe":
 		return s.handleResourcesUnsubscribe(session, req.Params)
-
 	default:
 		return nil, MethodNotFoundError(req.Method)
 	}
 }
 
-// handleInitialize handles the initialize request.
 func (s *Server) handleInitialize(session *MCPSession, params json.RawMessage) (interface{}, *JSONRPCError) {
 	initParams, err := UnmarshalParamsRequired[InitializeParams](params)
 	if err != nil {
 		return nil, err
 	}
-
-	// Validate protocol version
 	if initParams.ProtocolVersion != ProtocolVersion {
 		return nil, ProtocolVersionError(initParams.ProtocolVersion, ProtocolVersion)
 	}
-
-	// Store client info
 	session.SetClientData(initParams.ProtocolVersion, initParams.ClientInfo, initParams.Capabilities)
 	session.SetState(SessionStateInitialized)
-
-	// Return server capabilities
 	return &InitializeResult{
 		ProtocolVersion: ProtocolVersion,
 		Capabilities: ServerCapabilities{
-			Tools: &ToolsCapability{
-				ListChanged: false,
-			},
-			Resources: &ResourcesCapability{
-				Subscribe:   true,
-				ListChanged: true,
-			},
+			Tools:     &ToolsCapability{ListChanged: false},
+			Resources: &ResourcesCapability{Subscribe: true, ListChanged: true},
 		},
-		ServerInfo: ServerInfo{
-			Name:    "mockd",
-			Version: ServerVersion,
-		},
+		ServerInfo: ServerInfo{Name: "mockd", Version: ServerVersion},
 	}, nil
 }
 
-// handleInitialized handles the initialized notification.
 func (s *Server) handleInitialized(session *MCPSession) (interface{}, *JSONRPCError) {
 	if session.GetState() != SessionStateInitialized {
 		return nil, NotInitializedError()
@@ -378,141 +365,104 @@ func (s *Server) handleInitialized(session *MCPSession) (interface{}, *JSONRPCEr
 	return nil, nil
 }
 
-// handlePing handles the ping request.
 func (s *Server) handlePing() (interface{}, *JSONRPCError) {
 	return map[string]interface{}{}, nil
 }
 
-// handleToolsList returns the list of available tools.
 func (s *Server) handleToolsList(session *MCPSession) (interface{}, *JSONRPCError) {
 	if session.GetState() != SessionStateReady {
 		return nil, NotInitializedError()
 	}
-
-	return &ToolsListResult{
-		Tools: s.tools.List(),
-	}, nil
+	return &ToolsListResult{Tools: s.tools.List()}, nil
 }
 
-// handleToolsCall executes a tool.
 func (s *Server) handleToolsCall(session *MCPSession, params json.RawMessage) (interface{}, *JSONRPCError) {
 	if session.GetState() != SessionStateReady {
 		return nil, NotInitializedError()
 	}
-
 	callParams, err := UnmarshalParamsRequired[ToolCallParams](params)
 	if err != nil {
 		return nil, err
 	}
-
 	result, toolErr := s.tools.Execute(callParams.Name, callParams.Arguments, session)
 	if toolErr != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return result, nil
 	}
-
 	return result, nil
 }
 
-// handleResourcesList returns the list of available resources.
 func (s *Server) handleResourcesList(session *MCPSession) (interface{}, *JSONRPCError) {
 	if session.GetState() != SessionStateReady {
 		return nil, NotInitializedError()
 	}
-
-	return &ResourcesListResult{
-		Resources: s.resources.List(),
-	}, nil
+	return &ResourcesListResult{Resources: s.resources.List()}, nil
 }
 
-// handleResourcesRead reads a resource.
 func (s *Server) handleResourcesRead(session *MCPSession, params json.RawMessage) (interface{}, *JSONRPCError) {
 	if session.GetState() != SessionStateReady {
 		return nil, NotInitializedError()
 	}
-
 	readParams, err := UnmarshalParamsRequired[ResourceReadParams](params)
 	if err != nil {
 		return nil, err
 	}
-
 	contents, readErr := s.resources.Read(readParams.URI)
 	if readErr != nil {
 		return nil, readErr
 	}
-
-	return &ResourceReadResult{
-		Contents: contents,
-	}, nil
+	return &ResourceReadResult{Contents: contents}, nil
 }
 
-// handleResourcesSubscribe subscribes to a resource.
 func (s *Server) handleResourcesSubscribe(session *MCPSession, params json.RawMessage) (interface{}, *JSONRPCError) {
 	if session.GetState() != SessionStateReady {
 		return nil, NotInitializedError()
 	}
-
 	subParams, err := UnmarshalParamsRequired[ResourceSubscribeParams](params)
 	if err != nil {
 		return nil, err
 	}
-
 	session.Subscribe(subParams.URI)
 	return map[string]interface{}{}, nil
 }
 
-// handleResourcesUnsubscribe unsubscribes from a resource.
 func (s *Server) handleResourcesUnsubscribe(session *MCPSession, params json.RawMessage) (interface{}, *JSONRPCError) {
 	if session.GetState() != SessionStateReady {
 		return nil, NotInitializedError()
 	}
-
 	unsubParams, err := UnmarshalParamsRequired[ResourceUnsubscribeParams](params)
 	if err != nil {
 		return nil, err
 	}
-
 	session.Unsubscribe(unsubParams.URI)
 	return map[string]interface{}{}, nil
 }
 
-// handleSSE handles SSE GET requests.
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get("Mcp-Session-Id")
 	if sessionID == "" {
 		http.Error(w, "Session required", http.StatusBadRequest)
 		return
 	}
-
 	session := s.sessions.Get(sessionID)
 	if session == nil {
 		http.Error(w, "Session not found", http.StatusNotFound)
 		return
 	}
-
 	if session.GetState() != SessionStateReady {
 		http.Error(w, "Session not ready", http.StatusBadRequest)
 		return
 	}
-
-	// Check for Flusher support
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
-
-	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	// Handle Last-Event-ID for resumption
-	lastEventID := r.Header.Get("Last-Event-ID")
-	_ = lastEventID // TODO: implement event replay from buffer
-
-	// Event loop
 	ctx := r.Context()
 	eventID := int64(0)
 
@@ -520,15 +470,12 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-ctx.Done():
 			return
-
 		case notif, ok := <-session.EventChannel:
 			if !ok {
 				return
 			}
-
 			eventID++
 			data, _ := json.Marshal(notif)
-
 			_, _ = fmt.Fprintf(w, "id: %d\n", eventID)
 			_, _ = fmt.Fprintf(w, "event: message\n")
 			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
@@ -537,27 +484,23 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleSessionDelete handles session termination.
 func (s *Server) handleSessionDelete(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get("Mcp-Session-Id")
 	if sessionID == "" {
 		http.Error(w, "Session required", http.StatusBadRequest)
 		return
 	}
-
 	s.sessions.Delete(sessionID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// writeError writes a JSON-RPC error response.
 func (s *Server) writeError(w http.ResponseWriter, id interface{}, err *JSONRPCError) {
 	resp := ErrorResponse(id, err)
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK) // JSON-RPC errors are returned with 200 OK
+	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// writeSuccess writes a JSON-RPC success response.
 func (s *Server) writeSuccess(w http.ResponseWriter, id interface{}, result interface{}) {
 	resp := SuccessResponse(id, result)
 	w.Header().Set("Content-Type", "application/json")

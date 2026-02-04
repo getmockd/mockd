@@ -1,62 +1,47 @@
 // Package mcp implements the Model Context Protocol (MCP) server for mockd.
 //
-// MCP (Model Context Protocol) enables AI agents to discover, query, and manage
-// mock API endpoints through a standardized JSON-RPC 2.0 based protocol.
-// This allows LLM applications like Claude Desktop to programmatically interact
-// with mockd's mocking capabilities.
+// MCP enables AI agents to discover, query, and manage mock API endpoints
+// across all supported protocols (HTTP, WebSocket, GraphQL, gRPC, SOAP, MQTT, OAuth)
+// through a standardized JSON-RPC 2.0 based protocol.
 //
 // # Protocol Version
 //
-// This implementation follows MCP protocol version 2025-06-18 with Streamable HTTP transport.
+// This implementation follows MCP protocol version 2025-06-18 with Streamable HTTP
+// and stdio transports.
 //
-// # Features
+// # Tools (19 total)
 //
-// The MCP server provides:
-//   - Tool discovery and execution (tools/list, tools/call)
-//   - Resource discovery and reading (resources/list, resources/read)
-//   - SSE streaming for server-initiated notifications
-//   - Session management with Mcp-Session-Id headers
+// Mock CRUD:
+//   - list_mocks, get_mock, create_mock, update_mock, delete_mock, toggle_mock
 //
-// # Tools
+// Context / Workspace:
+//   - get_current_context, switch_context, list_workspaces, switch_workspace
 //
-// Available tools include:
-//   - get_mock_data: Retrieve mock response for API endpoint
-//   - list_endpoints: List all configured mock endpoints
-//   - create_endpoint: Create a new mock endpoint
-//   - update_endpoint: Update existing mock configuration
-//   - delete_endpoint: Remove a mock endpoint
-//   - toggle_endpoint: Enable/disable a mock endpoint
-//   - stateful_list: List items in a stateful resource
-//   - stateful_get: Get a specific stateful item
-//   - stateful_create: Create a new stateful item
-//   - stateful_reset: Reset stateful resource to seed data
-//   - get_request_logs: Retrieve captured request logs
-//   - clear_logs: Clear all request logs
+// Import / Export:
+//   - import_mocks, export_mocks
+//
+// Observability:
+//   - get_server_status, get_request_logs, clear_request_logs
+//
+// Stateful Resources:
+//   - list_stateful_items, get_stateful_item, create_stateful_item, reset_stateful_data
 //
 // # Resources
 //
 // Resources use the mock:// URI scheme:
-//   - mock:///path - Static mock endpoints
+//   - mock:///path#METHOD - Individual mock endpoints
 //   - mock://stateful/name - Stateful resources
-//   - mock://logs - Request logs
+//   - mock://logs - Request log summary
 //   - mock://config - Server configuration
+//   - mock://context - Current context info
 //
-// # Usage
+// # Transports
 //
-// Create and start an MCP server:
-//
-//	cfg := &mcp.Config{
-//	    Enabled: true,
-//	    Port:    9091,
-//	    Path:    "/mcp",
-//	}
-//	adminClient := cli.NewAdminClient("http://localhost:4290")
-//	server := mcp.NewServer(cfg, adminClient, statefulStore)
-//	server.Start()
+// Stdio (primary): mockd mcp — newline-delimited JSON-RPC over stdin/stdout.
+// HTTP (secondary): mockd serve --mcp — Streamable HTTP on :9091/mcp.
 //
 // # Security
 //
-// By default, the MCP server only accepts connections from localhost.
-// Set AllowRemote to true to accept remote connections (use with caution).
-// Origin header validation is performed to protect against DNS rebinding attacks.
+// By default, the HTTP transport only accepts connections from localhost.
+// Auth tokens from contexts.yaml are never exposed in tool responses.
 package mcp

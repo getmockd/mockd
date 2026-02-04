@@ -103,6 +103,7 @@ func (s *StdioServer) handleMessage(data []byte) *JSONRPCResponse {
 	// Initialize creates the single stdio session.
 	if req.Method == "initialize" {
 		s.session = NewSession()
+		s.server.initSession(s.session)
 		result, rpcErr := s.server.dispatch(s.session, req)
 		if req.IsNotification() {
 			return nil

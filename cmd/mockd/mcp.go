@@ -61,16 +61,14 @@ Flags:
 		return err
 	}
 
-	// Resolve admin URL from context/config/default if not specified.
+	// Resolve context name, admin URL, and workspace from context/config/default.
+	contextName := cliconfig.ResolveContext("")
 	if adminURL == "" {
-		cfg := cliconfig.ResolveClientConfigSimple("")
-		adminURL = cfg.AdminURL
+		adminURL = cliconfig.ResolveAdminURLWithContext("", "")
 	}
-	if adminURL == "" {
-		adminURL = cliconfig.DefaultAdminURL(cliconfig.DefaultAdminPort)
-	}
+	workspace := cliconfig.ResolveWorkspaceWithContext("", "")
 
-	// Create admin client (talks to the running mockd admin API).
+	// Create admin client with auth (talks to the running mockd admin API).
 	adminClient := cli.NewAdminClientWithAuth(adminURL)
 
 	// Create MCP config — stdio doesn't use HTTP, but the server needs a config.
@@ -80,6 +78,14 @@ Flags:
 
 	// Create MCP server (provides dispatch/tools/resources, not HTTP).
 	server := mcp.NewServer(mcpCfg, adminClient, nil) // nil stateful store — tools that need it will return an error
+
+	// Seed sessions with resolved context so tools know which server they're talking to.
+	server.SetInitialContext(contextName, adminURL, workspace)
+
+	// Client factory creates auth-aware clients for switch_context.
+	server.SetClientFactory(func(url string) cli.AdminClient {
+		return cli.NewAdminClientWithAuth(url)
+	})
 
 	// Logger writes to stderr so stdout stays clean for the protocol.
 	level := slog.LevelWarn
@@ -119,6 +125,16 @@ func startMCPHTTP(adminURL string, port int, allowRemote bool, storeIface interf
 	}
 
 	server := mcp.NewServer(mcpCfg, adminClient, store)
+
+	// Seed sessions with the resolved context so tools know which server they're talking to.
+	contextName := cliconfig.ResolveContext("")
+	workspace := cliconfig.ResolveWorkspaceWithContext("", "")
+	server.SetInitialContext(contextName, adminURL, workspace)
+
+	// Client factory creates auth-aware clients for switch_context.
+	server.SetClientFactory(func(url string) cli.AdminClient {
+		return cli.NewAdminClientWithAuth(url)
+	})
 
 	// Type-assert the logger.
 	if log, ok := logIface.(*slog.Logger); ok && log != nil {
