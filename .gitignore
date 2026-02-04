@@ -86,19 +86,20 @@ AUDIT_*.md
 TEST_*.md
 *_COMPLETE.md
 *_SUMMARY.md
-
-# Internal development docs
-internal-docs/
-
-# Internal development docs
-internal-docs/
-mockd_bench
-
-# Internal audit files
-AUDIT_*.md
 *_AUDIT_*.md
+
+# Internal development docs
+internal-docs/
+
+# Benchmark binaries
+mockd_bench
 run_benchmarks
 
 # Cross-compiled binaries
 mockd-arm64
 mockd-amd64
+
+# Stale benchmark/test artifacts
+memory_results.json
+startup_results.json
+test-mqtt.json
