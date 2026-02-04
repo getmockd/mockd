@@ -44,7 +44,7 @@ func NewAnthropicProvider(cfg *Config) (*AnthropicProvider, error) {
 
 	maxTokens := cfg.MaxTokens
 	if maxTokens == 0 {
-		maxTokens = 500
+		maxTokens = 4096
 	}
 
 	return &AnthropicProvider{

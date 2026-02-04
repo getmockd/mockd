@@ -543,14 +543,15 @@ func containsSubstring(s, substr string) bool {
 
 func TestSupportedProviders(t *testing.T) {
 	providers := SupportedProviders()
-	if len(providers) != 3 {
-		t.Errorf("expected 3 providers, got %d", len(providers))
+	if len(providers) != 4 {
+		t.Errorf("expected 4 providers, got %d", len(providers))
 	}
 
 	expected := map[string]bool{
-		ProviderOpenAI:    true,
-		ProviderAnthropic: true,
-		ProviderOllama:    true,
+		ProviderOpenAI:     true,
+		ProviderAnthropic:  true,
+		ProviderOllama:     true,
+		ProviderOpenRouter: true,
 	}
 
 	for _, p := range providers {

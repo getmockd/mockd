@@ -9,9 +9,10 @@ import (
 
 // Provider name constants
 const (
-	ProviderOpenAI    = "openai"
-	ProviderAnthropic = "anthropic"
-	ProviderOllama    = "ollama"
+	ProviderOpenAI     = "openai"
+	ProviderAnthropic  = "anthropic"
+	ProviderOllama     = "ollama"
+	ProviderOpenRouter = "openrouter"
 )
 
 // Environment variable names
@@ -24,10 +25,12 @@ const (
 
 // Default model names for each provider
 const (
-	DefaultOpenAIModel    = "gpt-4o-mini"
-	DefaultAnthropicModel = "claude-3-haiku-20240307"
-	DefaultOllamaModel    = "llama3.2"
-	DefaultOllamaEndpoint = "http://localhost:11434"
+	DefaultOpenAIModel        = "gpt-4o-mini"
+	DefaultAnthropicModel     = "claude-3-haiku-20240307"
+	DefaultOllamaModel        = "llama3.2"
+	DefaultOllamaEndpoint     = "http://localhost:11434"
+	DefaultOpenRouterModel    = "google/gemini-2.5-flash"
+	DefaultOpenRouterEndpoint = "https://openrouter.ai/api/v1"
 )
 
 // Config holds the configuration for AI providers.
@@ -89,6 +92,13 @@ func (c *Config) applyDefaults() {
 		if c.Endpoint == "" {
 			c.Endpoint = DefaultOllamaEndpoint
 		}
+	case ProviderOpenRouter:
+		if c.Model == "" {
+			c.Model = DefaultOpenRouterModel
+		}
+		if c.Endpoint == "" {
+			c.Endpoint = DefaultOpenRouterEndpoint
+		}
 	}
 }
 
@@ -103,7 +113,7 @@ func (c *Config) Validate() error {
 	}
 
 	switch c.Provider {
-	case ProviderOpenAI, ProviderAnthropic:
+	case ProviderOpenAI, ProviderAnthropic, ProviderOpenRouter:
 		if c.APIKey == "" {
 			return fmt.Errorf("%w for %s", ErrAPIKeyMissing, c.Provider)
 		}
@@ -125,5 +135,5 @@ func IsConfigured() bool {
 
 // SupportedProviders returns the list of supported provider names.
 func SupportedProviders() []string {
-	return []string{ProviderOpenAI, ProviderAnthropic, ProviderOllama}
+	return []string{ProviderOpenAI, ProviderAnthropic, ProviderOllama, ProviderOpenRouter}
 }

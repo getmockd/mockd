@@ -125,6 +125,12 @@ func NewProvider(cfg *Config) (Provider, error) {
 		return NewAnthropicProvider(cfg)
 	case ProviderOllama:
 		return NewOllamaProvider(cfg)
+	case ProviderOpenRouter:
+		// OpenRouter uses an OpenAI-compatible API with a different base URL.
+		if cfg.Endpoint == "" {
+			cfg.Endpoint = DefaultOpenRouterEndpoint
+		}
+		return NewOpenAIProvider(cfg)
 	default:
 		return nil, fmt.Errorf("%w: unknown provider %q", ErrProviderNotConfigured, cfg.Provider)
 	}

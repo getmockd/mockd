@@ -17,12 +17,14 @@ const (
 )
 
 // OpenAIProvider implements the Provider interface using OpenAI's API.
+// It also supports OpenAI-compatible endpoints like OpenRouter.
 type OpenAIProvider struct {
-	apiKey     string
-	model      string
-	baseURL    string
-	httpClient *http.Client
-	maxTokens  int
+	apiKey       string
+	model        string
+	baseURL      string
+	httpClient   *http.Client
+	maxTokens    int
+	extraHeaders map[string]string // Additional headers (e.g., OpenRouter attribution)
 }
 
 // NewOpenAIProvider creates a new OpenAI provider.
@@ -43,10 +45,10 @@ func NewOpenAIProvider(cfg *Config) (*OpenAIProvider, error) {
 
 	maxTokens := cfg.MaxTokens
 	if maxTokens == 0 {
-		maxTokens = 500
+		maxTokens = 4096
 	}
 
-	return &OpenAIProvider{
+	p := &OpenAIProvider{
 		apiKey:  cfg.APIKey,
 		model:   model,
 		baseURL: strings.TrimSuffix(baseURL, "/"),
@@ -54,7 +56,17 @@ func NewOpenAIProvider(cfg *Config) (*OpenAIProvider, error) {
 			Timeout: openAITimeout,
 		},
 		maxTokens: maxTokens,
-	}, nil
+	}
+
+	// Add OpenRouter attribution headers when using their endpoint.
+	if cfg.Provider == ProviderOpenRouter || strings.Contains(baseURL, "openrouter.ai") {
+		p.extraHeaders = map[string]string{
+			"HTTP-Referer": "https://mockd.io",
+			"X-Title":      "mockd",
+		}
+	}
+
+	return p, nil
 }
 
 // Name returns the provider name.
@@ -190,6 +202,9 @@ func (p *OpenAIProvider) callAPI(ctx context.Context, prompt string) (string, er
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	for k, v := range p.extraHeaders {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {

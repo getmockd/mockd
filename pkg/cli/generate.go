@@ -32,7 +32,7 @@ func RunGenerate(args []string) error {
 
 	// AI flags
 	aiFlag := fs.Bool("ai", false, "Enable AI-powered data generation")
-	provider := fs.String("provider", "", "AI provider (openai, anthropic, ollama)")
+	provider := fs.String("provider", "", "AI provider (openai, anthropic, ollama, openrouter)")
 	model := fs.String("model", "", "AI model to use")
 
 	// Other flags
@@ -49,7 +49,7 @@ Flags:
   -p, --prompt       Natural language description for generation
   -o, --output       Output file (default: stdout)
       --ai           Enable AI-powered data generation
-      --provider     AI provider (openai, anthropic, ollama)
+      --provider     AI provider (openai, anthropic, ollama, openrouter)
       --model        AI model to use
       --dry-run      Preview generation without saving
       --admin-url    Admin API base URL (default: http://localhost:4290)
@@ -58,7 +58,7 @@ Environment Variables:
   MOCKD_AI_PROVIDER  Default AI provider
   MOCKD_AI_API_KEY   API key for the provider
   MOCKD_AI_MODEL     Default model
-  MOCKD_AI_ENDPOINT  Custom endpoint (for Ollama)
+  MOCKD_AI_ENDPOINT  Custom endpoint (for Ollama, or override for any provider)
 
 Examples:
   # Generate mocks from OpenAPI spec with AI enhancement
@@ -145,6 +145,13 @@ func applyAIConfigDefaults(c *ai.Config) {
 		if c.Endpoint == "" {
 			c.Endpoint = ai.DefaultOllamaEndpoint
 		}
+	case ai.ProviderOpenRouter:
+		if c.Model == "" {
+			c.Model = ai.DefaultOpenRouterModel
+		}
+		if c.Endpoint == "" {
+			c.Endpoint = ai.DefaultOpenRouterEndpoint
+		}
 	}
 }
 
@@ -152,13 +159,13 @@ func formatAIConfigError(err error) error {
 	return fmt.Errorf(`AI provider not configured: %w
 
 To use AI-powered generation, set these environment variables:
-  export MOCKD_AI_PROVIDER=openai    # or anthropic, ollama
+  export MOCKD_AI_PROVIDER=openai    # or anthropic, ollama, openrouter
   export MOCKD_AI_API_KEY=your-key   # not needed for ollama
 
 Or specify on command line:
   mockd generate --ai --provider openai --prompt "..."
 
-Supported providers: openai, anthropic, ollama`, err)
+Supported providers: openai, anthropic, ollama, openrouter`, err)
 }
 
 func generateFromOpenAPI(inputFile, outputFile string, useAI bool, providerName, model string, dryRun bool, adminURL string) error {
@@ -286,7 +293,7 @@ func RunEnhance(args []string) error {
 
 	// Flags
 	aiFlag := fs.Bool("ai", false, "Enable AI-powered enhancement")
-	providerFlag := fs.String("provider", "", "AI provider (openai, anthropic, ollama)")
+	providerFlag := fs.String("provider", "", "AI provider (openai, anthropic, ollama, openrouter)")
 	modelFlag := fs.String("model", "", "AI model to use")
 	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 
@@ -297,7 +304,7 @@ Enhance existing mocks with AI-generated response data.
 
 Flags:
       --ai           Enable AI-powered enhancement (required)
-      --provider     AI provider (openai, anthropic, ollama)
+      --provider     AI provider (openai, anthropic, ollama, openrouter)
       --model        AI model to use
       --admin-url    Admin API base URL (default: http://localhost:4290)
 
@@ -305,7 +312,7 @@ Environment Variables:
   MOCKD_AI_PROVIDER  Default AI provider
   MOCKD_AI_API_KEY   API key for the provider
   MOCKD_AI_MODEL     Default model
-  MOCKD_AI_ENDPOINT  Custom endpoint (for Ollama)
+  MOCKD_AI_ENDPOINT  Custom endpoint (for Ollama, or override for any provider)
 
 Examples:
   # Enhance all mocks with AI-generated data
