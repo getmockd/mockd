@@ -186,8 +186,8 @@ cloudflared tunnel run mockd
 |------|-----------------|-----------|-----------|--------|
 | Anonymous | 2 hours | 100 MB | Random | No |
 | Free | 8 hours | 1 GB | Random | Yes |
-| Pro ($19/mo) | 24 hours | 5 GB/mo | Custom | Yes |
-| Team ($49/seat/mo) | Unlimited | 50 GB/mo | Custom + domain | Yes |
+| Pro ($12/mo) | 24 hours | 5 GB/mo | Custom | Yes |
+| Team ($29/mo) | Unlimited | 50 GB/mo | Custom + domain | Yes |
 
 Anonymous tunnels require no signup or token — just run `mockd tunnel-quic --port 4280`.
 
