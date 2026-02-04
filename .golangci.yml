@@ -29,6 +29,10 @@ linters:
     errcheck:
       check-type-assertions: true
       check-blank: false
+    misspell:
+      extra-words:
+        - typo: "mosquitto"
+          correction: "mosquitto"  # Eclipse Mosquitto MQTT broker (not a misspelling)
     gosec:
       excludes:
         - G104  # Audit errors not checked (too noisy)
