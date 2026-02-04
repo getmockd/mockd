@@ -33,7 +33,7 @@ func handleListMocks(args map[string]interface{}, session *MCPSession, server *S
 	}
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to list mocks: " + err.Error()), nil
+		return ToolResultError("failed to list mocks: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	summaries := make([]MockSummary, 0, len(mocks))
@@ -123,6 +123,9 @@ func handleGetMock(args map[string]interface{}, session *MCPSession, server *Ser
 	mockCfg, err := client.GetMock(id)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+		if isConnectionError(err) {
+			return ToolResultError("failed to get mock: " + adminError(err, session.GetAdminURL())), nil
+		}
 		return ToolResultError("mock not found: " + id), nil
 	}
 
@@ -167,7 +170,7 @@ func handleCreateMock(args map[string]interface{}, session *MCPSession, server *
 	createResult, err := client.CreateMock(&mockCfg)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to create mock: " + err.Error()), nil
+		return ToolResultError("failed to create mock: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	// Notify resource change
@@ -199,6 +202,9 @@ func handleUpdateMock(args map[string]interface{}, session *MCPSession, server *
 	existingMock, err := client.GetMock(id)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+		if isConnectionError(err) {
+			return ToolResultError("failed to update mock: " + adminError(err, session.GetAdminURL())), nil
+		}
 		return ToolResultError("mock not found: " + id), nil
 	}
 
@@ -226,7 +232,7 @@ func handleUpdateMock(args map[string]interface{}, session *MCPSession, server *
 
 	if _, err := client.UpdateMock(id, existingMock); err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to update mock: " + err.Error()), nil
+		return ToolResultError("failed to update mock: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	server.NotifyResourceListChanged()
@@ -252,7 +258,7 @@ func handleDeleteMock(args map[string]interface{}, session *MCPSession, server *
 
 	if err := client.DeleteMock(id); err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to delete mock: " + err.Error()), nil
+		return ToolResultError("failed to delete mock: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	server.NotifyResourceListChanged()
@@ -281,6 +287,9 @@ func handleToggleMock(args map[string]interface{}, session *MCPSession, server *
 	mockCfg, err := client.GetMock(id)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+		if isConnectionError(err) {
+			return ToolResultError("failed to toggle mock: " + adminError(err, session.GetAdminURL())), nil
+		}
 		return ToolResultError("mock not found: " + id), nil
 	}
 
@@ -288,7 +297,7 @@ func handleToggleMock(args map[string]interface{}, session *MCPSession, server *
 
 	if _, err := client.UpdateMock(id, mockCfg); err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to toggle mock: " + err.Error()), nil
+		return ToolResultError("failed to toggle mock: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	server.NotifyResourceListChanged()

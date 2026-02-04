@@ -72,7 +72,7 @@ func handleImportMocks(args map[string]interface{}, session *MCPSession, server 
 	importResult, err := client.ImportConfig(collection, replace)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to apply import: " + err.Error()), nil
+		return ToolResultError("failed to apply import: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	server.NotifyResourceListChanged()
@@ -102,7 +102,7 @@ func handleExportMocks(args map[string]interface{}, session *MCPSession, server 
 	collection, err := client.ExportConfig("")
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to export mocks: " + err.Error()), nil
+		return ToolResultError("failed to export mocks: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	if collection == nil {

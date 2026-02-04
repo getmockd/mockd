@@ -1,5 +1,7 @@
 package mcp
 
+import "strings"
+
 // ToolHandler is the signature for tool execution functions.
 type ToolHandler func(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error)
 
@@ -173,4 +175,31 @@ func getMap(args map[string]interface{}, key string) map[string]interface{} {
 		}
 	}
 	return nil
+}
+
+// =============================================================================
+// Admin error helpers
+// =============================================================================
+
+// isConnectionError returns true if the error indicates the admin server is unreachable.
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "dial tcp") ||
+		strings.Contains(msg, "connect: network is unreachable") ||
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "context deadline exceeded")
+}
+
+// adminError wraps an admin client error with an actionable message when the
+// server is unreachable, or returns the original error string otherwise.
+func adminError(err error, adminURL string) string {
+	if isConnectionError(err) {
+		return "mockd server unreachable at " + adminURL + " — start it with: mockd serve"
+	}
+	return err.Error()
 }

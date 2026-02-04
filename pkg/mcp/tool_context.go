@@ -102,7 +102,7 @@ func handleListWorkspaces(args map[string]interface{}, session *MCPSession, serv
 	workspaces, err := client.ListWorkspaces()
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to list workspaces: " + err.Error()), nil
+		return ToolResultError("failed to list workspaces: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	currentWS := session.GetWorkspace()

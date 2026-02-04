@@ -102,6 +102,18 @@ Flags:
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	server.SetLogger(log)
 
+	// Probe admin server — warn on stderr if unreachable, but don't exit.
+	// The session still initializes so the AI can discover the problem via tools.
+	if err := adminClient.Health(); err != nil {
+		log.Warn("mockd server unreachable — tools will fail until it's started",
+			"adminUrl", adminURL,
+			"error", err.Error(),
+			"hint", "run 'mockd serve' to start the server",
+		)
+	} else {
+		log.Info("connected to mockd server", "adminUrl", adminURL, "context", contextName)
+	}
+
 	// Run the stdio transport — blocks until EOF.
 	stdio := mcp.NewStdioServer(server)
 	stdio.SetLogger(log)

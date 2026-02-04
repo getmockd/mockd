@@ -1448,3 +1448,63 @@ func TestSessionState_String(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// ADMIN ERROR HELPERS
+// =============================================================================
+
+func TestIsConnectionError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{"nil error", nil, false},
+		{"connection refused", errors.New("dial tcp 127.0.0.1:4290: connection refused"), true},
+		{"no such host", errors.New("dial tcp: lookup badhost: no such host"), true},
+		{"dial tcp generic", errors.New("dial tcp 10.0.0.1:4290: i/o timeout"), true},
+		{"context deadline", errors.New("Post http://localhost:4290/health: context deadline exceeded"), true},
+		{"network unreachable", errors.New("connect: network is unreachable"), true},
+		{"404 not found", errors.New("404 Not Found"), false},
+		{"API error", errors.New("mock not found: http_abc123"), false},
+		{"empty error", errors.New(""), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isConnectionError(tt.err); got != tt.expected {
+				t.Errorf("isConnectionError(%q) = %v, want %v", tt.err, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestAdminError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("connection error wraps with actionable message", func(t *testing.T) {
+		err := errors.New("dial tcp 127.0.0.1:4290: connection refused")
+		got := adminError(err, "http://localhost:4290")
+
+		if !strings.Contains(got, "unreachable") {
+			t.Errorf("adminError should mention unreachable, got: %s", got)
+		}
+		if !strings.Contains(got, "mockd serve") {
+			t.Errorf("adminError should suggest 'mockd serve', got: %s", got)
+		}
+		if !strings.Contains(got, "http://localhost:4290") {
+			t.Errorf("adminError should include the admin URL, got: %s", got)
+		}
+	})
+
+	t.Run("non-connection error passes through", func(t *testing.T) {
+		err := errors.New("mock not found: http_abc123")
+		got := adminError(err, "http://localhost:4290")
+
+		if got != "mock not found: http_abc123" {
+			t.Errorf("adminError should pass through non-connection errors, got: %s", got)
+		}
+	})
+}

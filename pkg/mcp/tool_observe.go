@@ -17,16 +17,28 @@ func handleGetServerStatus(args map[string]interface{}, session *MCPSession, ser
 		return ToolResultError("admin client not available"), nil
 	}
 
+	adminURL := session.GetAdminURL()
+
 	result := map[string]interface{}{
 		"version":  ServerVersion,
-		"adminUrl": session.GetAdminURL(),
+		"adminUrl": adminURL,
 	}
 
 	// Health check — returns error only
 	if err := client.Health(); err != nil {
+		if isConnectionError(err) {
+			// Server is unreachable — return structured diagnostic instead of failing
+			result["reachable"] = false
+			result["healthy"] = false
+			result["error"] = err.Error()
+			result["hint"] = "Run 'mockd serve' to start the mockd server"
+			return ToolResultJSON(result)
+		}
+		result["reachable"] = true
 		result["healthy"] = false
 		result["healthError"] = err.Error()
 	} else {
+		result["reachable"] = true
 		result["healthy"] = true
 	}
 
@@ -71,7 +83,7 @@ func handleGetRequestLogs(args map[string]interface{}, session *MCPSession, serv
 	logsResult, err := client.GetLogs(filter)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to get logs: " + err.Error()), nil
+		return ToolResultError("failed to get logs: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	entries := make([]RequestLogEntry, 0, len(logsResult.Requests))
@@ -100,7 +112,7 @@ func handleClearRequestLogs(args map[string]interface{}, session *MCPSession, se
 	cleared, err := client.ClearLogs()
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to clear logs: " + err.Error()), nil
+		return ToolResultError("failed to clear logs: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	result := map[string]interface{}{
