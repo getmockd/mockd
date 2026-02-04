@@ -117,6 +117,8 @@ func run(args []string) error {
 		return cli.RunGRPC(cmdArgs)
 	case "mqtt":
 		return cli.RunMQTT(cmdArgs)
+	case "mcp":
+		return cli.RunMCP(cmdArgs)
 	case "websocket":
 		return cli.RunWebSocket(cmdArgs)
 	case "soap":
@@ -222,6 +224,9 @@ WebSocket Commands:
 SOAP Commands:
   soap        Validate WSDL files and call SOAP operations
 
+MCP (Model Context Protocol):
+  mcp         Start MCP server for AI assistants (stdio transport)
+
 Template Commands:
   templates   List and add templates from the official library
 
@@ -300,7 +305,7 @@ func isCommand(s string) bool {
 		"proxy", "recordings", "convert", "generate", "enhance",
 		"stream-recordings", "graphql", "chaos", "grpc", "mqtt", "soap",
 		"templates", "tunnel", "tunnel-quic", "init", "help", "status", "stop", "doctor",
-		"websocket", "context", "workspace", "ports", "validate", "up", "down", "ps",
+		"websocket", "context", "workspace", "ports", "validate", "up", "down", "ps", "mcp",
 	}
 	return slices.Contains(commands, s)
 }

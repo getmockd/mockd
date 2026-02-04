@@ -108,6 +108,11 @@ type serveFlags struct {
 	// Tracing flags
 	otlpEndpoint string
 	traceSampler float64
+
+	// MCP flags
+	mcpEnabled     bool
+	mcpPort        int
+	mcpAllowRemote bool
 }
 
 // serveContext holds all runtime state for the serve command.
@@ -119,6 +124,7 @@ type serveContext struct {
 	runtimeClient *runtime.Client
 	mqttBroker    *mqtt.Broker
 	chaosInjector *chaos.Injector
+	mcpServer     MCPStopper
 	store         *file.FileStore
 	log           *slog.Logger
 	tracer        *tracing.Tracer
@@ -308,6 +314,11 @@ func parseServeFlags(args []string) (*serveFlags, error) {
 	fs.StringVar(&f.otlpEndpoint, "otlp-endpoint", "", "OTLP HTTP endpoint for distributed tracing (e.g., http://localhost:4318/v1/traces)")
 	fs.Float64Var(&f.traceSampler, "trace-sampler", 1.0, "Trace sampling ratio (0.0-1.0, default: 1.0 = all traces)")
 
+	// MCP flags
+	fs.BoolVar(&f.mcpEnabled, "mcp", false, "Enable MCP (Model Context Protocol) server")
+	fs.IntVar(&f.mcpPort, "mcp-port", 9091, "MCP server port")
+	fs.BoolVar(&f.mcpAllowRemote, "mcp-allow-remote", false, "Allow remote MCP connections (default: localhost only)")
+
 	fs.Usage = func() {
 		printServeUsage()
 	}
@@ -406,6 +417,11 @@ Tracing flags:
       --otlp-endpoint OTLP HTTP endpoint for distributed tracing (e.g., http://localhost:4318/v1/traces)
       --trace-sampler Trace sampling ratio 0.0-1.0 (default: 1.0 = all traces)
 
+MCP flags:
+      --mcp              Enable MCP (Model Context Protocol) HTTP server
+      --mcp-port         MCP server port (default: 9091)
+      --mcp-allow-remote Allow remote MCP connections (default: localhost only)
+
 Examples:
   # Start with defaults
   mockd serve
@@ -437,7 +453,13 @@ Examples:
 
   # Start with JSON structured logging
   mockd serve --log-level debug --log-format json
+
+  # Start with MCP server enabled (for AI assistants via HTTP)
+  mockd serve --mcp
+
+  # For stdio MCP (Claude Desktop), use: mockd mcp
 `)
+
 }
 
 // validateServeFlags validates flag combinations for different operating modes.
@@ -476,6 +498,11 @@ func checkPortConflicts(f *serveFlags) error {
 	if f.httpsPort > 0 {
 		if err := ports.Check(f.httpsPort); err != nil {
 			return formatPortError(f.httpsPort, err)
+		}
+	}
+	if f.mcpEnabled {
+		if err := ports.Check(f.mcpPort); err != nil {
+			return formatPortError(f.mcpPort, err)
 		}
 	}
 	return nil
@@ -800,6 +827,24 @@ func startServers(sctx *serveContext) error {
 		}
 	}
 
+	// Start MCP server if enabled
+	if f.mcpEnabled && MCPStartFunc != nil {
+		adminURL := fmt.Sprintf("http://localhost:%d", f.adminPort)
+		mcpServer, err := MCPStartFunc(
+			adminURL,
+			f.mcpPort,
+			f.mcpAllowRemote,
+			sctx.server.StatefulStore(),
+			sctx.log.With("component", "mcp"),
+		)
+		if err != nil {
+			_ = sctx.server.Stop()
+			_ = sctx.adminAPI.Stop()
+			return fmt.Errorf("failed to start MCP server: %w", err)
+		}
+		sctx.mcpServer = mcpServer
+	}
+
 	// Print startup message - count mocks and stateful resources
 	mocks, _ := engClient.ListMocks(sctx.ctx)
 	mocksLoaded := len(mocks)
@@ -807,7 +852,7 @@ func startServers(sctx *serveContext) error {
 	if stateOverview, err := engClient.GetStateOverview(sctx.ctx); err == nil {
 		statefulCount = stateOverview.Total
 	}
-	printServeStartupMessage(f.port, f.adminPort, f.httpsPort, f.register, f.pull, mocksLoaded, statefulCount)
+	printServeStartupMessage(f.port, f.adminPort, f.httpsPort, f.mcpEnabled, f.mcpPort, f.register, f.pull, mocksLoaded, statefulCount)
 
 	return nil
 }
@@ -846,6 +891,13 @@ func runMainLoop(sctx *serveContext) error {
 		// 2. Wait for acknowledgment with a timeout (e.g., 5 seconds)
 		// 3. Handle errors gracefully - log but don't block shutdown
 		// See: runtimeClient should expose a Deregister() method
+	}
+
+	// Stop MCP server if running
+	if sctx.mcpServer != nil {
+		if err := sctx.mcpServer.Stop(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: MCP server shutdown error: %v\n", err)
+		}
 	}
 
 	// Stop admin API first (uses internal 5s timeout)
@@ -907,7 +959,7 @@ func cachePulledContent(cacheDir, uri string, content []byte) error {
 }
 
 // printServeStartupMessage prints the server startup information.
-func printServeStartupMessage(httpPort, adminPort, httpsPort int, isRuntime bool, pullURI string, mocksLoaded, statefulCount int) {
+func printServeStartupMessage(httpPort, adminPort, httpsPort int, mcpEnabled bool, mcpPort int, isRuntime bool, pullURI string, mocksLoaded, statefulCount int) {
 	if mocksLoaded == 0 && statefulCount == 0 && !isRuntime && pullURI == "" {
 		// No mocks configured - show welcome message
 		printWelcomeMessage(httpPort, adminPort)
@@ -930,6 +982,9 @@ func printServeStartupMessage(httpPort, adminPort, httpsPort int, isRuntime bool
 			fmt.Printf("  HTTPS:       https://localhost:%d\n", httpsPort)
 		}
 		fmt.Printf("  Admin API:   http://localhost:%d\n", adminPort)
+		if mcpEnabled {
+			fmt.Printf("  MCP server:  http://localhost:%d/mcp\n", mcpPort)
+		}
 		fmt.Println()
 
 		if isRuntime {
