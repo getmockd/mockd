@@ -369,7 +369,7 @@ func TestMCP_MultipleSessions(t *testing.T) {
 
 // Phase 4: User Story 2 - Mock Data Retrieval via MCP Tools
 
-func TestMCP_GetMockData(t *testing.T) {
+func TestMCP_GetMock(t *testing.T) {
 	mcpServer, _, cleanup := testServer(t)
 	defer cleanup()
 	handler := mcpServer.Handler()
@@ -390,15 +390,17 @@ func TestMCP_GetMockData(t *testing.T) {
 			},
 		},
 	}
-	if _, err := mcpServer.AdminClient().CreateMock(testMock); err != nil {
+	created, err := mcpServer.AdminClient().CreateMock(testMock)
+	if err != nil {
 		t.Fatalf("failed to add mock: %v", err)
 	}
 
 	sessionID := initializeSession(t, handler)
 
+	// Retrieve mock by ID using get_mock tool
 	resp := sendJSONRPC(t, handler, "tools/call", mcp.ToolCallParams{
-		Name:      "get_mock_data",
-		Arguments: map[string]interface{}{"path": "/api/users", "method": "GET"},
+		Name:      "get_mock",
+		Arguments: map[string]interface{}{"id": created.Mock.ID},
 	}, sessionID)
 
 	if resp.Error != nil {
@@ -410,7 +412,7 @@ func TestMCP_GetMockData(t *testing.T) {
 	json.Unmarshal(resultJSON, &result)
 
 	if result.IsError {
-		t.Error("expected success, got error")
+		t.Errorf("expected success, got error: %s", result.Content[0].Text)
 	}
 
 	if len(result.Content) == 0 {
@@ -422,7 +424,7 @@ func TestMCP_GetMockData(t *testing.T) {
 	}
 }
 
-func TestMCP_GetMockData_MethodOverride(t *testing.T) {
+func TestMCP_ListMocks(t *testing.T) {
 	mcpServer, _, cleanup := testServer(t)
 	defer cleanup()
 	handler := mcpServer.Handler()
@@ -461,10 +463,10 @@ func TestMCP_GetMockData_MethodOverride(t *testing.T) {
 
 	sessionID := initializeSession(t, handler)
 
-	// Test POST method override
+	// List all mocks using list_mocks tool
 	resp := sendJSONRPC(t, handler, "tools/call", mcp.ToolCallParams{
-		Name:      "get_mock_data",
-		Arguments: map[string]interface{}{"path": "/api/users", "method": "POST"},
+		Name:      "list_mocks",
+		Arguments: map[string]interface{}{"type": "http"},
 	}, sessionID)
 
 	if resp.Error != nil {
@@ -479,20 +481,17 @@ func TestMCP_GetMockData_MethodOverride(t *testing.T) {
 		t.Fatal("expected content")
 	}
 
-	// Verify we got the POST mock response (returns full mock info including status, body, headers, mockId)
-	var mockResult map[string]interface{}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &mockResult); err != nil {
-		t.Fatalf("failed to parse mock result: %v", err)
+	// Verify list returned both mocks as a JSON array
+	var summaries []map[string]interface{}
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &summaries); err != nil {
+		t.Fatalf("failed to parse list result: %v", err)
 	}
-	if mockResult["body"] != `{"action":"create"}` {
-		t.Errorf("expected POST body, got: %v", mockResult["body"])
-	}
-	if mockResult["status"] != float64(201) {
-		t.Errorf("expected status 201, got: %v", mockResult["status"])
+	if len(summaries) != 2 {
+		t.Errorf("expected 2 mocks, got %d", len(summaries))
 	}
 }
 
-func TestMCP_GetMockData_NoMatch(t *testing.T) {
+func TestMCP_GetMock_NotFound(t *testing.T) {
 	mcpServer, _, cleanup := testServer(t)
 	defer cleanup()
 	handler := mcpServer.Handler()
@@ -500,8 +499,8 @@ func TestMCP_GetMockData_NoMatch(t *testing.T) {
 	sessionID := initializeSession(t, handler)
 
 	resp := sendJSONRPC(t, handler, "tools/call", mcp.ToolCallParams{
-		Name:      "get_mock_data",
-		Arguments: map[string]interface{}{"path": "/api/nonexistent"},
+		Name:      "get_mock",
+		Arguments: map[string]interface{}{"id": "nonexistent-id"},
 	}, sessionID)
 
 	if resp.Error != nil {
@@ -513,7 +512,7 @@ func TestMCP_GetMockData_NoMatch(t *testing.T) {
 	json.Unmarshal(resultJSON, &result)
 
 	if !result.IsError {
-		t.Error("expected isError=true for no match")
+		t.Error("expected isError=true for nonexistent mock")
 	}
 }
 
@@ -538,22 +537,30 @@ func TestMCP_ToolsList(t *testing.T) {
 		t.Fatal("expected tools to be listed")
 	}
 
-	// Verify get_mock_data tool is present
-	found := false
-	for _, tool := range result.Tools {
-		if tool.Name == "get_mock_data" {
-			found = true
-			if tool.Description == "" {
-				t.Error("tool should have description")
+	// Verify key tools from the 19-tool MCP overhaul are present
+	expectedTools := []string{"list_mocks", "get_mock", "create_mock", "get_server_status"}
+	for _, expectedName := range expectedTools {
+		found := false
+		for _, tool := range result.Tools {
+			if tool.Name == expectedName {
+				found = true
+				if tool.Description == "" {
+					t.Errorf("tool %s should have description", expectedName)
+				}
+				if tool.InputSchema == nil {
+					t.Errorf("tool %s should have inputSchema", expectedName)
+				}
+				break
 			}
-			if tool.InputSchema == nil {
-				t.Error("tool should have inputSchema")
-			}
-			break
+		}
+		if !found {
+			t.Errorf("tool %s not found in tools/list", expectedName)
 		}
 	}
-	if !found {
-		t.Error("get_mock_data tool not found")
+
+	// Verify total count is 19
+	if len(result.Tools) != 19 {
+		t.Errorf("expected 19 tools, got %d", len(result.Tools))
 	}
 }
 

@@ -301,17 +301,6 @@ func (p *ResourceProvider) readConfigResource() ([]ResourceContent, *JSONRPCErro
 	}, nil
 }
 
-// formatDuration formats milliseconds as a duration string.
-func formatDuration(ms int) string {
-	if ms == 0 {
-		return "0s"
-	}
-	if ms < 1000 {
-		return formatInt(ms) + "ms"
-	}
-	return formatInt(ms/1000) + "s"
-}
-
 // formatInt formats an int as a string without fmt.
 func formatInt(n int) string {
 	if n == 0 {

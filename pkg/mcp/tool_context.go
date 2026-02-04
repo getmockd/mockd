@@ -59,6 +59,7 @@ func handleSwitchContext(args map[string]interface{}, session *MCPSession, serve
 	// Load context store (read-only)
 	ctxConfig, err := cliconfig.LoadContextConfig()
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to load contexts: " + err.Error()), nil
 	}
 	if ctxConfig == nil {

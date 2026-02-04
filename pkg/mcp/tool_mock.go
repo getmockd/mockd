@@ -151,11 +151,13 @@ func handleCreateMock(args map[string]interface{}, session *MCPSession, server *
 	// are forwarded as-is to the admin API.
 	argsJSON, err := json.Marshal(args)
 	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to serialize mock config: " + err.Error()), nil
 	}
 
 	var mockCfg config.MockConfiguration
 	if err := json.Unmarshal(argsJSON, &mockCfg); err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("invalid mock configuration: " + err.Error()), nil
 	}
 
@@ -224,6 +226,7 @@ func handleUpdateMock(args map[string]interface{}, session *MCPSession, server *
 			// Re-serialize just the protocol field update and apply
 			updateJSON, _ := json.Marshal(args)
 			if err := json.Unmarshal(updateJSON, existingMock); err != nil {
+				//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 				return ToolResultError("failed to merge update: " + err.Error()), nil
 			}
 			break // Only need to do this once
