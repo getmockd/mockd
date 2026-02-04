@@ -24,8 +24,8 @@ import (
 
 // Client is a QUIC tunnel client that connects to the relay server.
 type Client struct {
-	conn          quic.Connection
-	controlStream quic.Stream
+	conn          *quic.Conn
+	controlStream *quic.Stream
 
 	// Configuration
 	relayAddr   string
@@ -256,7 +256,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 // handleStream processes an incoming QUIC stream from the relay.
 // Dispatches to the appropriate handler based on stream type and flags.
-func (c *Client) handleStream(ctx context.Context, stream quic.Stream) {
+func (c *Client) handleStream(ctx context.Context, stream *quic.Stream) {
 	// Read request header
 	header, err := protocol.DecodeHeader(stream)
 	if err != nil {
@@ -339,7 +339,7 @@ func (c *Client) handleStream(ctx context.Context, stream quic.Stream) {
 
 // handleBidirectionalStream handles streams that need concurrent read/write
 // (WebSocket, gRPC, MQTT). Dispatches to protocol-specific handlers.
-func (c *Client) handleBidirectionalStream(ctx context.Context, stream quic.Stream, header *protocol.StreamHeader) {
+func (c *Client) handleBidirectionalStream(ctx context.Context, stream *quic.Stream, header *protocol.StreamHeader) {
 	// Decode HTTP metadata (WebSocket, gRPC all start with HTTP)
 	meta, err := protocol.DecodeHTTPMetadata(header.Metadata)
 	if err != nil {
@@ -373,7 +373,7 @@ func (c *Client) handleBidirectionalStream(ctx context.Context, stream quic.Stre
 // handleRawBidirectionalStream handles bidirectional streams using raw TCP.
 // Used for WebSocket (and future MQTT). Dials the local service, sends an
 // HTTP/1.1 request (with Upgrade headers), and bridges bytes in both directions.
-func (c *Client) handleRawBidirectionalStream(_ context.Context, stream quic.Stream, header *protocol.StreamHeader, meta *protocol.HTTPMetadata) {
+func (c *Client) handleRawBidirectionalStream(_ context.Context, stream *quic.Stream, header *protocol.StreamHeader, meta *protocol.HTTPMetadata) {
 	// Dial the local service
 	localAddr := fmt.Sprintf("127.0.0.1:%d", c.localPort)
 	localConn, err := net.DialTimeout("tcp", localAddr, 5*time.Second)
@@ -436,7 +436,7 @@ func (c *Client) handleRawBidirectionalStream(_ context.Context, stream quic.Str
 //	[4-byte length][chunk data]...   ← body chunks
 //	[4-byte 0x00000000]              ← end-of-body sentinel
 //	[StreamHeader: FlagTrailer + trailer metadata]
-func (c *Client) handleGRPCStream(ctx context.Context, stream quic.Stream, _ *protocol.StreamHeader, meta *protocol.HTTPMetadata) {
+func (c *Client) handleGRPCStream(ctx context.Context, stream *quic.Stream, _ *protocol.StreamHeader, meta *protocol.HTTPMetadata) {
 	localAddr := fmt.Sprintf("127.0.0.1:%d", c.localPort)
 
 	// Create an HTTP/2 transport for h2c (cleartext HTTP/2 to localhost)
@@ -561,7 +561,7 @@ func (c *Client) handleGRPCStream(ctx context.Context, stream quic.Stream, _ *pr
 
 // handleMQTTStream handles native MQTT bidirectional streams. The relay sends
 // MQTTMetadata with a broker name; we look up the local MQTT port and bridge bytes.
-func (c *Client) handleMQTTStream(_ context.Context, stream quic.Stream, header *protocol.StreamHeader) {
+func (c *Client) handleMQTTStream(_ context.Context, stream *quic.Stream, header *protocol.StreamHeader) {
 	// Decode MQTT metadata to get broker name
 	mqttMeta, err := protocol.DecodeMQTTMetadata(header.Metadata)
 	if err != nil {
@@ -626,7 +626,7 @@ func (c *Client) handleMQTTStream(_ context.Context, stream quic.Stream, header 
 
 // sendBidirResponseMeta sends response metadata (status + headers) back to the
 // relay as a protocol StreamHeader. Used by all bidirectional stream handlers.
-func (c *Client) sendBidirResponseMeta(stream quic.Stream, streamType protocol.StreamType, resp *http.Response) error {
+func (c *Client) sendBidirResponseMeta(stream *quic.Stream, streamType protocol.StreamType, resp *http.Response) error {
 	respMeta := &protocol.HTTPMetadata{
 		StatusCode: resp.StatusCode,
 		Header:     map[string][]string(resp.Header),
@@ -652,7 +652,7 @@ func (c *Client) sendBidirResponseMeta(stream quic.Stream, streamType protocol.S
 
 // bridgeRawBidir bridges bytes bidirectionally between a QUIC stream and a raw
 // TCP connection. Used for WebSocket and MQTT.
-func (c *Client) bridgeRawBidir(stream quic.Stream, streamType protocol.StreamType, localConn net.Conn, localReader io.Reader) {
+func (c *Client) bridgeRawBidir(stream *quic.Stream, streamType protocol.StreamType, localConn net.Conn, localReader io.Reader) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -731,7 +731,7 @@ func buildRawHTTPRequest(meta *protocol.HTTPMetadata, host string) []byte {
 }
 
 // sendErrorResponse sends an error response back through the stream.
-func (c *Client) sendErrorResponse(stream quic.Stream, status int, message string) {
+func (c *Client) sendErrorResponse(stream *quic.Stream, status int, message string) {
 	meta := &protocol.HTTPMetadata{
 		StatusCode: status,
 		Header: map[string][]string{
@@ -877,7 +877,7 @@ func (c *Client) IsConnected() bool {
 
 // responseWriter implements http.ResponseWriter for QUIC streams.
 type responseWriter struct {
-	stream        quic.Stream
+	stream        *quic.Stream
 	header        http.Header
 	statusCode    int
 	headerWritten bool
