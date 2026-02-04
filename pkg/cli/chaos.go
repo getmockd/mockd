@@ -109,11 +109,9 @@ Examples:
 		"enabled": true,
 	}
 
-	globalRules := map[string]interface{}{}
-
 	if *latency != "" {
 		min, max := ParseLatencyRange(*latency)
-		globalRules["latency"] = map[string]interface{}{
+		chaosConfig["latency"] = map[string]interface{}{
 			"min":         min,
 			"max":         max,
 			"probability": *probability,
@@ -121,14 +119,10 @@ Examples:
 	}
 
 	if *errorRate > 0 {
-		globalRules["errorRate"] = map[string]interface{}{
+		chaosConfig["errorRate"] = map[string]interface{}{
 			"probability": *errorRate,
 			"defaultCode": *errorCode,
 		}
-	}
-
-	if len(globalRules) > 0 {
-		chaosConfig["global"] = globalRules
 	}
 
 	if *path != "" {
