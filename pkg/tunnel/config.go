@@ -89,7 +89,7 @@ func DefaultConfig() *Config {
 		PingInterval:      DefaultPingInterval,
 		RequestTimeout:    DefaultRequestTimeout,
 		AutoReconnect:     true,
-		ClientVersion:     "0.2.3",
+		ClientVersion:     "0.2.4",
 	}
 }
 

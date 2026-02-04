@@ -1561,7 +1561,7 @@ func (s *Server) Metadata() protocol.Metadata {
 		ID:                   s.ID(),
 		Name:                 s.config.Name,
 		Protocol:             protocol.ProtocolGRPC,
-		Version:              "0.2.3",
+		Version:              "0.2.4",
 		TransportType:        protocol.TransportHTTP2,
 		ConnectionModel:      protocol.ConnectionModelStandalone,
 		CommunicationPattern: protocol.PatternRequestResponse,

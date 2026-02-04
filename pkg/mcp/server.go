@@ -16,7 +16,7 @@ import (
 )
 
 // ServerVersion is the mockd server version.
-const ServerVersion = "0.2.3"
+const ServerVersion = "0.2.4"
 
 // ClientFactory creates an AdminClient for a given admin URL.
 // Injected at wiring time to keep pkg/mcp testable.

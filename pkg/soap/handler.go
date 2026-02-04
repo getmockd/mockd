@@ -743,7 +743,7 @@ func (h *Handler) Metadata() protocol.Metadata {
 		ID:                   h.ID(),
 		Name:                 h.config.Name,
 		Protocol:             protocol.ProtocolSOAP,
-		Version:              "0.2.3",
+		Version:              "0.2.4",
 		TransportType:        protocol.TransportHTTP1,
 		ConnectionModel:      protocol.ConnectionModelStateless,
 		CommunicationPattern: protocol.PatternRequestResponse,

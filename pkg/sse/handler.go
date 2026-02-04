@@ -916,7 +916,7 @@ func (h *SSEHandler) Metadata() protocol.Metadata {
 	return protocol.Metadata{
 		ID:                   h.id,
 		Protocol:             protocol.ProtocolSSE,
-		Version:              "0.2.3",
+		Version:              "0.2.4",
 		TransportType:        protocol.TransportHTTP1,
 		ConnectionModel:      protocol.ConnectionModelPersistent,
 		CommunicationPattern: protocol.PatternServerPush,
