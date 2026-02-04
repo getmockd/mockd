@@ -238,12 +238,13 @@ Each mock should have this structure:
 {
   "name": "endpoint name",
   "method": "GET|POST|PUT|DELETE|PATCH",
-  "path": "/api/path/:param",
+  "path": "/api/path/{param}",
   "statusCode": 200,
   "responseBody": { ... realistic response data ... }
 }
 
-Return ONLY the JSON array, no explanation.`, description)
+IMPORTANT: Use {param} syntax for path parameters (NOT :param). For example: /api/users/{id}, /api/posts/{postId}.
+Return ONLY the raw JSON array. Do NOT wrap in markdown code fences. No explanation.`, description)
 
 	resp, err := g.provider.Generate(ctx, &ai.GenerateRequest{
 		FieldName: "mocks",
@@ -267,6 +268,9 @@ type mockEndpoint struct {
 
 func (g *Generator) parseMockResponse(response string) ([]*config.MockConfiguration, error) {
 	response = strings.TrimSpace(response)
+
+	// Strip markdown code fences — LLMs frequently wrap JSON in ```json ... ```
+	response = stripCodeFences(response)
 
 	// Try to parse as JSON array
 	var endpoints []mockEndpoint
@@ -375,6 +379,28 @@ func (g *Generator) EnhanceMock(ctx context.Context, m *config.MockConfiguration
 	}
 
 	return nil
+}
+
+// stripCodeFences removes markdown code fences from an LLM response.
+// LLMs frequently wrap JSON in ```json ... ``` despite being told not to.
+func stripCodeFences(s string) string {
+	s = strings.TrimSpace(s)
+
+	// Check for opening fence (```json, ```JSON, or just ```)
+	if strings.HasPrefix(s, "```") {
+		// Find end of first line (the opening fence)
+		idx := strings.Index(s, "\n")
+		if idx >= 0 {
+			s = s[idx+1:]
+		}
+		// Remove closing fence
+		if strings.HasSuffix(strings.TrimSpace(s), "```") {
+			s = strings.TrimSpace(s)
+			s = s[:len(s)-3]
+			s = strings.TrimSpace(s)
+		}
+	}
+	return s
 }
 
 // normalizePathParams converts Express-style :param path segments to mockd-style {param}.

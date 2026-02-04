@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getmockd/mockd/internal/id"
@@ -66,6 +67,9 @@ type Broker struct {
 	// to prevent infinite loops when a response triggers the same or related patterns.
 	mockResponseTopics   map[string]struct{}
 	mockResponseTopicsMu sync.Mutex
+	// stopping is set to 1 during shutdown to prevent hook callbacks from
+	// acquiring the broker mutex, which would deadlock with server.Close().
+	stopping atomic.Int32
 }
 
 // markMockResponseTopic marks a topic as currently being published by a mock response.
@@ -225,9 +229,9 @@ func (b *Broker) Start(ctx context.Context) error {
 // If the timeout expires, the handler will force shutdown.
 func (b *Broker) Stop(ctx context.Context, timeout time.Duration) error {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 
 	if !b.running {
+		b.mu.Unlock()
 		return nil
 	}
 
@@ -237,31 +241,38 @@ func (b *Broker) Stop(ctx context.Context, timeout time.Duration) error {
 		b.simulator = nil
 	}
 
+	// Signal that we're stopping so hook callbacks (OnUnsubscribed, OnSubscribed)
+	// skip acquiring b.mu, which would deadlock with server.Close().
+	b.stopping.Store(1)
+	b.mu.Unlock()
+
 	// Create a timeout context for graceful shutdown
 	shutdownCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// Close the server with timeout
+	// Close the server — this triggers client disconnections which call hooks.
+	// The mutex is NOT held here to avoid deadlock with hook callbacks.
 	done := make(chan error, 1)
 	go func() {
 		done <- b.server.Close()
 	}()
 
+	var closeErr error
 	select {
 	case err := <-done:
-		if err != nil {
-			b.running = false
-			b.startedAt = time.Time{}
-			return fmt.Errorf("failed to close server: %w", err)
-		}
+		closeErr = err
 	case <-shutdownCtx.Done():
-		b.running = false
-		b.startedAt = time.Time{}
-		return fmt.Errorf("shutdown timed out: %w", shutdownCtx.Err())
+		closeErr = fmt.Errorf("shutdown timed out: %w", shutdownCtx.Err())
 	}
 
+	b.mu.Lock()
 	b.running = false
 	b.startedAt = time.Time{}
+	b.mu.Unlock()
+
+	if closeErr != nil {
+		return fmt.Errorf("failed to close server: %w", closeErr)
+	}
 	return nil
 }
 

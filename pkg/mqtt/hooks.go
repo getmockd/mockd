@@ -339,7 +339,10 @@ func (h *MessageHook) OnSubscribed(cl *mqtt.Client, pk packets.Packet, reasonCod
 		}
 	}
 
-	// Track subscriptions for monitoring
+	// Track subscriptions for monitoring (skip during shutdown to avoid deadlock)
+	if h.broker.stopping.Load() != 0 {
+		return
+	}
 	h.broker.mu.Lock()
 	defer h.broker.mu.Unlock()
 
@@ -380,6 +383,11 @@ func (h *MessageHook) createSubscribeLogEntry(cl *mqtt.Client, topicFilter strin
 
 // OnUnsubscribed handles client unsubscriptions
 func (h *MessageHook) OnUnsubscribed(cl *mqtt.Client, pk packets.Packet) {
+	// Skip during shutdown to avoid deadlock — server.Close() triggers
+	// unsubscriptions while Stop() may be waiting for Close() to finish.
+	if h.broker.stopping.Load() != 0 {
+		return
+	}
 	h.broker.mu.Lock()
 	defer h.broker.mu.Unlock()
 

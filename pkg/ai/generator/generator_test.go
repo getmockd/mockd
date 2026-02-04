@@ -490,6 +490,30 @@ func TestFallbackValues(t *testing.T) {
 	})
 }
 
+func TestStripCodeFences(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"no fences", `[{"name": "test"}]`, `[{"name": "test"}]`},
+		{"json fence", "```json\n[{\"name\": \"test\"}]\n```", `[{"name": "test"}]`},
+		{"plain fence", "```\n[{\"name\": \"test\"}]\n```", `[{"name": "test"}]`},
+		{"fence with whitespace", "  ```json\n[{\"name\": \"test\"}]\n```  ", `[{"name": "test"}]`},
+		{"JSON uppercase fence", "```JSON\n[{\"name\": \"test\"}]\n```", `[{"name": "test"}]`},
+		{"no closing fence", "```json\n[{\"name\": \"test\"}]", `[{"name": "test"}]`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripCodeFences(tt.input)
+			if result != tt.expected {
+				t.Errorf("stripCodeFences() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestNormalizePathParams(t *testing.T) {
 	tests := []struct {
 		input    string
