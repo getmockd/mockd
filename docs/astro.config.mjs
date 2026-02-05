@@ -16,6 +16,10 @@ export default defineConfig({
     starlight({
       title: "mockd",
       description: "Fast, lightweight API mocking for development and testing",
+      logo: {
+        src: "./src/assets/mockd-logo.svg",
+        alt: "mockd",
+      },
       favicon: "/favicon.png",
       customCss: ["./src/styles/custom.css"],
       head: [
