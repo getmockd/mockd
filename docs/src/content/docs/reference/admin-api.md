@@ -421,6 +421,54 @@ Get details of a specific request including headers, body, and response.
 
 Clear request history.
 
+#### GET /requests/stream
+
+Server-Sent Events (SSE) endpoint for streaming new requests in real-time.
+
+**Headers:**
+
+```
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+```
+
+**Events:**
+
+```
+event: connected
+data: {"message": "Connected to request stream"}
+
+event: request
+data: {"id": "req-123", "method": "GET", "path": "/api/users", ...}
+```
+
+**Usage with curl:**
+
+```bash
+curl -N http://localhost:4290/requests/stream
+```
+
+**Usage with JavaScript:**
+
+```javascript
+const eventSource = new EventSource('http://localhost:4290/requests/stream');
+
+eventSource.addEventListener('connected', (e) => {
+  console.log('Connected to request stream');
+});
+
+eventSource.addEventListener('request', (e) => {
+  const request = JSON.parse(e.data);
+  console.log('New request:', request.method, request.path);
+});
+```
+
+This endpoint is useful for:
+- Real-time request monitoring dashboards
+- Live debugging during development
+- Integration with external logging systems
+
 ---
 
 ### Proxy Management
@@ -640,6 +688,89 @@ Import mock configuration.
   "replace": false
 }
 ```
+
+---
+
+### Export Formats
+
+#### GET /insomnia.yaml
+
+Export mocks as Insomnia v5 collection (YAML format, recommended).
+
+**Response:** `Content-Type: application/x-yaml`
+
+```yaml
+type: collection.insomnia.rest/5.0
+name: mockd Mocks
+meta:
+  id: mockd_export
+  created: 1705315800000
+  modified: 1705315800000
+resources:
+  - _id: wrk_mockd
+    _type: workspace
+    name: mockd Mocks
+  - _id: req_get_users
+    _type: request
+    parentId: wrk_mockd
+    name: Get Users
+    method: GET
+    url: http://localhost:4280/api/users
+    headers: []
+    parameters: []
+```
+
+**Usage:**
+
+```bash
+# Download and import into Insomnia
+curl -o mockd-collection.yaml http://localhost:4290/insomnia.yaml
+# Then: File > Import > From File in Insomnia
+```
+
+#### GET /insomnia.json
+
+Export mocks as Insomnia v4 collection (JSON format, legacy).
+
+**Response:** `Content-Type: application/json`
+
+```json
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_source": "mockd",
+  "resources": [
+    {
+      "_id": "wrk_mockd",
+      "_type": "workspace",
+      "name": "mockd Mocks"
+    },
+    {
+      "_id": "req_get_users",
+      "_type": "request",
+      "parentId": "wrk_mockd",
+      "name": "Get Users",
+      "method": "GET",
+      "url": "http://localhost:4280/api/users"
+    }
+  ]
+}
+```
+
+**Query Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `format=yaml` or `format=v5` | Force v5 YAML format on `/insomnia.json` |
+
+**Features:**
+
+- Exports all HTTP mocks as Insomnia requests
+- Includes request headers and query parameters
+- Creates appropriate Content-Type headers for JSON/XML bodies
+- Organizes mocks in a workspace structure
+- Supports SSE mocks (adds `Accept: text/event-stream` header)
+- Supports SOAP mocks (adds SOAPAction headers)
 
 ---
 

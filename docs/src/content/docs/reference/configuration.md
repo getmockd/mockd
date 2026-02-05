@@ -698,6 +698,90 @@ Client auth modes:
 - `verify-if-given` - Verify client certificate if provided
 - `require-and-verify` - Require and verify client certificate
 
+### CORS Configuration
+
+Configure Cross-Origin Resource Sharing for the mock server.
+
+```yaml
+serverConfig:
+  cors:
+    enabled: true
+    allowOrigins:
+      - "http://localhost:3000"
+      - "https://app.example.com"
+    allowMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+    allowHeaders:
+      - Content-Type
+      - Authorization
+      - X-Requested-With
+    exposeHeaders:
+      - X-Request-ID
+    allowCredentials: false
+    maxAge: 86400
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable CORS handling |
+| `allowOrigins` | array | `["http://localhost:*"]` | Allowed origins (use `["*"]` for any) |
+| `allowMethods` | array | `[GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD]` | Allowed HTTP methods |
+| `allowHeaders` | array | `[Content-Type, Authorization, X-Requested-With, Accept, Origin]` | Allowed request headers |
+| `exposeHeaders` | array | `[]` | Headers browsers can access |
+| `allowCredentials` | boolean | `false` | Allow credentials (cannot use with `*` origin) |
+| `maxAge` | integer | `86400` | Preflight cache duration (seconds) |
+
+**Default behavior:** When not configured, mockd allows requests from localhost origins only. This is secure for local development while preventing cross-origin attacks.
+
+**Wildcard origins:**
+
+```yaml
+cors:
+  allowOrigins: ["*"]  # Allow any origin (not recommended for production)
+```
+
+**Note:** When `allowCredentials: true`, you cannot use wildcard origins.
+
+### Rate Limiting Configuration
+
+Configure rate limiting for the mock server.
+
+```yaml
+serverConfig:
+  rateLimit:
+    enabled: true
+    requestsPerSecond: 1000
+    burstSize: 2000
+    trustedProxies:
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable rate limiting |
+| `requestsPerSecond` | float | `1000` | Requests per second limit |
+| `burstSize` | integer | `2000` | Maximum burst size (token bucket) |
+| `trustedProxies` | array | `[]` | CIDR ranges for trusted proxies |
+
+**How it works:** Rate limiting uses a token bucket algorithm. The bucket fills at `requestsPerSecond` rate up to `burstSize` tokens. Each request consumes one token.
+
+**Trusted proxies:** When set, mockd trusts `X-Forwarded-For` headers from these IP ranges for accurate client IP detection.
+
+**Example: Strict rate limiting for load testing:**
+
+```yaml
+serverConfig:
+  rateLimit:
+    enabled: true
+    requestsPerSecond: 100
+    burstSize: 150
+```
+
 ---
 
 ## Stateful Resources

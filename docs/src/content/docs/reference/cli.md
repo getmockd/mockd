@@ -124,6 +124,7 @@ mockd serve [flags]
 |------|-------------|---------|
 | `--log-level` | Log level (debug, info, warn, error) | `info` |
 | `--log-format` | Log format (text, json) | `text` |
+| `--loki-endpoint` | Loki endpoint for log aggregation | |
 
 **Tracing Flags:**
 
@@ -164,6 +165,9 @@ mockd serve --audit-enabled --audit-file audit.log --audit-level debug
 
   # Start with JSON structured logging
   mockd serve --log-level debug --log-format json
+
+  # Send logs to Loki for aggregation
+  mockd serve --loki-endpoint http://localhost:3100/loki/api/v1/push
 ```
 
 ---
