@@ -1,0 +1,140 @@
+---
+title: mockd
+description: Fast, lightweight API mocking for development and testing
+template: splash
+hero:
+  tagline: Create realistic mock APIs in seconds. No external dependencies. Works offline.
+  image:
+    file: ../../assets/mockd-logo.svg
+  actions:
+    - text: Get Started
+      link: /getting-started/quickstart/
+      icon: right-arrow
+      variant: primary
+    - text: Installation
+      link: /getting-started/installation/
+      variant: secondary
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Why mockd?
+
+<CardGrid stagger>
+  <Card title="Zero Dependencies" icon="rocket">
+    Single binary written in Go. No runtime dependencies, no configuration servers, no Docker required for basic usage.
+  </Card>
+  <Card title="Instant Setup" icon="star">
+    Define mocks in JSON and start serving immediately. Your first mock API runs in under 5 minutes.
+  </Card>
+  <Card title="Stateful Mocking" icon="document">
+    Simulate real CRUD APIs with persistent state. Create, update, delete resources and see changes reflected across requests.
+  </Card>
+  <Card title="Proxy Recording" icon="magnifier">
+    Record real API traffic through the MITM proxy and replay responses as mocks. Perfect for capturing production behavior.
+  </Card>
+  <Card title="Flexible Matching" icon="setting">
+    Match requests by path, method, headers, query params, and body content. Use exact matches or regex patterns.
+  </Card>
+  <Card title="Developer First" icon="laptop">
+    Works offline, runs locally, integrates with any HTTP client. Use for development, testing, or CI/CD pipelines.
+  </Card>
+</CardGrid>
+
+---
+
+## Quick Install
+
+<Tabs>
+  <TabItem label="Binary (Linux/macOS)">
+    ```bash
+    curl -sSL https://github.com/getmockd/mockd/releases/latest/download/mockd-$(uname -s)-$(uname -m) -o mockd
+    chmod +x mockd
+    ./mockd --version
+    ```
+  </TabItem>
+  <TabItem label="Go Install">
+    ```bash
+    go install github.com/getmockd/mockd/cmd/mockd@latest
+    ```
+  </TabItem>
+  <TabItem label="Docker">
+    ```bash
+    docker run -p 4280:4280 -v $(pwd)/mocks:/mocks ghcr.io/getmockd/mockd
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Your First Mock
+
+Create a file called `mocks.json`:
+
+```json
+{
+  "mocks": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/users"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "users": [
+            {"id": 1, "name": "Alice"},
+            {"id": 2, "name": "Bob"}
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+Start the server:
+
+```bash
+mockd start --config mocks.json
+```
+
+Test it:
+
+```bash
+curl http://localhost:4280/api/users
+```
+
+---
+
+## Use Cases
+
+### Development
+
+Mock external APIs during frontend development. No need to wait for backend teams or deal with rate limits.
+
+### Testing
+
+Create predictable test fixtures for integration and end-to-end tests. Control every response.
+
+### CI/CD
+
+Run fast, isolated tests in CI pipelines without external dependencies.
+
+### Prototyping
+
+Quickly prototype API designs before implementing the real backend.
+
+---
+
+## Learn More
+
+- **[Installation](/getting-started/installation/)** - Download and install mockd
+- **[Quickstart](/getting-started/quickstart/)** - Run your first mock server
+- **[Core Concepts](/getting-started/concepts/)** - Understand how mockd works
+- **[Request Matching](/guides/request-matching/)** - Configure matching rules
+- **[Stateful Mocking](/guides/stateful-mocking/)** - Simulate CRUD APIs

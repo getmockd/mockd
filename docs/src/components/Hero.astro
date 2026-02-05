@@ -1,0 +1,36 @@
+---
+interface Props {
+  title: string;
+  tagline: string;
+  primaryLink?: string;
+  primaryText?: string;
+  secondaryLink?: string;
+  secondaryText?: string;
+}
+
+const { 
+  title, 
+  tagline, 
+  primaryLink = "/getting-started/quickstart/",
+  primaryText = "Get Started",
+  secondaryLink = "/getting-started/installation/",
+  secondaryText = "Installation"
+} = Astro.props;
+---
+
+<div class="hero-section">
+  <h1 class="hero-title">{title}</h1>
+  <p class="hero-tagline">{tagline}</p>
+  <div class="hero-buttons">
+    <a href={primaryLink} class="hero-button hero-button-primary">
+      {primaryText}
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14"/>
+        <path d="m12 5 7 7-7 7"/>
+      </svg>
+    </a>
+    <a href={secondaryLink} class="hero-button hero-button-secondary">
+      {secondaryText}
+    </a>
+  </div>
+</div>

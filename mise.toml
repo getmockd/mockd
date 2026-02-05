@@ -3,6 +3,7 @@
 
 [tools]
 go = "1.25"
+node = "22"
 
 [env]
 # Ensure ~/.local/bin is in PATH for linked binary
@@ -211,25 +212,31 @@ echo "GOARCH: $(go env GOARCH)"
 """
 
 # =============================================================================
-# Documentation Tasks (delegates to docs/ directory)
+# Documentation Tasks (Starlight/Astro - uses pnpm)
 # =============================================================================
 
 [tasks.docs-install]
 description = "Install documentation dependencies"
 dir = "docs"
-run = "mise run install"
+run = "pnpm install"
 
 [tasks.docs-serve]
+alias = "docs"
 description = "Start documentation server with live reload"
 dir = "docs"
-run = "mise run serve"
+run = "pnpm dev"
 
 [tasks.docs-build]
 description = "Build static documentation site"
 dir = "docs"
-run = "mise run build"
+run = "pnpm build"
+
+[tasks.docs-preview]
+description = "Preview built documentation site"
+dir = "docs"
+run = "pnpm preview"
 
 [tasks.docs-clean]
 description = "Clean documentation build artifacts"
 dir = "docs"
-run = "mise run clean"
+run = "rm -rf dist .astro node_modules"
