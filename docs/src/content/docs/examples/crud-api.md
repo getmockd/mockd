@@ -72,12 +72,12 @@ Create `tasks-api.json`:
   "mocks": [
     {
       "name": "Health check",
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/health"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": {"status": "ok", "timestamp": "{{now}}"}
       }
     }

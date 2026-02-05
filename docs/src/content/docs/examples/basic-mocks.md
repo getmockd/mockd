@@ -13,12 +13,12 @@ The simplest possible mock:
 {
   "mocks": [
     {
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/hello"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": "Hello, World!"
       }
     }
@@ -41,12 +41,12 @@ Return JSON data:
 {
   "mocks": [
     {
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/user"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "headers": {
           "Content-Type": "application/json"
         },
@@ -71,12 +71,12 @@ Mock a simple API:
   "mocks": [
     {
       "name": "List products",
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/products"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": {
           "products": [
             {"id": 1, "name": "Widget", "price": 9.99},
@@ -87,12 +87,12 @@ Mock a simple API:
     },
     {
       "name": "Get product",
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/products/1"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": {
           "id": 1,
           "name": "Widget",
@@ -103,12 +103,12 @@ Mock a simple API:
     },
     {
       "name": "Product not found",
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/products/999"
       },
       "response": {
-        "status": 404,
+        "statusCode": 404,
         "body": {
           "error": "Product not found"
         }
@@ -126,12 +126,12 @@ Match dynamic paths:
 {
   "mocks": [
     {
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/users/{id}"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": {
           "id": "{{request.pathParam.id}}",
           "name": "User {{request.pathParam.id}}"
@@ -160,7 +160,7 @@ Match and use query params:
 {
   "mocks": [
     {
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/search",
         "query": {
@@ -168,7 +168,7 @@ Match and use query params:
         }
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": {
           "query": "{{request.query.q}}",
           "results": []
@@ -195,7 +195,7 @@ Require specific headers:
   "mocks": [
     {
       "name": "Authenticated request",
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/protected",
         "headers": {
@@ -203,18 +203,18 @@ Require specific headers:
         }
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": {"message": "Access granted"}
       }
     },
     {
       "name": "Unauthorized",
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/protected"
       },
       "response": {
-        "status": 401,
+        "statusCode": 401,
         "body": {"error": "Unauthorized"}
       }
     }
@@ -240,12 +240,12 @@ Handle POST requests:
 {
   "mocks": [
     {
-      "request": {
+      "matcher": {
         "method": "POST",
         "path": "/api/users"
       },
       "response": {
-        "status": 201,
+        "statusCode": 201,
         "headers": {
           "Location": "/api/users/{{uuid}}"
         },
@@ -278,13 +278,13 @@ Add latency to responses:
 {
   "mocks": [
     {
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/slow"
       },
       "response": {
-        "status": 200,
-        "delay": "2s",
+        "statusCode": 200,
+        "delayMs": 2000,
         "body": {"message": "Finally!"}
       }
     }
@@ -300,12 +300,12 @@ Mock various error scenarios:
 {
   "mocks": [
     {
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/error/400"
       },
       "response": {
-        "status": 400,
+        "statusCode": 400,
         "body": {
           "error": "Bad Request",
           "message": "Invalid parameters"
@@ -313,12 +313,12 @@ Mock various error scenarios:
       }
     },
     {
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/error/500"
       },
       "response": {
-        "status": 500,
+        "statusCode": 500,
         "body": {
           "error": "Internal Server Error",
           "message": "Something went wrong"
@@ -326,12 +326,12 @@ Mock various error scenarios:
       }
     },
     {
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/error/503"
       },
       "response": {
-        "status": 503,
+        "statusCode": 503,
         "headers": {
           "Retry-After": "30"
         },
@@ -352,12 +352,12 @@ Load response body from file:
 {
   "mocks": [
     {
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/large-data"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "headers": {
           "Content-Type": "application/json"
         },
@@ -380,23 +380,23 @@ A realistic API mock:
   "mocks": [
     {
       "name": "Health check",
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/health"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": {"status": "ok"}
       }
     },
     {
       "name": "List users",
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/v1/users"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": {
           "data": [
             {"id": 1, "name": "Alice"},
@@ -411,12 +411,12 @@ A realistic API mock:
     },
     {
       "name": "Get user by ID",
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/v1/users/{id}"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": {
           "id": "{{request.pathParam.id}}",
           "name": "User {{request.pathParam.id}}",
@@ -426,12 +426,12 @@ A realistic API mock:
     },
     {
       "name": "Create user",
-      "request": {
+      "matcher": {
         "method": "POST",
         "path": "/api/v1/users"
       },
       "response": {
-        "status": 201,
+        "statusCode": 201,
         "body": {
           "id": "{{uuid}}",
           "name": "{{request.body.name}}",
@@ -441,12 +441,12 @@ A realistic API mock:
     },
     {
       "name": "Delete user",
-      "request": {
+      "matcher": {
         "method": "DELETE",
         "path": "/api/v1/users/{id}"
       },
       "response": {
-        "status": 204
+        "statusCode": 204
       }
     }
   ]

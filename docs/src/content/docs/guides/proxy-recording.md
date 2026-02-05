@@ -145,7 +145,7 @@ Recording content:
     "query": {}
   },
   "response": {
-    "status": 200,
+    "statusCode": 200,
     "headers": {
       "Content-Type": "application/json"
     },

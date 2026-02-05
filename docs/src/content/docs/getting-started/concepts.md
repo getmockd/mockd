@@ -14,7 +14,7 @@ A **mock** is a rule that defines:
 
 ```json
 {
-  "request": { ... },   // Request matcher
+  "matcher": { ... },   // Request matcher
   "response": { ... }   // Response definition
 }
 ```
@@ -27,7 +27,7 @@ The request matcher defines criteria for matching incoming requests:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "method": "GET",
     "path": "/api/users",
     "headers": {
@@ -81,14 +81,14 @@ The response defines what mockd sends back:
 ```json
 {
   "response": {
-    "status": 200,
+    "statusCode": 200,
     "headers": {
       "Content-Type": "application/json"
     },
     "body": {
       "message": "Success"
     },
-    "delay": "100ms"
+    "delayMs": 100
   }
 }
 ```
@@ -97,10 +97,11 @@ The response defines what mockd sends back:
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `status` | HTTP status code | 200 |
+| `statusCode` | HTTP status code | 200 |
+|-------|-------------|---------|
 | `headers` | Response headers | `{}` |
 | `body` | Response body (string or JSON) | `""` |
-| `delay` | Simulated latency | `0ms` |
+| `delayMs` | Simulated latency (milliseconds) | `0` |
 
 ### Body Types
 
@@ -172,12 +173,12 @@ A complete configuration file:
   "mocks": [
     {
       "name": "List users",
-      "request": {
+      "matcher": {
         "method": "GET",
         "path": "/api/users"
       },
       "response": {
-        "status": 200,
+        "statusCode": 200,
         "body": {"users": []}
       }
     }

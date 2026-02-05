@@ -30,7 +30,7 @@ Access various parts of the incoming request.
 
 ```json
 {
-  "request": {
+  "matcher": {
     "path": "/api/users/{id}"
   },
   "response": {
@@ -262,12 +262,12 @@ When embedding JSON, ensure proper escaping:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "method": "POST",
     "path": "/api/orders"
   },
   "response": {
-    "status": 201,
+    "statusCode": 201,
     "headers": {
       "Content-Type": "application/json",
       "Location": "/api/orders/{{uuid}}",

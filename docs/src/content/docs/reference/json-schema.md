@@ -122,7 +122,7 @@ Add to `coc-settings.json`:
   "definitions": {
     "mock": {
       "type": "object",
-      "required": ["request", "response"],
+      "required": ["matcher", "response"],
       "properties": {
         "name": {
           "type": "string",
@@ -137,7 +137,7 @@ Add to `coc-settings.json`:
           "default": 0,
           "description": "Match priority (lower = higher)"
         },
-        "request": { "$ref": "#/definitions/requestMatcher" },
+        "matcher": { "$ref": "#/definitions/requestMatcher" },
         "response": { "$ref": "#/definitions/response" }
       }
     }
@@ -198,7 +198,7 @@ Add to `coc-settings.json`:
     "response": {
       "type": "object",
       "properties": {
-        "status": {
+        "statusCode": {
           "type": "integer",
           "minimum": 100,
           "maximum": 599,
@@ -217,11 +217,11 @@ Add to `coc-settings.json`:
           "type": "string",
           "description": "Load body from file path"
         },
-        "delay": {
-          "type": "string",
-          "pattern": "^[0-9]+(ms|s|m)$",
-          "default": "0ms",
-          "description": "Response delay (e.g., '100ms', '1s')"
+        "delayMs": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Response delay in milliseconds"
         }
       }
     }
@@ -336,7 +336,7 @@ Add custom properties with `x-` prefix:
     {
       "x-team": "backend",
       "x-version": "2.0",
-      "request": {...},
+      "matcher": {...},
       "response": {...}
     }
   ]

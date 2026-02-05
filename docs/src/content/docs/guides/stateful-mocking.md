@@ -371,8 +371,8 @@ Stateful resources work alongside traditional mocks:
 {
   "mocks": [
     {
-      "request": {"method": "GET", "path": "/api/health"},
-      "response": {"status": 200, "body": {"status": "ok"}}
+      "matcher": {"method": "GET", "path": "/api/health"},
+      "response": {"statusCode": 200, "body": {"status": "ok"}}
     }
   ],
   "statefulResources": [

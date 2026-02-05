@@ -5,8 +5,6 @@ description: Learn how mockd evaluates matchers to determine which mock responds
 
 Request matching determines which mock responds to an incoming HTTP request. mockd evaluates matchers in order and returns the first matching response.
 
-> **Note:** In JSON/YAML configuration files, the actual field name is `matcher`, not `request`. The examples below use the simplified format for clarity.
-
 ## Basic Matching
 
 ### Method Matching
@@ -15,7 +13,7 @@ Match specific HTTP methods:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "method": "GET"
   }
 }
@@ -29,7 +27,7 @@ Exact path match:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "path": "/api/users"
   }
 }
@@ -41,7 +39,7 @@ Capture dynamic path segments using curly braces:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "path": "/api/users/{id}"
   }
 }
@@ -68,7 +66,7 @@ Access captured values in responses:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "path": "/api/{resource}/{id}/comments/{commentId}"
   }
 }
@@ -85,7 +83,7 @@ Match remaining path segments with `.*`:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "path": "/api/files/{filepath:.*}"
   }
 }
@@ -138,7 +136,7 @@ Match requests with specific query parameters:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "path": "/api/users",
     "query": {
       "page": "1",
@@ -154,7 +152,7 @@ Only specified parameters are required. Additional parameters are ignored:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "path": "/api/search",
     "query": {
       "q": "test"
@@ -173,7 +171,7 @@ Match requests with specific headers:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "headers": {
       "Content-Type": "application/json",
       "X-API-Key": "secret123"
@@ -188,7 +186,7 @@ Use `*` wildcards for flexible header matching:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "headers": {
       "Authorization": "Bearer *",
       "Accept": "application/*"
@@ -208,7 +206,7 @@ Header names are case-insensitive (per HTTP spec), but values are case-sensitive
 
 ```json
 {
-  "request": {
+  "matcher": {
     "headers": {
       "content-type": "application/json"
     }
@@ -228,7 +226,7 @@ Match exact JSON structure:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "body": {
       "username": "alice",
       "action": "login"
@@ -243,7 +241,7 @@ Use `bodyContains` for partial matching:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "bodyContains": {
       "username": "alice"
     }
@@ -259,7 +257,7 @@ Match specific paths in JSON:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "bodyMatch": {
       "$.user.email": ".*@example\\.com",
       "$.items[0].quantity": "[1-9][0-9]*"
@@ -274,7 +272,7 @@ Match raw body content:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "bodyString": "<xml>.*</xml>"
   }
 }
@@ -363,7 +361,7 @@ Combine multiple matchers for precise matching:
 
 ```json
 {
-  "request": {
+  "matcher": {
     "method": "POST",
     "path": "/api/users/{id}/comments",
     "headers": {
@@ -420,13 +418,13 @@ When priority is equal, earlier mocks in the config file win.
 
 ```json
 {
-  "request": {
+  "matcher": {
     "path": "/api/.*",
     "headers": {
       "X-API-Key": "valid-key-123"
     }
   },
-  "response": { "status": 200 }
+  "response": { "statusCode": 200 }
 }
 ```
 
@@ -435,7 +433,7 @@ When priority is equal, earlier mocks in the config file win.
 ```json
 [
   {
-    "request": {
+    "matcher": {
       "path": "/api/data",
       "headers": { "Accept": "application/xml" }
     },
@@ -445,7 +443,7 @@ When priority is equal, earlier mocks in the config file win.
     }
   },
   {
-    "request": {
+    "matcher": {
       "path": "/api/data",
       "headers": { "Accept": "application/json" }
     },
