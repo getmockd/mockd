@@ -148,6 +148,9 @@ nav:
     - Stream Recording: guides/stream-recording.md
     - Replay Modes: guides/replay-modes.md
     - TLS/HTTPS: guides/tls-https.md
+    - Sharing Mocks: guides/sharing-mocks.md
+    - Validation: guides/validation.md
+    - Troubleshooting: guides/troubleshooting.md
   - Protocols:
     - WebSocket: guides/websocket-mocking.md
     - GraphQL: guides/graphql-mocking.md
