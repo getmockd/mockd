@@ -49,7 +49,9 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 <Tabs>
   <TabItem label="Binary (Linux/macOS)">
     ```bash
-    curl -sSL https://github.com/getmockd/mockd/releases/latest/download/mockd-$(uname -s)-$(uname -m) -o mockd
+    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    ARCH=$(uname -m); [ "$ARCH" = "x86_64" ] && ARCH="amd64"; [ "$ARCH" = "aarch64" ] && ARCH="arm64"
+    curl -sSL "https://github.com/getmockd/mockd/releases/latest/download/mockd-${OS}-${ARCH}" -o mockd
     chmod +x mockd
     ./mockd --version
     ```

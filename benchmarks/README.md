@@ -157,7 +157,7 @@ benchmark:
     - uses: actions/checkout@v4
     - uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.25'
     - run: go run benchmarks/run_benchmarks.go
     - uses: actions/upload-artifact@v4
       with:
@@ -168,7 +168,7 @@ benchmark:
 ## Requirements
 
 ### Go Benchmarks
-- Go 1.24+
+- Go 1.25+
 
 ### HTTP Load Testing
 - One of: k6, wrk, hey, or ab
