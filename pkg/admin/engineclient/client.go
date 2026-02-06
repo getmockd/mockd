@@ -577,11 +577,14 @@ func (c *Client) ListSSEConnections(ctx context.Context) ([]*SSEConnection, erro
 		return nil, c.parseError(resp)
 	}
 
-	var connections []*SSEConnection
-	if err := json.NewDecoder(resp.Body).Decode(&connections); err != nil {
+	var result struct {
+		Connections []*SSEConnection `json:"connections"`
+		Count       int              `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode SSE connections: %w", err)
 	}
-	return connections, nil
+	return result.Connections, nil
 }
 
 // GetSSEConnection returns a specific SSE connection.

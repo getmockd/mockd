@@ -115,7 +115,8 @@ func (s *StdioServer) handleMessage(data []byte) *JSONRPCResponse {
 	}
 
 	// Initialized is a notification — no response needed.
-	if req.Method == "initialized" {
+	// Accept both "initialized" and "notifications/initialized" (OpenCode uses the latter)
+	if req.Method == "initialized" || req.Method == "notifications/initialized" {
 		if s.session != nil {
 			_, _ = s.server.dispatch(s.session, req)
 		}

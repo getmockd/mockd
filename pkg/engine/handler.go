@@ -303,15 +303,31 @@ func (h *Handler) logRequest(startTime time.Time, r *http.Request, headers map[s
 }
 
 // writeResponse writes the mock response to the HTTP response writer.
-// It processes any template variables in the response body using the request context.
+// It processes template variables in both response headers and body using the request context.
 func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyBytes []byte, pathParams map[string]string, pathPatternCaptures map[string]string, resp *mock.HTTPResponse) {
 	// Apply delay if specified
 	if resp.DelayMs > 0 {
 		time.Sleep(time.Duration(resp.DelayMs) * time.Millisecond)
 	}
 
-	// Set headers
+	// Build template context once, reuse for both headers and body.
+	var tmplCtx *template.Context
+	if h.templateEngine != nil {
+		tmplCtx = template.NewContext(r, bodyBytes)
+		tmplCtx.Request.PathParams = pathParams
+		tmplCtx.SetPathPatternCaptures(pathPatternCaptures)
+		if identity := mtls.FromContext(r.Context()); identity != nil {
+			tmplCtx.SetMTLSFromIdentity(identity)
+		}
+	}
+
+	// Set headers (with template expansion)
 	for name, value := range resp.Headers {
+		if tmplCtx != nil {
+			if processed, err := h.templateEngine.Process(value, tmplCtx); err == nil {
+				value = processed
+			}
+		}
 		w.Header().Set(name, value)
 	}
 
@@ -336,19 +352,8 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 
 	// Write body with template processing
 	if body != "" {
-		// Process template variables if the template engine is available
-		if h.templateEngine != nil {
-			ctx := template.NewContext(r, bodyBytes)
-			// Add path parameters to context
-			ctx.Request.PathParams = pathParams
-			// Add path pattern captures from regex matching
-			ctx.SetPathPatternCaptures(pathPatternCaptures)
-			// Add mTLS identity to context if available
-			if identity := mtls.FromContext(r.Context()); identity != nil {
-				ctx.SetMTLSFromIdentity(identity)
-			}
-			processedBody, err := h.templateEngine.Process(body, ctx)
-			if err == nil {
+		if tmplCtx != nil {
+			if processedBody, err := h.templateEngine.Process(body, tmplCtx); err == nil {
 				body = processedBody
 			}
 			// On error, use the original body (graceful degradation)

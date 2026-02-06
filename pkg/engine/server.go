@@ -568,14 +568,7 @@ func (s *Server) StatefulStore() *stateful.StateStore {
 // registerStatefulResource registers a stateful resource from config.
 // This is an internal method - external callers should use the HTTP API.
 func (s *Server) registerStatefulResource(cfg *config.StatefulResourceConfig) error {
-	return s.statefulStore.Register(&stateful.ResourceConfig{
-		Name:        cfg.Name,
-		BasePath:    cfg.BasePath,
-		IDField:     cfg.IDField,
-		ParentField: cfg.ParentField,
-		SeedData:    cfg.SeedData,
-		Validation:  cfg.Validation,
-	})
+	return s.statefulStore.Register(cfg)
 }
 
 // Handler returns the request handler (for admin API use).

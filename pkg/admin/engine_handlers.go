@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/store"
 )
@@ -253,6 +254,11 @@ func (a *AdminAPI) handleRegisterEngine(w http.ResponseWriter, r *http.Request) 
 		engineURL := fmt.Sprintf("http://%s:%d", req.Host, req.Port)
 		a.localEngine = engineclient.New(engineURL)
 		a.log.Info("auto-set localEngine from registration", "engineId", id, "url", engineURL)
+
+		// Push any persisted stateful resources to the newly connected engine.
+		// Mocks are handled separately (via BulkCreate from the CLI or re-import),
+		// but stateful resources need to be restored here so they survive restarts.
+		go a.syncPersistedStatefulResources()
 	}
 
 	writeJSON(w, http.StatusCreated, RegisterEngineResponse{
@@ -591,4 +597,38 @@ func (a *AdminAPI) handleGetEngineConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, response)
+}
+
+// syncPersistedStatefulResources pushes stateful resources from the file store
+// to the engine. This runs asynchronously after the first engine registers so
+// that resources imported in a previous admin session are restored.
+func (a *AdminAPI) syncPersistedStatefulResources() {
+	if a.dataStore == nil || a.localEngine == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, 15*time.Second)
+	defer cancel()
+
+	resources, err := a.dataStore.StatefulResources().List(ctx)
+	if err != nil {
+		a.log.Warn("failed to load persisted stateful resources", "error", err)
+		return
+	}
+	if len(resources) == 0 {
+		return
+	}
+
+	a.log.Info("restoring persisted stateful resources to engine", "count", len(resources))
+
+	// Build a minimal collection with only stateful resources (no mocks).
+	collection := &config.MockCollection{
+		Version:           "1.0",
+		Name:              "persisted-stateful-resources",
+		StatefulResources: resources,
+	}
+
+	if err := a.localEngine.ImportConfig(ctx, collection, false); err != nil {
+		a.log.Warn("failed to sync persisted stateful resources to engine", "error", err)
+	}
 }

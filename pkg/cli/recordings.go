@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"text/tabwriter"
 
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/recording"
 )
 
@@ -93,19 +95,39 @@ Examples:
 		return err
 	}
 
-	// Check if proxy is running with recordings
-	if proxyServer.store == nil {
-		return ErrProxyNotRunning
-	}
+	// Use in-process store if available, otherwise fall back to admin API.
+	var recordings []*recording.Recording
+	var total int
 
-	filter := recording.RecordingFilter{
-		SessionID: *sessionID,
-		Method:    *method,
-		Path:      *path,
-		Limit:     *limit,
+	if proxyServer.store != nil {
+		filter := recording.RecordingFilter{
+			SessionID: *sessionID,
+			Method:    *method,
+			Path:      *path,
+			Limit:     *limit,
+		}
+		recordings, total = proxyServer.store.ListRecordings(filter)
+	} else {
+		// Proxy not running in this process — fetch from admin API.
+		adminURL := cliconfig.ResolveAdminURL("")
+		resp, err := http.Get(adminURL + "/recordings")
+		if err != nil {
+			return fmt.Errorf("failed to list recordings: %w (is mockd running?)", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to list recordings: HTTP %d", resp.StatusCode)
+		}
+		var data struct {
+			Recordings []*recording.Recording `json:"recordings"`
+			Total      int                    `json:"total"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			return fmt.Errorf("failed to decode recordings: %w", err)
+		}
+		recordings = data.Recordings
+		total = data.Total
 	}
-
-	recordings, total := proxyServer.store.ListRecordings(filter)
 
 	if *jsonOutput {
 		output, err := json.MarshalIndent(recordings, "", "  ")

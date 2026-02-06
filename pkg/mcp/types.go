@@ -3,10 +3,31 @@ package mcp
 import (
 	"encoding/json"
 	"time"
+
+	types "github.com/getmockd/mockd/pkg/api/types"
 )
 
-// ProtocolVersion is the MCP protocol version supported by this implementation.
+// ProtocolVersion is the MCP protocol version advertised by this implementation.
 const ProtocolVersion = "2025-06-18"
+
+// SupportedProtocolVersions lists all protocol versions this server accepts.
+// We accept multiple versions for compatibility with various MCP clients.
+var SupportedProtocolVersions = []string{
+	"2025-11-25", // OpenCode 1.1.52+
+	"2025-06-18", // Current spec
+	"2025-03-26", // Common
+	"2024-11-05", // Older clients
+}
+
+// IsProtocolVersionSupported checks if a client's protocol version is supported.
+func IsProtocolVersionSupported(version string) bool {
+	for _, v := range SupportedProtocolVersions {
+		if v == version {
+			return true
+		}
+	}
+	return false
+}
 
 // JSON-RPC 2.0 Types
 
@@ -368,13 +389,8 @@ type StatefulListResult struct {
 	Meta PaginationMeta           `json:"meta"`
 }
 
-// PaginationMeta contains pagination information.
-type PaginationMeta struct {
-	Total  int `json:"total"`
-	Limit  int `json:"limit"`
-	Offset int `json:"offset"`
-	Count  int `json:"count"`
-}
+// PaginationMeta is an alias for the shared pagination metadata type.
+type PaginationMeta = types.PaginationMeta
 
 // RequestLogEntry represents a captured request log entry.
 type RequestLogEntry struct {

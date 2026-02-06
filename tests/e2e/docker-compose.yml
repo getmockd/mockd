@@ -1,0 +1,65 @@
+# mockd E2E Test Stack
+#
+# Architecture:
+#   mockd:        Admin API (:4290) + Mock Engine (:4280) — the system under test
+#   test-runner:  Alpine + curl + jq — runs test scripts against mockd
+#
+# Usage:
+#   docker compose -f tests/e2e/docker-compose.yml up --build --abort-on-container-exit
+#
+# The test-runner exits 0 on success, non-zero on failure.
+# --abort-on-container-exit ensures compose stops when tests finish.
+
+services:
+  mockd:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: mockd-e2e
+    command:
+      - serve
+      - --port=4280
+      - --admin-port=4290
+      - --no-auth
+      - --no-persist
+      - --log-level=warn
+    ports:
+      - "14280:4280"   # Mock engine (mapped to host for debugging)
+      - "14290:4290"   # Admin API (mapped to host for debugging)
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/mockd", "health", "--admin-port", "4290"]
+      interval: 2s
+      timeout: 3s
+      start_period: 5s
+      retries: 10
+    networks:
+      - test-net
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.runner
+    container_name: mockd-e2e-runner
+    depends_on:
+      mockd:
+        condition: service_healthy
+    environment:
+      MOCKD_ADMIN_URL: http://mockd:4290
+      MOCKD_ENGINE_URL: http://mockd:4280
+      MOCKD_MGMT_URL: http://mockd:4281
+      # Control which test suites to run (comma-separated, or "all")
+      TEST_SUITES: ${TEST_SUITES:-all}
+    volumes:
+      - ./scripts:/tests:ro
+      - ./results:/results
+    networks:
+      - test-net
+
+networks:
+  test-net:
+    driver: bridge

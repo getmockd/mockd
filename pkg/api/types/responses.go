@@ -8,6 +8,8 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 )
 
+// --- General Responses ---
+
 // ErrorResponse is a standard error response used across all APIs.
 type ErrorResponse struct {
 	Error   string `json:"error"`
@@ -22,11 +24,41 @@ type HealthResponse struct {
 	Timestamp time.Time `json:"timestamp,omitempty"`
 }
 
-// MockListResponse lists mocks with count.
-type MockListResponse struct {
-	Mocks []*config.MockConfiguration `json:"mocks"`
-	Count int                         `json:"count"`
+// MessageResponse is a simple message response.
+type MessageResponse struct {
+	Message string `json:"message"`
 }
+
+// CountResponse is a response with a count field.
+type CountResponse struct {
+	Message string `json:"message,omitempty"`
+	Count   int    `json:"count,omitempty"`
+	Cleared int    `json:"cleared,omitempty"`
+}
+
+// ToggleRequest represents a request to toggle an item's enabled status.
+type ToggleRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+// PaginatedResponse is a generic paginated response wrapper.
+type PaginatedResponse[T any] struct {
+	Items  []T `json:"items"`
+	Count  int `json:"count"`
+	Total  int `json:"total,omitempty"`
+	Offset int `json:"offset,omitempty"`
+	Limit  int `json:"limit,omitempty"`
+}
+
+// PaginationMeta contains pagination metadata for collection responses.
+type PaginationMeta struct {
+	Total  int `json:"total"`
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+	Count  int `json:"count"`
+}
+
+// --- Server Status ---
 
 // ProtocolStatus represents status for a single protocol.
 type ProtocolStatus struct {
@@ -54,14 +86,49 @@ type ServerStatus struct {
 	StartedAt    time.Time                 `json:"startedAt,omitempty"`
 }
 
-// PaginatedResponse is a generic paginated response wrapper.
-type PaginatedResponse[T any] struct {
-	Items  []T `json:"items"`
-	Count  int `json:"count"`
-	Total  int `json:"total,omitempty"`
-	Offset int `json:"offset,omitempty"`
-	Limit  int `json:"limit,omitempty"`
+// StatusResponse returns engine status (used by engine control API).
+type StatusResponse struct {
+	ID           string                    `json:"id"`
+	Name         string                    `json:"name,omitempty"`
+	Status       string                    `json:"status"`
+	Uptime       int64                     `json:"uptime"`
+	MockCount    int                       `json:"mockCount"`
+	RequestCount int64                     `json:"requestCount"`
+	Protocols    map[string]ProtocolStatus `json:"protocols"`
+	StartedAt    time.Time                 `json:"startedAt"`
 }
+
+// ConfigResponse represents the server configuration.
+type ConfigResponse struct {
+	HTTPPort       int `json:"httpPort"`
+	HTTPSPort      int `json:"httpsPort,omitempty"`
+	ManagementPort int `json:"managementPort"`
+	MaxLogEntries  int `json:"maxLogEntries"`
+	ReadTimeout    int `json:"readTimeout"`
+	WriteTimeout   int `json:"writeTimeout"`
+}
+
+// --- Mock Types ---
+
+// MockListResponse lists mocks with count.
+type MockListResponse struct {
+	Mocks []*config.MockConfiguration `json:"mocks"`
+	Count int                         `json:"count"`
+}
+
+// DeployRequest is sent to deploy mocks to an engine.
+type DeployRequest struct {
+	Mocks   []*config.MockConfiguration `json:"mocks"`
+	Replace bool                        `json:"replace,omitempty"`
+}
+
+// DeployResponse confirms deployment.
+type DeployResponse struct {
+	Deployed int    `json:"deployed"`
+	Message  string `json:"message,omitempty"`
+}
+
+// --- Request Logs ---
 
 // RequestLogEntry represents a logged request.
 type RequestLogEntry struct {
@@ -98,10 +165,7 @@ type RequestLogFilter struct {
 	Protocol string `json:"protocol,omitempty"`
 }
 
-// ToggleRequest represents a request to toggle an item's enabled status.
-type ToggleRequest struct {
-	Enabled bool `json:"enabled"`
-}
+// --- Import / Export ---
 
 // ImportConfigRequest represents a request to import configuration.
 type ImportConfigRequest struct {
@@ -117,14 +181,163 @@ type ImportConfigResponse struct {
 	StatefulResources int    `json:"statefulResources,omitempty"`
 }
 
-// MessageResponse is a simple message response.
-type MessageResponse struct {
-	Message string `json:"message"`
+// --- Chaos Injection ---
+
+// ChaosConfig represents chaos injection configuration for the API.
+type ChaosConfig struct {
+	Enabled   bool              `json:"enabled"`
+	Latency   *LatencyConfig    `json:"latency,omitempty"`
+	ErrorRate *ErrorRateConfig  `json:"errorRate,omitempty"`
+	Bandwidth *BandwidthConfig  `json:"bandwidth,omitempty"`
+	Rules     []ChaosRuleConfig `json:"rules,omitempty"`
 }
 
-// CountResponse is a response with a count field.
-type CountResponse struct {
-	Message string `json:"message,omitempty"`
-	Count   int    `json:"count,omitempty"`
-	Cleared int    `json:"cleared,omitempty"`
+// LatencyConfig configures latency injection.
+type LatencyConfig struct {
+	Min         string  `json:"min"`
+	Max         string  `json:"max"`
+	Probability float64 `json:"probability"`
+}
+
+// ErrorRateConfig configures error injection.
+type ErrorRateConfig struct {
+	Probability float64 `json:"probability"`
+	StatusCodes []int   `json:"statusCodes,omitempty"`
+	DefaultCode int     `json:"defaultCode,omitempty"`
+}
+
+// BandwidthConfig configures bandwidth throttling.
+type BandwidthConfig struct {
+	BytesPerSecond int     `json:"bytesPerSecond"`
+	Probability    float64 `json:"probability"`
+}
+
+// ChaosRuleConfig represents a path-specific chaos rule.
+type ChaosRuleConfig struct {
+	PathPattern string   `json:"pathPattern"`
+	Methods     []string `json:"methods,omitempty"`
+	Probability float64  `json:"probability,omitempty"`
+}
+
+// ChaosStats represents chaos injection statistics.
+type ChaosStats struct {
+	TotalRequests    int64            `json:"totalRequests"`
+	InjectedFaults   int64            `json:"injectedFaults"`
+	LatencyInjected  int64            `json:"latencyInjected"`
+	ErrorsInjected   int64            `json:"errorsInjected"`
+	TimeoutsInjected int64            `json:"timeoutsInjected"`
+	FaultsByType     map[string]int64 `json:"faultsByType"`
+}
+
+// --- Stateful Resources ---
+
+// StatefulResource represents a stateful mock resource for the API.
+type StatefulResource struct {
+	Name        string `json:"name"`
+	BasePath    string `json:"basePath"`
+	ItemCount   int    `json:"itemCount"`
+	SeedCount   int    `json:"seedCount"`
+	IDField     string `json:"idField"`
+	ParentField string `json:"parentField,omitempty"`
+}
+
+// StateOverview represents an overview of all stateful resources.
+type StateOverview struct {
+	Resources    []StatefulResource `json:"resources"`
+	Total        int                `json:"total"`
+	TotalItems   int                `json:"totalItems"`
+	ResourceList []string           `json:"resourceList"`
+}
+
+// ResetStateRequest is the request body for resetting state.
+type ResetStateRequest struct {
+	Resource string `json:"resource,omitempty"`
+}
+
+// ResetStateResponse is the response from a state reset operation.
+type ResetStateResponse struct {
+	Reset     bool     `json:"reset"`
+	Resources []string `json:"resources"`
+	Message   string   `json:"message"`
+}
+
+// --- Protocol Handlers ---
+
+// ProtocolHandler represents a running protocol handler.
+type ProtocolHandler struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	Port        int    `json:"port,omitempty"`
+	Path        string `json:"path,omitempty"`
+	Status      string `json:"status"`
+	Connections int    `json:"connections"`
+	Version     string `json:"version,omitempty"`
+}
+
+// ProtocolHandlerListResponse lists all protocol handlers.
+type ProtocolHandlerListResponse struct {
+	Handlers []*ProtocolHandler `json:"handlers"`
+	Count    int                `json:"count"`
+}
+
+// --- SSE ---
+
+// SSEConnection represents an active SSE connection.
+type SSEConnection struct {
+	ID          string    `json:"id"`
+	MockID      string    `json:"mockId"`
+	Path        string    `json:"path"`
+	ClientIP    string    `json:"clientIp"`
+	UserAgent   string    `json:"userAgent,omitempty"`
+	ConnectedAt time.Time `json:"connectedAt"`
+	EventsSent  int64     `json:"eventsSent"`
+	BytesSent   int64     `json:"bytesSent"`
+	Status      string    `json:"status"`
+}
+
+// SSEConnectionListResponse lists SSE connections.
+type SSEConnectionListResponse struct {
+	Connections []*SSEConnection `json:"connections"`
+	Count       int              `json:"count"`
+}
+
+// SSEStats represents SSE statistics.
+type SSEStats struct {
+	TotalConnections  int64          `json:"totalConnections"`
+	ActiveConnections int            `json:"activeConnections"`
+	TotalEventsSent   int64          `json:"totalEventsSent"`
+	TotalBytesSent    int64          `json:"totalBytesSent"`
+	ConnectionErrors  int64          `json:"connectionErrors"`
+	ConnectionsByMock map[string]int `json:"connectionsByMock"`
+}
+
+// --- WebSocket ---
+
+// WebSocketConnection represents an active WebSocket connection.
+type WebSocketConnection struct {
+	ID            string    `json:"id"`
+	MockID        string    `json:"mockId"`
+	Path          string    `json:"path"`
+	ClientIP      string    `json:"clientIp"`
+	ConnectedAt   time.Time `json:"connectedAt"`
+	MessagesSent  int64     `json:"messagesSent"`
+	MessagesRecv  int64     `json:"messagesRecv"`
+	BytesSent     int64     `json:"bytesSent"`
+	BytesReceived int64     `json:"bytesReceived"`
+	Status        string    `json:"status"`
+}
+
+// WebSocketConnectionListResponse lists WebSocket connections.
+type WebSocketConnectionListResponse struct {
+	Connections []*WebSocketConnection `json:"connections"`
+	Count       int                    `json:"count"`
+}
+
+// WebSocketStats represents WebSocket statistics.
+type WebSocketStats struct {
+	TotalConnections  int64          `json:"totalConnections"`
+	ActiveConnections int            `json:"activeConnections"`
+	TotalMessagesSent int64          `json:"totalMessagesSent"`
+	TotalMessagesRecv int64          `json:"totalMessagesRecv"`
+	ConnectionsByMock map[string]int `json:"connectionsByMock"`
 }

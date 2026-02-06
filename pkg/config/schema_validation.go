@@ -317,7 +317,7 @@ func validateHTTPMock(http *HTTPMockConfig, path string, result *SchemaValidatio
 	}
 }
 
-func validateStatefulResource(resource *StatefulResourceEntry, path string, names map[string]bool, workspaceNames map[string]bool, result *SchemaValidationResult) {
+func validateStatefulResource(resource *StatefulResourceConfig, path string, names map[string]bool, workspaceNames map[string]bool, result *SchemaValidationResult) {
 	// Name is required
 	if resource.Name == "" {
 		result.AddError(path+".name", "required")

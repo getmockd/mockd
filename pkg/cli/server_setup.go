@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/audit"
@@ -295,13 +296,29 @@ func BuildChaosConfig(f *ServerFlags) *chaos.ChaosConfig {
 }
 
 // ParseLatencyRange parses a latency range string like "10ms-100ms" into min and max values.
+// Bare numbers without units (e.g., "100") are treated as milliseconds.
 func ParseLatencyRange(s string) (min, max string) {
 	parts := strings.Split(s, "-")
 	if len(parts) == 2 {
-		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+		return normalizeLatency(strings.TrimSpace(parts[0])), normalizeLatency(strings.TrimSpace(parts[1]))
 	}
 	// If no range, use the same value for both
-	return s, s
+	v := normalizeLatency(s)
+	return v, v
+}
+
+// normalizeLatency ensures a latency value has a time unit. Bare numbers default to milliseconds.
+func normalizeLatency(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	// If it already has a unit suffix, leave it alone.
+	if _, err := time.ParseDuration(s); err == nil {
+		return s
+	}
+	// Bare number — treat as milliseconds.
+	return s + "ms"
 }
 
 // WaitForShutdown blocks until interrupt, then gracefully stops servers.

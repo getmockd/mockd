@@ -436,15 +436,16 @@ jobs:
 
 ```json
 {
-  "stateful": {
-    "resources": {
-      "users": {
-        "seed": [
-          {"id": 1, "name": "Test User", "email": "test@example.com"}
-        ]
-      }
+  "statefulResources": [
+    {
+      "name": "users",
+      "basePath": "/api/users",
+      "idField": "id",
+      "seedData": [
+        {"id": "1", "name": "Test User", "email": "test@example.com"}
+      ]
     }
-  }
+  ]
 }
 ```
 

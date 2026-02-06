@@ -229,57 +229,49 @@ Add to `coc-settings.json`:
 }
 ```
 
-### Stateful Definition
+### Stateful Resources Definition
 
 ```json
 {
   "definitions": {
-    "stateful": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "resources": {
-          "type": "object",
-          "additionalProperties": { "$ref": "#/definitions/resource" }
-        },
-        "persistence": { "$ref": "#/definitions/persistence" }
-      }
+    "statefulResources": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/statefulResource" }
     },
-    "resource": {
+    "statefulResource": {
       "type": "object",
-      "required": ["collection", "item"],
+      "required": ["name", "basePath"],
       "properties": {
-        "collection": {
+        "name": {
           "type": "string",
-          "description": "Collection endpoint path"
+          "description": "Resource name (e.g., users, products)"
         },
-        "item": {
+        "basePath": {
           "type": "string",
-          "description": "Item endpoint path with {id} parameter"
+          "description": "Base path for CRUD endpoints (e.g., /api/users)"
         },
         "idField": {
           "type": "string",
-          "default": "id"
+          "default": "id",
+          "description": "Field used as the unique identifier"
         },
-        "autoId": {
-          "type": "boolean",
-          "default": true
+        "parentField": {
+          "type": "string",
+          "default": "",
+          "description": "Optional parent field for nested resources"
         },
-        "seed": {
+        "seedData": {
           "type": "array",
-          "items": { "type": "object" }
-        },
-        "seedFile": {
-          "type": "string"
+          "items": { "type": "object" },
+          "description": "Initial data to populate the resource"
         }
       }
     }
   }
 }
 ```
+
+> **Note:** Resource definitions and seed data are persisted to the admin file store. Runtime data (CRUD operations) is in-memory only and resets to seed data on restart.
 
 ## Validation
 

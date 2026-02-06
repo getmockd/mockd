@@ -127,18 +127,90 @@ func (mm *MockManager) Update(id string, cfg *config.MockConfiguration) error {
 		return err
 	}
 
-	// Store directly (MockConfiguration is now an alias for mock.Mock)
-	return mm.store.Set(cfg)
+	// Unregister old handlers/servers before updating.
+	// For port-binding protocols (gRPC, MQTT), this stops the old server.
+	// For HTTP-based protocols (WebSocket, GraphQL, SOAP, OAuth), this removes the route handler.
+	// They will be re-registered with the new config by registerHandlerLocked below.
+	mm.unregisterHandlerLocked(existing)
+
+	// Store the updated config
+	if err := mm.store.Set(cfg); err != nil {
+		return err
+	}
+
+	// Re-register protocol handlers with the new config.
+	// This starts new gRPC/MQTT servers and updates HTTP-based handlers.
+	// registerHandlerLocked checks the enabled flag and skips if disabled,
+	// which correctly handles the toggle-to-disabled case (server stopped above,
+	// not restarted here).
+	if err := mm.registerHandlerLocked(cfg); err != nil {
+		mm.log.Warn("failed to re-register handler after update",
+			"id", id, "error", err)
+		// Don't fail the update — the config is saved, the old server is stopped.
+		// The user can fix the config and update again.
+	}
+
+	return nil
 }
 
-// Delete removes a mock by ID.
+// Delete removes a mock by ID and stops any protocol-specific servers/handlers.
 func (mm *MockManager) Delete(id string) error {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
+
+	// Look up the mock first to determine its type for cleanup.
+	cfg := mm.store.Get(id)
+	if cfg == nil {
+		return fmt.Errorf("mock with ID %s not found", id)
+	}
+
+	// Clean up protocol-specific servers and handlers before removing from store.
+	mm.unregisterHandlerLocked(cfg)
+
 	if !mm.store.Delete(id) {
 		return fmt.Errorf("mock with ID %s not found", id)
 	}
 	return nil
+}
+
+// unregisterHandlerLocked removes protocol-specific servers and handlers for a mock.
+// MUST be called while holding mm.mu lock.
+func (mm *MockManager) unregisterHandlerLocked(cfg *config.MockConfiguration) {
+	if cfg == nil {
+		return
+	}
+
+	switch cfg.Type {
+	case mock.MockTypeGRPC:
+		if mm.protocolManager != nil {
+			if err := mm.protocolManager.StopGRPCServer(cfg.ID); err != nil {
+				mm.log.Warn("failed to stop gRPC server", "id", cfg.ID, "error", err)
+			}
+		}
+	case mock.MockTypeMQTT:
+		if mm.protocolManager != nil {
+			if err := mm.protocolManager.StopMQTTBroker(cfg.ID); err != nil {
+				mm.log.Warn("failed to stop MQTT broker", "id", cfg.ID, "error", err)
+			}
+		}
+
+	case mock.MockTypeWebSocket:
+		if mm.handler != nil && cfg.WebSocket != nil {
+			mm.handler.UnregisterWebSocketEndpoint(cfg.WebSocket.Path)
+		}
+	case mock.MockTypeGraphQL:
+		if mm.handler != nil && cfg.GraphQL != nil {
+			mm.handler.UnregisterGraphQLHandler(cfg.GraphQL.Path)
+		}
+	case mock.MockTypeSOAP:
+		if mm.handler != nil && cfg.SOAP != nil {
+			mm.handler.UnregisterSOAPHandler(cfg.SOAP.Path)
+		}
+	case mock.MockTypeOAuth:
+		if mm.handler != nil && cfg.OAuth != nil {
+			mm.handler.UnregisterOAuthHandler(cfg.OAuth.Issuer)
+		}
+	}
 }
 
 // Get retrieves a mock by ID.
@@ -183,10 +255,16 @@ func (mm *MockManager) Exists(id string) bool {
 	return mm.store.Exists(id)
 }
 
-// Clear removes all mocks.
+// Clear removes all mocks and stops all protocol-specific servers/handlers.
 func (mm *MockManager) Clear() {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
+
+	// Unregister all protocol handlers before clearing the store.
+	for _, cfg := range mm.store.List() {
+		mm.unregisterHandlerLocked(cfg)
+	}
+
 	mm.store.Clear()
 }
 
@@ -328,11 +406,23 @@ func (mm *MockManager) registerGraphQLMock(m *mock.Mock) error {
 	if gqlSpec.Resolvers != nil {
 		cfg.Resolvers = make(map[string]graphql.ResolverConfig)
 		for path, resolver := range gqlSpec.Resolvers {
-			cfg.Resolvers[path] = graphql.ResolverConfig{
+			rc := graphql.ResolverConfig{
 				Response: resolver.Response,
 				Delay:    resolver.Delay,
 			}
-			// Note: Match and Error fields would need conversion if used
+			if resolver.Match != nil {
+				rc.Match = &graphql.ResolverMatch{
+					Args: resolver.Match.Args,
+				}
+			}
+			if resolver.Error != nil {
+				rc.Error = &graphql.GraphQLErrorConfig{
+					Message:    resolver.Error.Message,
+					Path:       resolver.Error.Path,
+					Extensions: resolver.Error.Extensions,
+				}
+			}
+			cfg.Resolvers[path] = rc
 		}
 	}
 
@@ -516,6 +606,7 @@ func (mm *MockManager) registerMQTTMock(m *mock.Mock) error {
 	}
 
 	mm.log.Info("started MQTT broker", "name", m.Name, "port", broker.Port())
+
 	return nil
 }
 

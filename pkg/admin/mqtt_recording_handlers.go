@@ -376,8 +376,8 @@ func (m *MQTTRecordingManager) handleGetMQTTBrokerStatus(w http.ResponseWriter, 
 	})
 }
 
-// handleListMQTTBrokers handles GET /mqtt.
-func (m *MQTTRecordingManager) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
+// handleListMQTTBrokersInternal handles listing brokers from locally registered brokers.
+func (m *MQTTRecordingManager) handleListMQTTBrokersInternal(w http.ResponseWriter, r *http.Request) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -402,9 +402,8 @@ func (m *MQTTRecordingManager) handleListMQTTBrokers(w http.ResponseWriter, r *h
 	})
 }
 
-// handleGetMQTTStatus handles GET /mqtt/status.
-// Returns aggregate status of all MQTT brokers.
-func (m *MQTTRecordingManager) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
+// handleGetMQTTStatusInternal handles status from locally registered brokers.
+func (m *MQTTRecordingManager) handleGetMQTTStatusInternal(w http.ResponseWriter, r *http.Request) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -438,6 +437,93 @@ func (m *MQTTRecordingManager) handleGetMQTTStatus(w http.ResponseWriter, r *htt
 		TotalClients: totalClients,
 		TotalTopics:  totalTopics,
 		Brokers:      brokers,
+	})
+}
+
+// handleListMQTTBrokers handles GET /mqtt.
+// Queries MQTT mocks from the engine (over HTTP) to build broker list.
+func (a *AdminAPI) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
+	// First check local recording manager for directly registered brokers.
+	a.mqttRecordingManager.mu.RLock()
+	localBrokers := len(a.mqttRecordingManager.brokers)
+	a.mqttRecordingManager.mu.RUnlock()
+
+	if localBrokers > 0 {
+		a.mqttRecordingManager.handleListMQTTBrokersInternal(w, r)
+		return
+	}
+
+	// No local brokers — query engine for MQTT mocks over HTTP.
+	if a.localEngine == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": []interface{}{}, "count": 0})
+		return
+	}
+
+	mocks, err := a.localEngine.ListMocks(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": []interface{}{}, "count": 0})
+		return
+	}
+
+	brokers := make([]MQTTBrokerStatusResponse, 0)
+	for _, m := range mocks {
+		if m.Type == "mqtt" && m.MQTT != nil {
+			brokers = append(brokers, MQTTBrokerStatusResponse{
+				ID:      m.ID,
+				Port:    m.MQTT.Port,
+				Running: m.Enabled == nil || *m.Enabled,
+			})
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": brokers, "count": len(brokers)})
+}
+
+// handleGetMQTTStatus handles GET /mqtt/status.
+// Queries MQTT mocks from the engine (over HTTP) to build aggregate status.
+func (a *AdminAPI) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
+	// First check local recording manager for directly registered brokers.
+	a.mqttRecordingManager.mu.RLock()
+	localBrokers := len(a.mqttRecordingManager.brokers)
+	a.mqttRecordingManager.mu.RUnlock()
+
+	if localBrokers > 0 {
+		a.mqttRecordingManager.handleGetMQTTStatusInternal(w, r)
+		return
+	}
+
+	// No local brokers — query engine for MQTT mocks over HTTP.
+	if a.localEngine == nil {
+		writeJSON(w, http.StatusOK, MQTTGlobalStatusResponse{Brokers: []MQTTBrokerStatusResponse{}})
+		return
+	}
+
+	mocks, err := a.localEngine.ListMocks(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusOK, MQTTGlobalStatusResponse{Brokers: []MQTTBrokerStatusResponse{}})
+		return
+	}
+
+	brokers := make([]MQTTBrokerStatusResponse, 0)
+	anyRunning := false
+	for _, m := range mocks {
+		if m.Type == "mqtt" && m.MQTT != nil {
+			running := m.Enabled == nil || *m.Enabled
+			if running {
+				anyRunning = true
+			}
+			brokers = append(brokers, MQTTBrokerStatusResponse{
+				ID:      m.ID,
+				Port:    m.MQTT.Port,
+				Running: running,
+			})
+		}
+	}
+
+	writeJSON(w, http.StatusOK, MQTTGlobalStatusResponse{
+		Running:     anyRunning,
+		BrokerCount: len(brokers),
+		Brokers:     brokers,
 	})
 }
 

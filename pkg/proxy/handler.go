@@ -130,6 +130,9 @@ func (p *Proxy) forwardRequest(r *http.Request) (*http.Response, error) {
 	// Remove hop-by-hop headers
 	removeHopByHopHeaders(outReq.Header)
 
+	// Set Host header to match the target (not the proxy) so upstream servers route correctly.
+	outReq.Host = outReq.URL.Host
+
 	// Set X-Forwarded headers
 	outReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
 	outReq.Header.Set("X-Forwarded-Host", r.Host)

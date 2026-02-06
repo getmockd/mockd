@@ -338,6 +338,43 @@ func TestMCP_Initialize_InvalidProtocolVersion(t *testing.T) {
 	}
 }
 
+func TestMCP_Initialize_VersionNegotiation(t *testing.T) {
+	// MCP spec: "If the server supports the requested protocol version,
+	// it MUST respond with the same version."
+	mcpServer, _, cleanup := testServer(t)
+	defer cleanup()
+	handler := mcpServer.Handler()
+
+	for _, clientVersion := range mcp.SupportedProtocolVersions {
+		t.Run(clientVersion, func(t *testing.T) {
+			params := mcp.InitializeParams{
+				ProtocolVersion: clientVersion,
+				Capabilities:    mcp.ClientCapabilities{},
+				ClientInfo: mcp.ClientInfo{
+					Name:    "test-client",
+					Version: "1.0.0",
+				},
+			}
+
+			resp := sendJSONRPC(t, handler, "initialize", params, "")
+
+			if resp.Error != nil {
+				t.Fatalf("unexpected error for supported version %s: %v", clientVersion, resp.Error)
+			}
+
+			resultJSON, _ := json.Marshal(resp.Result)
+			var result mcp.InitializeResult
+			if err := json.Unmarshal(resultJSON, &result); err != nil {
+				t.Fatalf("failed to unmarshal result: %v", err)
+			}
+
+			if result.ProtocolVersion != clientVersion {
+				t.Errorf("server must echo client version per MCP spec: sent %s, got %s", clientVersion, result.ProtocolVersion)
+			}
+		})
+	}
+}
+
 func TestMCP_MultipleSessions(t *testing.T) {
 	mcpServer, _, cleanup := testServer(t)
 	defer cleanup()

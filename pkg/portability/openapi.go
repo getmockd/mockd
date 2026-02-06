@@ -1,6 +1,8 @@
 package portability
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -11,6 +13,13 @@ import (
 	"github.com/getmockd/mockd/pkg/mock"
 	"gopkg.in/yaml.v3"
 )
+
+// generateImportID generates a unique mock ID for imported mocks.
+func generateImportID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "http_" + hex.EncodeToString(b)
+}
 
 // OpenAPI 3.x types
 
@@ -317,7 +326,7 @@ func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, id
 
 	enabled := true
 	return &config.MockConfiguration{
-		ID:        fmt.Sprintf("imported-%d", id),
+		ID:        generateImportID(),
 		Type:      mock.MockTypeHTTP,
 		Name:      name,
 		Enabled:   &enabled,
@@ -433,7 +442,7 @@ func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *Swagge
 
 	enabled2 := true
 	return &config.MockConfiguration{
-		ID:        fmt.Sprintf("imported-%d", id),
+		ID:        generateImportID(),
 		Type:      mock.MockTypeHTTP,
 		Name:      name,
 		Enabled:   &enabled2,

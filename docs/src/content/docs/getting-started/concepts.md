@@ -206,14 +206,14 @@ State persists across requests during the server session.
 
 ```json
 {
-  "stateful": {
-    "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}"
-      }
+  "statefulResources": [
+    {
+      "name": "users",
+      "basePath": "/api/users",
+      "idField": "id",
+      "seedData": []
     }
-  }
+  ]
 }
 ```
 

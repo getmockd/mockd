@@ -89,9 +89,10 @@ type LogResult struct {
 
 // ImportResult contains import operation results.
 type ImportResult struct {
-	Message  string
-	Imported int
-	Total    int
+	Message           string
+	Imported          int
+	Total             int
+	StatefulResources int
 }
 
 // CreateMockResult contains the result of a create mock operation.
@@ -434,17 +435,19 @@ func (c *adminClient) ImportConfig(collection *config.MockCollection, replace bo
 	}
 
 	var result struct {
-		Message  string `json:"message"`
-		Imported int    `json:"imported"`
-		Total    int    `json:"total"`
+		Message           string `json:"message"`
+		Imported          int    `json:"imported"`
+		Total             int    `json:"total"`
+		StatefulResources int    `json:"statefulResources"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	return &ImportResult{
-		Message:  result.Message,
-		Imported: result.Imported,
-		Total:    result.Total,
+		Message:           result.Message,
+		Imported:          result.Imported,
+		Total:             result.Total,
+		StatefulResources: result.StatefulResources,
 	}, nil
 }
 

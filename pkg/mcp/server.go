@@ -316,7 +316,7 @@ func (s *Server) dispatch(session *MCPSession, req *JSONRPCRequest) (interface{}
 	switch req.Method {
 	case "initialize":
 		return s.handleInitialize(session, req.Params)
-	case "initialized":
+	case "initialized", "notifications/initialized":
 		return s.handleInitialized(session)
 	case "ping":
 		return s.handlePing()
@@ -342,13 +342,18 @@ func (s *Server) handleInitialize(session *MCPSession, params json.RawMessage) (
 	if err != nil {
 		return nil, err
 	}
-	if initParams.ProtocolVersion != ProtocolVersion {
+	if !IsProtocolVersionSupported(initParams.ProtocolVersion) {
 		return nil, ProtocolVersionError(initParams.ProtocolVersion, ProtocolVersion)
 	}
-	session.SetClientData(initParams.ProtocolVersion, initParams.ClientInfo, initParams.Capabilities)
+
+	// MCP spec: "If the server supports the requested protocol version,
+	// it MUST respond with the same version."
+	negotiatedVersion := initParams.ProtocolVersion
+
+	session.SetClientData(negotiatedVersion, initParams.ClientInfo, initParams.Capabilities)
 	session.SetState(SessionStateInitialized)
 	return &InitializeResult{
-		ProtocolVersion: ProtocolVersion,
+		ProtocolVersion: negotiatedVersion,
 		Capabilities: ServerCapabilities{
 			Tools:     &ToolsCapability{ListChanged: false},
 			Resources: &ResourcesCapability{Subscribe: true, ListChanged: true},

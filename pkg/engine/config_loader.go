@@ -11,7 +11,6 @@ import (
 	"github.com/getmockd/mockd/pkg/graphql"
 	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/mock"
-	"github.com/getmockd/mockd/pkg/stateful"
 	"github.com/getmockd/mockd/pkg/store"
 )
 
@@ -38,7 +37,8 @@ func (cl *ConfigLoader) SetLogger(log *slog.Logger) {
 
 // LoadFromStore loads all configurations from the persistent store into the engine.
 // This should be called after setting the store and before starting the server.
-// It loads mocks from the unified mock store and starts all protocol handlers.
+// It loads mocks from the unified mock store and starts all protocol handlers,
+// and also restores persisted stateful resource definitions.
 func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store.Store) error {
 	if persistentStore == nil {
 		return nil // No store configured, nothing to load
@@ -60,6 +60,27 @@ func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store
 		// registerHandler logs warnings for failures but doesn't return errors
 		// to allow loading to continue for other mocks
 		cl.server.mockManager.registerHandler(m)
+	}
+
+	// Load persisted stateful resource definitions.
+	// These are registered with the engine's stateful store so their CRUD
+	// endpoints become available immediately (seeded with initial data).
+	resources, err := persistentStore.StatefulResources().List(ctx)
+	if err != nil {
+		cl.log.Warn("failed to load persisted stateful resources", "error", err)
+	} else {
+		for _, res := range resources {
+			if res == nil {
+				continue
+			}
+			if err := cl.registerStatefulResource(res); err != nil {
+				cl.log.Warn("failed to restore stateful resource",
+					"name", res.Name, "error", err)
+			}
+		}
+		if len(resources) > 0 {
+			cl.log.Info("restored persisted stateful resources", "count", len(resources))
+		}
 	}
 
 	return nil
@@ -228,6 +249,8 @@ func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) 
 			if err := cl.registerStatefulResource(res); err != nil {
 				// Skip if resource already exists (similar to mocks)
 				if !replace {
+					cl.log.Warn("skipping stateful resource (already registered)",
+						"name", res.Name, "error", err)
 					continue
 				}
 				return fmt.Errorf("failed to register stateful resource %s: %w", res.Name, err)
@@ -249,12 +272,5 @@ func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) 
 
 // registerStatefulResource registers a stateful resource from config.
 func (cl *ConfigLoader) registerStatefulResource(cfg *config.StatefulResourceConfig) error {
-	return cl.server.statefulStore.Register(&stateful.ResourceConfig{
-		Name:        cfg.Name,
-		BasePath:    cfg.BasePath,
-		IDField:     cfg.IDField,
-		ParentField: cfg.ParentField,
-		SeedData:    cfg.SeedData,
-		Validation:  cfg.Validation,
-	})
+	return cl.server.statefulStore.Register(cfg)
 }

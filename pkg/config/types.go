@@ -240,9 +240,12 @@ type WebSocketEndpointConfig struct {
 }
 
 // StatefulResourceConfig defines configuration for a stateful CRUD resource.
+// This is the single canonical type used in YAML config, persistence, and API transport.
 type StatefulResourceConfig struct {
 	// Name is the unique resource name (e.g., "users", "products")
 	Name string `json:"name" yaml:"name"`
+	// Workspace is the workspace this resource belongs to (YAML config only, not persisted)
+	Workspace string `json:"workspace,omitempty" yaml:"workspace,omitempty"`
 	// BasePath is the URL path prefix (e.g., "/api/users")
 	BasePath string `json:"basePath" yaml:"basePath"`
 	// IDField is the field name for ID (default: "id")

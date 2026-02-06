@@ -1152,6 +1152,7 @@ func (s *Server) createTemplateContext(md metadata.MD, reqMap map[string]interfa
 }
 
 // applyDelay applies configured delay.
+// Accepts Go duration strings ("100ms", "2s") or bare numbers treated as milliseconds ("100").
 func (s *Server) applyDelay(delay string) {
 	if delay == "" {
 		return
@@ -1159,7 +1160,11 @@ func (s *Server) applyDelay(delay string) {
 
 	d, err := time.ParseDuration(delay)
 	if err != nil {
-		return
+		// Bare number without unit — treat as milliseconds for consistency with HTTP delayMs.
+		d, err = time.ParseDuration(delay + "ms")
+		if err != nil {
+			return
+		}
 	}
 
 	if d > 0 {

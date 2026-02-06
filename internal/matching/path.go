@@ -2,6 +2,7 @@ package matching
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -52,6 +53,13 @@ func getCompiledRegex(pattern string) *regexp.Regexp {
 //   - Wildcard: "/api/users/*" matches "/api/users/123"
 //   - Named params: "/api/users/{id}" matches "/api/users/123"
 func MatchPath(pattern, path string) int {
+	// Normalize: URL-decode the pattern so that stored paths like "/api/hello%20world"
+	// match incoming requests where Go's net/http has already decoded the path to
+	// "/api/hello world". If decoding fails, use the original pattern.
+	if decoded, err := url.PathUnescape(pattern); err == nil {
+		pattern = decoded
+	}
+
 	// Exact match
 	if pattern == path {
 		return ScorePathExact

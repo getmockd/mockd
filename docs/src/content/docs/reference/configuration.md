@@ -786,7 +786,7 @@ serverConfig:
 
 ## Stateful Resources
 
-Stateful resources provide automatic CRUD operations with persistent state.
+Stateful resources provide automatic CRUD operations with in-memory state. Resource definitions and seed data are persisted to the admin file store, but runtime data (created/updated/deleted items) is held in memory and resets to seed data on restart.
 
 ```yaml
 version: "1.0"

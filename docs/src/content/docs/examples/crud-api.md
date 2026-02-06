@@ -11,7 +11,7 @@ We'll create a mock API for a task management system with:
 
 - Tasks (main resource)
 - Users (for assignment)
-- Persistent state across requests
+- In-memory state across requests (resets to seed data on restart)
 
 ## Configuration
 
@@ -22,53 +22,48 @@ Create `tasks-api.json`:
   "server": {
     "port": 4280
   },
-  "stateful": {
-    "resources": {
-      "users": {
-        "collection": "/api/users",
-        "item": "/api/users/{id}",
-        "idField": "id",
-        "autoId": true,
-        "seed": [
-          {"id": 1, "name": "Alice", "email": "alice@example.com"},
-          {"id": 2, "name": "Bob", "email": "bob@example.com"}
-        ]
-      },
-      "tasks": {
-        "collection": "/api/tasks",
-        "item": "/api/tasks/{id}",
-        "idField": "id",
-        "autoId": true,
-        "filtering": true,
-        "seed": [
-          {
-            "id": 1,
-            "title": "Setup project",
-            "description": "Initialize the project structure",
-            "status": "done",
-            "assigneeId": 1,
-            "createdAt": "2024-01-10T09:00:00Z"
-          },
-          {
-            "id": 2,
-            "title": "Write documentation",
-            "description": "Create user documentation",
-            "status": "in_progress",
-            "assigneeId": 2,
-            "createdAt": "2024-01-11T10:00:00Z"
-          },
-          {
-            "id": 3,
-            "title": "Add tests",
-            "description": "Write unit tests",
-            "status": "todo",
-            "assigneeId": null,
-            "createdAt": "2024-01-12T11:00:00Z"
-          }
-        ]
-      }
+  "statefulResources": [
+    {
+      "name": "users",
+      "basePath": "/api/users",
+      "idField": "id",
+      "seedData": [
+        {"id": "1", "name": "Alice", "email": "alice@example.com"},
+        {"id": "2", "name": "Bob", "email": "bob@example.com"}
+      ]
+    },
+    {
+      "name": "tasks",
+      "basePath": "/api/tasks",
+      "idField": "id",
+      "seedData": [
+        {
+          "id": "1",
+          "title": "Setup project",
+          "description": "Initialize the project structure",
+          "status": "done",
+          "assigneeId": 1,
+          "createdAt": "2024-01-10T09:00:00Z"
+        },
+        {
+          "id": "2",
+          "title": "Write documentation",
+          "description": "Create user documentation",
+          "status": "in_progress",
+          "assigneeId": 2,
+          "createdAt": "2024-01-11T10:00:00Z"
+        },
+        {
+          "id": "3",
+          "title": "Add tests",
+          "description": "Write unit tests",
+          "status": "todo",
+          "assigneeId": null,
+          "createdAt": "2024-01-12T11:00:00Z"
+        }
+      ]
     }
-  },
+  ],
   "mocks": [
     {
       "name": "Health check",
@@ -264,22 +259,9 @@ curl -X POST http://localhost:4290/state \
   }'
 ```
 
-## With Persistence
+## State Lifecycle
 
-Enable file persistence so state survives restarts:
-
-```json
-{
-  "stateful": {
-    "resources": { ... },
-    "persistence": {
-      "enabled": true,
-      "file": "./state.json",
-      "saveInterval": "10s"
-    }
-  }
-}
-```
+Stateful resource **definitions** (name, basePath, seedData) are persisted to the admin file store and survive restarts. However, **runtime data** (items created, updated, or deleted via CRUD operations) is held in memory only. When the server restarts, runtime data resets to the seed data.
 
 ## Workflow Example
 

@@ -3,7 +3,7 @@ package stateful
 import (
 	"time"
 
-	"github.com/getmockd/mockd/pkg/validation"
+	"github.com/getmockd/mockd/pkg/config"
 )
 
 // ResourceItem represents a single record within a stateful resource.
@@ -56,21 +56,9 @@ type PaginatedResponse struct {
 	Meta PaginationMeta `json:"meta"`
 }
 
-// ResourceConfig defines configuration for a stateful resource.
-type ResourceConfig struct {
-	// Name is the unique resource name (e.g., "users", "products")
-	Name string `json:"name"`
-	// BasePath is the URL path prefix (e.g., "/api/users")
-	BasePath string `json:"basePath"`
-	// IDField is the field name for ID (default: "id")
-	IDField string `json:"idField,omitempty"`
-	// ParentField is the field name for parent FK in nested resources
-	ParentField string `json:"parentField,omitempty"`
-	// SeedData is the initial data to load on startup/reset
-	SeedData []map[string]interface{} `json:"seedData,omitempty"`
-	// Validation defines validation rules for CRUD operations
-	Validation *validation.StatefulValidation `json:"validation,omitempty"`
-}
+// ResourceConfig is an alias for config.StatefulResourceConfig.
+// This is the single canonical type for stateful resource configuration.
+type ResourceConfig = config.StatefulResourceConfig
 
 // StateOverview provides information about all registered stateful resources.
 type StateOverview struct {

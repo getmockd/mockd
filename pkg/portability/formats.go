@@ -85,7 +85,13 @@ func DetectFormat(data []byte, filename string) Format {
 
 	// For JSON or unknown extensions, try to parse and detect
 	if isJSON || ext == "" {
-		return detectFormatFromJSON(data)
+		if f := detectFormatFromJSON(data); f != FormatUnknown {
+			return f
+		}
+		// JSON detection failed — try YAML as fallback (covers no-extension case)
+		if ext == "" {
+			return detectFormatFromYAML(data)
+		}
 	}
 
 	return FormatUnknown
@@ -201,7 +207,7 @@ func detectFormatFromYAML(data []byte) Format {
 // Returns FormatUnknown for unrecognized format strings.
 func ParseFormat(s string) Format {
 	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "mockd", "native":
+	case "mockd", "native", "json", "yaml", "yml":
 		return FormatMockd
 	case "openapi", "swagger", "oas":
 		return FormatOpenAPI

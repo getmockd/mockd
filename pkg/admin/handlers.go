@@ -9,42 +9,19 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	types "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/requestlog"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
-// ErrorResponse represents an error response.
-type ErrorResponse struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
-	Details any    `json:"details,omitempty"`
-}
-
-// HealthResponse represents a health check response.
-type HealthResponse struct {
-	Status string `json:"status"`
-	Uptime int    `json:"uptime"`
-}
-
-// ServerStatus represents a detailed server status response.
-type ServerStatus struct {
-	Status       string `json:"status"`
-	HTTPPort     int    `json:"httpPort"`
-	HTTPSPort    int    `json:"httpsPort,omitempty"`
-	AdminPort    int    `json:"adminPort"`
-	Uptime       int64  `json:"uptime"`
-	MockCount    int    `json:"mockCount"`
-	ActiveMocks  int    `json:"activeMocks"`
-	RequestCount int64  `json:"requestCount"`
-	TLSEnabled   bool   `json:"tlsEnabled"`
-	Version      string `json:"version"`
-}
-
-// MockListResponse represents a list of mocks response.
-type MockListResponse struct {
-	Mocks []*config.MockConfiguration `json:"mocks"`
-	Count int                         `json:"count"`
-}
+// Type aliases pointing to the canonical shared types.
+type (
+	ErrorResponse    = types.ErrorResponse
+	HealthResponse   = types.HealthResponse
+	ServerStatus     = types.ServerStatus
+	MockListResponse = types.MockListResponse
+)
 
 // writeJSON writes a JSON response.
 func writeJSON(w http.ResponseWriter, status int, data any) {
@@ -303,10 +280,8 @@ func (a *AdminAPI) handleDeleteMock(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ToggleRequest represents a toggle mock request.
-type ToggleRequest struct {
-	Enabled bool `json:"enabled"`
-}
+// ToggleRequest is an alias for the shared toggle request type.
+type ToggleRequest = types.ToggleRequest
 
 // handleToggleMock handles POST /mocks/{id}/toggle.
 func (a *AdminAPI) handleToggleMock(w http.ResponseWriter, r *http.Request) {
@@ -393,10 +368,95 @@ func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mockStore := a.getMockStore()
+
+	// Default workspaceId for imported mocks (consistent with POST /mocks and POST /mocks/bulk).
+	workspaceID := r.URL.Query().Get("workspaceId")
+	if workspaceID == "" {
+		workspaceID = store.DefaultWorkspaceID
+	}
+
+	now := time.Now()
+	for _, m := range req.Config.Mocks {
+		if m == nil {
+			continue
+		}
+		if m.WorkspaceID == "" {
+			m.WorkspaceID = workspaceID
+		}
+		// Ensure timestamps are set so imported mocks look like normal mocks.
+		if m.CreatedAt.IsZero() {
+			m.CreatedAt = now
+		}
+		m.UpdatedAt = now
+	}
+
+	// If replacing, clear the file store first so we don't leave stale entries.
+	if req.Replace && mockStore != nil {
+		// Delete all existing mocks from the file store in this workspace.
+		existing, _ := mockStore.List(ctx, nil)
+		for _, em := range existing {
+			_ = mockStore.Delete(ctx, em.ID)
+		}
+	}
+
+	// Write imported mocks to the admin file store FIRST (dual-write pattern).
+	// This ensures DELETE /mocks/{id} can find them later.
+	imported := 0
+	if mockStore != nil {
+		for _, m := range req.Config.Mocks {
+			if m == nil {
+				continue
+			}
+			// Generate ID if not provided
+			if m.ID == "" {
+				m.ID = generateMockID(m.Type)
+			}
+			// Use Create (skip duplicates) to populate the file store.
+			if err := mockStore.Create(ctx, m); err != nil {
+				// If it already exists, update it instead.
+				if err == store.ErrAlreadyExists {
+					_ = mockStore.Update(ctx, m)
+				} else {
+					a.log.Warn("failed to write imported mock to file store",
+						"id", m.ID, "error", err)
+				}
+			}
+		}
+	}
+
+	// Dual-write stateful resources to the file store so they survive restarts.
+	if len(req.Config.StatefulResources) > 0 && a.dataStore != nil {
+		resStore := a.dataStore.StatefulResources()
+		if req.Replace {
+			_ = resStore.DeleteAll(ctx)
+		}
+		for _, res := range req.Config.StatefulResources {
+			if res == nil {
+				continue
+			}
+			if err := resStore.Create(ctx, res); err != nil {
+				if err == store.ErrAlreadyExists {
+					// Resource already exists; on replace we already cleared, so this
+					// shouldn't happen, but handle gracefully.
+					a.log.Debug("stateful resource already exists in file store", "name", res.Name)
+				} else {
+					a.log.Warn("failed to write stateful resource to file store",
+						"name", res.Name, "error", err)
+				}
+			}
+		}
+	}
+
+	// Forward to engine for runtime registration (starts gRPC/MQTT servers, registers handlers).
 	if err := a.localEngine.ImportConfig(ctx, req.Config, req.Replace); err != nil {
 		writeError(w, http.StatusBadRequest, "import_error", sanitizeError(err, a.log, "import config"))
 		return
 	}
+
+	// Count successfully imported mocks.
+	imported = len(req.Config.Mocks)
+
 	// Get the updated state
 	collection, _ := a.localEngine.ExportConfig(ctx, "imported")
 	total := 0
@@ -405,7 +465,7 @@ func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	response := map[string]any{
 		"message":  "Configuration imported successfully",
-		"imported": len(req.Config.Mocks),
+		"imported": imported,
 		"total":    total,
 	}
 	if len(req.Config.StatefulResources) > 0 {

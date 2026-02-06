@@ -43,18 +43,25 @@ func (a *AdminAPI) handleListSSEConnections(w http.ResponseWriter, r *http.Reque
 	info := make([]sse.SSEStreamInfo, 0, len(connections))
 	for _, conn := range connections {
 		info = append(info, sse.SSEStreamInfo{
-			ID:     conn.ID,
-			MockID: conn.MockID,
-			// ClientIP and other fields would need to be added to engineclient types
+			ID:       conn.ID,
+			MockID:   conn.MockID,
+			ClientIP: conn.ClientIP,
 		})
+	}
+
+	connsByMock := stats.ConnectionsByMock
+	if connsByMock == nil {
+		connsByMock = make(map[string]int)
 	}
 
 	writeJSON(w, http.StatusOK, SSEConnectionListResponse{
 		Connections: info,
 		Stats: sse.ConnectionStats{
 			ActiveConnections: stats.ActiveConnections,
-			TotalConnections:  int64(stats.TotalConnections),
-			ConnectionsByMock: make(map[string]int),
+			TotalConnections:  stats.TotalConnections,
+			TotalEventsSent:   stats.TotalEventsSent,
+			TotalBytesSent:    stats.TotalBytesSent,
+			ConnectionsByMock: connsByMock,
 		},
 	})
 }
@@ -148,10 +155,16 @@ func (a *AdminAPI) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	connsByMock := stats.ConnectionsByMock
+	if connsByMock == nil {
+		connsByMock = make(map[string]int)
+	}
 	writeJSON(w, http.StatusOK, sse.ConnectionStats{
 		ActiveConnections: stats.ActiveConnections,
-		TotalConnections:  int64(stats.TotalConnections),
-		ConnectionsByMock: make(map[string]int),
+		TotalConnections:  stats.TotalConnections,
+		TotalEventsSent:   stats.TotalEventsSent,
+		TotalBytesSent:    stats.TotalBytesSent,
+		ConnectionsByMock: connsByMock,
 	})
 }
 

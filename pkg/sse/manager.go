@@ -174,8 +174,8 @@ func (m *SSEConnectionManager) Stats() ConnectionStats {
 	stats := ConnectionStats{
 		ActiveConnections: len(m.connections),
 		TotalConnections:  m.totalConnections,
-		TotalEventsSent:   m.totalEventsSent,
-		TotalBytesSent:    m.totalBytesSent,
+		TotalEventsSent:   atomic.LoadInt64(&m.totalEventsSent),
+		TotalBytesSent:    atomic.LoadInt64(&m.totalBytesSent),
 		ConnectionErrors:  m.connectionErrors,
 		ConnectionsByMock: make(map[string]int),
 	}

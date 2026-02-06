@@ -292,6 +292,12 @@ func (uctx *upContext) run() error {
 		return fmt.Errorf("loading mocks: %w", err)
 	}
 
+	// Load and apply stateful resources from config
+	if err := uctx.loadAndApplyStatefulResources(); err != nil {
+		uctx.stopAll()
+		return fmt.Errorf("loading stateful resources: %w", err)
+	}
+
 	// Write PID file
 	pidPath := defaultUpPIDPath()
 	if err := uctx.writePIDFile(pidPath); err != nil {
@@ -900,6 +906,46 @@ func (uctx *upContext) loadAndApplyMocks() error {
 		for _, w := range result.Warnings {
 			fmt.Fprintf(os.Stderr, "  Warning: %s\n", w)
 		}
+	}
+
+	return nil
+}
+
+// loadAndApplyStatefulResources pushes StatefulResourceConfig from the project config
+// to the admin via ImportConfig.
+func (uctx *upContext) loadAndApplyStatefulResources() error {
+	if len(uctx.cfg.StatefulResources) == 0 {
+		return nil
+	}
+
+	// Use the config entries directly (no conversion needed — StatefulResourceConfig
+	// is now the single canonical type used in both YAML config and API transport).
+	resources := make([]*config.StatefulResourceConfig, 0, len(uctx.cfg.StatefulResources))
+	for i := range uctx.cfg.StatefulResources {
+		resources = append(resources, &uctx.cfg.StatefulResources[i])
+	}
+
+	adminClient := uctx.findFirstAdminClient()
+	if adminClient == nil {
+		return fmt.Errorf("no admin client available to push stateful resources")
+	}
+
+	// Build a collection with only stateful resources.
+	collection := &config.MockCollection{
+		Version:           "1.0",
+		Name:              "stateful-resources",
+		StatefulResources: resources,
+	}
+
+	fmt.Printf("Loading %d stateful resources...\n", len(resources))
+
+	result, err := adminClient.ImportConfig(collection, false)
+	if err != nil {
+		return fmt.Errorf("importing stateful resources: %w", err)
+	}
+
+	if result.StatefulResources > 0 {
+		fmt.Printf("Applied %d stateful resources via admin API\n", result.StatefulResources)
 	}
 
 	return nil

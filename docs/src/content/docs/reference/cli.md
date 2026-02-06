@@ -685,7 +685,7 @@ mockd delete abc123
 
 ### mockd import
 
-Import mocks from various sources and formats.
+Import mocks from various sources and formats. Imported configurations may include `statefulResources` definitions, which are persisted to the admin file store and survive restarts. Runtime data for stateful resources is in-memory only and resets to seed data on restart.
 
 ```bash
 mockd import <source> [flags]

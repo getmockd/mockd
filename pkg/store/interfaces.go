@@ -124,6 +124,18 @@ type MockStore interface {
 	BulkUpdate(ctx context.Context, mocks []*mock.Mock) error
 }
 
+// StatefulResourceStore handles persistence for stateful resource configurations.
+type StatefulResourceStore interface {
+	// List returns all persisted stateful resource configs.
+	List(ctx context.Context) ([]*config.StatefulResourceConfig, error)
+	// Create persists a new stateful resource config.
+	Create(ctx context.Context, res *config.StatefulResourceConfig) error
+	// Delete removes a stateful resource config by name.
+	Delete(ctx context.Context, name string) error
+	// DeleteAll removes all stateful resource configs.
+	DeleteAll(ctx context.Context) error
+}
+
 // FolderFilter provides filtering criteria for folder list operations.
 type FolderFilter struct {
 	WorkspaceID string  // Filter by workspace ("" = no filter)

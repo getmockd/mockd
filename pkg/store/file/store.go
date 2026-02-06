@@ -43,6 +43,9 @@ type storeData struct {
 	// Unified mocks - all mock types in one slice
 	Mocks []*mock.Mock `json:"mocks,omitempty"`
 
+	// Stateful resource configurations (persisted across restarts)
+	StatefulResources []*config.StatefulResourceConfig `json:"statefulResources,omitempty"`
+
 	Folders     []*config.Folder         `json:"folders,omitempty"`
 	Recordings  []*store.Recording       `json:"recordings,omitempty"`
 	RequestLog  []*store.RequestLogEntry `json:"requestLog,omitempty"`
@@ -244,6 +247,11 @@ func (s *FileStore) Workspaces() store.WorkspaceStore {
 // Mocks returns the mock store.
 func (s *FileStore) Mocks() store.MockStore {
 	return &mockStore{fs: s}
+}
+
+// StatefulResources returns the stateful resource store.
+func (s *FileStore) StatefulResources() store.StatefulResourceStore {
+	return &statefulResourceStore{fs: s}
 }
 
 // Folders returns the folder store.

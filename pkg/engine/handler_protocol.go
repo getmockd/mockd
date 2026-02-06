@@ -119,6 +119,35 @@ func (h *Handler) UnregisterSOAPHandler(path string) {
 	delete(h.soapHandlers, path)
 }
 
+// UnregisterOAuthHandler removes all OAuth handler routes for a given issuer base path.
+func (h *Handler) UnregisterOAuthHandler(issuer string) {
+	h.oauthMu.Lock()
+	defer h.oauthMu.Unlock()
+
+	basePath := ""
+	if issuer != "" {
+		if idx := strings.Index(issuer, "://"); idx != -1 {
+			remainder := issuer[idx+3:]
+			if pathIdx := strings.Index(remainder, "/"); pathIdx != -1 {
+				basePath = remainder[pathIdx:]
+			}
+		}
+	}
+
+	delete(h.oauthHandlers, basePath+"/authorize")
+	delete(h.oauthHandlers, basePath+"/token")
+	delete(h.oauthHandlers, basePath+"/userinfo")
+	delete(h.oauthHandlers, basePath+"/revoke")
+	delete(h.oauthHandlers, basePath+"/introspect")
+	delete(h.oauthHandlers, basePath+"/.well-known/jwks.json")
+	delete(h.oauthHandlers, basePath+"/.well-known/openid-configuration")
+}
+
+// UnregisterWebSocketEndpoint removes a WebSocket endpoint by path.
+func (h *Handler) UnregisterWebSocketEndpoint(path string) {
+	h.wsManager.UnregisterEndpoint(path)
+}
+
 // ListSOAPHandlerPaths returns all registered SOAP handler paths.
 func (h *Handler) ListSOAPHandlerPaths() []string {
 	h.soapMu.RLock()

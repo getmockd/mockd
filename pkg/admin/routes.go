@@ -97,6 +97,7 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /state/reset", a.handleStateReset)
 	mux.HandleFunc("GET /state/resources", a.handleListStateResources)
 	mux.HandleFunc("GET /state/resources/{name}", a.handleGetStateResource)
+	mux.HandleFunc("POST /state/resources/{name}/reset", a.handleResetStateResource)
 	mux.HandleFunc("DELETE /state/resources/{name}", a.handleClearStateResource)
 
 	// SSE connection management
@@ -136,9 +137,17 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /chaos", a.handleGetChaos)
 	mux.HandleFunc("PUT /chaos", a.handleSetChaos)
 
+	// gRPC server management (convenience — proxies to /mocks?type=grpc)
+	mux.HandleFunc("GET /grpc", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		q.Set("type", "grpc")
+		r.URL.RawQuery = q.Encode()
+		a.handleListUnifiedMocks(w, r)
+	})
+
 	// MQTT broker management
-	mux.HandleFunc("GET /mqtt", a.mqttRecordingManager.handleListMQTTBrokers)
-	mux.HandleFunc("GET /mqtt/status", a.mqttRecordingManager.handleGetMQTTStatus)
+	mux.HandleFunc("GET /mqtt", a.handleListMQTTBrokers)
+	mux.HandleFunc("GET /mqtt/status", a.handleGetMQTTStatus)
 	mux.HandleFunc("GET /mqtt/{id}/status", a.mqttRecordingManager.handleGetMQTTBrokerStatus)
 	mux.HandleFunc("POST /mqtt/{id}/record/start", a.mqttRecordingManager.handleStartMQTTRecording)
 	mux.HandleFunc("POST /mqtt/{id}/record/stop", a.mqttRecordingManager.handleStopMQTTRecording)

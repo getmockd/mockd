@@ -38,7 +38,7 @@ type ProjectConfig struct {
 	Mocks []MockEntry `json:"mocks,omitempty" yaml:"mocks,omitempty"`
 
 	// StatefulResources defines CRUD resources
-	StatefulResources []StatefulResourceEntry `json:"statefulResources,omitempty" yaml:"statefulResources,omitempty"`
+	StatefulResources []StatefulResourceConfig `json:"statefulResources,omitempty" yaml:"statefulResources,omitempty"`
 }
 
 // AdminConfig defines a control plane instance.
@@ -283,23 +283,9 @@ type HTTPResponse struct {
 	Delay string `json:"delay,omitempty" yaml:"delay,omitempty"`
 }
 
-// StatefulResourceEntry extends StatefulResourceConfig for the v1 config format.
-type StatefulResourceEntry struct {
-	// Name is the unique resource name (e.g., "users", "products")
-	Name string `json:"name" yaml:"name"`
-
-	// Workspace is the workspace this resource belongs to
-	Workspace string `json:"workspace,omitempty" yaml:"workspace,omitempty"`
-
-	// BasePath is the URL path prefix (e.g., "/api/users")
-	BasePath string `json:"basePath" yaml:"basePath"`
-
-	// IDField is the field name for ID (default: "id")
-	IDField string `json:"idField,omitempty" yaml:"idField,omitempty"`
-
-	// SeedData is the initial data to load on startup/reset
-	SeedData []map[string]interface{} `json:"seedData,omitempty" yaml:"seedData,omitempty"`
-}
+// StatefulResourceEntry is an alias for StatefulResourceConfig for backward compatibility.
+// Deprecated: Use StatefulResourceConfig directly.
+type StatefulResourceEntry = StatefulResourceConfig
 
 // CLIContextConfig is the structure for ~/.config/mockd/contexts.yaml.
 type CLIContextConfig struct {
@@ -505,7 +491,7 @@ func MergeProjectConfigs(configs ...*ProjectConfig) *ProjectConfig {
 		Engines:           []EngineConfig{},
 		Workspaces:        []WorkspaceConfig{},
 		Mocks:             []MockEntry{},
-		StatefulResources: []StatefulResourceEntry{},
+		StatefulResources: []StatefulResourceConfig{},
 	}
 
 	for _, cfg := range configs {
@@ -676,7 +662,7 @@ func mergeMocks(base, overlay []MockEntry) []MockEntry {
 	return base
 }
 
-func mergeStatefulResources(base, overlay []StatefulResourceEntry) []StatefulResourceEntry {
+func mergeStatefulResources(base, overlay []StatefulResourceConfig) []StatefulResourceConfig {
 	byName := make(map[string]int)
 	for i, r := range base {
 		byName[r.Name] = i
@@ -694,7 +680,7 @@ func mergeStatefulResources(base, overlay []StatefulResourceEntry) []StatefulRes
 	return base
 }
 
-func mergeStatefulResource(base, overlay StatefulResourceEntry) StatefulResourceEntry {
+func mergeStatefulResource(base, overlay StatefulResourceConfig) StatefulResourceConfig {
 	if overlay.Workspace != "" {
 		base.Workspace = overlay.Workspace
 	}
@@ -704,8 +690,14 @@ func mergeStatefulResource(base, overlay StatefulResourceEntry) StatefulResource
 	if overlay.IDField != "" {
 		base.IDField = overlay.IDField
 	}
+	if overlay.ParentField != "" {
+		base.ParentField = overlay.ParentField
+	}
 	if len(overlay.SeedData) > 0 {
 		base.SeedData = overlay.SeedData
+	}
+	if overlay.Validation != nil {
+		base.Validation = overlay.Validation
 	}
 	return base
 }

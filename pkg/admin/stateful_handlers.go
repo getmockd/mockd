@@ -47,6 +47,30 @@ func (a *AdminAPI) handleStateReset(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "reset"})
 }
 
+// handleResetStateResource resets a specific stateful resource to its seed data.
+func (a *AdminAPI) handleResetStateResource(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
+		return
+	}
+
+	if a.localEngine == nil {
+		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
+		return
+	}
+
+	if err := a.localEngine.ResetState(ctx, name); err != nil {
+		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "reset", "resource": name})
+}
+
 // handleListStateResources returns a list of all registered stateful resources.
 func (a *AdminAPI) handleListStateResources(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
