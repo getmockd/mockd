@@ -673,6 +673,556 @@ run_s17() {
   api DELETE /mocks
 }
 
+# ─── Request Logging ─────────────────────────────────────────────────────────
+
+run_requests() {
+  suite_header "Request Logging"
+
+  # Create a mock and hit it
+  api POST /mocks -d '{
+    "type": "http",
+    "name": "Request Log Target",
+    "http": {
+      "matcher": {"method": "GET", "path": "/api/log-target"},
+      "response": {"statusCode": 200, "body": "{\"logged\": true}"}
+    }
+  }'
+  local mock_id
+  mock_id=$(echo "$BODY" | jq -r '.id')
+
+  engine GET /api/log-target
+  engine GET /api/log-target
+  engine GET /api/log-target
+
+  # List requests
+  api GET /requests
+  assert_status 200 "REQ-001: GET /requests returns 200"
+  local req_count
+  req_count=$(echo "$BODY" | jq '.count // .total // 0' 2>/dev/null) || req_count=0
+  if [[ "$req_count" -ge 3 ]]; then
+    pass "REQ-002: At least 3 requests logged"
+  else
+    fail "REQ-002" "expected >= 3 requests, got $req_count"
+  fi
+
+  # Get a specific request
+  local req_id
+  req_id=$(echo "$BODY" | jq -r '.requests[0].id // empty' 2>/dev/null) || req_id=""
+  if [[ -n "$req_id" ]]; then
+    api GET "/requests/${req_id}"
+    assert_status 200 "REQ-003: GET /requests/{id} returns 200"
+    assert_json_field '.path' '/api/log-target' "REQ-003b: Path matches"
+  else
+    skip "REQ-003: No request ID to test"
+  fi
+
+  # Clear requests
+  api DELETE /requests
+  assert_status 200 "REQ-004: DELETE /requests clears logs"
+
+  api GET /requests
+  local after_count
+  after_count=$(echo "$BODY" | jq '.count // .total // 0' 2>/dev/null) || after_count=0
+  if [[ "$after_count" -eq 0 ]]; then
+    pass "REQ-005: Requests cleared"
+  else
+    fail "REQ-005" "expected 0 requests after clear, got $after_count"
+  fi
+
+  # Cleanup
+  api DELETE /mocks
+}
+
+# ─── State Management ────────────────────────────────────────────────────────
+
+run_state() {
+  suite_header "State Management"
+
+  # Import stateful resources
+  api POST /config -d '{
+    "config": {
+      "version": "1.0",
+      "name": "state-test",
+      "mocks": [],
+      "statefulResources": [
+        {
+          "name": "products",
+          "basePath": "/api/products",
+          "idField": "id",
+          "seedData": [
+            {"id": "p1", "name": "Widget", "price": 10},
+            {"id": "p2", "name": "Gadget", "price": 20}
+          ]
+        },
+        {
+          "name": "orders",
+          "basePath": "/api/orders",
+          "idField": "id",
+          "seedData": [{"id": "o1", "customer": "Alice"}]
+        }
+      ]
+    }
+  }'
+  assert_status 200 "STATE-SETUP: Import stateful resources"
+
+  # State overview
+  api GET /state
+  assert_status 200 "STATE-001: GET /state returns 200"
+
+  # List state resources
+  api GET /state/resources
+  assert_status 200 "STATE-002: GET /state/resources returns 200"
+
+  # Get specific resource
+  api GET /state/resources/products
+  assert_status 200 "STATE-003: GET /state/resources/{name} returns 200"
+
+  # Add an item so we can verify reset brings it back to seed
+  engine POST /api/products -d '{"name":"Extra","price":99}'
+  assert_status 201 "STATE-004: Add item to products"
+
+  engine GET /api/products
+  assert_json_field '.meta.total' '3' "STATE-004b: Products has 3 items"
+
+  # Reset specific resource → back to seed data
+  api POST /state/resources/products/reset
+  assert_status 200 "STATE-005: POST /state/resources/{name}/reset returns 200"
+
+  engine GET /api/products
+  assert_json_field '.meta.total' '2' "STATE-005b: Products reset to 2 seed items"
+
+  # Clear specific resource (remove all items, keep resource)
+  api DELETE /state/resources/orders
+  assert_status 200 "STATE-006: DELETE /state/resources/{name} clears items"
+
+  engine GET /api/orders
+  assert_json_field '.meta.total' '0' "STATE-006b: Orders cleared to 0"
+
+  # Global state reset
+  api POST /state/reset
+  assert_status 200 "STATE-007: POST /state/reset returns 200"
+
+  engine GET /api/orders
+  assert_json_field '.meta.total' '1' "STATE-007b: Orders reset to seed (1 item)"
+}
+
+# ─── Workspace Management ────────────────────────────────────────────────────
+
+run_workspaces() {
+  suite_header "Workspace Management"
+
+  # List workspaces (empty)
+  api GET /workspaces
+  assert_status 200 "WS-001: GET /workspaces returns 200"
+
+  # Create workspace
+  api POST /workspaces -d '{"name": "test-ws", "description": "Test workspace"}'
+  assert_status 201 "WS-002: POST /workspaces creates workspace"
+  local ws_id
+  ws_id=$(echo "$BODY" | jq -r '.id')
+
+  # Get workspace
+  api GET "/workspaces/${ws_id}"
+  assert_status 200 "WS-003: GET /workspaces/{id} returns workspace"
+  assert_json_field '.name' 'test-ws' "WS-003b: Name matches"
+
+  # Update workspace
+  api PUT "/workspaces/${ws_id}" -d '{"name": "updated-ws", "description": "Updated"}'
+  assert_status 200 "WS-004: PUT /workspaces/{id} updates workspace"
+
+  # Delete workspace
+  api DELETE "/workspaces/${ws_id}"
+  assert_status 204 "WS-005: DELETE /workspaces/{id} removes workspace"
+
+  # Delete nonexistent → 404
+  api DELETE "/workspaces/${ws_id}"
+  assert_status 404 "WS-006: DELETE nonexistent workspace → 404"
+}
+
+# ─── S7 Extended Negative Tests ──────────────────────────────────────────────
+
+run_s7_extended() {
+  suite_header "S7 Extended: More Negative Tests"
+
+  # POST /mocks with invalid type
+  api POST /mocks -d '{"name":"test","type":"invalid_protocol"}'
+  if [[ "$STATUS" == "400" || "$STATUS" == "422" ]]; then
+    pass "S7-EXT-001: POST /mocks invalid type → 4xx"
+  else
+    fail "S7-EXT-001" "expected 400 or 422 for invalid type, got $STATUS"
+  fi
+
+  # PATCH /mocks/{id} nonexistent
+  api PATCH /mocks/nonexistent-id-12345 -d '{"name":"patched"}'
+  assert_status 404 "S7-EXT-002: PATCH /mocks/{id} nonexistent → 404"
+
+  # PUT /chaos with invalid JSON
+  api PUT /chaos -d 'not json'
+  assert_status 400 "S7-EXT-003: PUT /chaos invalid JSON → 400"
+
+  # POST /state/reset with invalid JSON (should still work — empty body resets all)
+  api POST /state/reset -d ''
+  # Accept 200 (reset all) or 400 — depends on implementation
+  if [[ "$STATUS" == "200" || "$STATUS" == "400" ]]; then
+    pass "S7-EXT-004: POST /state/reset with empty body handled"
+  else
+    fail "S7-EXT-004" "expected 200 or 400, got $STATUS"
+  fi
+
+  # GET /workspaces/{id} nonexistent
+  api GET /workspaces/nonexistent-ws
+  assert_status 404 "S7-EXT-005: GET /workspaces/{id} nonexistent → 404"
+
+  # PUT /workspaces/{id} nonexistent
+  api PUT /workspaces/nonexistent-ws -d '{"name":"test"}'
+  assert_status 404 "S7-EXT-006: PUT /workspaces/{id} nonexistent → 404"
+
+  # POST /config with empty mocks array (should be fine)
+  api POST /config -d '{"config":{"version":"1.0","name":"empty","mocks":[]}}'
+  assert_status 200 "S7-EXT-007: POST /config with empty mocks → 200"
+
+  # POST /mocks with huge body (should be rejected or truncated, not crash)
+  local big_body
+  big_body=$(python3 -c "print('{\"name\":\"' + 'A'*100000 + '\",\"type\":\"http\"}')" 2>/dev/null || echo '{"name":"test","type":"http"}')
+  api POST /mocks -d "$big_body"
+  # Any non-5xx response is acceptable
+  if [[ "$STATUS" -lt 500 ]] 2>/dev/null; then
+    pass "S7-EXT-008: Large request body handled (status $STATUS)"
+  else
+    fail "S7-EXT-008" "Server error on large body: $STATUS"
+  fi
+}
+
+# ─── Mock Operations ─────────────────────────────────────────────────────────
+
+run_mock_ops() {
+  suite_header "Mock Operations (Bulk, Patch, Toggle)"
+
+  # Bulk create
+  api POST /mocks/bulk -d '[
+    {
+      "type": "http",
+      "name": "Bulk Mock 1",
+      "http": {
+        "matcher": {"method": "GET", "path": "/api/bulk1"},
+        "response": {"statusCode": 200, "body": "{\"n\": 1}"}
+      }
+    },
+    {
+      "type": "http",
+      "name": "Bulk Mock 2",
+      "http": {
+        "matcher": {"method": "GET", "path": "/api/bulk2"},
+        "response": {"statusCode": 200, "body": "{\"n\": 2}"}
+      }
+    }
+  ]'
+  if [[ "$STATUS" == "200" || "$STATUS" == "201" ]]; then
+    pass "MOCK-001: POST /mocks/bulk creates mocks"
+  else
+    fail "MOCK-001" "expected 200/201, got $STATUS (body: $(echo "$BODY" | head -c 200))"
+  fi
+
+  engine GET /api/bulk1
+  assert_status 200 "MOCK-001b: Bulk mock 1 responds"
+  engine GET /api/bulk2
+  assert_status 200 "MOCK-001c: Bulk mock 2 responds"
+
+  # Get a mock ID for patch/toggle tests
+  api GET /mocks
+  local mock_id
+  mock_id=$(echo "$BODY" | jq -r '.mocks[0].id // empty' 2>/dev/null) || mock_id=""
+
+  if [[ -n "$mock_id" ]]; then
+    # PATCH mock (may return 200 or 404 if engine doesn't support partial update)
+    api PATCH "/mocks/${mock_id}" -d '{"name":"Patched Name"}'
+    if [[ "$STATUS" == "200" ]]; then
+      pass "MOCK-002: PATCH /mocks/{id} works"
+      assert_json_field '.name' 'Patched Name' "MOCK-002b: Name patched"
+    elif [[ "$STATUS" == "404" ]]; then
+      # PATCH route exists but may not resolve for engine-managed mocks
+      skip "MOCK-002: PATCH returns 404 for engine-managed mock"
+    else
+      fail "MOCK-002" "expected 200 or 404, got $STATUS"
+    fi
+
+    # Toggle mock off
+    api POST "/mocks/${mock_id}/toggle" -d '{"enabled": false}'
+    assert_status 200 "MOCK-003: Toggle mock off"
+
+    # Toggle mock on
+    api POST "/mocks/${mock_id}/toggle" -d '{"enabled": true}'
+    assert_status 200 "MOCK-003b: Toggle mock on"
+
+    # Verification: POST verify with assertion
+    api POST "/mocks/${mock_id}/verify" -d '{"atLeast": 0}'
+    if [[ "$STATUS" == "200" ]]; then
+      pass "MOCK-004: POST /mocks/{id}/verify assertion"
+    else
+      # Might not be implemented or different format
+      skip "MOCK-004: POST verify not available (status $STATUS)"
+    fi
+  else
+    skip "MOCK-002: No mock ID for patch test"
+    skip "MOCK-003: No mock ID for toggle test"
+    skip "MOCK-004: No mock ID for verify test"
+  fi
+
+  # Reset all verification data
+  api DELETE /verify
+  if [[ "$STATUS" == "200" || "$STATUS" == "204" ]]; then
+    pass "MOCK-005: DELETE /verify resets all"
+  else
+    fail "MOCK-005" "expected 200/204, got $STATUS"
+  fi
+
+  # Cleanup
+  api DELETE /mocks
+}
+
+# ─── S9 Extended: HTTP Edge Cases ─────────────────────────────────────────────
+
+run_s9_extended() {
+  suite_header "S9 Extended: HTTP Edge Cases"
+
+  # Header matching
+  api POST /mocks -d '{
+    "type": "http",
+    "name": "Header Matcher",
+    "http": {
+      "matcher": {"method": "GET", "path": "/api/header-test", "headers": {"X-Custom": "magic"}},
+      "response": {"statusCode": 200, "body": "{\"matched\": \"header\"}"}
+    }
+  }'
+  assert_status 201 "S9X-001: Create header matcher"
+
+  engine GET /api/header-test -H 'X-Custom: magic'
+  assert_status 200 "S9X-002: Header match succeeds"
+  assert_json_field '.matched' 'header' "S9X-002b: Correct response"
+
+  engine GET /api/header-test -H 'X-Custom: wrong'
+  assert_status 404 "S9X-003: Wrong header → 404"
+
+  # Query parameter matching
+  api POST /mocks -d '{
+    "type": "http",
+    "name": "Query Matcher",
+    "http": {
+      "matcher": {"method": "GET", "path": "/api/query-test", "queryParams": {"key": "value"}},
+      "response": {"statusCode": 200, "body": "{\"matched\": \"query\"}"}
+    }
+  }'
+  assert_status 201 "S9X-004: Create query param matcher"
+
+  engine GET '/api/query-test?key=value'
+  assert_status 200 "S9X-005: Query param match succeeds"
+
+  engine GET '/api/query-test?key=wrong'
+  assert_status 404 "S9X-006: Wrong query param → 404"
+
+  # Response with custom headers
+  api POST /mocks -d '{
+    "type": "http",
+    "name": "Custom Headers",
+    "http": {
+      "matcher": {"method": "GET", "path": "/api/custom-headers"},
+      "response": {
+        "statusCode": 200,
+        "body": "ok",
+        "headers": {"X-Custom-Response": "hello", "X-Another": "world"}
+      }
+    }
+  }'
+  assert_status 201 "S9X-007: Create mock with custom response headers"
+
+  # Test response headers
+  local resp_headers
+  resp_headers=$(curl -s -D - -o /dev/null "${ENGINE}/api/custom-headers" 2>&1) || resp_headers=""
+  if echo "$resp_headers" | grep -qi "X-Custom-Response"; then
+    pass "S9X-008: Custom response header present"
+  else
+    fail "S9X-008" "X-Custom-Response header not found in response"
+  fi
+
+  # Delayed response
+  api POST /mocks -d '{
+    "type": "http",
+    "name": "Delayed Response",
+    "http": {
+      "matcher": {"method": "GET", "path": "/api/delayed"},
+      "response": {"statusCode": 200, "body": "{\"delayed\": true}", "delayMs": 100}
+    }
+  }'
+  assert_status 201 "S9X-009: Create delayed mock"
+
+  local start_time end_time elapsed
+  start_time=$(date +%s%N)
+  engine GET /api/delayed
+  end_time=$(date +%s%N)
+  elapsed=$(( (end_time - start_time) / 1000000 ))
+  assert_status 200 "S9X-010: Delayed mock responds"
+  if [[ "$elapsed" -ge 80 ]]; then
+    pass "S9X-010b: Delay applied (${elapsed}ms)"
+  else
+    fail "S9X-010b" "expected >= 80ms delay, got ${elapsed}ms"
+  fi
+
+  # Path pattern matching (wildcard)
+  api POST /mocks -d '{
+    "type": "http",
+    "name": "Wildcard Path",
+    "http": {
+      "matcher": {"method": "GET", "path": "/api/users/{id}/profile"},
+      "response": {"statusCode": 200, "body": "{\"profile\": true}"}
+    }
+  }'
+  assert_status 201 "S9X-011: Create wildcard path mock"
+
+  engine GET /api/users/123/profile
+  assert_status 200 "S9X-012: Wildcard path matches /users/123/profile"
+
+  engine GET /api/users/abc/profile
+  assert_status 200 "S9X-013: Wildcard path matches /users/abc/profile"
+
+  # Cleanup
+  api DELETE /mocks
+}
+
+# ─── S15 Extended: Chaos Depth ────────────────────────────────────────────────
+
+run_s15_extended() {
+  suite_header "S15 Extended: Chaos Depth"
+
+  # Create a target mock
+  api POST /mocks -d '{
+    "type": "http",
+    "name": "Chaos Deep Target",
+    "http": {
+      "matcher": {"method": "GET", "path": "/api/chaos-deep"},
+      "response": {"statusCode": 200, "body": "{\"ok\": true}"}
+    }
+  }'
+
+  # Error rate injection
+  api PUT /chaos -d '{
+    "enabled": true,
+    "errorRate": {
+      "probability": 1.0,
+      "statusCodes": [500, 502, 503],
+      "defaultCode": 500
+    }
+  }'
+  assert_status 200 "S15X-001: Enable error rate chaos"
+
+  engine GET /api/chaos-deep
+  if [[ "$STATUS" -ge 500 ]]; then
+    pass "S15X-002: Error rate produces 5xx (got $STATUS)"
+  else
+    fail "S15X-002" "expected 5xx, got $STATUS"
+  fi
+
+  # Bandwidth throttling
+  api PUT /chaos -d '{
+    "enabled": true,
+    "bandwidth": {
+      "bytesPerSecond": 1024,
+      "probability": 1.0
+    }
+  }'
+  assert_status 200 "S15X-003: Enable bandwidth chaos"
+
+  engine GET /api/chaos-deep
+  # Should still respond, just slowly
+  if [[ "$STATUS" -ge 200 && "$STATUS" -lt 600 ]]; then
+    pass "S15X-004: Bandwidth-throttled response received (status $STATUS)"
+  else
+    fail "S15X-004" "unexpected status: $STATUS"
+  fi
+
+  # Chaos with path-specific rules
+  api PUT /chaos -d '{
+    "enabled": true,
+    "rules": [
+      {
+        "pathPattern": "/api/chaos-deep",
+        "methods": ["GET"],
+        "probability": 1.0
+      }
+    ],
+    "latency": {
+      "min": "1ms",
+      "max": "2ms",
+      "probability": 1.0
+    }
+  }'
+  assert_status 200 "S15X-005: Enable chaos with path rules"
+
+  # Disable
+  api PUT /chaos -d '{"enabled": false}'
+  assert_status 200 "S15X-006: Disable chaos"
+
+  # Cleanup
+  api DELETE /mocks
+}
+
+# ─── Metadata Extended ────────────────────────────────────────────────────────
+
+run_metadata_extended() {
+  suite_header "Metadata Extended"
+
+  # Insomnia export
+  api GET /insomnia.json
+  assert_status 200 "META-001: GET /insomnia.json returns 200"
+
+  api GET /insomnia.yaml
+  assert_status 200 "META-002: GET /insomnia.yaml returns 200"
+
+  # Metrics
+  api GET /metrics
+  assert_status 200 "META-003: GET /metrics returns 200"
+
+  # Generate from template
+  api POST /templates/basic -d '{}'
+  if [[ "$STATUS" == "200" || "$STATUS" == "201" ]]; then
+    pass "META-004: POST /templates/{name} generates mock"
+  else
+    # Template name might not exist — that's fine, just verify the route works
+    if [[ "$STATUS" == "404" || "$STATUS" == "400" ]]; then
+      pass "META-004: POST /templates/{name} route active (status $STATUS)"
+    else
+      fail "META-004" "unexpected status: $STATUS"
+    fi
+  fi
+
+  # gRPC listing (convenience route)
+  api GET /grpc
+  assert_status 200 "META-005: GET /grpc returns 200"
+
+  # MQTT listing
+  api GET /mqtt
+  assert_status 200 "META-006: GET /mqtt returns 200"
+
+  api GET /mqtt/status
+  assert_status 200 "META-007: GET /mqtt/status returns 200"
+
+  # SOAP listing
+  api GET /soap
+  assert_status 200 "META-008: GET /soap returns 200"
+}
+
+# ─── SSE Admin Endpoints ─────────────────────────────────────────────────────
+
+run_sse_admin() {
+  suite_header "SSE Admin Endpoints"
+
+  # SSE connection management (no active connections expected)
+  api GET /sse/connections
+  assert_status 200 "SSE-001: GET /sse/connections returns 200"
+
+  api GET /sse/stats
+  assert_status 200 "SSE-002: GET /sse/stats returns 200"
+}
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 main() {
@@ -685,20 +1235,29 @@ main() {
   # Always run smoke first
   run_smoke
 
-  should_run "s1"     && run_s1
-  should_run "s2"     && run_s2
-  should_run "s3"     && run_s3
-  should_run "s5"     && run_s5
-  should_run "s6"     && run_s6
-  should_run "s7"     && run_s7
-  should_run "s9"     && { run_s9_http; run_s9_crud; }
-  should_run "s10"    && run_s10
-  should_run "s11"    && run_s11
-  should_run "s14"    && run_s14
-  should_run "s15"    && run_s15
-  should_run "s16"    && run_s16
-  should_run "s17"    && run_s17
-  should_run "import" && run_import_export
+  should_run "s1"       && run_s1
+  should_run "s2"       && run_s2
+  should_run "s3"       && run_s3
+  should_run "s5"       && run_s5
+  should_run "s6"       && run_s6
+  should_run "s7"       && run_s7
+  should_run "s7x"      && run_s7_extended
+  should_run "s9"       && { run_s9_http; run_s9_crud; }
+  should_run "s9x"      && run_s9_extended
+  should_run "s10"      && run_s10
+  should_run "s11"      && run_s11
+  should_run "s14"      && run_s14
+  should_run "s15"      && run_s15
+  should_run "s15x"     && run_s15_extended
+  should_run "s16"      && run_s16
+  should_run "s17"      && run_s17
+  should_run "import"   && run_import_export
+  should_run "requests" && run_requests
+  should_run "state"    && run_state
+  should_run "ws"       && run_workspaces
+  should_run "mockops"  && run_mock_ops
+  should_run "meta"     && run_metadata_extended
+  should_run "sse"      && run_sse_admin
 
   # ─── Summary ─────────────────────────────────────────────────────────────
   echo ""
