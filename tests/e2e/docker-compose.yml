@@ -2,7 +2,7 @@
 #
 # Architecture:
 #   mockd:        Admin API (:4290) + Mock Engine (:4280) — the system under test
-#   test-runner:  Alpine + curl + jq — runs test scripts against mockd
+#   test-runner:  Alpine + curl + jq + mockd CLI — runs test scripts against mockd
 #
 # Usage:
 #   docker compose -f tests/e2e/docker-compose.yml up --build --abort-on-container-exit
@@ -42,8 +42,8 @@ services:
 
   test-runner:
     build:
-      context: .
-      dockerfile: Dockerfile.runner
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.runner
     container_name: mockd-e2e-runner
     depends_on:
       mockd:

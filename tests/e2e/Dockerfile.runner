@@ -1,4 +1,25 @@
-# Test runner image: Alpine with curl, jq, and bash for E2E test scripts
+# Test runner image: Alpine with curl, jq, bash, AND the mockd CLI binary
+# for running CLI-based E2E tests against a remote mockd server.
+#
+# Uses a multi-stage build: first builds mockd, then copies it into the runner.
+
+# Stage 1: Build mockd (same as Dockerfile.mockd)
+FROM golang:1.25-alpine AS builder
+
+RUN apk add --no-cache ca-certificates git
+
+WORKDIR /build
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+COPY . .
+
+RUN CGO_ENABLED=0 go build \
+    -ldflags="-s -w" \
+    -trimpath \
+    -o mockd \
+    ./cmd/mockd
+
+# Stage 2: Test runner with mockd binary
 FROM alpine:3.20
 
 RUN apk add --no-cache \
@@ -7,7 +28,10 @@ RUN apk add --no-cache \
     jq \
     coreutils
 
-COPY entrypoint.sh /entrypoint.sh
+# Copy the built mockd binary for CLI tests
+COPY --from=builder /build/mockd /usr/local/bin/mockd
+
+COPY tests/e2e/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
