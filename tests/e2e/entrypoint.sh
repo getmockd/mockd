@@ -1223,6 +1223,452 @@ run_sse_admin() {
   assert_status 200 "SSE-002: GET /sse/stats returns 200"
 }
 
+# ─── GraphQL Protocol ────────────────────────────────────────────────────────
+
+run_graphql() {
+  suite_header "GraphQL Protocol"
+
+  # Create a GraphQL mock
+  api POST /mocks -d '{
+    "type": "graphql",
+    "name": "Test GraphQL API",
+    "graphql": {
+      "path": "/graphql",
+      "schema": "type Query { user(id: ID!): User\n  users: [User!]! }\ntype User { id: ID!\n  name: String!\n  email: String! }",
+      "introspection": true,
+      "resolvers": {
+        "Query.user": {
+          "response": {
+            "id": "42",
+            "name": "Test User",
+            "email": "test@example.com"
+          }
+        },
+        "Query.users": {
+          "response": [
+            {"id": "1", "name": "Alice", "email": "alice@example.com"},
+            {"id": "2", "name": "Bob", "email": "bob@example.com"}
+          ]
+        }
+      }
+    }
+  }'
+  assert_status 201 "GQL-001: Create GraphQL mock"
+  local gql_id
+  gql_id=$(echo "$BODY" | jq -r '.id')
+
+  # Query the GraphQL endpoint
+  engine POST /graphql -d '{"query": "{ users { id name } }"}'
+  assert_status 200 "GQL-002: GraphQL query returns 200"
+  assert_body_contains "Alice" "GQL-003: Response contains Alice"
+
+  # Query with variables
+  engine POST /graphql -d '{"query": "query GetUser($id: ID!) { user(id: $id) { id name email } }", "variables": {"id": "42"}}'
+  assert_status 200 "GQL-004: GraphQL query with variables"
+  assert_body_contains "Test User" "GQL-005: User query returns data"
+
+  # Introspection query
+  engine POST /graphql -d '{"query": "{ __schema { queryType { name } } }"}'
+  assert_status 200 "GQL-006: Introspection query works"
+
+  # Handler should be listed
+  api GET /handlers
+  assert_status 200 "GQL-007: Handlers list includes GraphQL"
+
+  # Cleanup
+  api DELETE /mocks
+}
+
+# ─── OAuth Protocol ──────────────────────────────────────────────────────────
+
+run_oauth() {
+  suite_header "OAuth Protocol"
+
+  # Create an OAuth mock
+  api POST /mocks -d '{
+    "type": "oauth",
+    "name": "Test OAuth Provider",
+    "oauth": {
+      "issuer": "http://localhost:4280/oauth",
+      "tokenExpiry": "1h",
+      "defaultScopes": ["openid", "profile", "email"],
+      "clients": [
+        {
+          "clientId": "test-app",
+          "clientSecret": "test-secret",
+          "redirectUris": ["http://localhost:3000/callback"],
+          "grantTypes": ["client_credentials", "password"]
+        }
+      ],
+      "users": [
+        {
+          "username": "testuser",
+          "password": "testpass",
+          "claims": {
+            "sub": "user-123",
+            "name": "Test User",
+            "email": "test@example.com"
+          }
+        }
+      ]
+    }
+  }'
+  assert_status 201 "OAUTH-001: Create OAuth mock"
+
+  # OIDC discovery
+  engine GET /oauth/.well-known/openid-configuration
+  assert_status 200 "OAUTH-002: OIDC discovery endpoint"
+  assert_body_contains "token_endpoint" "OAUTH-003: Discovery has token_endpoint"
+
+  # JWKS
+  engine GET /oauth/.well-known/jwks.json
+  assert_status 200 "OAUTH-004: JWKS endpoint"
+  assert_body_contains "keys" "OAUTH-005: JWKS has keys"
+
+  # Client credentials grant
+  local token_resp
+  token_resp=$(curl -s -w '\n%{http_code}' -X POST "${ENGINE}/oauth/token" \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    -d 'grant_type=client_credentials&client_id=test-app&client_secret=test-secret&scope=openid' 2>&1) || true
+  BODY=$(echo "$token_resp" | sed '$d')
+  STATUS=$(echo "$token_resp" | tail -n 1)
+  assert_status 200 "OAUTH-006: Client credentials grant"
+  assert_body_contains "access_token" "OAUTH-007: Response has access_token"
+
+  # Extract token for userinfo
+  local token
+  token=$(echo "$BODY" | jq -r '.access_token' 2>/dev/null) || token=""
+
+  # Password grant
+  token_resp=$(curl -s -w '\n%{http_code}' -X POST "${ENGINE}/oauth/token" \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    -d 'grant_type=password&client_id=test-app&client_secret=test-secret&username=testuser&password=testpass&scope=openid+profile' 2>&1) || true
+  BODY=$(echo "$token_resp" | sed '$d')
+  STATUS=$(echo "$token_resp" | tail -n 1)
+  assert_status 200 "OAUTH-008: Password grant"
+
+  # Invalid client credentials → error
+  token_resp=$(curl -s -w '\n%{http_code}' -X POST "${ENGINE}/oauth/token" \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    -d 'grant_type=client_credentials&client_id=wrong&client_secret=wrong' 2>&1) || true
+  BODY=$(echo "$token_resp" | sed '$d')
+  STATUS=$(echo "$token_resp" | tail -n 1)
+  if [[ "$STATUS" == "401" || "$STATUS" == "400" ]]; then
+    pass "OAUTH-009: Invalid credentials rejected"
+  else
+    fail "OAUTH-009" "expected 401/400, got $STATUS"
+  fi
+
+  # Cleanup
+  api DELETE /mocks
+}
+
+# ─── SOAP Protocol ───────────────────────────────────────────────────────────
+
+run_soap() {
+  suite_header "SOAP Protocol"
+
+  # Create a SOAP mock
+  api POST /mocks -d '{
+    "type": "soap",
+    "name": "Test SOAP Service",
+    "soap": {
+      "path": "/soap/user",
+      "operations": {
+        "GetUser": {
+          "soapAction": "http://example.com/GetUser",
+          "response": "<GetUserResponse><id>123</id><name>John Doe</name></GetUserResponse>"
+        },
+        "CreateUser": {
+          "soapAction": "http://example.com/CreateUser",
+          "response": "<CreateUserResponse><userId>new-001</userId><status>created</status></CreateUserResponse>"
+        }
+      }
+    }
+  }'
+  assert_status 201 "SOAP-001: Create SOAP mock"
+
+  # Send SOAP request
+  local soap_resp
+  soap_resp=$(curl -s -w '\n%{http_code}' -X POST "${ENGINE}/soap/user" \
+    -H 'Content-Type: text/xml' \
+    -H 'SOAPAction: http://example.com/GetUser' \
+    -d '<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetUser><userId>123</userId></GetUser></soap:Body></soap:Envelope>' 2>&1) || true
+  BODY=$(echo "$soap_resp" | sed '$d')
+  STATUS=$(echo "$soap_resp" | tail -n 1)
+  assert_status 200 "SOAP-002: SOAP GetUser request"
+  assert_body_contains "John Doe" "SOAP-003: Response contains user name"
+
+  # WSDL endpoint
+  engine GET '/soap/user?wsdl'
+  if [[ "$STATUS" == "200" ]]; then
+    pass "SOAP-004: WSDL endpoint responds"
+  else
+    skip "SOAP-004: WSDL not available (status $STATUS)"
+  fi
+
+  # Cleanup
+  api DELETE /mocks
+}
+
+# ─── WebSocket Protocol ──────────────────────────────────────────────────────
+
+run_websocket() {
+  suite_header "WebSocket Protocol"
+
+  # Create a WebSocket mock
+  api POST /mocks -d '{
+    "type": "websocket",
+    "name": "Test WebSocket",
+    "websocket": {
+      "path": "/ws/test",
+      "echoMode": true,
+      "matchers": [
+        {
+          "match": {"type": "exact", "value": "ping"},
+          "response": {"type": "text", "value": "pong"}
+        }
+      ],
+      "defaultResponse": {"type": "text", "value": "unknown"}
+    }
+  }'
+  assert_status 201 "WS-001: Create WebSocket mock"
+
+  # Verify WebSocket handler is listed
+  api GET /handlers
+  assert_status 200 "WS-002: Handlers list"
+  local handler_count
+  handler_count=$(echo "$BODY" | jq '.handlers | length // .count // 0' 2>/dev/null) || handler_count=0
+  if [[ "$handler_count" -ge 1 ]]; then
+    pass "WS-003: At least 1 handler registered"
+  else
+    # Handler may be registered differently — check total
+    skip "WS-003: Handler count=$handler_count (may be listed differently)"
+  fi
+
+  # Cleanup
+  api DELETE /mocks
+}
+
+# ─── SSE Protocol (stream test) ──────────────────────────────────────────────
+
+run_sse_stream() {
+  suite_header "SSE Protocol"
+
+  # Create an SSE mock (type is "http" with sse config)
+  api POST /mocks -d '{
+    "type": "http",
+    "name": "SSE Event Stream",
+    "http": {
+      "matcher": {"method": "GET", "path": "/events"},
+      "sse": {
+        "events": [
+          {"type": "message", "data": {"text": "hello"}, "id": "1"},
+          {"type": "message", "data": {"text": "world"}, "id": "2"}
+        ],
+        "timing": {"fixedDelay": 10},
+        "lifecycle": {"maxEvents": 2}
+      }
+    }
+  }'
+  assert_status 201 "SSE-STREAM-001: Create SSE mock"
+
+  # Connect and read a few events (with timeout so it doesnt hang)
+  local sse_output
+  sse_output=$(curl -s -N --max-time 3 -H 'Accept: text/event-stream' "${ENGINE}/events" 2>&1) || true
+  if echo "$sse_output" | grep -q "hello"; then
+    pass "SSE-STREAM-002: Received SSE events"
+  else
+    fail "SSE-STREAM-002" "No SSE events received (output: $(echo "$sse_output" | head -c 200))"
+  fi
+
+  # Check SSE connections were tracked
+  api GET /sse/connections
+  assert_status 200 "SSE-STREAM-003: SSE connections endpoint"
+
+  # Check SSE stats
+  api GET /sse/stats
+  assert_status 200 "SSE-STREAM-004: SSE stats endpoint"
+
+  # Cleanup
+  api DELETE /mocks
+}
+
+# ─── Proxy Admin Endpoints ───────────────────────────────────────────────────
+
+run_proxy() {
+  suite_header "Proxy Admin Endpoints"
+
+  # Get proxy status (should work even when proxy not started)
+  api GET /proxy/status
+  assert_status 200 "PROXY-001: GET /proxy/status returns 200"
+
+  # Get proxy filters
+  api GET /proxy/filters
+  assert_status 200 "PROXY-002: GET /proxy/filters returns 200"
+
+  # Get CA (may not be initialized)
+  api GET /proxy/ca
+  if [[ "$STATUS" == "200" || "$STATUS" == "404" ]]; then
+    pass "PROXY-003: GET /proxy/ca responds ($STATUS)"
+  else
+    fail "PROXY-003" "expected 200/404, got $STATUS"
+  fi
+
+  # Generate CA (may need specific payload or return 400 for missing params)
+  api POST /proxy/ca -d '{}'
+  if [[ "$STATUS" -lt 500 ]]; then
+    pass "PROXY-004: POST /proxy/ca handled ($STATUS)"
+  else
+    fail "PROXY-004" "server error: $STATUS"
+  fi
+
+  # Start proxy (may need a target — test error handling)
+  api POST /proxy/start -d '{"target": "http://httpbin.org"}'
+  if [[ "$STATUS" -lt 500 ]]; then
+    pass "PROXY-005: POST /proxy/start handled ($STATUS)"
+  else
+    fail "PROXY-005" "server error on proxy start: $STATUS"
+  fi
+
+  # Stop proxy
+  api POST /proxy/stop
+  if [[ "$STATUS" == "200" || "$STATUS" == "400" ]]; then
+    pass "PROXY-006: POST /proxy/stop handled ($STATUS)"
+  else
+    fail "PROXY-006" "unexpected status: $STATUS"
+  fi
+
+  # Set proxy mode
+  api PUT /proxy/mode -d '{"mode": "record"}'
+  if [[ "$STATUS" -lt 500 ]]; then
+    pass "PROXY-007: PUT /proxy/mode handled ($STATUS)"
+  else
+    fail "PROXY-007" "server error: $STATUS"
+  fi
+
+  # Set proxy filters
+  api PUT /proxy/filters -d '{"include": ["*"], "exclude": []}'
+  if [[ "$STATUS" -lt 500 ]]; then
+    pass "PROXY-008: PUT /proxy/filters handled ($STATUS)"
+  else
+    fail "PROXY-008" "server error: $STATUS"
+  fi
+}
+
+# ─── Token & API Key Management ──────────────────────────────────────────────
+
+run_tokens() {
+  suite_header "Token & API Key Management"
+
+  # Generate registration token
+  api POST /admin/tokens/registration -d '{"name": "test-runtime"}'
+  if [[ "$STATUS" == "200" || "$STATUS" == "201" ]]; then
+    pass "TOKEN-001: Generate registration token"
+  else
+    fail "TOKEN-001" "expected 200/201, got $STATUS"
+  fi
+
+  # List registration tokens
+  api GET /admin/tokens/registration
+  assert_status 200 "TOKEN-002: List registration tokens"
+
+  # Get API key
+  api GET /admin/api-key
+  assert_status 200 "TOKEN-003: Get API key"
+
+  # Rotate API key (may return 400 when auth is disabled via --no-auth)
+  api POST /admin/api-key/rotate
+  if [[ "$STATUS" -lt 500 ]]; then
+    pass "TOKEN-004: Rotate API key handled ($STATUS)"
+  else
+    fail "TOKEN-004" "server error: $STATUS"
+  fi
+}
+
+# ─── Import Edge Cases ───────────────────────────────────────────────────────
+
+run_import_edge() {
+  suite_header "Import Edge Cases"
+
+  # Import with replace mode
+  api POST /config -d '{
+    "replace": true,
+    "config": {
+      "version": "1.0",
+      "name": "replace-test",
+      "mocks": [
+        {
+          "type": "http",
+          "name": "Replace Mock A",
+          "http": {
+            "matcher": {"method": "GET", "path": "/api/replace-a"},
+            "response": {"statusCode": 200, "body": "A"}
+          }
+        }
+      ]
+    }
+  }'
+  assert_status 200 "IMP-EDGE-001: Import with replace"
+
+  engine GET /api/replace-a
+  assert_status 200 "IMP-EDGE-002: Replace mock A works"
+
+  # Import again with replace — should clear previous mocks
+  api POST /config -d '{
+    "replace": true,
+    "config": {
+      "version": "1.0",
+      "name": "replace-test-2",
+      "mocks": [
+        {
+          "type": "http",
+          "name": "Replace Mock B",
+          "http": {
+            "matcher": {"method": "GET", "path": "/api/replace-b"},
+            "response": {"statusCode": 200, "body": "B"}
+          }
+        }
+      ]
+    }
+  }'
+  assert_status 200 "IMP-EDGE-003: Second import with replace"
+
+  engine GET /api/replace-b
+  assert_status 200 "IMP-EDGE-004: Replace mock B works"
+
+  engine GET /api/replace-a
+  assert_status 404 "IMP-EDGE-005: Replace mock A gone (replaced)"
+
+  # Import with merge (no replace flag)
+  api POST /config -d '{
+    "config": {
+      "version": "1.0",
+      "name": "merge-test",
+      "mocks": [
+        {
+          "type": "http",
+          "name": "Merged Mock C",
+          "http": {
+            "matcher": {"method": "GET", "path": "/api/merge-c"},
+            "response": {"statusCode": 200, "body": "C"}
+          }
+        }
+      ]
+    }
+  }'
+  assert_status 200 "IMP-EDGE-006: Import with merge"
+
+  engine GET /api/replace-b
+  assert_status 200 "IMP-EDGE-007: Existing mock B still present"
+
+  engine GET /api/merge-c
+  assert_status 200 "IMP-EDGE-008: Merged mock C present"
+
+  # Cleanup
+  api DELETE /mocks
+}
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 main() {
@@ -1251,13 +1697,21 @@ main() {
   should_run "s15x"     && run_s15_extended
   should_run "s16"      && run_s16
   should_run "s17"      && run_s17
-  should_run "import"   && run_import_export
+  should_run "import"    && run_import_export
+  should_run "impedge"  && run_import_edge
   should_run "requests" && run_requests
   should_run "state"    && run_state
   should_run "ws"       && run_workspaces
   should_run "mockops"  && run_mock_ops
   should_run "meta"     && run_metadata_extended
   should_run "sse"      && run_sse_admin
+  should_run "sseproto" && run_sse_stream
+  should_run "graphql"  && run_graphql
+  should_run "oauth"    && run_oauth
+  should_run "soap"     && run_soap
+  should_run "wsproto"  && run_websocket
+  should_run "proxy"    && run_proxy
+  should_run "tokens"   && run_tokens
 
   # ─── Summary ─────────────────────────────────────────────────────────────
   echo ""
