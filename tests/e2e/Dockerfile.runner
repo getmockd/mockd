@@ -5,15 +5,9 @@ RUN apk add --no-cache \
     bash \
     curl \
     jq \
-    coreutils \
-    mosquitto-clients \
-    grpcurl
+    coreutils
 
-# Create results directory
-RUN mkdir -p /results
-
-COPY scripts/ /tests/
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh /tests/*.sh 2>/dev/null || true
+RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

@@ -1,0 +1,25 @@
+# E2E test image for mockd — uses alpine (not distroless) so we get
+# curl/wget for healthchecks and a shell for debugging.
+# syntax=docker/dockerfile:1
+
+FROM golang:1.25-alpine AS builder
+
+RUN apk add --no-cache ca-certificates git
+
+WORKDIR /build
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+COPY . .
+
+RUN CGO_ENABLED=0 go build \
+    -ldflags="-s -w" \
+    -trimpath \
+    -o mockd \
+    ./cmd/mockd
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates curl
+COPY --from=builder /build/mockd /usr/local/bin/mockd
+EXPOSE 4280 4290
+ENTRYPOINT ["/usr/local/bin/mockd"]
+CMD ["serve"]

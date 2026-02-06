@@ -14,20 +14,20 @@ services:
   mockd:
     build:
       context: ../..
-      dockerfile: Dockerfile
+      dockerfile: tests/e2e/Dockerfile.mockd
     container_name: mockd-e2e
     command:
       - serve
       - --port=4280
       - --admin-port=4290
-      - --no-auth
-      - --no-persist
+      - --data-dir=/tmp/mockd-e2e
       - --log-level=warn
+      - --no-auth
     ports:
-      - "14280:4280"   # Mock engine (mapped to host for debugging)
-      - "14290:4290"   # Admin API (mapped to host for debugging)
+      - "14280:4280"
+      - "14290:4290"
     healthcheck:
-      test: ["CMD", "/usr/local/bin/mockd", "health", "--admin-port", "4290"]
+      test: ["CMD", "curl", "-sf", "http://localhost:4290/health"]
       interval: 2s
       timeout: 3s
       start_period: 5s
@@ -51,12 +51,8 @@ services:
     environment:
       MOCKD_ADMIN_URL: http://mockd:4290
       MOCKD_ENGINE_URL: http://mockd:4280
-      MOCKD_MGMT_URL: http://mockd:4281
       # Control which test suites to run (comma-separated, or "all")
       TEST_SUITES: ${TEST_SUITES:-all}
-    volumes:
-      - ./scripts:/tests:ro
-      - ./results:/results
     networks:
       - test-net
 
