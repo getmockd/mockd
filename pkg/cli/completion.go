@@ -454,7 +454,7 @@ _mockd() {
                 '--force[Overwrite existing config file]' \
                 '--format[Output format]:format:(yaml json)' \
                 '(-i --interactive)'{-i,--interactive}'[Interactive mode]' \
-                '(-t --template)'{-t,--template}'[Template name]:template:(default crud websocket-chat graphql-api grpc-service mqtt-iot list)'
+                '(-t --template)'{-t,--template}'[Template name]:template:(minimal full api default crud websocket-chat graphql-api grpc-service mqtt-iot list)'
             ;;
         new)
             _arguments \
@@ -1050,7 +1050,7 @@ complete -c mockd -n '__fish_seen_subcommand_from init' -s o -l output -d 'Outpu
 complete -c mockd -n '__fish_seen_subcommand_from init' -l force -d 'Overwrite existing config file'
 complete -c mockd -n '__fish_seen_subcommand_from init' -l format -d 'Output format' -a 'yaml json'
 complete -c mockd -n '__fish_seen_subcommand_from init' -s i -l interactive -d 'Interactive mode'
-complete -c mockd -n '__fish_seen_subcommand_from init' -s t -l template -d 'Template name' -a 'default crud websocket-chat graphql-api grpc-service mqtt-iot list'
+complete -c mockd -n '__fish_seen_subcommand_from init' -s t -l template -d 'Template name' -a 'minimal full api default crud websocket-chat graphql-api grpc-service mqtt-iot list'
 
 # doctor options
 complete -c mockd -n '__fish_seen_subcommand_from doctor' -s c -l config -d 'Path to config file to validate' -r -F

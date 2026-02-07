@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/getmockd/mockd/pkg/cli/templates"
 	"github.com/getmockd/mockd/pkg/config"
 	"gopkg.in/yaml.v3"
 )
@@ -50,7 +51,9 @@ func runInitWithIO(args []string, stdin io.Reader, stdout, stderr io.Writer) err
 	fs.StringVar(output, "o", "mockd.yaml", "Output filename (shorthand)")
 	format := fs.String("format", "", "Output format: yaml or json (default: inferred from filename)")
 	defaults := fs.Bool("defaults", false, "Generate minimal config without prompts")
-	template := fs.String("template", "", "Use predefined template (minimal, full, api)")
+	interactive := fs.Bool("interactive", false, "Interactive mode - prompts for configuration")
+	fs.BoolVar(interactive, "i", false, "Interactive mode (shorthand)")
+	template := fs.String("template", "", "Use predefined template")
 	fs.StringVar(template, "t", "", "Use predefined template (shorthand)")
 
 	fs.Usage = func() {
@@ -63,12 +66,21 @@ Flags:
   -o, --output          Output filename (default: mockd.yaml)
       --format          Output format: yaml or json (default: inferred from filename)
       --defaults        Generate minimal config without prompts
-  -t, --template        Use predefined template (minimal, full, api)
+  -i, --interactive     Interactive mode - prompts for configuration
+  -t, --template        Use predefined template (see list below)
 
-Templates:
-  minimal    Just admin + engine + one health mock
-  full       Admin + engine + workspace + sample mocks
-  api        Setup for REST API mocking with CRUD examples
+Built-in Templates:
+  minimal          Just admin + engine + one health mock
+  full             Admin + engine + workspace + sample mocks
+  api              Setup for REST API mocking with CRUD examples
+
+Protocol Templates:
+  default          Basic HTTP mocks (hello, echo, health)
+  crud             Full REST CRUD API for resources
+  websocket-chat   Chat room WebSocket endpoint with echo
+  graphql-api      GraphQL API with User CRUD resolvers
+  grpc-service     gRPC Greeter service with reflection
+  mqtt-iot         MQTT broker with IoT sensor topics
 
 Examples:
   # Interactive wizard (default)
@@ -77,8 +89,14 @@ Examples:
   # Generate minimal config without prompts
   mockd init --defaults
 
-  # Use a specific template
+  # Use a built-in template
   mockd init --template full
+
+  # Use a protocol template
+  mockd init --template graphql-api
+
+  # List all available templates
+  mockd init --template list
 
   # Custom output file
   mockd init -o my-mocks.yaml
@@ -119,21 +137,46 @@ Examples:
 		}
 	}
 
+	// Handle --template list
+	if *template == "list" {
+		_, _ = fmt.Fprint(stdout, templates.FormatList())
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintln(stdout, "Built-in templates:")
+		_, _ = fmt.Fprintf(stdout, "  %-16s  %s\n", "minimal", "Just admin + engine + one health mock")
+		_, _ = fmt.Fprintf(stdout, "  %-16s  %s\n", "full", "Admin + engine + workspace + sample mocks")
+		_, _ = fmt.Fprintf(stdout, "  %-16s  %s\n", "api", "REST API mocking with CRUD examples")
+		return nil
+	}
+
 	// Build the config based on flags
 	var cfg *config.ProjectConfig
+	var rawYAML []byte // Used for protocol templates that are raw YAML files
 	var err error
 
 	if *template != "" {
-		// Use predefined template
-		cfg, err = getProjectConfigTemplate(*template)
-		if err != nil {
-			return err
+		// Check protocol templates first (raw YAML files from pkg/cli/templates)
+		if templates.Exists(*template) {
+			rawYAML, err = templates.Get(*template)
+			if err != nil {
+				return fmt.Errorf("failed to load template %q: %w", *template, err)
+			}
+			// Protocol templates are always YAML, override format
+			if outputFormat == "json" {
+				return fmt.Errorf("protocol templates are YAML-only; use --format yaml or omit --format")
+			}
+		} else {
+			// Try built-in Go struct templates (minimal, full, api)
+			cfg, err = getProjectConfigTemplate(*template)
+			if err != nil {
+				return err
+			}
 		}
 	} else if *defaults {
 		// Generate minimal config without prompts
 		cfg = generateMinimalProjectConfig(defaultInitConfig())
 	} else {
-		// Interactive wizard
+		// Interactive wizard (default, or explicit -i/--interactive)
+		_ = *interactive // explicit flag accepted but wizard is the default anyway
 		_, _ = fmt.Fprintln(stdout, "Creating new mockd configuration...")
 		_, _ = fmt.Fprintln(stdout)
 
@@ -147,7 +190,10 @@ Examples:
 
 	// Generate output
 	var data []byte
-	if outputFormat == "json" {
+	if rawYAML != nil {
+		// Protocol template — already formatted YAML with comments
+		data = rawYAML
+	} else if outputFormat == "json" {
 		data, err = json.MarshalIndent(cfg, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to generate JSON: %w", err)
@@ -312,7 +358,7 @@ func getProjectConfigTemplate(name string) (*config.ProjectConfig, error) {
 	case "api":
 		return generateAPITemplate(), nil
 	default:
-		return nil, fmt.Errorf("unknown template: %s\n\nAvailable templates: minimal, full, api", name)
+		return nil, fmt.Errorf("unknown template: %s\n\nRun 'mockd init --template list' to see all available templates", name)
 	}
 }
 
