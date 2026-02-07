@@ -621,7 +621,7 @@ func (h *SubscriptionHandler) sendError(sc *subscriptionConn, id string, message
 	// Both protocols use "error" type for error messages
 	msgType := msgTypeError
 
-	payload := []GraphQLError{{Message: message}}
+	payload := []GraphQLError{{Message: message, Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"}}}
 	payloadBytes, _ := json.Marshal(payload)
 
 	msg := wsMessage{

@@ -236,8 +236,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			validationResult := h.validateHTTPRequest(r, bodyBytes, pathParams, match.HTTP.Validation)
 			if validationResult != nil && !validationResult.Valid {
 				statusCode = h.writeHTTPValidationError(w, validationResult, match.HTTP.Validation)
-				h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
-				return
+				if statusCode != 0 {
+					h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+					return
+				}
+				// statusCode 0 means permissive/warn mode — continue to response
 			}
 		}
 

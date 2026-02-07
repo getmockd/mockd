@@ -44,7 +44,7 @@ func NewExecutor(schema *Schema, config *GraphQLConfig) *Executor {
 func (e *Executor) Execute(ctx context.Context, req *GraphQLRequest) *GraphQLResponse {
 	if req == nil || req.Query == "" {
 		return &GraphQLResponse{
-			Errors: []GraphQLError{{Message: "query is required"}},
+			Errors: []GraphQLError{{Message: "query is required", Extensions: map[string]interface{}{"code": "GRAPHQL_VALIDATION_FAILED"}}},
 		}
 	}
 
@@ -52,7 +52,7 @@ func (e *Executor) Execute(ctx context.Context, req *GraphQLRequest) *GraphQLRes
 	doc, err := e.parseQuery(req.Query)
 	if err != nil {
 		return &GraphQLResponse{
-			Errors: []GraphQLError{{Message: err.Error()}},
+			Errors: []GraphQLError{{Message: err.Error(), Extensions: map[string]interface{}{"code": "GRAPHQL_PARSE_FAILED"}}},
 		}
 	}
 
@@ -68,11 +68,11 @@ func (e *Executor) Execute(ctx context.Context, req *GraphQLRequest) *GraphQLRes
 	if op == nil {
 		if req.OperationName != "" {
 			return &GraphQLResponse{
-				Errors: []GraphQLError{{Message: fmt.Sprintf("operation %q not found", req.OperationName)}},
+				Errors: []GraphQLError{{Message: fmt.Sprintf("operation %q not found", req.OperationName), Extensions: map[string]interface{}{"code": "GRAPHQL_VALIDATION_FAILED"}}},
 			}
 		}
 		return &GraphQLResponse{
-			Errors: []GraphQLError{{Message: "no operation found in query"}},
+			Errors: []GraphQLError{{Message: "no operation found in query", Extensions: map[string]interface{}{"code": "GRAPHQL_VALIDATION_FAILED"}}},
 		}
 	}
 
@@ -124,13 +124,13 @@ func (e *Executor) executeOperation(ctx context.Context, doc *ast.QueryDocument,
 	case ast.Subscription:
 		opType = "Subscription"
 	default:
-		return nil, []*GraphQLError{{Message: "unsupported operation type"}}
+		return nil, []*GraphQLError{{Message: "unsupported operation type", Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"}}}
 	}
 
 	// Check for introspection queries
 	if e.isIntrospectionQuery(op.SelectionSet) {
 		if e.config != nil && !e.config.Introspection {
-			return nil, []*GraphQLError{{Message: "introspection is disabled"}}
+			return nil, []*GraphQLError{{Message: "introspection is disabled", Extensions: map[string]interface{}{"code": "GRAPHQL_VALIDATION_FAILED"}}}
 		}
 		// Return introspection data from schema
 		return e.executeIntrospection(ctx, doc, op.SelectionSet, variables)
@@ -828,7 +828,7 @@ func (e *Executor) resolveField(ctx context.Context, field *ast.Field, resolver 
 		if delay, err := time.ParseDuration(resolver.Delay); err == nil {
 			select {
 			case <-ctx.Done():
-				return nil, &GraphQLError{Message: "request cancelled"}
+				return nil, &GraphQLError{Message: "request cancelled", Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"}}
 			case <-time.After(delay):
 			}
 		}

@@ -156,7 +156,7 @@ func NewErrorResponse(result *Result, status int) *ErrorResponse {
 
 // WriteResponse writes the error response as JSON to the http.ResponseWriter
 func (e *ErrorResponse) WriteResponse(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(e.Status)
 	_ = json.NewEncoder(w).Encode(e)
 }

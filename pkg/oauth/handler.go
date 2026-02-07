@@ -71,6 +71,24 @@ func (h *Handler) generateIDTokenForUser(userID, clientID, nonce string, user *U
 	return idToken
 }
 
+// validateScopes checks that all requested scopes are in the allowed scopes list.
+// Returns an error message if any scope is invalid, or empty string if all valid.
+func (h *Handler) validateScopes(requestedScope string) string {
+	if requestedScope == "" {
+		return ""
+	}
+	allowed := make(map[string]bool)
+	for _, s := range h.provider.config.DefaultScopes {
+		allowed[s] = true
+	}
+	for _, s := range strings.Fields(requestedScope) {
+		if !allowed[s] {
+			return fmt.Sprintf("scope %q is not supported", s)
+		}
+	}
+	return ""
+}
+
 // HandleAuthorize handles GET /authorize
 func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
@@ -96,6 +114,12 @@ func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	scope := params.Get("scope")
 	state := params.Get("state")
 	nonce := params.Get("nonce")
+
+	// Validate scopes against allowed scopes
+	if msg := h.validateScopes(scope); msg != "" {
+		h.errorResponse(w, http.StatusBadRequest, ErrInvalidScope, msg)
+		return
+	}
 
 	// Validate required parameters
 	if clientID == "" {
@@ -321,6 +345,12 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 func (h *Handler) handleClientCredentialsGrant(w http.ResponseWriter, r *http.Request, clientID, clientSecret string) {
 	scope := r.FormValue("scope")
 
+	// Validate scopes against allowed scopes
+	if msg := h.validateScopes(scope); msg != "" {
+		h.errorResponse(w, http.StatusBadRequest, ErrInvalidScope, msg)
+		return
+	}
+
 	// Validate client
 	client := h.provider.ValidateClient(clientID, clientSecret)
 	if client == nil {
@@ -359,6 +389,12 @@ func (h *Handler) handleClientCredentialsGrant(w http.ResponseWriter, r *http.Re
 func (h *Handler) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request, clientID, clientSecret string) {
 	refreshToken := r.FormValue("refresh_token")
 	scope := r.FormValue("scope")
+
+	// Validate scopes against allowed scopes
+	if msg := h.validateScopes(scope); msg != "" {
+		h.errorResponse(w, http.StatusBadRequest, ErrInvalidScope, msg)
+		return
+	}
 
 	if refreshToken == "" {
 		h.errorResponse(w, http.StatusBadRequest, ErrInvalidRequest, "refresh_token is required")
@@ -424,6 +460,12 @@ func (h *Handler) handlePasswordGrant(w http.ResponseWriter, r *http.Request, cl
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	scope := r.FormValue("scope")
+
+	// Validate scopes against allowed scopes
+	if msg := h.validateScopes(scope); msg != "" {
+		h.errorResponse(w, http.StatusBadRequest, ErrInvalidScope, msg)
+		return
+	}
 
 	if username == "" || password == "" {
 		h.errorResponse(w, http.StatusBadRequest, ErrInvalidRequest, "username and password are required")

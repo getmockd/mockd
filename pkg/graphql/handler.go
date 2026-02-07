@@ -237,7 +237,7 @@ func (h *Handler) writeError(w http.ResponseWriter, statusCode int, message stri
 	w.WriteHeader(statusCode)
 
 	resp := &GraphQLResponse{
-		Errors: []GraphQLError{{Message: message}},
+		Errors: []GraphQLError{{Message: message, Extensions: map[string]interface{}{"code": "INTERNAL_SERVER_ERROR"}}},
 	}
 
 	_ = json.NewEncoder(w).Encode(resp)

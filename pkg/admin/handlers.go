@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
@@ -13,6 +15,7 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/store"
+	"gopkg.in/yaml.v3"
 )
 
 // Type aliases pointing to the canonical shared types.
@@ -346,6 +349,20 @@ func (a *AdminAPI) handleExportConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "export config"))
 		return
 	}
+
+	// Support YAML export via ?format=yaml query parameter.
+	if strings.EqualFold(r.URL.Query().Get("format"), "yaml") {
+		out, err := yaml.Marshal(collection)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "export_error", "Failed to marshal YAML: "+err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-yaml")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(out)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, collection)
 }
 
@@ -353,9 +370,24 @@ func (a *AdminAPI) handleExportConfig(w http.ResponseWriter, r *http.Request) {
 func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req ConfigImportRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
-		return
+
+	// Detect YAML content type and decode accordingly.
+	ct := r.Header.Get("Content-Type")
+	if strings.Contains(ct, "yaml") {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "read_error", "Failed to read request body")
+			return
+		}
+		if err := yaml.Unmarshal(body, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_yaml", "Invalid YAML: "+err.Error())
+			return
+		}
+	} else {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+			return
+		}
 	}
 
 	if req.Config == nil {
