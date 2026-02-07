@@ -646,7 +646,11 @@ func (uctx *upContext) connectEngineToAdmin(engineCfg config.EngineConfig) error
 
 	// Register engine via HTTP: POST /engines/register
 	mgmtPort := srv.ManagementPort()
-	result, err := client.RegisterEngine(engineCfg.Name, "localhost", mgmtPort)
+	host := engineCfg.Host
+	if host == "" {
+		host = "localhost"
+	}
+	result, err := client.RegisterEngine(engineCfg.Name, host, mgmtPort)
 	if err != nil {
 		return fmt.Errorf("registering engine via HTTP: %w", err)
 	}

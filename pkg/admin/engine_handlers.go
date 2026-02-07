@@ -183,10 +183,12 @@ func (a *AdminAPI) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 
 // handleRegisterEngine handles POST /engines/register.
 func (a *AdminAPI) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
-	// Check if localhost bypass is allowed AND request is from localhost
+	// Check if localhost bypass is allowed AND request is from localhost,
+	// or if API key auth is disabled (trusted network / dev mode).
 	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	authDisabled := !a.apiKeyConfig.Enabled
 
-	if !localhostBypass {
+	if !localhostBypass && !authDisabled {
 		token := getBearerToken(r)
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token required")
@@ -293,10 +295,12 @@ func (a *AdminAPI) handleUnregisterEngine(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Check if localhost bypass is allowed AND request is from localhost
+	// Check if localhost bypass is allowed AND request is from localhost,
+	// or if API key auth is disabled (trusted network / dev mode).
 	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	authDisabled := !a.apiKeyConfig.Enabled
 
-	if !localhostBypass {
+	if !localhostBypass && !authDisabled {
 		token := getBearerToken(r)
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token required")
@@ -327,10 +331,12 @@ func (a *AdminAPI) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Check if localhost bypass is allowed AND request is from localhost
+	// Check if localhost bypass is allowed AND request is from localhost,
+	// or if API key auth is disabled (trusted network / dev mode).
 	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	authDisabled := !a.apiKeyConfig.Enabled
 
-	if !localhostBypass {
+	if !localhostBypass && !authDisabled {
 		token := getBearerToken(r)
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token required")
@@ -383,10 +389,12 @@ func (a *AdminAPI) handleAssignWorkspace(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Check if localhost bypass is allowed AND request is from localhost
+	// Check if localhost bypass is allowed AND request is from localhost,
+	// or if API key auth is disabled (trusted network / dev mode).
 	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	authDisabled := !a.apiKeyConfig.Enabled
 
-	if !localhostBypass {
+	if !localhostBypass && !authDisabled {
 		token := getBearerToken(r)
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "missing_token", "Authorization token required")

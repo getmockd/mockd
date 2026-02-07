@@ -19,17 +19,26 @@ RUN CGO_ENABLED=0 go build \
     -o mockd \
     ./cmd/mockd
 
-# Stage 2: Test runner with mockd binary
+# Stage 2: Test runner with mockd binary + protocol clients
 FROM alpine:3.20
 
 RUN apk add --no-cache \
     bash \
     curl \
     jq \
-    coreutils
+    coreutils \
+    mosquitto-clients \
+    websocat
+
+# Install grpcurl (not in Alpine repos)
+RUN curl -sSL https://github.com/fullstorydev/grpcurl/releases/download/v1.9.3/grpcurl_1.9.3_linux_x86_64.tar.gz \
+    | tar -xz -C /usr/local/bin grpcurl && chmod +x /usr/local/bin/grpcurl
 
 # Copy the built mockd binary for CLI tests
 COPY --from=builder /build/mockd /usr/local/bin/mockd
+
+# Copy test fixtures needed by protocol tests
+COPY tests/fixtures/grpc/test.proto /fixtures/test.proto
 
 COPY tests/e2e/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

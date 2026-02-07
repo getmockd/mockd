@@ -1,0 +1,17 @@
+# Admin-only configuration for 3-container split E2E tests.
+#
+# This config starts ONLY the Admin API (control plane) on port 4290.
+# No engine is started here — engines register remotely via HTTP.
+#
+# Architecture:
+#   admin container  -> Admin API (:4290)
+#   engine container -> Engine (:4280) + Control API (:4281) -> registers with admin
+#   test-runner      -> CLI + curl against both
+
+version: "1.0"
+
+admins:
+  - name: main
+    port: 4290
+    auth:
+      type: none

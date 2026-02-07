@@ -1,0 +1,24 @@
+# Engine-only configuration for 3-container split E2E tests.
+#
+# This config connects to a REMOTE admin (no local admin started) and
+# starts a local engine that registers with the remote admin via HTTP.
+#
+# The admin URL uses the Docker service name "admin" which resolves
+# to the admin container on the split-net Docker network.
+#
+# Architecture:
+#   admin container  -> Admin API (:4290)
+#   engine container -> Engine (:4280) + Control API (:4281) -> registers with admin
+#   test-runner      -> CLI + curl against both
+
+version: "1.0"
+
+admins:
+  - name: main
+    url: http://admin:4290    # Remote admin — connect, don't start
+
+engines:
+  - name: worker
+    httpPort: 4280
+    host: engine              # Docker service name — admin reaches engine via http://engine:<mgmtPort>
+    admin: main               # Register with the remote admin via HTTP

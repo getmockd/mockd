@@ -1,0 +1,113 @@
+# mockd E2E Test Stack — 3-Container Split Architecture
+#
+# Proves that CLI, Admin API, and Engine can run on separate machines
+# communicating entirely over HTTP, as designed for production deployments.
+#
+# Architecture:
+#   admin:       Admin API (:4290) — control plane, no engine
+#   engine:      Mock Server (:4280) + Engine Control API (:4281) — data plane, no admin
+#                Registers with the remote admin via POST /engines/register
+#   test-runner: Alpine + curl + jq + mockd CLI — runs test scripts
+#                Talks to admin (:4290) for management and engine (:4280) for mock traffic
+#
+# Usage:
+#   docker compose -f tests/e2e/docker-compose.split.yml down -v && \
+#   docker compose -f tests/e2e/docker-compose.split.yml up --build --abort-on-container-exit
+#
+# This runs the SAME 337 tests as the co-located docker-compose.yml
+# but over a true 3-container split with HTTP between every layer.
+
+services:
+  # ── Control Plane ────────────────────────────────────────────────────────────
+  # Starts only the Admin API. No engine runs here.
+  # The engine container registers with this admin via HTTP.
+  admin:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.mockd
+    container_name: mockd-e2e-admin
+    command:
+      - up
+      - -f
+      - /etc/mockd/admin.yaml
+      - --log-level=warn
+    volumes:
+      - ./configs/admin.yaml:/etc/mockd/admin.yaml:ro
+    ports:
+      - "14290:4290"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4290/health"]
+      interval: 2s
+      timeout: 3s
+      start_period: 5s
+      retries: 10
+    networks:
+      - split-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+
+  # ── Data Plane ───────────────────────────────────────────────────────────────
+  # Starts only the Engine (mock server + control API). No admin runs here.
+  # On startup, `mockd up` registers this engine with the remote admin
+  # via POST http://admin:4290/engines/register.
+  engine:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.mockd
+    container_name: mockd-e2e-engine
+    command:
+      - up
+      - -f
+      - /etc/mockd/engine.yaml
+      - --log-level=warn
+    volumes:
+      - ./configs/engine.yaml:/etc/mockd/engine.yaml:ro
+    depends_on:
+      admin:
+        condition: service_healthy
+    ports:
+      - "14280:4280"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4280/__mockd/health"]
+      interval: 2s
+      timeout: 3s
+      start_period: 8s
+      retries: 15
+    networks:
+      - split-net
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+
+  # ── Test Runner ──────────────────────────────────────────────────────────────
+  # Runs the same entrypoint.sh test suites as the co-located setup.
+  # MOCKD_ADMIN_URL points to the admin container (control plane).
+  # MOCKD_ENGINE_URL points to the engine container (data plane).
+  # This proves the 3-layer HTTP separation:
+  #   CLI (test-runner) → Admin API (admin:4290) → Engine Control API (engine:4281)
+  test-runner:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.runner
+    container_name: mockd-e2e-split-runner
+    depends_on:
+      admin:
+        condition: service_healthy
+      engine:
+        condition: service_healthy
+    environment:
+      MOCKD_ADMIN_URL: http://admin:4290
+      MOCKD_ENGINE_URL: http://engine:4280
+      # Control which test suites to run (comma-separated, or "all")
+      TEST_SUITES: ${TEST_SUITES:-all}
+    networks:
+      - split-net
+
+networks:
+  split-net:
+    driver: bridge

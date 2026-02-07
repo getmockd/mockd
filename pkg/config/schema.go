@@ -110,6 +110,11 @@ type EngineConfig struct {
 	// Name is the unique identifier for this engine (required)
 	Name string `json:"name" yaml:"name"`
 
+	// Host is the hostname/IP the admin should use to reach this engine's control API.
+	// Defaults to "localhost" for co-located deployments.
+	// Set to the Docker service name (e.g., "engine") for split deployments.
+	Host string `json:"host,omitempty" yaml:"host,omitempty"`
+
 	// HTTPPort is the port for HTTP mock serving (0 = disabled)
 	HTTPPort int `json:"httpPort,omitempty" yaml:"httpPort,omitempty"`
 
@@ -584,6 +589,9 @@ func mergeEngines(base, overlay []EngineConfig) []EngineConfig {
 }
 
 func mergeEngine(base, overlay EngineConfig) EngineConfig {
+	if overlay.Host != "" {
+		base.Host = overlay.Host
+	}
 	if overlay.HTTPPort != 0 {
 		base.HTTPPort = overlay.HTTPPort
 	}
