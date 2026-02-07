@@ -136,8 +136,8 @@ func (e *Executor) executeOperation(ctx context.Context, doc *ast.QueryDocument,
 		return e.executeIntrospection(ctx, doc, op.SelectionSet, variables)
 	}
 
-	// Execute the selection set
-	return e.executeSelectionSet(ctx, opType, op.SelectionSet, variables)
+	// Execute the selection set (pass doc so fragment spreads can be resolved)
+	return e.executeSelectionSetWithDoc(ctx, doc, opType, op.SelectionSet, variables)
 }
 
 // isIntrospectionQuery checks if the selection set contains only introspection fields.
@@ -642,12 +642,23 @@ func (e *Executor) buildPossibleTypesIntrospection(doc *ast.QueryDocument, def *
 
 // executeSelectionSet executes a selection set against resolvers.
 func (e *Executor) executeSelectionSet(ctx context.Context, opType string, selections ast.SelectionSet, variables map[string]interface{}) (map[string]interface{}, []*GraphQLError) {
+	return e.executeSelectionSetWithDoc(ctx, nil, opType, selections, variables)
+}
+
+// executeSelectionSetWithDoc executes a selection set against resolvers, using doc
+// to resolve named fragment spreads.
+func (e *Executor) executeSelectionSetWithDoc(ctx context.Context, doc *ast.QueryDocument, opType string, selections ast.SelectionSet, variables map[string]interface{}) (map[string]interface{}, []*GraphQLError) {
 	result := make(map[string]interface{})
 	var errors []*GraphQLError
 
 	for _, sel := range selections {
 		switch s := sel.(type) {
 		case *ast.Field:
+			// Check @skip and @include directives
+			if e.shouldSkipField(s.Directives, variables) {
+				continue
+			}
+
 			alias := s.Alias
 			if alias == "" {
 				alias = s.Name
@@ -675,22 +686,147 @@ func (e *Executor) executeSelectionSet(ctx context.Context, opType string, selec
 				errors = append(errors, err)
 				result[alias] = nil
 			} else {
+				// Prune the response to only include selected sub-fields
+				// This ensures @skip/@include on sub-fields work correctly
+				if s.SelectionSet != nil {
+					value = e.pruneResponse(doc, value, s.SelectionSet, variables)
+				}
 				result[alias] = value
 			}
 
 		case *ast.FragmentSpread:
-			// Fragment spreads are handled during query validation
-			// For mocking purposes, we don't need to handle them specially
-			continue
+			// Check @skip and @include directives on the spread
+			if e.shouldSkipField(s.Directives, variables) {
+				continue
+			}
+
+			// Resolve the named fragment from the document and merge its fields
+			if doc != nil {
+				for _, frag := range doc.Fragments {
+					if frag.Name == s.Name {
+						fragResult, fragErrors := e.executeSelectionSetWithDoc(ctx, doc, opType, frag.SelectionSet, variables)
+						for k, v := range fragResult {
+							result[k] = v
+						}
+						errors = append(errors, fragErrors...)
+						break
+					}
+				}
+			}
 
 		case *ast.InlineFragment:
-			// Inline fragments are handled during query validation
-			// For mocking purposes, we don't need to handle them specially
-			continue
+			// Check @skip and @include directives on the inline fragment
+			if e.shouldSkipField(s.Directives, variables) {
+				continue
+			}
+
+			// Execute inline fragment's selection set and merge results
+			fragResult, fragErrors := e.executeSelectionSetWithDoc(ctx, doc, opType, s.SelectionSet, variables)
+			for k, v := range fragResult {
+				result[k] = v
+			}
+			errors = append(errors, fragErrors...)
 		}
 	}
 
 	return result, errors
+}
+
+// pruneResponse filters a resolved value to only include fields present in the selection set,
+// respecting @skip/@include directives. This is necessary because mock resolvers return
+// complete pre-configured response objects, and directive-based field exclusion needs to
+// happen as a post-processing step.
+func (e *Executor) pruneResponse(doc *ast.QueryDocument, value interface{}, selections ast.SelectionSet, variables map[string]interface{}) interface{} {
+	if value == nil || selections == nil {
+		return value
+	}
+
+	switch v := value.(type) {
+	case map[string]interface{}:
+		// Collect all requested field names (expanding fragments)
+		result := make(map[string]interface{})
+		e.collectSelectedFields(doc, result, v, selections, variables)
+		return result
+
+	case []interface{}:
+		// Apply pruning to each element in the array
+		pruned := make([]interface{}, len(v))
+		for i, item := range v {
+			pruned[i] = e.pruneResponse(doc, item, selections, variables)
+		}
+		return pruned
+
+	default:
+		return value
+	}
+}
+
+// collectSelectedFields walks the selection set and copies matching fields from src to dst,
+// respecting @skip/@include directives and expanding fragments.
+func (e *Executor) collectSelectedFields(doc *ast.QueryDocument, dst, src map[string]interface{}, selections ast.SelectionSet, variables map[string]interface{}) {
+	for _, sel := range selections {
+		switch s := sel.(type) {
+		case *ast.Field:
+			if e.shouldSkipField(s.Directives, variables) {
+				continue
+			}
+			alias := s.Alias
+			if alias == "" {
+				alias = s.Name
+			}
+			if s.Name == "__typename" {
+				dst[alias] = "Object"
+				continue
+			}
+			if val, ok := src[s.Name]; ok {
+				if s.SelectionSet != nil {
+					val = e.pruneResponse(doc, val, s.SelectionSet, variables)
+				}
+				dst[alias] = val
+			}
+
+		case *ast.FragmentSpread:
+			if e.shouldSkipField(s.Directives, variables) {
+				continue
+			}
+			if doc != nil {
+				for _, frag := range doc.Fragments {
+					if frag.Name == s.Name {
+						e.collectSelectedFields(doc, dst, src, frag.SelectionSet, variables)
+						break
+					}
+				}
+			}
+
+		case *ast.InlineFragment:
+			if e.shouldSkipField(s.Directives, variables) {
+				continue
+			}
+			e.collectSelectedFields(doc, dst, src, s.SelectionSet, variables)
+		}
+	}
+}
+
+// shouldSkipField evaluates @skip(if:) and @include(if:) directives.
+// Returns true if the field/fragment should be omitted from the result.
+func (e *Executor) shouldSkipField(directives ast.DirectiveList, variables map[string]interface{}) bool {
+	for _, dir := range directives {
+		switch dir.Name {
+		case "skip":
+			if arg := dir.Arguments.ForName("if"); arg != nil {
+				if val := e.resolveValue(arg.Value, variables); val == true {
+					return true
+				}
+			}
+		case "include":
+			if arg := dir.Arguments.ForName("if"); arg != nil {
+				if val := e.resolveValue(arg.Value, variables); val == false {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // extractArguments extracts argument values from a field.

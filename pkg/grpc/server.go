@@ -22,6 +22,8 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
 	v1reflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
@@ -142,6 +144,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// Register all services dynamically
 	s.registerServices()
 
+	// Register gRPC health service (grpc.health.v1) for K8s health probes
+	s.registerHealthService()
+
 	// Enable reflection if configured
 	if s.config.Reflection {
 		s.registerReflectionService()
@@ -254,6 +259,24 @@ func (s *Server) registerServices() {
 			Metadata:    nil,
 		}, struct{}{})
 	}
+}
+
+// registerHealthService registers the grpc.health.v1.Health service.
+// This allows Kubernetes gRPC health probes and other health-checking clients
+// to query the server's health status. Each registered mock service is set
+// to SERVING, and the overall server health (empty service name) is also SERVING.
+func (s *Server) registerHealthService() {
+	hsrv := health.NewServer()
+
+	// Overall health (empty service name = whole server)
+	hsrv.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+
+	// Set each mock service to SERVING
+	for _, serviceName := range s.schema.ListServices() {
+		hsrv.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+	}
+
+	healthpb.RegisterHealthServer(s.grpcServer, hsrv)
 }
 
 // registerReflectionService registers the gRPC reflection service with a custom
@@ -621,8 +644,13 @@ func (s *Server) handleUnary(_ interface{}, ctx context.Context, dec func(interf
 		return nil, err
 	}
 
-	// Apply delay if configured
-	s.applyDelay(methodCfg.Delay)
+	// Apply delay if configured (context-aware for gRPC deadlines)
+	s.applyDelayWithContext(ctx, methodCfg.Delay)
+	if ctx.Err() != nil {
+		grpcErr := status.Error(codes.DeadlineExceeded, "deadline exceeded during configured delay")
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamUnary, md, reqMap, nil, grpcErr)
+		return nil, grpcErr
+	}
 
 	// Return error if configured
 	if methodCfg.Error != nil {
@@ -1151,9 +1179,16 @@ func (s *Server) createTemplateContext(md metadata.MD, reqMap map[string]interfa
 	return template.NewContextFromMap(reqMap, headers)
 }
 
-// applyDelay applies configured delay.
+// applyDelay applies configured delay, respecting the context deadline.
 // Accepts Go duration strings ("100ms", "2s") or bare numbers treated as milliseconds ("100").
 func (s *Server) applyDelay(delay string) {
+	s.applyDelayWithContext(context.Background(), delay)
+}
+
+// applyDelayWithContext applies configured delay, respecting the given context's deadline.
+// If the context is cancelled or its deadline expires before the delay completes,
+// this returns early instead of sleeping the full duration.
+func (s *Server) applyDelayWithContext(ctx context.Context, delay string) {
 	if delay == "" {
 		return
 	}
@@ -1168,7 +1203,11 @@ func (s *Server) applyDelay(delay string) {
 	}
 
 	if d > 0 {
-		time.Sleep(d)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(d):
+		}
 	}
 }
 

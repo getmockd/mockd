@@ -48,13 +48,15 @@ type ErrorResponse struct {
 
 // AuthorizationCode represents a stored authorization code
 type AuthorizationCode struct {
-	Code        string
-	ClientID    string
-	RedirectURI string
-	Scope       string
-	UserID      string
-	Nonce       string
-	ExpiresAt   time.Time
+	Code                string
+	ClientID            string
+	RedirectURI         string
+	Scope               string
+	UserID              string
+	Nonce               string
+	CodeChallenge       string // PKCE: stored code_challenge
+	CodeChallengeMethod string // PKCE: "S256" or "plain"
+	ExpiresAt           time.Time
 }
 
 // RefreshTokenData represents stored refresh token data

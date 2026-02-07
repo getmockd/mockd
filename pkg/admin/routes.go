@@ -132,6 +132,8 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /replay/{id}", a.streamRecordingManager.handleGetReplayStatus)
 	mux.HandleFunc("DELETE /replay/{id}", a.streamRecordingManager.handleStopReplay)
 	mux.HandleFunc("POST /replay/{id}/advance", a.streamRecordingManager.handleAdvanceReplay)
+	mux.HandleFunc("POST /replay/{id}/pause", a.streamRecordingManager.handlePauseReplay)
+	mux.HandleFunc("POST /replay/{id}/resume", a.streamRecordingManager.handleResumeReplay)
 
 	// Chaos injection management
 	mux.HandleFunc("GET /chaos", a.handleGetChaos)

@@ -748,6 +748,54 @@ func (m *StreamRecordingManager) handleListReplaySessions(w http.ResponseWriter,
 	writeJSON(w, http.StatusOK, result)
 }
 
+// handlePauseReplay handles POST /replay/{id}/pause.
+func (m *StreamRecordingManager) handlePauseReplay(w http.ResponseWriter, r *http.Request) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing_id", "Replay session ID is required")
+		return
+	}
+
+	if m.replay == nil {
+		writeError(w, http.StatusNotFound, "not_found", "Replay session not found")
+		return
+	}
+
+	if err := m.replay.PauseReplay(id); err != nil {
+		writeError(w, http.StatusBadRequest, "pause_error", fmt.Sprintf("Failed to pause replay: %v", err))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleResumeReplay handles POST /replay/{id}/resume.
+func (m *StreamRecordingManager) handleResumeReplay(w http.ResponseWriter, r *http.Request) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing_id", "Replay session ID is required")
+		return
+	}
+
+	if m.replay == nil {
+		writeError(w, http.StatusNotFound, "not_found", "Replay session not found")
+		return
+	}
+
+	if err := m.replay.ResumeReplay(id); err != nil {
+		writeError(w, http.StatusBadRequest, "resume_error", fmt.Sprintf("Failed to resume replay: %v", err))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleVacuum handles POST /stream-recordings/vacuum.
 func (m *StreamRecordingManager) handleVacuum(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()

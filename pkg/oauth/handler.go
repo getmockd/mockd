@@ -1,6 +1,8 @@
 package oauth
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -89,6 +91,21 @@ func (h *Handler) validateScopes(requestedScope string) string {
 	return ""
 }
 
+// verifyCodeChallenge verifies the PKCE code_verifier against the stored code_challenge.
+// Supports "plain" (direct comparison) and "S256" (SHA-256 hash comparison) methods.
+func (h *Handler) verifyCodeChallenge(challenge, method, verifier string) bool {
+	switch method {
+	case "S256":
+		hash := sha256.Sum256([]byte(verifier))
+		computed := base64.RawURLEncoding.EncodeToString(hash[:])
+		return computed == challenge
+	case "plain", "":
+		return verifier == challenge
+	default:
+		return false
+	}
+}
+
 // HandleAuthorize handles GET /authorize
 func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
@@ -114,6 +131,8 @@ func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	scope := params.Get("scope")
 	state := params.Get("state")
 	nonce := params.Get("nonce")
+	codeChallenge := params.Get("code_challenge")
+	codeChallengeMethod := params.Get("code_challenge_method")
 
 	// Validate scopes against allowed scopes
 	if msg := h.validateScopes(scope); msg != "" {
@@ -171,14 +190,26 @@ func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
+		// Validate PKCE code_challenge_method if provided
+		if codeChallenge != "" && codeChallengeMethod != "" && codeChallengeMethod != "plain" && codeChallengeMethod != "S256" {
+			h.redirectError(w, r, redirectURI, state, ErrInvalidRequest, "unsupported code_challenge_method; must be plain or S256")
+			return
+		}
+		// Default to "plain" if code_challenge is provided without method
+		if codeChallenge != "" && codeChallengeMethod == "" {
+			codeChallengeMethod = "plain"
+		}
+
 		authCode := &AuthorizationCode{
-			Code:        code,
-			ClientID:    clientID,
-			RedirectURI: redirectURI,
-			Scope:       scope,
-			UserID:      userID,
-			Nonce:       nonce,
-			ExpiresAt:   time.Now().Add(10 * time.Minute),
+			Code:                code,
+			ClientID:            clientID,
+			RedirectURI:         redirectURI,
+			Scope:               scope,
+			UserID:              userID,
+			Nonce:               nonce,
+			CodeChallenge:       codeChallenge,
+			CodeChallengeMethod: codeChallengeMethod,
+			ExpiresAt:           time.Now().Add(10 * time.Minute),
 		}
 		h.provider.StoreAuthorizationCode(authCode)
 
@@ -266,6 +297,7 @@ func (h *Handler) HandleToken(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Request, clientID, clientSecret string) {
 	code := r.FormValue("code")
 	redirectURI := r.FormValue("redirect_uri")
+	codeVerifier := r.FormValue("code_verifier")
 
 	if code == "" {
 		h.errorResponse(w, http.StatusBadRequest, ErrInvalidRequest, "code is required")
@@ -276,11 +308,19 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Validate client
-	client := h.provider.ValidateClient(clientID, clientSecret)
+	// Validate client — for PKCE flows, client_secret may be omitted (public clients)
+	client := h.provider.GetClient(clientID)
 	if client == nil {
-		h.errorResponse(w, http.StatusUnauthorized, ErrInvalidClient, "invalid client credentials")
+		h.errorResponse(w, http.StatusUnauthorized, ErrInvalidClient, "unknown client")
 		return
+	}
+	// If client has a secret, validate it (confidential client)
+	if client.ClientSecret != "" && clientSecret != "" {
+		client = h.provider.ValidateClient(clientID, clientSecret)
+		if client == nil {
+			h.errorResponse(w, http.StatusUnauthorized, ErrInvalidClient, "invalid client credentials")
+			return
+		}
 	}
 
 	if !h.provider.ClientSupportsGrantType(client, GrantTypeAuthorizationCode) {
@@ -293,6 +333,18 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		h.errorResponse(w, http.StatusBadRequest, ErrInvalidGrant, err.Error())
 		return
+	}
+
+	// Verify PKCE code_verifier if code_challenge was provided during authorization
+	if authCode.CodeChallenge != "" {
+		if codeVerifier == "" {
+			h.errorResponse(w, http.StatusBadRequest, ErrInvalidGrant, "code_verifier is required for PKCE")
+			return
+		}
+		if !h.verifyCodeChallenge(authCode.CodeChallenge, authCode.CodeChallengeMethod, codeVerifier) {
+			h.errorResponse(w, http.StatusBadRequest, ErrInvalidGrant, "code_verifier does not match code_challenge")
+			return
+		}
 	}
 
 	// Generate tokens

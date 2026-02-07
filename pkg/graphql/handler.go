@@ -167,6 +167,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check for batched query (array of requests)
+	if r.Method == http.MethodPost {
+		contentType := r.Header.Get("Content-Type")
+		if !strings.HasPrefix(contentType, "application/graphql") {
+			// Re-parse raw body to check for batch
+			if len(rawBody) > 0 && rawBody[0] == '[' {
+				var batch []GraphQLRequest
+				if batchErr := json.Unmarshal([]byte(rawBody), &batch); batchErr == nil && len(batch) > 0 {
+					h.handleBatchRequest(w, r, batch, startTime, rawBody)
+					return
+				}
+			}
+		}
+	}
+
 	// Execute the GraphQL request
 	resp := h.executor.Execute(r.Context(), req)
 
@@ -208,6 +223,37 @@ func (h *Handler) getOperationType(req *GraphQLRequest) string {
 		return "subscription"
 	}
 	return "query"
+}
+
+// handleBatchRequest handles an array of GraphQL requests (batched query).
+// Apollo, Relay, and other clients use this to send multiple operations in a single HTTP request.
+func (h *Handler) handleBatchRequest(w http.ResponseWriter, r *http.Request, batch []GraphQLRequest, startTime time.Time, rawBody string) {
+	responses := make([]*GraphQLResponse, len(batch))
+	for i := range batch {
+		responses[i] = h.executor.Execute(r.Context(), &batch[i])
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(responses); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to encode batch response")
+		return
+	}
+
+	respBody := buf.String()
+	_, _ = w.Write(buf.Bytes())
+
+	// Log the first request as representative
+	var firstReq *GraphQLRequest
+	var firstResp *GraphQLResponse
+	if len(batch) > 0 {
+		firstReq = &batch[0]
+		firstResp = responses[0]
+	}
+	h.logRequest(r, startTime, rawBody, firstResp, firstReq, http.StatusOK, respBody)
+	h.recordMetrics(r.URL.Path, "batch", http.StatusOK, time.Since(startTime))
 }
 
 // parseGetRequest parses a GraphQL request from GET query parameters.
@@ -282,10 +328,19 @@ func (h *Handler) parsePostRequestWithBody(r *http.Request) (*GraphQLRequest, st
 		return &GraphQLRequest{Query: string(body)}, rawBody, nil
 	}
 
-	// Default to application/json
+	// Default to application/json — try single request first, then batched
 	var req GraphQLRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, rawBody, &parseError{message: "invalid JSON request body"}
+		// Try parsing as a batch (array of requests)
+		var batch []GraphQLRequest
+		if batchErr := json.Unmarshal(body, &batch); batchErr != nil {
+			return nil, rawBody, &parseError{message: "invalid JSON request body"}
+		}
+		if len(batch) == 0 {
+			return nil, rawBody, &parseError{message: "empty batch request"}
+		}
+		// Return the first request; batch is handled at the ServeHTTP level
+		return &batch[0], rawBody, nil
 	}
 
 	return &req, rawBody, nil
