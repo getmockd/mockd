@@ -377,7 +377,7 @@ func (m *MQTTRecordingManager) handleGetMQTTBrokerStatus(w http.ResponseWriter, 
 }
 
 // handleListMQTTBrokersInternal handles listing brokers from locally registered brokers.
-func (m *MQTTRecordingManager) handleListMQTTBrokersInternal(w http.ResponseWriter, r *http.Request) {
+func (m *MQTTRecordingManager) handleListMQTTBrokersInternal(w http.ResponseWriter, _ *http.Request) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -403,7 +403,7 @@ func (m *MQTTRecordingManager) handleListMQTTBrokersInternal(w http.ResponseWrit
 }
 
 // handleGetMQTTStatusInternal handles status from locally registered brokers.
-func (m *MQTTRecordingManager) handleGetMQTTStatusInternal(w http.ResponseWriter, r *http.Request) {
+func (m *MQTTRecordingManager) handleGetMQTTStatusInternal(w http.ResponseWriter, _ *http.Request) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 

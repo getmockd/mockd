@@ -640,11 +640,6 @@ func (e *Executor) buildPossibleTypesIntrospection(doc *ast.QueryDocument, def *
 	return result
 }
 
-// executeSelectionSet executes a selection set against resolvers.
-func (e *Executor) executeSelectionSet(ctx context.Context, opType string, selections ast.SelectionSet, variables map[string]interface{}) (map[string]interface{}, []*GraphQLError) {
-	return e.executeSelectionSetWithDoc(ctx, nil, opType, selections, variables)
-}
-
 // executeSelectionSetWithDoc executes a selection set against resolvers, using doc
 // to resolve named fragment spreads.
 func (e *Executor) executeSelectionSetWithDoc(ctx context.Context, doc *ast.QueryDocument, opType string, selections ast.SelectionSet, variables map[string]interface{}) (map[string]interface{}, []*GraphQLError) {

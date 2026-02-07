@@ -271,7 +271,7 @@ func (i *OpenAPIImporter) importOpenAPI3(data []byte) (*config.MockCollection, e
 }
 
 // operationToMock converts an OpenAPI operation to a MockConfiguration.
-func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, id int, now time.Time) *config.MockConfiguration {
+func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ int, now time.Time) *config.MockConfiguration {
 	// Convert OpenAPI path params {param} to :param for mockd
 	mockPath := convertOpenAPIPath(path)
 
@@ -404,7 +404,7 @@ func (i *OpenAPIImporter) importSwagger2(data []byte) (*config.MockCollection, e
 }
 
 // swaggerOperationToMock converts a Swagger 2.0 operation to a MockConfiguration.
-func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *SwaggerOperation, id int, now time.Time) *config.MockConfiguration {
+func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *SwaggerOperation, _ int, now time.Time) *config.MockConfiguration {
 	mockPath := convertOpenAPIPath(path)
 
 	name := op.Summary

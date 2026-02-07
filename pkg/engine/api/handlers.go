@@ -25,7 +25,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	engineProtocols := s.engine.ProtocolStatus()
 	protocols := make(map[string]ProtocolStatus, len(engineProtocols))
 	for k, v := range engineProtocols {
-		protocols[k] = ProtocolStatus(v)
+		protocols[k] = v
 	}
 
 	resp := StatusResponse{
