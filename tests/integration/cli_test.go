@@ -109,7 +109,9 @@ func TestCLIMockCRUDCommands(t *testing.T) {
 	defer exec.Command("rm", "-f", "../../mockd_test").Run()
 
 	// Start the server in background with isolated data directory
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Use 60s timeout to allow for slow CI environments where server startup
+	// can take 20-25s, leaving enough time for the actual test operations.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	serverCmd := exec.CommandContext(ctx, "./mockd_test", "start",
@@ -251,7 +253,9 @@ func TestCLIImportExportCommands(t *testing.T) {
 	defer exec.Command("rm", "-f", "../../mockd_test").Run()
 
 	// Start the server with isolated data directory
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Use 60s timeout to allow for slow CI environments where server startup
+	// can take 20-25s, leaving enough time for the actual test operations.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	serverCmd := exec.CommandContext(ctx, "./mockd_test", "start",
