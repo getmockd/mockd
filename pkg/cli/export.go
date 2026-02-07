@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/cliconfig"
+	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/portability"
 )
 
@@ -99,8 +100,13 @@ Supported export formats: mockd, openapi`, *format)
 	var data []byte
 	switch exportFormat {
 	case portability.FormatMockd:
-		exporter := &portability.NativeExporter{AsYAML: asYAML}
-		data, err = exporter.Export(collection)
+		// Output MockCollection format directly so the exported file can be
+		// loaded back by `mockd serve --config` without conversion.
+		if asYAML {
+			data, err = config.ToYAML(collection)
+		} else {
+			data, err = config.ToJSON(collection)
+		}
 	case portability.FormatOpenAPI:
 		exporter := &portability.OpenAPIExporter{AsYAML: asYAML}
 		data, err = exporter.Export(collection)

@@ -300,14 +300,14 @@ func TestCLIImportExportCommands(t *testing.T) {
 		}
 
 		var exported struct {
-			Version   string        `json:"version"`
-			Endpoints []interface{} `json:"endpoints"`
+			Version string        `json:"version"`
+			Mocks   []interface{} `json:"mocks"`
 		}
 		if err := json.Unmarshal(exportData, &exported); err != nil {
 			t.Fatalf("Failed to parse export output: %v\n%s", err, exportData)
 		}
-		if len(exported.Endpoints) == 0 {
-			t.Fatal("Expected at least one endpoint in export")
+		if len(exported.Mocks) == 0 {
+			t.Fatal("Expected at least one mock in export")
 		}
 	})
 }

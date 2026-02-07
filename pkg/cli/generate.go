@@ -274,18 +274,26 @@ func outputMocks(collection *config.MockCollection, outputFile string, dryRun bo
 		return nil
 	}
 
-	// Determine output format
-	asYAML := true
+	// Determine output format and marshal directly to MockCollection format
+	// so the output can be loaded back by `mockd serve --config`.
+	// Note: We use config.ToYAML/ToJSON instead of NativeExporter because
+	// NativeExporter produces NativeV1 format (with "endpoints" key) which
+	// is not directly loadable by serve --config (which expects "mocks" key).
+	var data []byte
+	var err error
 	if outputFile != "" {
 		ext := strings.ToLower(filepath.Ext(outputFile))
-		asYAML = ext == ".yaml" || ext == ".yml"
+		if ext == ".yaml" || ext == ".yml" {
+			data, err = config.ToYAML(collection)
+		} else {
+			data, err = config.ToJSON(collection)
+		}
+	} else {
+		// Default to YAML for stdout
+		data, err = config.ToYAML(collection)
 	}
-
-	// Export
-	exporter := &portability.NativeExporter{AsYAML: asYAML}
-	data, err := exporter.Export(collection)
 	if err != nil {
-		return fmt.Errorf("failed to export mocks: %w", err)
+		return fmt.Errorf("failed to marshal mocks: %w", err)
 	}
 
 	// Output

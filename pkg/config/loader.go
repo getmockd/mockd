@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,12 +120,23 @@ func SaveToFile(path string, collection *MockCollection) error {
 	return nil
 }
 
+// ErrNativeV1Format is returned when a file appears to be in NativeV1 export format
+// (has "endpoints" key instead of "mocks"), which cannot be loaded directly.
+var ErrNativeV1Format = errors.New("file appears to be in NativeV1 export format")
+
 // ParseJSON parses JSON bytes into a MockCollection with validation.
 func ParseJSON(data []byte) (*MockCollection, error) {
 	var collection MockCollection
 
 	if err := json.Unmarshal(data, &collection); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	// Detect NativeV1 format: has "endpoints" key but parsed as 0 mocks
+	if len(collection.Mocks) == 0 && looksLikeNativeV1JSON(data) {
+		return nil, fmt.Errorf("%w: this file uses the 'endpoints' key (NativeV1 format) "+
+			"instead of 'mocks'. Use 'mockd import <file>' to load it, or re-export "+
+			"with 'mockd export' which now outputs the correct format", ErrNativeV1Format)
 	}
 
 	// Validate the collection
@@ -143,12 +155,47 @@ func ParseYAML(data []byte) (*MockCollection, error) {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidYAML, err)
 	}
 
+	// Detect NativeV1 format: has "endpoints" key but parsed as 0 mocks
+	if len(collection.Mocks) == 0 && looksLikeNativeV1YAML(data) {
+		return nil, fmt.Errorf("%w: this file uses the 'endpoints' key (NativeV1 format) "+
+			"instead of 'mocks'. Use 'mockd import <file>' to load it, or re-export "+
+			"with 'mockd export' which now outputs the correct format", ErrNativeV1Format)
+	}
+
 	// Validate the collection
 	if err := collection.Validate(); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
 	return &collection, nil
+}
+
+// looksLikeNativeV1JSON checks if JSON data has an "endpoints" top-level key,
+// indicating it's in NativeV1 format rather than MockCollection format.
+func looksLikeNativeV1JSON(data []byte) bool {
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return false
+	}
+	_, hasEndpoints := probe["endpoints"]
+	return hasEndpoints
+}
+
+// looksLikeNativeV1YAML checks if YAML data has an "endpoints" top-level key,
+// indicating it's in NativeV1 format rather than MockCollection format.
+func looksLikeNativeV1YAML(data []byte) bool {
+	// Simple line-based check: look for "endpoints:" at the start of a line
+	// (not indented, so it's a top-level key)
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		trimmed := bytes.TrimSpace(line)
+		if bytes.HasPrefix(trimmed, []byte("endpoints:")) || bytes.Equal(trimmed, []byte("endpoints:")) {
+			// Make sure it's a top-level key (not indented)
+			if len(line) > 0 && line[0] != ' ' && line[0] != '\t' {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ToJSON marshals a MockCollection to formatted JSON bytes.

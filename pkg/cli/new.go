@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/portability"
 )
 
@@ -88,18 +89,23 @@ Use 'mockd new --help' for more information`, *template, strings.Join(available,
 		return fmt.Errorf("failed to generate from template: %w", err)
 	}
 
-	// Determine output format
-	asYAML := true
+	// Marshal directly to MockCollection format so the output can be
+	// loaded back by `mockd serve --config` (which expects "mocks" key,
+	// not the NativeV1 "endpoints" key).
+	var data []byte
 	if *output != "" {
 		ext := strings.ToLower(filepath.Ext(*output))
-		asYAML = ext == ".yaml" || ext == ".yml"
+		if ext == ".yaml" || ext == ".yml" {
+			data, err = config.ToYAML(collection)
+		} else {
+			data, err = config.ToJSON(collection)
+		}
+	} else {
+		// Default to YAML for stdout
+		data, err = config.ToYAML(collection)
 	}
-
-	// Export the collection
-	exporter := &portability.NativeExporter{AsYAML: asYAML}
-	data, err := exporter.Export(collection)
 	if err != nil {
-		return fmt.Errorf("failed to export collection: %w", err)
+		return fmt.Errorf("failed to marshal collection: %w", err)
 	}
 
 	// Output
