@@ -59,8 +59,13 @@ services:
     environment:
       MOCKD_ADMIN_URL: http://mockd:4290
       MOCKD_ENGINE_URL: http://mockd:4280
+    volumes:
+      - test-results:/results
     networks:
       - test-net
+
+volumes:
+  test-results:
 
 networks:
   test-net:

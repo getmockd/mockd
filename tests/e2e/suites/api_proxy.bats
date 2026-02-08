@@ -3,6 +3,12 @@
 # Proxy Admin Endpoints — status, filters, CA, start/stop, mode
 # ============================================================================
 
+teardown_file() {
+  load '../lib/helpers'
+  # Ensure proxy is stopped after tests
+  api POST /proxy/stop
+}
+
 setup() {
   load '../lib/helpers'
 }

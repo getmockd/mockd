@@ -57,4 +57,8 @@ COPY tests/fixtures/grpc/test.proto /fixtures/test.proto
 COPY tests/e2e/lib/ /e2e/lib/
 COPY tests/e2e/suites/ /e2e/suites/
 
-ENTRYPOINT ["bats", "--formatter", "tap", "/e2e/suites/"]
+# Create results directory for JUnit output
+RUN mkdir -p /results
+
+# Default: run all suites with TAP output + JUnit XML report
+ENTRYPOINT ["bats", "--formatter", "tap", "--report-formatter", "junit", "--output", "/results", "/e2e/suites/"]

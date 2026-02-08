@@ -3,6 +3,16 @@
 # Token & API Key Management — registration tokens, API key rotation
 # ============================================================================
 
+setup_file() {
+  load '../lib/helpers'
+}
+
+teardown_file() {
+  # Token cleanup is not strictly needed (tokens are ephemeral in --no-auth mode)
+  # but included for consistency.
+  true
+}
+
 setup() {
   load '../lib/helpers'
 }

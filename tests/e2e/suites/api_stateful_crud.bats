@@ -24,6 +24,12 @@ setup_file() {
   }'
 }
 
+teardown_file() {
+  load '../lib/helpers'
+  # Reset stateful resources to seed data
+  api POST /state/reset -d '{}'
+}
+
 setup() {
   load '../lib/helpers'
 }

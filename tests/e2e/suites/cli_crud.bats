@@ -7,17 +7,18 @@ setup_file() {
   load '../lib/helpers'
   api DELETE /mocks
 
-  # Create a suite of mocks for list/get/delete tests
-  run mockd add --path /cli/hello --body '{"cli":"hello"}' --name "CLI Hello" --admin-url "$ADMIN"
-  run mockd add --method POST --path /cli/users --status 201 \
+  # Create a suite of mocks for list/get/delete tests — call directly (not via run)
+  # so failures in setup_file abort early instead of silently continuing
+  mockd add --path /cli/hello --body '{"cli":"hello"}' --name "CLI Hello" --admin-url "$ADMIN"
+  mockd add --method POST --path /cli/users --status 201 \
     --body '{"id":"u1","created":true}' --name "CLI Create User" \
     --header "X-Custom:cli-test" --delay 50 --admin-url "$ADMIN"
-  run mockd add --path /cli/authed --body '{"authed":true}' \
+  mockd add --path /cli/authed --body '{"authed":true}' \
     --match-header "Authorization:Bearer test" --name "CLI Auth Mock" --admin-url "$ADMIN"
-  run mockd add --path /cli/search --body '{"results":[]}' \
+  mockd add --path /cli/search --body '{"results":[]}' \
     --match-query "q:hello" --name "CLI Search" --admin-url "$ADMIN"
-  run mockd add --path /cli/priority --body '{"level":"low"}' --priority 1 --name "Low" --admin-url "$ADMIN"
-  run mockd add --path /cli/priority --body '{"level":"high"}' --priority 100 --name "High" --admin-url "$ADMIN"
+  mockd add --path /cli/priority --body '{"level":"low"}' --priority 1 --name "Low" --admin-url "$ADMIN"
+  mockd add --path /cli/priority --body '{"level":"high"}' --priority 100 --name "High" --admin-url "$ADMIN"
 }
 
 teardown_file() {

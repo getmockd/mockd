@@ -159,6 +159,35 @@ docker compose -f tests/e2e/docker-compose.split.yml down -v 2>/dev/null
 exit $exit_code
 """
 
+[tasks."e2e:suite"]
+description = "Run a single E2E suite (e.g., mise run e2e:suite grpc_protocol)"
+run = """
+docker compose -f tests/e2e/docker-compose.yml up -d --build mockd 2>/dev/null
+echo "Waiting for mockd health..."
+for i in $(seq 1 30); do
+  if curl -sf http://localhost:14290/health >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+docker compose -f tests/e2e/docker-compose.yml run --rm --entrypoint bats test-runner /e2e/suites/${1}.bats
+exit_code=$?
+docker compose -f tests/e2e/docker-compose.yml down -v 2>/dev/null
+exit $exit_code
+"""
+
+[tasks."e2e:shell"]
+description = "Open a shell in the E2E test runner (for debugging)"
+run = """
+docker compose -f tests/e2e/docker-compose.yml up -d --build mockd 2>/dev/null
+echo "Waiting for mockd health..."
+for i in $(seq 1 30); do
+  if curl -sf http://localhost:14290/health >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+echo "mockd ready — opening shell. Run: bats /e2e/suites/<file>.bats"
+docker compose -f tests/e2e/docker-compose.yml run --rm --entrypoint bash test-runner
+docker compose -f tests/e2e/docker-compose.yml down -v 2>/dev/null
+"""
+
 [tasks.test-v]
 alias = "tv"
 description = "Run tests with verbose output"
