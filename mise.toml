@@ -143,14 +143,20 @@ run = "go test ./..."
 description = "Run E2E tests in Docker (bats-core)"
 run = """
 docker compose -f tests/e2e/docker-compose.yml down -v 2>/dev/null
-docker compose -f tests/e2e/docker-compose.yml up --build --abort-on-container-exit
+docker compose -f tests/e2e/docker-compose.yml up --build --abort-on-container-exit --exit-code-from test-runner
+exit_code=$?
+docker compose -f tests/e2e/docker-compose.yml down -v 2>/dev/null
+exit $exit_code
 """
 
 [tasks.e2e-split]
 description = "Run E2E tests in 3-container split architecture"
 run = """
 docker compose -f tests/e2e/docker-compose.split.yml down -v 2>/dev/null
-docker compose -f tests/e2e/docker-compose.split.yml up --build --abort-on-container-exit
+docker compose -f tests/e2e/docker-compose.split.yml up --build --abort-on-container-exit --exit-code-from test-runner
+exit_code=$?
+docker compose -f tests/e2e/docker-compose.split.yml down -v 2>/dev/null
+exit $exit_code
 """
 
 [tasks.test-v]

@@ -6,7 +6,6 @@
 # Proto file: /fixtures/test.proto (copied into both mockd and runner containers)
 
 GRPC_PORT=50051
-GRPC_STATE_FILE="/tmp/grpc_mock_id.txt"
 
 setup_file() {
   load '../lib/helpers'
@@ -36,17 +35,16 @@ setup_file() {
       }
     }
   }'
-  # Persist mock ID via temp file — bats runs tests in subshells so export won't work
-  json_field '.id' > "$GRPC_STATE_FILE"
+  # Persist mock ID via bats temp dir — tests run in subshells so export won't work
+  json_field '.id' > "$BATS_FILE_TMPDIR/grpc_mock_id"
 
-  # Wait for gRPC server to spin up
-  sleep 3
+  # Wait for gRPC server to accept connections
+  wait_for_port mockd "$GRPC_PORT"
 }
 
 teardown_file() {
   load '../lib/helpers'
   api DELETE /mocks
-  rm -f "$GRPC_STATE_FILE"
 }
 
 setup() {
@@ -55,7 +53,7 @@ setup() {
 
 # Helper to read the mock ID written by setup_file
 grpc_mock_id() {
-  cat "$GRPC_STATE_FILE"
+  cat "$BATS_FILE_TMPDIR/grpc_mock_id"
 }
 
 @test "GRPC-001: Create gRPC mock returns 201" {
@@ -103,7 +101,7 @@ grpc_mock_id() {
   mid=$(grpc_mock_id)
   api DELETE "/mocks/${mid}"
   [[ "$STATUS" == "204" ]]
-  sleep 2
+  wait_for_port_down mockd "$GRPC_PORT"
 }
 
 @test "GRPC-009: gRPC server stopped after mock deletion" {
@@ -133,11 +131,11 @@ grpc_mock_id() {
   }'
   local disable_id
   disable_id=$(json_field '.id')
-  sleep 2
+  wait_for_port mockd "$GRPC_PORT"
 
   api POST "/mocks/${disable_id}/toggle" -d '{"enabled": false}'
   [[ "$STATUS" == "200" ]]
-  sleep 2
+  wait_for_port_down mockd "$GRPC_PORT"
 }
 
 @test "GRPC-011: Disabled gRPC mock does not respond" {

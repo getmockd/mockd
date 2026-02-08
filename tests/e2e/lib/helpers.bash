@@ -4,6 +4,10 @@
 # ============================================================================
 # Provides HTTP helper functions for calling the admin API and mock engine.
 # Loaded by bats suites via: load '../lib/helpers'
+#
+# Globals set by api()/engine():
+#   STATUS  — HTTP status code (e.g., "200", "404"). Reset on every call.
+#   BODY    — Response body text. Reset on every call.
 
 # ─── Environment ───────────────────────────────────────────────────────────────
 
@@ -19,11 +23,12 @@ api() {
   local method="$1" path="$2"
   shift 2
   local url="${ADMIN}${path}"
-  local resp
-  resp=$(curl -s -w '\n%{http_code}' -X "$method" "$url" \
-    -H 'Content-Type: application/json' "$@" 2>&1) || true
-  BODY=$(echo "$resp" | sed '$d')
-  STATUS=$(echo "$resp" | tail -n 1)
+  local tmpfile
+  tmpfile=$(mktemp)
+  STATUS=$(curl -s -w '%{http_code}' -o "$tmpfile" -X "$method" "$url" \
+    -H 'Content-Type: application/json' "$@" 2>/dev/null) || STATUS="000"
+  BODY=$(cat "$tmpfile")
+  rm -f "$tmpfile"
 }
 
 # Hit the mock engine (not admin).
@@ -32,11 +37,12 @@ engine() {
   local method="$1" path="$2"
   shift 2
   local url="${ENGINE}${path}"
-  local resp
-  resp=$(curl -s -w '\n%{http_code}' -X "$method" "$url" \
-    -H 'Content-Type: application/json' "$@" 2>&1) || true
-  BODY=$(echo "$resp" | sed '$d')
-  STATUS=$(echo "$resp" | tail -n 1)
+  local tmpfile
+  tmpfile=$(mktemp)
+  STATUS=$(curl -s -w '%{http_code}' -o "$tmpfile" -X "$method" "$url" \
+    -H 'Content-Type: application/json' "$@" 2>/dev/null) || STATUS="000"
+  BODY=$(cat "$tmpfile")
+  rm -f "$tmpfile"
 }
 
 # ─── JSON Helpers ──────────────────────────────────────────────────────────────
@@ -47,8 +53,33 @@ json_field() {
   echo "$BODY" | jq -r "$1" 2>/dev/null
 }
 
-# Extract a JSON field from arbitrary input.
-# Usage: echo "$output" | json_val '.id'
-json_val() {
-  jq -r "$1" 2>/dev/null
+# ─── Wait Helpers ──────────────────────────────────────────────────────────────
+
+# Wait for a TCP port to accept connections.
+# Usage: wait_for_port mockd 50051       (default 30 retries × 0.5s = 15s)
+#        wait_for_port mockd 1883 20     (20 retries × 0.5s = 10s)
+wait_for_port() {
+  local host="$1" port="$2" retries="${3:-30}"
+  for ((i=0; i<retries; i++)); do
+    if timeout 1 bash -c "echo >/dev/tcp/${host}/${port}" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "wait_for_port: ${host}:${port} not reachable after ${retries} retries" >&2
+  return 1
+}
+
+# Wait for a TCP port to stop accepting connections (after deletion/disable).
+# Usage: wait_for_port_down mockd 50051
+wait_for_port_down() {
+  local host="$1" port="$2" retries="${3:-20}"
+  for ((i=0; i<retries; i++)); do
+    if ! timeout 1 bash -c "echo >/dev/tcp/${host}/${port}" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "wait_for_port_down: ${host}:${port} still reachable after ${retries} retries" >&2
+  return 1
 }

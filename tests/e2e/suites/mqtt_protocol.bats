@@ -31,17 +31,21 @@ setup_file() {
       ]
     }
   }'
-  # Persist mock ID via temp file — bats runs tests in subshells so export won't work
-  echo "$(json_field '.id')" > "$BATS_FILE_TMPDIR/mqtt_mock_id"
+  # Persist mock ID via bats temp dir — tests run in subshells so export won't work
+  json_field '.id' > "$BATS_FILE_TMPDIR/mqtt_mock_id"
 
-  # Wait for broker to start
-  sleep 2
+  # Wait for MQTT broker to accept connections
+  wait_for_port mockd "$MQTT_PORT"
 }
 
 teardown_file() {
   load '../lib/helpers'
   api DELETE /mocks
-  rm -f /tmp/mqtt_echo.txt /tmp/mqtt_sub_temp.txt /tmp/mqtt_sub_humid.txt
+}
+
+teardown() {
+  # Kill any lingering mosquitto_sub background processes from failed tests
+  pkill -f "mosquitto_sub.*mockd" 2>/dev/null || true
 }
 
 setup() {
@@ -59,15 +63,13 @@ mqtt_mock_id() {
 }
 
 @test "MQTT-002: Broker accepts publish connection" {
-  local pub_out
-  pub_out=$(mosquitto_pub -h mockd -p "$MQTT_PORT" -t "test/ping" -m "hello" 2>&1) || true
-  local pub_exit=$?
-  [[ $pub_exit -eq 0 ]] || ! echo "$pub_out" | grep -q "Error"
+  run mosquitto_pub -h mockd -p "$MQTT_PORT" -t "test/ping" -m "hello"
+  [[ "$status" -eq 0 ]]
 }
 
 @test "MQTT-003: Subscribe receives temp message" {
   # Start subscriber in background first, then publish to trigger delivery
-  timeout 8 mosquitto_sub -h mockd -p "$MQTT_PORT" -t "sensors/temp" -C 1 > /tmp/mqtt_sub_temp.txt 2>&1 &
+  timeout 8 mosquitto_sub -h mockd -p "$MQTT_PORT" -t "sensors/temp" -C 1 > "$BATS_TEST_TMPDIR/mqtt_sub_temp.txt" 2>&1 &
   local sub_pid=$!
   sleep 1
 
@@ -76,12 +78,12 @@ mqtt_mock_id() {
 
   wait $sub_pid 2>/dev/null || true
   local sub_out
-  sub_out=$(cat /tmp/mqtt_sub_temp.txt 2>/dev/null) || sub_out=""
+  sub_out=$(cat "$BATS_TEST_TMPDIR/mqtt_sub_temp.txt" 2>/dev/null) || sub_out=""
   echo "$sub_out" | grep -q "temp"
 }
 
 @test "MQTT-004: Publish to custom topic received by subscriber" {
-  timeout 8 mosquitto_sub -h mockd -p "$MQTT_PORT" -t "test/echo" -C 1 > /tmp/mqtt_echo.txt 2>&1 &
+  timeout 8 mosquitto_sub -h mockd -p "$MQTT_PORT" -t "test/echo" -C 1 > "$BATS_TEST_TMPDIR/mqtt_echo.txt" 2>&1 &
   local sub_pid=$!
   sleep 1
 
@@ -89,7 +91,7 @@ mqtt_mock_id() {
 
   wait $sub_pid 2>/dev/null || true
   local echo_out
-  echo_out=$(cat /tmp/mqtt_echo.txt 2>/dev/null) || echo_out=""
+  echo_out=$(cat "$BATS_TEST_TMPDIR/mqtt_echo.txt" 2>/dev/null) || echo_out=""
   echo "$echo_out" | grep -q "hello from e2e"
 }
 
@@ -105,7 +107,7 @@ mqtt_mock_id() {
 
 @test "MQTT-007: Second topic (humidity) receives messages" {
   # Start subscriber in background first, then publish to trigger delivery
-  timeout 8 mosquitto_sub -h mockd -p "$MQTT_PORT" -t "sensors/humidity" -C 1 > /tmp/mqtt_sub_humid.txt 2>&1 &
+  timeout 8 mosquitto_sub -h mockd -p "$MQTT_PORT" -t "sensors/humidity" -C 1 > "$BATS_TEST_TMPDIR/mqtt_sub_humid.txt" 2>&1 &
   local sub_pid=$!
   sleep 1
 
@@ -114,14 +116,14 @@ mqtt_mock_id() {
 
   wait $sub_pid 2>/dev/null || true
   local sub_out
-  sub_out=$(cat /tmp/mqtt_sub_humid.txt 2>/dev/null) || sub_out=""
+  sub_out=$(cat "$BATS_TEST_TMPDIR/mqtt_sub_humid.txt" 2>/dev/null) || sub_out=""
   echo "$sub_out" | grep -q "humidity"
 }
 
 @test "MQTT-008: Delete MQTT mock returns 204" {
   api DELETE "/mocks/$(mqtt_mock_id)"
   [[ "$STATUS" == "204" ]]
-  sleep 2
+  wait_for_port_down mockd "$MQTT_PORT"
 }
 
 @test "MQTT-009: Broker stopped after mock deletion" {

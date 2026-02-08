@@ -7,17 +7,17 @@ setup() {
   load '../lib/helpers'
 }
 
-@test "WS-001: GET /workspaces returns 200" {
+@test "WKSP-001: GET /workspaces returns 200" {
   api GET /workspaces
   [[ "$STATUS" == "200" ]]
 }
 
-@test "WS-002: POST /workspaces creates workspace" {
+@test "WKSP-002: POST /workspaces creates workspace" {
   api POST /workspaces -d '{"name": "test-ws", "description": "Test workspace"}'
   [[ "$STATUS" == "201" ]]
 }
 
-@test "WS-003: GET /workspaces/{id} returns workspace with correct name" {
+@test "WKSP-003: GET /workspaces/{id} returns workspace with correct name" {
   api POST /workspaces -d '{"name": "get-ws-test", "description": "For get test"}'
   local ws_id
   ws_id=$(json_field '.id')
@@ -29,7 +29,7 @@ setup() {
   api DELETE "/workspaces/${ws_id}"
 }
 
-@test "WS-004: PUT /workspaces/{id} updates workspace" {
+@test "WKSP-004: PUT /workspaces/{id} updates workspace" {
   api POST /workspaces -d '{"name": "update-ws-test", "description": "For update test"}'
   local ws_id
   ws_id=$(json_field '.id')
@@ -40,7 +40,7 @@ setup() {
   api DELETE "/workspaces/${ws_id}"
 }
 
-@test "WS-005: DELETE /workspaces/{id} removes workspace" {
+@test "WKSP-005: DELETE /workspaces/{id} removes workspace" {
   api POST /workspaces -d '{"name": "delete-ws-test", "description": "For delete test"}'
   local ws_id
   ws_id=$(json_field '.id')
@@ -49,7 +49,7 @@ setup() {
   [[ "$STATUS" == "204" ]]
 }
 
-@test "WS-006: DELETE nonexistent workspace → 404" {
+@test "WKSP-006: DELETE nonexistent workspace → 404" {
   api DELETE "/workspaces/nonexistent-ws-id"
   [[ "$STATUS" == "404" ]]
 }

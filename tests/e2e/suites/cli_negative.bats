@@ -7,10 +7,14 @@ setup() {
   load '../lib/helpers'
 }
 
-@test "CLI-NEG-001: mockd add without --path fails or handles gracefully" {
+@test "CLI-NEG-001: mockd add without --path fails or auto-generates path" {
   run mockd add --body '{"no":"path"}' --admin-url "$ADMIN"
-  # Some implementations may succeed with generated path — accept either
-  true
+  # CLI either fails (no path) or succeeds with an auto-generated path — both are acceptable
+  [[ "$status" -eq 0 || "$status" -ne 0 ]]
+  # But if it succeeded, output should mention "Created" or contain a path
+  if [[ "$status" -eq 0 ]]; then
+    [[ "$output" == *"Created"* || "$output" == *"created"* || "$output" == *"/"* ]]
+  fi
 }
 
 @test "CLI-NEG-002: mockd get nonexistent mock fails" {

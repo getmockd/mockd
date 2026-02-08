@@ -1,0 +1,14 @@
+# Docker build context exclusions — reduces build context for E2E Docker images.
+# Paths are relative to the repo root (the build context for docker-compose).
+.git
+.github
+docs
+benchmarks
+charts
+observability
+coverage.*
+coverage.html
+bin/
+*.md
+!go.mod
+!go.sum
