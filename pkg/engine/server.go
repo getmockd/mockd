@@ -19,6 +19,7 @@ import (
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/mqtt"
 	"github.com/getmockd/mockd/pkg/protocol"
+	"github.com/getmockd/mockd/pkg/ratelimit"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
 	"github.com/getmockd/mockd/pkg/store"
@@ -87,7 +88,7 @@ type Server struct {
 	tracer *tracing.Tracer
 
 	// Rate limiter for the mock engine (optional)
-	rateLimiter *EngineRateLimiter
+	rateLimiter *ratelimit.PerIPLimiter
 }
 
 // ServerOption is a functional option for configuring a Server.
@@ -276,8 +277,12 @@ func (s *Server) Start() error {
 
 	// Apply rate limiting middleware if enabled
 	if s.cfg.RateLimit != nil && s.cfg.RateLimit.Enabled {
-		s.rateLimiter = NewEngineRateLimiter(s.cfg.RateLimit)
-		s.httpHandler = NewRateLimitMiddleware(s.httpHandler, s.rateLimiter)
+		s.rateLimiter = ratelimit.NewPerIPLimiter(ratelimit.PerIPConfig{
+			Rate:           s.cfg.RateLimit.RequestsPerSecond,
+			Burst:          s.cfg.RateLimit.BurstSize,
+			TrustedProxies: s.cfg.RateLimit.TrustedProxies,
+		})
+		s.httpHandler = ratelimit.Middleware(s.rateLimiter)(s.httpHandler)
 		s.log.Info("rate limiting enabled", "rps", s.cfg.RateLimit.RequestsPerSecond, "burst", s.cfg.RateLimit.BurstSize)
 	}
 

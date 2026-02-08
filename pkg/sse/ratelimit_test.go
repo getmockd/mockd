@@ -19,8 +19,9 @@ func TestRateLimiter_New(t *testing.T) {
 		return
 	}
 
-	if limiter.maxTokens != 5 {
-		t.Errorf("expected maxTokens 5, got %f", limiter.maxTokens)
+	stats := limiter.Stats()
+	if stats.MaxTokens != 5 {
+		t.Errorf("expected maxTokens 5, got %f", stats.MaxTokens)
 	}
 }
 
@@ -38,8 +39,9 @@ func TestRateLimiter_DefaultBurstSize(t *testing.T) {
 	}
 
 	limiter := NewRateLimiter(config)
-	if limiter.maxTokens != 10 {
-		t.Errorf("expected maxTokens 10 (default from rate), got %f", limiter.maxTokens)
+	stats := limiter.Stats()
+	if stats.MaxTokens != 10 {
+		t.Errorf("expected maxTokens 10 (default from rate), got %f", stats.MaxTokens)
 	}
 }
 

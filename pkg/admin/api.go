@@ -14,6 +14,7 @@ import (
 	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/metrics"
+	"github.com/getmockd/mockd/pkg/ratelimit"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/store/file"
 	"github.com/getmockd/mockd/pkg/tracing"
@@ -22,6 +23,12 @@ import (
 // EngineHeartbeatTimeout is the duration after which an engine is marked offline
 // if no heartbeat is received.
 const EngineHeartbeatTimeout = 30 * time.Second
+
+// DefaultRateLimit is the default requests per second limit for the admin API.
+const DefaultRateLimit float64 = 100
+
+// DefaultBurstSize is the default burst size for the admin API.
+const DefaultBurstSize int = 200
 
 // AdminAPI exposes a REST API for managing mock configurations.
 type AdminAPI struct {
@@ -57,7 +64,7 @@ type AdminAPI struct {
 	apiKeyConfig APIKeyConfig
 
 	// Rate limiter for API protection
-	rateLimiter *RateLimiter
+	rateLimiter *ratelimit.PerIPLimiter
 
 	// CORS configuration
 	corsConfig CORSConfig
@@ -145,7 +152,10 @@ func NewAdminAPI(port int, opts ...Option) *AdminAPI {
 
 	// Initialize rate limiter with defaults if not provided via options
 	if api.rateLimiter == nil {
-		api.rateLimiter = NewRateLimiter(DefaultRateLimit, DefaultBurstSize)
+		api.rateLimiter = ratelimit.NewPerIPLimiter(ratelimit.PerIPConfig{
+			Rate:  DefaultRateLimit,
+			Burst: DefaultBurstSize,
+		})
 	}
 
 	// Initialize CORS config with defaults if not provided via options
@@ -240,7 +250,7 @@ func (a *AdminAPI) HasLocalEngine() bool {
 // Middleware order (outermost to innermost): Tracing -> Security Headers -> CORS -> API Key Auth -> Rate Limiting -> Handler
 func (a *AdminAPI) withMiddleware(handler http.Handler) http.Handler {
 	// Apply rate limiting first (innermost middleware)
-	rateLimited := a.rateLimiter.Middleware(handler)
+	rateLimited := ratelimit.Middleware(a.rateLimiter, ratelimit.WithTextResponse())(handler)
 
 	// API key authentication wraps rate limiting
 	authenticated := rateLimited

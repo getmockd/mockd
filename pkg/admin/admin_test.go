@@ -14,6 +14,7 @@ import (
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/getmockd/mockd/pkg/ratelimit"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -825,14 +826,14 @@ func TestCORSMiddleware_DisallowedOrigin(t *testing.T) {
 // ============================================================================
 
 func TestRateLimiter_AllowsBurstRequests(t *testing.T) {
-	rl := NewRateLimiter(100, 10) // 100 req/s, burst of 10
+	rl := ratelimit.NewPerIPLimiter(ratelimit.PerIPConfig{Rate: 100, Burst: 10})
 	defer rl.Stop()
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	wrapped := rl.Middleware(handler)
+	wrapped := ratelimit.Middleware(rl, ratelimit.WithTextResponse())(handler)
 
 	// Burst of 10 requests should all succeed
 	for i := 0; i < 10; i++ {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/ratelimit"
 	"github.com/getmockd/mockd/pkg/tracing"
 )
 
@@ -47,7 +48,7 @@ func WithEngineTokenExpiration(d time.Duration) Option {
 
 // WithRateLimiter configures a custom rate limiter for the admin API.
 // If not set, a default rate limiter (100 req/s, burst 200) is used.
-func WithRateLimiter(rl *RateLimiter) Option {
+func WithRateLimiter(rl *ratelimit.PerIPLimiter) Option {
 	return func(a *AdminAPI) {
 		a.rateLimiter = rl
 	}
