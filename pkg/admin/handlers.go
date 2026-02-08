@@ -13,6 +13,7 @@ import (
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	types "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/httputil"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/store"
 	"gopkg.in/yaml.v3"
@@ -26,18 +27,14 @@ type (
 	MockListResponse = types.MockListResponse
 )
 
-// writeJSON writes a JSON response.
+// writeJSON writes a JSON response using the shared httputil package.
 func writeJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if data != nil {
-		_ = json.NewEncoder(w).Encode(data)
-	}
+	httputil.WriteJSON(w, status, data)
 }
 
 // writeError writes an error response.
 func writeError(w http.ResponseWriter, status int, errCode, message string) {
-	writeJSON(w, status, ErrorResponse{
+	httputil.WriteJSON(w, status, ErrorResponse{
 		Error:   errCode,
 		Message: message,
 	})

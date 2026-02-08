@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/httputil"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -585,14 +586,14 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 
 // Helpers
 
+// writeJSON writes a JSON response using the shared httputil package.
+// This ensures Content-Type is always set correctly.
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	httputil.WriteJSON(w, status, v)
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(ErrorResponse{
+	httputil.WriteJSON(w, status, ErrorResponse{
 		Error:   code,
 		Message: message,
 	})

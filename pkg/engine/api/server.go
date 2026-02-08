@@ -187,9 +187,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /export", s.handleExportMocks)
 }
 
+// withMiddleware wraps the handler with any necessary middleware.
+// Note: Content-Type is now set per-response by httputil.WriteJSON,
+// so this middleware only serves as an extension point.
 func (s *Server) withMiddleware(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		handler.ServeHTTP(w, r)
-	})
+	return handler
 }
