@@ -41,7 +41,7 @@ setup_file() {
     "name": "Unicode",
     "http": {
       "matcher": {"method": "GET", "path": "/api/emoji"},
-      "response": {"statusCode": 200, "body": "{\"emoji\": \"\xf0\x9f\x8e\x89\"}"}
+      "response": {"statusCode": 200, "body": "{\"emoji\": \"🎉\"}"}
     }
   }'
 }

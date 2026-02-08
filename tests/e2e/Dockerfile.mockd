@@ -20,6 +20,7 @@ RUN CGO_ENABLED=0 go build \
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates curl
 COPY --from=builder /build/mockd /usr/local/bin/mockd
+COPY tests/fixtures/grpc/test.proto /fixtures/test.proto
 EXPOSE 4280 4290
 ENTRYPOINT ["/usr/local/bin/mockd"]
 CMD ["serve"]

@@ -3,8 +3,10 @@
 # gRPC Protocol — mock creation, reflection, unary RPC, streaming, lifecycle
 # ============================================================================
 # Uses grpcurl to test actual gRPC protocol behavior against mockd.
+# Proto file: /fixtures/test.proto (copied into both mockd and runner containers)
 
 GRPC_PORT=50051
+GRPC_STATE_FILE="/tmp/grpc_mock_id.txt"
 
 setup_file() {
   load '../lib/helpers'
@@ -15,7 +17,7 @@ setup_file() {
     "name": "e2e-grpc-test",
     "grpc": {
       "port": '"$GRPC_PORT"',
-      "proto": "syntax = \"proto3\";\npackage test;\nservice UserService {\n  rpc GetUser(GetUserRequest) returns (User);\n  rpc ListUsers(ListUsersRequest) returns (stream User);\n}\nmessage GetUserRequest { string id = 1; }\nmessage User { string id = 1; string name = 2; string email = 3; }\nmessage ListUsersRequest { int32 page_size = 1; }",
+      "protoFile": "/fixtures/test.proto",
       "reflection": true,
       "services": {
         "test.UserService": {
@@ -34,56 +36,60 @@ setup_file() {
       }
     }
   }'
-  export GRPC_MOCK_ID=$(json_field '.id')
+  # Persist mock ID via temp file — bats runs tests in subshells so export won't work
+  json_field '.id' > "$GRPC_STATE_FILE"
 
   # Wait for gRPC server to spin up
-  sleep 1
+  sleep 3
 }
 
 teardown_file() {
   load '../lib/helpers'
   api DELETE /mocks
+  rm -f "$GRPC_STATE_FILE"
 }
 
 setup() {
   load '../lib/helpers'
 }
 
+# Helper to read the mock ID written by setup_file
+grpc_mock_id() {
+  cat "$GRPC_STATE_FILE"
+}
+
 @test "GRPC-001: Create gRPC mock returns 201" {
-  # Verified in setup_file — just confirm the mock exists
-  api GET "/mocks/${GRPC_MOCK_ID}"
+  local mid
+  mid=$(grpc_mock_id)
+  [[ -n "$mid" ]]
+  api GET "/mocks/${mid}"
   [[ "$STATUS" == "200" ]]
 }
 
 @test "GRPC-002: Reflection lists UserService" {
-  local refl_out
-  refl_out=$(grpcurl -plaintext "mockd:${GRPC_PORT}" list 2>&1) || true
-  echo "$refl_out" | grep -q "test.UserService"
+  run grpcurl -plaintext "mockd:${GRPC_PORT}" list
+  [[ "$output" == *"test.UserService"* ]]
 }
 
 @test "GRPC-003: Describe lists GetUser method" {
-  local methods_out
-  methods_out=$(grpcurl -plaintext "mockd:${GRPC_PORT}" describe test.UserService 2>&1) || true
-  echo "$methods_out" | grep -q "GetUser"
+  run grpcurl -plaintext "mockd:${GRPC_PORT}" describe test.UserService
+  [[ "$output" == *"GetUser"* ]]
 }
 
 @test "GRPC-004: Unary GetUser returns Alice" {
-  local unary_out
-  unary_out=$(grpcurl -plaintext -d '{"id": "1"}' "mockd:${GRPC_PORT}" test.UserService/GetUser 2>&1) || true
-  echo "$unary_out" | grep -q "Alice"
+  run grpcurl -plaintext -d '{"id": "1"}' "mockd:${GRPC_PORT}" test.UserService/GetUser
+  [[ "$output" == *"Alice"* ]]
 }
 
 @test "GRPC-005: Response includes email field" {
-  local unary_out
-  unary_out=$(grpcurl -plaintext -d '{"id": "1"}' "mockd:${GRPC_PORT}" test.UserService/GetUser 2>&1) || true
-  echo "$unary_out" | jq -e '.email' >/dev/null 2>&1
+  run grpcurl -plaintext -d '{"id": "1"}' "mockd:${GRPC_PORT}" test.UserService/GetUser
+  echo "$output" | jq -e '.email' >/dev/null 2>&1
 }
 
 @test "GRPC-006: Server streaming returns 2+ users" {
-  local stream_out
-  stream_out=$(grpcurl -plaintext -d '{"page_size": 10}' "mockd:${GRPC_PORT}" test.UserService/ListUsers 2>&1) || true
+  run grpcurl -plaintext -d '{"page_size": 10}' "mockd:${GRPC_PORT}" test.UserService/ListUsers
   local stream_count
-  stream_count=$(echo "$stream_out" | grep -c '"name"' || true)
+  stream_count=$(echo "$output" | grep -c '"name"' || true)
   [[ "$stream_count" -ge 2 ]]
 }
 
@@ -93,15 +99,16 @@ setup() {
 }
 
 @test "GRPC-008: Delete gRPC mock returns 204" {
-  api DELETE "/mocks/${GRPC_MOCK_ID}"
+  local mid
+  mid=$(grpc_mock_id)
+  api DELETE "/mocks/${mid}"
   [[ "$STATUS" == "204" ]]
-  sleep 1
+  sleep 2
 }
 
 @test "GRPC-009: gRPC server stopped after mock deletion" {
-  local post_delete_out
-  post_delete_out=$(grpcurl -plaintext "mockd:${GRPC_PORT}" list 2>&1) || true
-  echo "$post_delete_out" | grep -qi "connect\|refused\|unavailable\|error"
+  run grpcurl -plaintext "mockd:${GRPC_PORT}" list
+  [[ "$output" == *"connect"* || "$output" == *"refused"* || "$output" == *"unavailable"* || "$output" == *"error"* || "$output" == *"Error"* || "$status" -ne 0 ]]
 }
 
 @test "GRPC-010: Toggle gRPC mock to disabled" {
@@ -111,7 +118,7 @@ setup() {
     "name": "e2e-grpc-disable-test",
     "grpc": {
       "port": '"$GRPC_PORT"',
-      "proto": "syntax = \"proto3\";\npackage test;\nservice HealthService {\n  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);\n}\nmessage HealthCheckRequest { string service = 1; }\nmessage HealthCheckResponse { string status = 1; }",
+      "protoFile": "/fixtures/test.proto",
       "reflection": true,
       "services": {
         "test.HealthService": {
@@ -126,15 +133,14 @@ setup() {
   }'
   local disable_id
   disable_id=$(json_field '.id')
-  sleep 1
+  sleep 2
 
   api POST "/mocks/${disable_id}/toggle" -d '{"enabled": false}'
   [[ "$STATUS" == "200" ]]
-  sleep 1
+  sleep 2
 }
 
 @test "GRPC-011: Disabled gRPC mock does not respond" {
-  local disabled_out
-  disabled_out=$(grpcurl -plaintext "mockd:${GRPC_PORT}" test.HealthService/Check 2>&1) || true
-  echo "$disabled_out" | grep -qi "connect\|refused\|unavailable\|error\|unimplemented"
+  run grpcurl -plaintext "mockd:${GRPC_PORT}" test.HealthService/Check
+  [[ "$output" == *"connect"* || "$output" == *"refused"* || "$output" == *"unavailable"* || "$output" == *"error"* || "$output" == *"Error"* || "$output" == *"unimplemented"* || "$status" -ne 0 ]]
 }
