@@ -60,11 +60,7 @@ linters:
           - ineffassign
           - unparam
           - prealloc
-      # Examples and benchmarks
-      - path: "^examples/"
-        linters:
-          - errcheck
-          - ineffassign
+      # Benchmarks
       - path: "^benchmarks/"
         linters:
           - errcheck

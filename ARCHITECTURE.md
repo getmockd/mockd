@@ -422,6 +422,5 @@ Test data in `tests/fixtures/`:
 ## Further Reading
 
 - `docs/` - User documentation (mkdocs)
-- `examples/` - Example configurations
 - `CONTRIBUTING.md` - Contribution guidelines
 - `ROADMAP.md` - Project roadmap

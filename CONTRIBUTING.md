@@ -70,10 +70,9 @@ mockd/
 │   ├── config/    # Configuration types and file I/O
 │   ├── engine/    # Core mock server engine
 │   └── tls/       # TLS certificate generation
-├── tests/
-│   ├── integration/   # Integration tests
-│   └── performance/   # Benchmark tests
-└── examples/      # Example programs
+└── tests/
+    ├── integration/   # Integration tests
+    └── performance/   # Benchmark tests
 ```
 
 ## Making Changes

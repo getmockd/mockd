@@ -278,8 +278,7 @@ docs/
 ├── index.md              # Homepage
 ├── getting-started/      # Installation, quickstart, concepts
 ├── guides/               # Feature guides
-├── reference/            # CLI, config, API reference
-└── examples/             # Usage examples
+└── reference/            # CLI, config, API reference
 ```
 
 ### Adding New Pages
