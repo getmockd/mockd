@@ -738,7 +738,7 @@ func TestChunkedConfig_Validate_MutualExclusivity(t *testing.T) {
 		{
 			name: "only dataFile - ok",
 			config: ChunkedConfig{
-				DataFile: "/path/to/file",
+				DataFile: "data/test.json",
 			},
 			wantErr: false,
 		},

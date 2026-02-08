@@ -124,7 +124,7 @@ All mock types share a common structure (`pkg/mock/types.go`):
 ```go
 type Mock struct {
     ID          string    `json:"id"`
-    Type        MockType  `json:"type"`        // http, websocket, grpc, mqtt, etc.
+    Type        Type      `json:"type"`        // http, websocket, grpc, mqtt, etc.
     Name        string    `json:"name"`
     Enabled     bool      `json:"enabled"`
     WorkspaceID string    `json:"workspaceId"`
@@ -221,9 +221,9 @@ Storage backends:
    }
    ```
 
-2. **Add to MockType constants**:
+2. **Add to Type constants**:
    ```go
-   MockTypeMyProtocol MockType = "myprotocol"
+   TypeMyProtocol Type = "myprotocol"
    ```
 
 3. **Create handler package** at `pkg/myprotocol/`:
