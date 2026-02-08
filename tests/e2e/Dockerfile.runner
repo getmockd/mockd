@@ -1,7 +1,14 @@
-# Test runner image: Alpine with curl, jq, bash, AND the mockd CLI binary
-# for running CLI-based E2E tests against a remote mockd server.
+# Test runner image: Alpine with bats-core, protocol clients, and mockd CLI.
 #
-# Uses a multi-stage build: first builds mockd, then copies it into the runner.
+# Uses bats-core as the test framework for E2E tests against a remote
+# mockd server. Multi-stage build: first builds mockd, then copies it
+# into the runner alongside bats and protocol clients.
+#
+# Usage:
+#   bats /e2e/suites/                          # run all suites
+#   bats /e2e/suites/grpc_protocol.bats        # run one suite
+#   bats /e2e/suites/ --filter "GRPC"          # filter by name
+#   bats /e2e/suites/ --formatter junit        # JUnit XML output
 
 # Stage 1: Build mockd (same as Dockerfile.mockd)
 FROM golang:1.25.7-alpine AS builder
@@ -19,7 +26,7 @@ RUN CGO_ENABLED=0 go build \
     -o mockd \
     ./cmd/mockd
 
-# Stage 2: Test runner with mockd binary + protocol clients
+# Stage 2: Test runner with bats + mockd binary + protocol clients
 FROM alpine:3.20
 
 RUN apk add --no-cache \
@@ -27,8 +34,14 @@ RUN apk add --no-cache \
     curl \
     jq \
     coreutils \
+    git \
     mosquitto-clients \
     websocat
+
+# Install bats-core from source (no npm dependency)
+RUN git clone --depth 1 --branch v1.11.1 https://github.com/bats-core/bats-core.git /tmp/bats-core && \
+    /tmp/bats-core/install.sh /usr/local && \
+    rm -rf /tmp/bats-core
 
 # Install grpcurl (not in Alpine repos)
 RUN curl -sSL https://github.com/fullstorydev/grpcurl/releases/download/v1.9.3/grpcurl_1.9.3_linux_x86_64.tar.gz \
@@ -40,7 +53,8 @@ COPY --from=builder /build/mockd /usr/local/bin/mockd
 # Copy test fixtures needed by protocol tests
 COPY tests/fixtures/grpc/test.proto /fixtures/test.proto
 
-COPY tests/e2e/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Copy bats test suites and helpers
+COPY tests/e2e/lib/ /e2e/lib/
+COPY tests/e2e/suites/ /e2e/suites/
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["bats", "--formatter", "tap", "/e2e/suites/"]

@@ -2,10 +2,18 @@
 #
 # Architecture:
 #   mockd:        Admin API (:4290) + Mock Engine (:4280) — the system under test
-#   test-runner:  Alpine + curl + jq + mockd CLI — runs test scripts against mockd
+#   test-runner:  Alpine + bats-core + protocol clients + mockd CLI — runs bats suites
 #
 # Usage:
 #   docker compose -f tests/e2e/docker-compose.yml up --build --abort-on-container-exit
+#
+# Run specific suites:
+#   docker compose -f tests/e2e/docker-compose.yml run test-runner \
+#     bats /e2e/suites/grpc_protocol.bats /e2e/suites/mqtt_protocol.bats
+#
+# Filter by test name:
+#   docker compose -f tests/e2e/docker-compose.yml run test-runner \
+#     bats --filter "GRPC" /e2e/suites/
 #
 # The test-runner exits 0 on success, non-zero on failure.
 # --abort-on-container-exit ensures compose stops when tests finish.
@@ -51,8 +59,6 @@ services:
     environment:
       MOCKD_ADMIN_URL: http://mockd:4290
       MOCKD_ENGINE_URL: http://mockd:4280
-      # Control which test suites to run (comma-separated, or "all")
-      TEST_SUITES: ${TEST_SUITES:-all}
     networks:
       - test-net
 

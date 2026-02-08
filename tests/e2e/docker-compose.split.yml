@@ -7,14 +7,14 @@
 #   admin:       Admin API (:4290) — control plane, no engine
 #   engine:      Mock Server (:4280) + Engine Control API (:4281) — data plane, no admin
 #                Registers with the remote admin via POST /engines/register
-#   test-runner: Alpine + curl + jq + mockd CLI — runs test scripts
+#   test-runner: Alpine + bats-core + protocol clients + mockd CLI — runs bats suites
 #                Talks to admin (:4290) for management and engine (:4280) for mock traffic
 #
 # Usage:
 #   docker compose -f tests/e2e/docker-compose.split.yml down -v && \
 #   docker compose -f tests/e2e/docker-compose.split.yml up --build --abort-on-container-exit
 #
-# This runs the SAME 337 tests as the co-located docker-compose.yml
+# This runs the SAME bats test suites as the co-located docker-compose.yml
 # but over a true 3-container split with HTTP between every layer.
 
 services:
@@ -85,7 +85,7 @@ services:
           memory: 512M
 
   # ── Test Runner ──────────────────────────────────────────────────────────────
-  # Runs the same entrypoint.sh test suites as the co-located setup.
+  # Runs the same bats test suites as the co-located setup.
   # MOCKD_ADMIN_URL points to the admin container (control plane).
   # MOCKD_ENGINE_URL points to the engine container (data plane).
   # This proves the 3-layer HTTP separation:
@@ -103,8 +103,6 @@ services:
     environment:
       MOCKD_ADMIN_URL: http://admin:4290
       MOCKD_ENGINE_URL: http://engine:4280
-      # Control which test suites to run (comma-separated, or "all")
-      TEST_SUITES: ${TEST_SUITES:-all}
     networks:
       - split-net
 
