@@ -2,6 +2,7 @@ package mqtt
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"strings"
 	"time"
 
@@ -53,7 +54,9 @@ func (h *AuthHook) OnConnectAuthenticate(cl *mqtt.Client, pk packets.Packet) boo
 	password := string(pk.Connect.Password)
 
 	for _, user := range h.config.Users {
-		if user.Username == username && user.Password == password {
+		usernameMatch := subtle.ConstantTimeCompare([]byte(user.Username), []byte(username)) == 1
+		passwordMatch := subtle.ConstantTimeCompare([]byte(user.Password), []byte(password)) == 1
+		if usernameMatch && passwordMatch {
 			return true
 		}
 	}

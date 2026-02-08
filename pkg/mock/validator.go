@@ -601,8 +601,14 @@ func (m *Mock) validateMQTT() error {
 		if m.MQTT.TLS.CertFile == "" {
 			return &ValidationError{Field: "mqtt.tls.certFile", Message: "certFile is required when TLS is enabled"}
 		}
+		if _, ok := util.SafeFilePathAllowAbsolute(m.MQTT.TLS.CertFile); !ok {
+			return &ValidationError{Field: "mqtt.tls.certFile", Message: "path cannot contain '..'"}
+		}
 		if m.MQTT.TLS.KeyFile == "" {
 			return &ValidationError{Field: "mqtt.tls.keyFile", Message: "keyFile is required when TLS is enabled"}
+		}
+		if _, ok := util.SafeFilePathAllowAbsolute(m.MQTT.TLS.KeyFile); !ok {
+			return &ValidationError{Field: "mqtt.tls.keyFile", Message: "path cannot contain '..'"}
 		}
 	}
 
