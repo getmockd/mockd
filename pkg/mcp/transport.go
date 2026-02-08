@@ -3,11 +3,10 @@ package mcp
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"github.com/getmockd/mockd/pkg/util"
 )
 
 // HTTP headers used by MCP protocol.
@@ -72,7 +71,7 @@ func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 		// Auto-generate ID
 		id := s.eventID.Add(1)
 		sb.WriteString("id: ")
-		sb.WriteString(util.FormatInt64(id))
+		sb.WriteString(strconv.FormatInt(id, 10))
 		sb.WriteByte('\n')
 	}
 
@@ -86,7 +85,7 @@ func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 	// Retry hint
 	if event.Retry > 0 {
 		sb.WriteString("retry: ")
-		sb.WriteString(util.FormatInt64(int64(event.Retry)))
+		sb.WriteString(strconv.FormatInt(int64(event.Retry), 10))
 		sb.WriteByte('\n')
 	}
 

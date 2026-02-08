@@ -9,8 +9,6 @@ import (
 	"maps"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +24,7 @@ import (
 	"github.com/getmockd/mockd/pkg/sse"
 	"github.com/getmockd/mockd/pkg/stateful"
 	"github.com/getmockd/mockd/pkg/template"
+	"github.com/getmockd/mockd/pkg/util"
 	"github.com/getmockd/mockd/pkg/validation"
 	"github.com/getmockd/mockd/pkg/websocket"
 )
@@ -351,10 +350,10 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 	// Determine body content - check inline body first, then file
 	body := resp.Body
 	if body == "" && resp.BodyFile != "" {
-		// Prevent path traversal attacks
-		cleanPath := filepath.Clean(resp.BodyFile)
-		if strings.Contains(cleanPath, "..") {
-			h.log.Error("path traversal detected in bodyFile", "file", resp.BodyFile)
+		// Prevent path traversal and absolute path attacks
+		cleanPath, safe := util.SafeFilePath(resp.BodyFile)
+		if !safe {
+			h.log.Error("unsafe path in bodyFile (traversal or absolute)", "file", resp.BodyFile)
 		} else {
 			data, err := os.ReadFile(cleanPath)
 			if err != nil {

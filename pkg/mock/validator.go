@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/getmockd/mockd/pkg/util"
 	"github.com/ohler55/ojg/jp"
 )
 
@@ -316,6 +317,16 @@ func (r *HTTPResponse) Validate() error {
 		}
 	}
 
+	// Validate bodyFile path safety (reject traversal and absolute paths)
+	if r.BodyFile != "" {
+		if _, safe := util.SafeFilePath(r.BodyFile); !safe {
+			return &ValidationError{
+				Field:   "response.bodyFile",
+				Message: "path must be relative and cannot contain '..'",
+			}
+		}
+	}
+
 	// DelayMs must be >= 0 and <= 30000
 	if r.DelayMs < 0 {
 		return &ValidationError{Field: "response.delayMs", Message: "delayMs must be >= 0"}
@@ -426,6 +437,16 @@ func (c *ChunkedConfig) Validate() error {
 		return &ValidationError{Field: "chunked", Message: "data, dataFile, and ndjsonItems are mutually exclusive"}
 	}
 
+	// Validate dataFile path safety (reject traversal and absolute paths)
+	if c.DataFile != "" {
+		if _, safe := util.SafeFilePath(c.DataFile); !safe {
+			return &ValidationError{
+				Field:   "chunked.dataFile",
+				Message: "path must be relative and cannot contain '..'",
+			}
+		}
+	}
+
 	// Validate chunk size
 	if c.ChunkSize < 0 {
 		return &ValidationError{Field: "chunked.chunkSize", Message: "must be >= 0"}
@@ -465,6 +486,13 @@ func (m *Mock) validateGraphQL() error {
 		return &ValidationError{Field: "graphql", Message: "cannot specify both schema and schemaFile"}
 	}
 
+	// Validate schemaFile path against traversal
+	if hasSchemaFile {
+		if _, safe := util.SafeFilePathAllowAbsolute(m.GraphQL.SchemaFile); !safe {
+			return &ValidationError{Field: "graphql.schemaFile", Message: "path cannot contain '..'"}
+		}
+	}
+
 	return nil
 }
 
@@ -490,6 +518,29 @@ func (m *Mock) validateGRPC() error {
 		return &ValidationError{Field: "grpc", Message: "cannot specify both protoFile and protoFiles"}
 	}
 
+	// Validate proto file paths against traversal
+	if m.GRPC.ProtoFile != "" {
+		if _, safe := util.SafeFilePathAllowAbsolute(m.GRPC.ProtoFile); !safe {
+			return &ValidationError{Field: "grpc.protoFile", Message: "path cannot contain '..'"}
+		}
+	}
+	for i, pf := range m.GRPC.ProtoFiles {
+		if _, safe := util.SafeFilePathAllowAbsolute(pf); !safe {
+			return &ValidationError{
+				Field:   fmt.Sprintf("grpc.protoFiles[%d]", i),
+				Message: "path cannot contain '..'",
+			}
+		}
+	}
+	for i, ip := range m.GRPC.ImportPaths {
+		if _, safe := util.SafeFilePathAllowAbsolute(ip); !safe {
+			return &ValidationError{
+				Field:   fmt.Sprintf("grpc.importPaths[%d]", i),
+				Message: "path cannot contain '..'",
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -513,6 +564,13 @@ func (m *Mock) validateSOAP() error {
 
 	if hasWSDL && hasWSDLFile {
 		return &ValidationError{Field: "soap", Message: "cannot specify both wsdl and wsdlFile"}
+	}
+
+	// Validate wsdlFile path against traversal
+	if hasWSDLFile {
+		if _, safe := util.SafeFilePathAllowAbsolute(m.SOAP.WSDLFile); !safe {
+			return &ValidationError{Field: "soap.wsdlFile", Message: "path cannot contain '..'"}
+		}
 	}
 
 	// Validate operations if present

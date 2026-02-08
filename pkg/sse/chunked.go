@@ -2,12 +2,14 @@ package sse
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/getmockd/mockd/pkg/util"
 )
 
 // ChunkedHandler handles HTTP chunked transfer encoding responses.
@@ -79,7 +81,11 @@ func (h *ChunkedHandler) getData(cfg *mock.ChunkedConfig) ([]byte, error) {
 
 	// Check for file data
 	if cfg.DataFile != "" {
-		return os.ReadFile(cfg.DataFile)
+		cleanPath, safe := util.SafeFilePath(cfg.DataFile)
+		if !safe {
+			return nil, fmt.Errorf("unsafe path in dataFile (traversal or absolute): %q", cfg.DataFile)
+		}
+		return os.ReadFile(cleanPath)
 	}
 
 	return nil, nil

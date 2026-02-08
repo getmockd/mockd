@@ -3,6 +3,7 @@ package sse
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -128,7 +129,7 @@ func (h *SSEHandler) logEvent(stream *SSEStream, path string, mockID string, eve
 
 // generateLogID generates a unique log entry ID.
 func generateLogID() string {
-	return "sse-log-" + util.FormatInt64(time.Now().UnixNano())
+	return "sse-log-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 }
 
 // formatEventData formats event data as a string for logging.
@@ -266,7 +267,7 @@ func (h *SSEHandler) generateStreamID() string {
 
 // formatStreamID formats a stream ID.
 func formatStreamID(id int64) string {
-	return "sse-" + util.FormatInt64(id)
+	return "sse-" + strconv.FormatInt(id, 10)
 }
 
 // configFromMock creates an internal SSEConfig from mock configuration.
@@ -557,7 +558,7 @@ func (h *SSEHandler) generateSequenceEvents(gen *EventGenerator) []SSEEventDef {
 		}
 		events = append(events, SSEEventDef{
 			Data: data,
-			ID:   util.FormatInt64(int64(value)),
+			ID:   strconv.FormatInt(int64(value), 10),
 		})
 	}
 
@@ -570,7 +571,7 @@ func formatSequenceValue(format string, value int) string {
 	result := format
 	for i := 0; i < len(result)-1; i++ {
 		if result[i] == '%' && result[i+1] == 'd' {
-			result = result[:i] + util.FormatInt(value) + result[i+2:]
+			result = result[:i] + strconv.Itoa(value) + result[i+2:]
 		}
 	}
 	return result
@@ -592,7 +593,7 @@ func (h *SSEHandler) generateRandomEvents(gen *EventGenerator) []SSEEventDef {
 		data := h.processRandomSchema(gen.Random.Schema)
 		events = append(events, SSEEventDef{
 			Data: data,
-			ID:   util.FormatInt64(int64(i + 1)),
+			ID:   strconv.FormatInt(int64(i+1), 10),
 		})
 	}
 
@@ -654,7 +655,7 @@ func (h *SSEHandler) generateTemplateEvents(gen *EventGenerator) []SSEEventDef {
 			event := SSEEventDef{
 				Type:    e.Type,
 				Data:    e.Data,
-				ID:      util.FormatInt64(eventID),
+				ID:      strconv.FormatInt(eventID, 10),
 				Retry:   e.Retry,
 				Comment: e.Comment,
 				Delay:   e.Delay,
@@ -701,7 +702,7 @@ func (h *SSEHandler) findResumePosition(stream *SSEStream, events []SSEEventDef)
 func (h *SSEHandler) sendEvent(stream *SSEStream, event *SSEEventDef, eventIndex int64) error {
 	// Assign ID if not set and resume is enabled
 	if event.ID == "" && stream.config.Resume.Enabled {
-		event.ID = util.FormatInt64(eventIndex + 1)
+		event.ID = strconv.FormatInt(eventIndex+1, 10)
 	}
 
 	// Format the event

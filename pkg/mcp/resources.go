@@ -2,13 +2,13 @@ package mcp
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/cli"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/stateful"
-	"github.com/getmockd/mockd/pkg/util"
 )
 
 // ResourceProvider provides MCP resources from the mock engine.
@@ -60,7 +60,7 @@ func (p *ResourceProvider) List() []ResourceDefinition {
 			uri := "mock://stateful/" + name
 			description := "Stateful resource: " + name
 			if info != nil {
-				description = "CRUD operations on " + name + " (" + util.FormatInt(info.ItemCount) + " items)"
+				description = "CRUD operations on " + name + " (" + strconv.Itoa(info.ItemCount) + " items)"
 			}
 
 			resources = append(resources, ResourceDefinition{
@@ -383,10 +383,10 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 			return "", "", ""
 		}
 		uri = "mock://grpc/" + m.ID
-		name = "gRPC :" + util.FormatInt(m.GRPC.Port)
+		name = "gRPC :" + strconv.Itoa(m.GRPC.Port)
 		desc = m.Name
 		if desc == "" {
-			desc = "gRPC mock on port " + util.FormatInt(m.GRPC.Port)
+			desc = "gRPC mock on port " + strconv.Itoa(m.GRPC.Port)
 		}
 	case mock.TypeSOAP:
 		if m.SOAP == nil {
@@ -403,10 +403,10 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 			return "", "", ""
 		}
 		uri = "mock://mqtt/" + m.ID
-		name = "MQTT :" + util.FormatInt(m.MQTT.Port)
+		name = "MQTT :" + strconv.Itoa(m.MQTT.Port)
 		desc = m.Name
 		if desc == "" {
-			desc = "MQTT broker on port " + util.FormatInt(m.MQTT.Port)
+			desc = "MQTT broker on port " + strconv.Itoa(m.MQTT.Port)
 		}
 	case mock.TypeOAuth:
 		if m.OAuth == nil {

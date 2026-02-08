@@ -165,7 +165,8 @@ func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *Result {
 
 	// Store body for potential re-read (needed if body validation is performed)
 	if r.Body != nil && r.Body != http.NoBody {
-		bodyBytes, err := io.ReadAll(r.Body)
+		const maxValidationBodySize = 10 << 20 // 10MB defense-in-depth
+		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxValidationBodySize))
 		if err != nil {
 			result.AddError(&FieldError{
 				Location: LocationBody,

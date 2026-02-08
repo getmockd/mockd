@@ -5,6 +5,7 @@ package admin
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -83,7 +84,7 @@ func (a *API) ValidateEngineToken(engineID, token string) bool {
 	a.tokenMu.RLock()
 	defer a.tokenMu.RUnlock()
 	stored, exists := a.engineTokens[engineID]
-	if !exists || stored.Token != token {
+	if !exists || subtle.ConstantTimeCompare([]byte(stored.Token), []byte(token)) != 1 {
 		return false
 	}
 	// Check expiration

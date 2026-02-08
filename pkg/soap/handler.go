@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -84,10 +83,10 @@ func NewHandler(config *SOAPConfig) (*Handler, error) {
 // Returns an error if a file is configured but cannot be read.
 func (h *Handler) loadWSDL() error {
 	if h.config.WSDLFile != "" {
-		// Prevent path traversal attacks
-		cleanPath := filepath.Clean(h.config.WSDLFile)
-		if strings.Contains(cleanPath, "..") {
-			return fmt.Errorf("path traversal detected in WSDLFile: %q", h.config.WSDLFile)
+		// Prevent path traversal and absolute path attacks
+		cleanPath, safe := util.SafeFilePathAllowAbsolute(h.config.WSDLFile)
+		if !safe {
+			return fmt.Errorf("unsafe path in WSDLFile (traversal detected): %q", h.config.WSDLFile)
 		}
 		data, err := os.ReadFile(cleanPath)
 		if err != nil {
@@ -127,8 +126,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read request body
-	body, err := io.ReadAll(r.Body)
+	// Read request body (bounded to prevent memory exhaustion)
+	const maxSOAPBodySize = 10 << 20 // 10MB
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxSOAPBodySize))
 	if err != nil {
 		h.writeFault(w, &SOAPFault{
 			Code:    "soap:Client",

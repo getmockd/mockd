@@ -76,27 +76,28 @@ func (b *Bucket) TryAcquire() bool {
 
 // Wait blocks until a token is available or ctx is cancelled.
 func (b *Bucket) Wait(ctx context.Context) error {
-	b.mu.Lock()
-	b.refill(time.Now())
-
-	if b.tokens >= 1 {
-		b.tokens--
-		b.mu.Unlock()
-		return nil
-	}
-
-	// Calculate how long until one token is available
-	waitTime := time.Duration((1 - b.tokens) / b.rate * float64(time.Second))
-	b.mu.Unlock()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(waitTime):
+	for {
 		b.mu.Lock()
-		b.tokens = 0 // consume the token we waited for
+		b.refill(time.Now())
+
+		if b.tokens >= 1 {
+			b.tokens--
+			b.mu.Unlock()
+			return nil
+		}
+
+		// Calculate how long until one token is available
+		waitTime := time.Duration((1 - b.tokens) / b.rate * float64(time.Second))
 		b.mu.Unlock()
-		return nil
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(waitTime):
+			// Re-check after wait — another goroutine may have consumed
+			// the token we were waiting for (TOCTOU). The loop will
+			// refill and retry if needed.
+		}
 	}
 }
 

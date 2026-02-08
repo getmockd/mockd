@@ -70,7 +70,8 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var bodyBytes []byte
 	if r.Body != nil && r.Body != http.NoBody {
 		var err error
-		bodyBytes, err = io.ReadAll(r.Body)
+		const maxValidationBodySize = 10 << 20 // 10MB defense-in-depth
+		bodyBytes, err = io.ReadAll(io.LimitReader(r.Body, maxValidationBodySize))
 		if err != nil {
 			result := &Result{Valid: false}
 			result.AddError(&FieldError{

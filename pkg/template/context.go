@@ -133,7 +133,8 @@ func (c *Context) SetPathPatternCaptures(captures map[string]string) {
 // NewContextFromRequest creates a template context by reading the request body.
 // The body is read completely and can be read again if needed.
 func NewContextFromRequest(r *http.Request) (*Context, error) {
-	bodyBytes, err := io.ReadAll(r.Body)
+	const maxTemplateBodySize = 10 << 20 // 10MB defense-in-depth
+	bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxTemplateBodySize))
 	if err != nil {
 		return nil, err
 	}

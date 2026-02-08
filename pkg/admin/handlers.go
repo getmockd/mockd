@@ -331,7 +331,8 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	// Detect YAML content type and decode accordingly.
 	ct := r.Header.Get("Content-Type")
 	if strings.Contains(ct, "yaml") {
-		body, err := io.ReadAll(r.Body)
+		const maxImportBodySize = 10 << 20 // 10MB
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxImportBodySize))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "read_error", "Failed to read request body")
 			return
