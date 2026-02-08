@@ -555,7 +555,7 @@ func TestStatefulHandler_GetResource_SetsContentType(t *testing.T) {
 	req.SetPathValue("name", "users")
 	rec := httptest.NewRecorder()
 
-	api.handleGetStateResource(rec, req)
+	api.handleGetStateResource(rec, req, server.client())
 
 	// The Content-Type header should be set BEFORE WriteHeader is called
 	contentType := rec.Header().Get("Content-Type")
@@ -574,7 +574,7 @@ func TestStatefulHandler_ClearResource_SetsContentType(t *testing.T) {
 	req.SetPathValue("name", "users")
 	rec := httptest.NewRecorder()
 
-	api.handleClearStateResource(rec, req)
+	api.handleClearStateResource(rec, req, server.client())
 
 	// The Content-Type header should be set BEFORE WriteHeader is called
 	contentType := rec.Header().Get("Content-Type")

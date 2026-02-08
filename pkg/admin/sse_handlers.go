@@ -169,7 +169,7 @@ func (a *AdminAPI) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListMockSSEConnections handles GET /mocks/{id}/sse/connections.
-func (a *AdminAPI) handleListMockSSEConnections(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleListMockSSEConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	mockID := r.PathValue("id")
 	if mockID == "" {
@@ -177,13 +177,8 @@ func (a *AdminAPI) handleListMockSSEConnections(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
 	// Verify mock exists
-	_, err := a.localEngine.GetMock(ctx, mockID)
+	_, err := engine.GetMock(ctx, mockID)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
@@ -194,7 +189,7 @@ func (a *AdminAPI) handleListMockSSEConnections(w http.ResponseWriter, r *http.R
 	}
 
 	// Get all SSE connections and filter by mock
-	connections, err := a.localEngine.ListSSEConnections(ctx)
+	connections, err := engine.ListSSEConnections(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
 		return
@@ -218,7 +213,7 @@ func (a *AdminAPI) handleListMockSSEConnections(w http.ResponseWriter, r *http.R
 }
 
 // handleCloseMockSSEConnections handles DELETE /mocks/{id}/sse/connections.
-func (a *AdminAPI) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	mockID := r.PathValue("id")
 	if mockID == "" {
@@ -226,13 +221,8 @@ func (a *AdminAPI) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
 	// Verify mock exists
-	_, err := a.localEngine.GetMock(ctx, mockID)
+	_, err := engine.GetMock(ctx, mockID)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
@@ -243,7 +233,7 @@ func (a *AdminAPI) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.
 	}
 
 	// Get all SSE connections and close those for this mock
-	connections, err := a.localEngine.ListSSEConnections(ctx)
+	connections, err := engine.ListSSEConnections(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
 		return
@@ -252,7 +242,7 @@ func (a *AdminAPI) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.
 	closed := 0
 	for _, conn := range connections {
 		if conn.MockID == mockID {
-			if err := a.localEngine.CloseSSEConnection(ctx, conn.ID); err == nil {
+			if err := engine.CloseSSEConnection(ctx, conn.ID); err == nil {
 				closed++
 			}
 		}

@@ -221,7 +221,7 @@ func TestHandleListMocks(t *testing.T) {
 		req := httptest.NewRequest("GET", "/mocks", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleListMocks(rec, req)
+		api.handleListMocks(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -255,7 +255,7 @@ func TestHandleListMocks(t *testing.T) {
 		req := httptest.NewRequest("GET", "/mocks", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleListMocks(rec, req)
+		api.handleListMocks(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -287,7 +287,7 @@ func TestHandleListMocks(t *testing.T) {
 		req := httptest.NewRequest("GET", "/mocks?enabled=true", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleListMocks(rec, req)
+		api.handleListMocks(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -321,7 +321,7 @@ func TestHandleListMocks(t *testing.T) {
 		req := httptest.NewRequest("GET", "/mocks?parentId=folder-1", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleListMocks(rec, req)
+		api.handleListMocks(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -338,7 +338,7 @@ func TestHandleListMocks(t *testing.T) {
 		req := httptest.NewRequest("GET", "/mocks", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleListMocks(rec, req)
+		api.requireEngine(api.handleListMocks)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 
@@ -379,7 +379,7 @@ func TestHandleGetMock(t *testing.T) {
 		req.SetPathValue("id", "mock-123")
 		rec := httptest.NewRecorder()
 
-		api.handleGetMock(rec, req)
+		api.handleGetMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -400,7 +400,7 @@ func TestHandleGetMock(t *testing.T) {
 		req.SetPathValue("id", "nonexistent")
 		rec := httptest.NewRecorder()
 
-		api.handleGetMock(rec, req)
+		api.handleGetMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 
@@ -420,7 +420,7 @@ func TestHandleGetMock(t *testing.T) {
 		req.SetPathValue("id", "")
 		rec := httptest.NewRecorder()
 
-		api.handleGetMock(rec, req)
+		api.handleGetMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 
@@ -437,7 +437,7 @@ func TestHandleGetMock(t *testing.T) {
 		req.SetPathValue("id", "mock-123")
 		rec := httptest.NewRecorder()
 
-		api.handleGetMock(rec, req)
+		api.requireEngine(api.handleGetMock)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 
@@ -478,7 +478,7 @@ func TestHandleCreateMock(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleCreateMock(rec, req)
+		api.handleCreateMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusCreated, rec.Code)
 
@@ -499,7 +499,7 @@ func TestHandleCreateMock(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleCreateMock(rec, req)
+		api.handleCreateMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 
@@ -532,7 +532,7 @@ func TestHandleCreateMock(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleCreateMock(rec, req)
+		api.handleCreateMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusConflict, rec.Code)
 
@@ -555,7 +555,7 @@ func TestHandleCreateMock(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleCreateMock(rec, req)
+		api.requireEngine(api.handleCreateMock)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
@@ -588,7 +588,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleUpdateMock(rec, req)
+		api.handleUpdateMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -615,7 +615,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleUpdateMock(rec, req)
+		api.handleUpdateMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 
@@ -642,7 +642,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleUpdateMock(rec, req)
+		api.handleUpdateMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 
@@ -662,7 +662,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		req.SetPathValue("id", "")
 		rec := httptest.NewRecorder()
 
-		api.handleUpdateMock(rec, req)
+		api.handleUpdateMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
@@ -679,7 +679,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		req.SetPathValue("id", "mock-123")
 		rec := httptest.NewRecorder()
 
-		api.handleUpdateMock(rec, req)
+		api.requireEngine(api.handleUpdateMock)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
@@ -703,7 +703,7 @@ func TestHandleDeleteMock(t *testing.T) {
 		req.SetPathValue("id", "mock-to-delete")
 		rec := httptest.NewRecorder()
 
-		api.handleDeleteMock(rec, req)
+		api.handleDeleteMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusNoContent, rec.Code)
 
@@ -721,7 +721,7 @@ func TestHandleDeleteMock(t *testing.T) {
 		req.SetPathValue("id", "nonexistent")
 		rec := httptest.NewRecorder()
 
-		api.handleDeleteMock(rec, req)
+		api.handleDeleteMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 
@@ -741,7 +741,7 @@ func TestHandleDeleteMock(t *testing.T) {
 		req.SetPathValue("id", "")
 		rec := httptest.NewRecorder()
 
-		api.handleDeleteMock(rec, req)
+		api.handleDeleteMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
@@ -753,7 +753,7 @@ func TestHandleDeleteMock(t *testing.T) {
 		req.SetPathValue("id", "mock-123")
 		rec := httptest.NewRecorder()
 
-		api.handleDeleteMock(rec, req)
+		api.requireEngine(api.handleDeleteMock)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
@@ -780,7 +780,7 @@ func TestHandleToggleMock(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleToggleMock(rec, req)
+		api.handleToggleMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -810,7 +810,7 @@ func TestHandleToggleMock(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleToggleMock(rec, req)
+		api.handleToggleMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -833,7 +833,7 @@ func TestHandleToggleMock(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleToggleMock(rec, req)
+		api.handleToggleMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 	})
@@ -854,7 +854,7 @@ func TestHandleToggleMock(t *testing.T) {
 		req.SetPathValue("id", "mock-toggle")
 		rec := httptest.NewRecorder()
 
-		api.handleToggleMock(rec, req)
+		api.handleToggleMock(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
@@ -867,7 +867,7 @@ func TestHandleToggleMock(t *testing.T) {
 		req.SetPathValue("id", "mock-123")
 		rec := httptest.NewRecorder()
 
-		api.handleToggleMock(rec, req)
+		api.requireEngine(api.handleToggleMock)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
@@ -914,7 +914,7 @@ func TestHandleGetStatus(t *testing.T) {
 		req := httptest.NewRequest("GET", "/status", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleGetStatus(rec, req)
+		api.handleGetStatus(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -933,7 +933,7 @@ func TestHandleGetStatus(t *testing.T) {
 		req := httptest.NewRequest("GET", "/status", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleGetStatus(rec, req)
+		api.requireEngine(api.handleGetStatus)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
@@ -957,7 +957,7 @@ func TestHandleExportConfig(t *testing.T) {
 		req := httptest.NewRequest("GET", "/config", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleExportConfig(rec, req)
+		api.handleExportConfig(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -974,7 +974,7 @@ func TestHandleExportConfig(t *testing.T) {
 		req := httptest.NewRequest("GET", "/config", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleExportConfig(rec, req)
+		api.requireEngine(api.handleExportConfig)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
@@ -1008,7 +1008,7 @@ func TestHandleImportConfig(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleImportConfig(rec, req)
+		api.handleImportConfig(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
@@ -1028,7 +1028,7 @@ func TestHandleImportConfig(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleImportConfig(rec, req)
+		api.handleImportConfig(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 
@@ -1048,7 +1048,7 @@ func TestHandleImportConfig(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleImportConfig(rec, req)
+		api.handleImportConfig(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
@@ -1067,7 +1067,7 @@ func TestHandleImportConfig(t *testing.T) {
 		req := httptest.NewRequest("POST", "/config", bytes.NewReader(body))
 		rec := httptest.NewRecorder()
 
-		api.handleImportConfig(rec, req)
+		api.requireEngine(api.handleImportConfig)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
@@ -1084,7 +1084,7 @@ func TestHandleListRequests(t *testing.T) {
 		req := httptest.NewRequest("GET", "/requests", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleListRequests(rec, req)
+		api.handleListRequests(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
@@ -1095,7 +1095,7 @@ func TestHandleListRequests(t *testing.T) {
 		req := httptest.NewRequest("GET", "/requests", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleListRequests(rec, req)
+		api.requireEngine(api.handleListRequests)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
@@ -1113,7 +1113,7 @@ func TestHandleGetRequest(t *testing.T) {
 		req.SetPathValue("id", "req-123")
 		rec := httptest.NewRecorder()
 
-		api.handleGetRequest(rec, req)
+		api.handleGetRequest(rec, req, server.client())
 
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 	})
@@ -1128,7 +1128,7 @@ func TestHandleGetRequest(t *testing.T) {
 		req.SetPathValue("id", "")
 		rec := httptest.NewRecorder()
 
-		api.handleGetRequest(rec, req)
+		api.handleGetRequest(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
@@ -1140,7 +1140,7 @@ func TestHandleGetRequest(t *testing.T) {
 		req.SetPathValue("id", "req-123")
 		rec := httptest.NewRecorder()
 
-		api.handleGetRequest(rec, req)
+		api.requireEngine(api.handleGetRequest)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
@@ -1157,7 +1157,7 @@ func TestHandleClearRequests(t *testing.T) {
 		req := httptest.NewRequest("DELETE", "/requests", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleClearRequests(rec, req)
+		api.handleClearRequests(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
@@ -1168,7 +1168,7 @@ func TestHandleClearRequests(t *testing.T) {
 		req := httptest.NewRequest("DELETE", "/requests", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleClearRequests(rec, req)
+		api.requireEngine(api.handleClearRequests)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
@@ -1273,7 +1273,7 @@ func TestAdminAPIWithTimeout(t *testing.T) {
 		req := httptest.NewRequest("GET", "/mocks", nil).WithContext(ctx)
 		rec := httptest.NewRecorder()
 
-		api.handleListMocks(rec, req)
+		api.handleListMocks(rec, req, server.client())
 
 		// The handler should return an error since context is cancelled
 		// The exact status depends on how the engine client handles cancellation

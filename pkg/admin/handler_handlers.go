@@ -42,19 +42,14 @@ func (a *AdminAPI) handleListHandlers(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /handlers/{id}
-func (a *AdminAPI) handleGetHandler(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleGetHandler(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine configured")
-		return
-	}
-
-	handler, err := a.localEngine.GetHandler(r.Context(), id)
+	handler, err := engine.GetHandler(r.Context(), id)
 	if err != nil {
 		if err == engineclient.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not_found", "handler not found")
@@ -68,19 +63,14 @@ func (a *AdminAPI) handleGetHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /handlers/{id}/health
-func (a *AdminAPI) handleGetHandlerHealth(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleGetHandlerHealth(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine configured")
-		return
-	}
-
-	handler, err := a.localEngine.GetHandler(r.Context(), id)
+	handler, err := engine.GetHandler(r.Context(), id)
 	if err != nil {
 		if err == engineclient.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not_found", "handler not found")
@@ -98,19 +88,14 @@ func (a *AdminAPI) handleGetHandlerHealth(w http.ResponseWriter, r *http.Request
 }
 
 // GET /handlers/{id}/stats
-func (a *AdminAPI) handleGetHandlerStats(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleGetHandlerStats(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine configured")
-		return
-	}
-
-	handler, err := a.localEngine.GetHandler(r.Context(), id)
+	handler, err := engine.GetHandler(r.Context(), id)
 	if err != nil {
 		if err == engineclient.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not_found", "handler not found")

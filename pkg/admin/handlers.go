@@ -49,22 +49,17 @@ func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetStatus handles GET /status and returns detailed server status.
-func (a *AdminAPI) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleGetStatus(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	engineStatus, err := a.localEngine.Status(ctx)
+	engineStatus, err := engine.Status(ctx)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "get engine status"))
 		return
 	}
 
 	// Count active mocks from engine status
-	mocks, err := a.localEngine.ListMocks(ctx)
+	mocks, err := engine.ListMocks(ctx)
 	if err != nil {
 		// Log the error but continue with zero active mocks count
 		// This is non-critical for the status endpoint
@@ -97,15 +92,10 @@ func (a *AdminAPI) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListMocks handles GET /mocks.
-func (a *AdminAPI) handleListMocks(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleListMocks(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	mocks, err := a.localEngine.ListMocks(ctx)
+	mocks, err := engine.ListMocks(ctx)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "list mocks"))
 		return
@@ -157,13 +147,8 @@ func sortMocksByMetaSortKey(mocks []*config.MockConfiguration) {
 }
 
 // handleCreateMock handles POST /mocks.
-func (a *AdminAPI) handleCreateMock(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleCreateMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
-
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
 
 	var mock config.MockConfiguration
 	if err := json.NewDecoder(r.Body).Decode(&mock); err != nil {
@@ -185,7 +170,7 @@ func (a *AdminAPI) handleCreateMock(w http.ResponseWriter, r *http.Request) {
 		mock.MetaSortKey = -float64(now.UnixMilli())
 	}
 
-	created, err := a.localEngine.CreateMock(ctx, &mock)
+	created, err := engine.CreateMock(ctx, &mock)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrDuplicate) {
 			writeError(w, http.StatusConflict, "duplicate_id", ErrMsgConflict)
@@ -198,7 +183,7 @@ func (a *AdminAPI) handleCreateMock(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetMock handles GET /mocks/{id}.
-func (a *AdminAPI) handleGetMock(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleGetMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -206,12 +191,7 @@ func (a *AdminAPI) handleGetMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	mock, err := a.localEngine.GetMock(ctx, id)
+	mock, err := engine.GetMock(ctx, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
@@ -224,16 +204,11 @@ func (a *AdminAPI) handleGetMock(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUpdateMock handles PUT /mocks/{id}.
-func (a *AdminAPI) handleUpdateMock(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleUpdateMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")
-		return
-	}
-
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
 		return
 	}
 
@@ -243,7 +218,7 @@ func (a *AdminAPI) handleUpdateMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := a.localEngine.UpdateMock(ctx, id, &mock)
+	updated, err := engine.UpdateMock(ctx, id, &mock)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
@@ -256,7 +231,7 @@ func (a *AdminAPI) handleUpdateMock(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteMock handles DELETE /mocks/{id}.
-func (a *AdminAPI) handleDeleteMock(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleDeleteMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -264,12 +239,7 @@ func (a *AdminAPI) handleDeleteMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	if err := a.localEngine.DeleteMock(ctx, id); err != nil {
+	if err := engine.DeleteMock(ctx, id); err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
 			return
@@ -284,16 +254,11 @@ func (a *AdminAPI) handleDeleteMock(w http.ResponseWriter, r *http.Request) {
 type ToggleRequest = types.ToggleRequest
 
 // handleToggleMock handles POST /mocks/{id}/toggle.
-func (a *AdminAPI) handleToggleMock(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleToggleMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")
-		return
-	}
-
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
 		return
 	}
 
@@ -303,7 +268,7 @@ func (a *AdminAPI) handleToggleMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mock, err := a.localEngine.ToggleMock(ctx, id, req.Enabled)
+	mock, err := engine.ToggleMock(ctx, id, req.Enabled)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
@@ -329,19 +294,14 @@ type RequestLogListResponse struct {
 }
 
 // handleExportConfig handles GET /config.
-func (a *AdminAPI) handleExportConfig(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleExportConfig(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	name := r.URL.Query().Get("name")
 	if name == "" {
 		name = "mockd-export"
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	collection, err := a.localEngine.ExportConfig(ctx, name)
+	collection, err := engine.ExportConfig(ctx, name)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "export config"))
 		return
@@ -364,7 +324,7 @@ func (a *AdminAPI) handleExportConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleImportConfig handles POST /config.
-func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	var req ConfigImportRequest
 
@@ -389,11 +349,6 @@ func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 
 	if req.Config == nil {
 		writeError(w, http.StatusBadRequest, "missing_config", "config field is required")
-		return
-	}
-
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
 		return
 	}
 
@@ -478,7 +433,7 @@ func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Forward to engine for runtime registration (starts gRPC/MQTT servers, registers handlers).
-	if err := a.localEngine.ImportConfig(ctx, req.Config, req.Replace); err != nil {
+	if err := engine.ImportConfig(ctx, req.Config, req.Replace); err != nil {
 		writeError(w, http.StatusBadRequest, "import_error", sanitizeError(err, a.log, "import config"))
 		return
 	}
@@ -487,7 +442,7 @@ func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	imported = len(req.Config.Mocks)
 
 	// Get the updated state
-	collection, _ := a.localEngine.ExportConfig(ctx, "imported")
+	collection, _ := engine.ExportConfig(ctx, "imported")
 	total := 0
 	if collection != nil {
 		total = len(collection.Mocks)
@@ -524,13 +479,8 @@ func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 //   - graphqlOpType: Filter GraphQL by operation type (query, mutation, subscription)
 //   - wsConnectionId: Filter WebSocket by connection ID
 //   - sseConnectionId: Filter SSE by connection ID
-func (a *AdminAPI) handleListRequests(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleListRequests(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
-
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
 
 	// Build filter from query parameters
 	clientFilter := &engineclient.RequestFilter{}
@@ -559,7 +509,7 @@ func (a *AdminAPI) handleListRequests(w http.ResponseWriter, r *http.Request) {
 		clientFilter.MockID = matched
 	}
 
-	result, err := a.localEngine.ListRequests(ctx, clientFilter)
+	result, err := engine.ListRequests(ctx, clientFilter)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "list requests"))
 		return
@@ -568,7 +518,7 @@ func (a *AdminAPI) handleListRequests(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetRequest handles GET /requests/{id}.
-func (a *AdminAPI) handleGetRequest(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleGetRequest(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -576,12 +526,7 @@ func (a *AdminAPI) handleGetRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	entry, err := a.localEngine.GetRequest(ctx, id)
+	entry, err := engine.GetRequest(ctx, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
@@ -594,15 +539,10 @@ func (a *AdminAPI) handleGetRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleClearRequests handles DELETE /requests.
-func (a *AdminAPI) handleClearRequests(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleClearRequests(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	count, err := a.localEngine.ClearRequests(ctx)
+	count, err := engine.ClearRequests(ctx)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "clear requests"))
 		return
@@ -614,12 +554,7 @@ func (a *AdminAPI) handleClearRequests(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleStreamRequests handles GET /requests/stream - SSE endpoint for streaming new requests.
-func (a *AdminAPI) handleStreamRequests(w http.ResponseWriter, r *http.Request) {
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
+func (a *AdminAPI) handleStreamRequests(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -654,7 +589,7 @@ func (a *AdminAPI) handleStreamRequests(w http.ResponseWriter, r *http.Request) 
 		case <-ticker.C:
 			// Get latest requests from engine
 			filter := &engineclient.RequestFilter{Limit: 10}
-			result, err := a.localEngine.ListRequests(ctx, filter)
+			result, err := engine.ListRequests(ctx, filter)
 			if err != nil {
 				continue
 			}

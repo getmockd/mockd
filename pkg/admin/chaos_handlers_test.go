@@ -65,7 +65,7 @@ func TestHandleGetChaos(t *testing.T) {
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleGetChaos(rec, req)
+		api.handleGetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
@@ -95,7 +95,7 @@ func TestHandleGetChaos(t *testing.T) {
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleGetChaos(rec, req)
+		api.handleGetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -127,7 +127,7 @@ func TestHandleGetChaos(t *testing.T) {
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleGetChaos(rec, req)
+		api.handleGetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -163,7 +163,7 @@ func TestHandleGetChaos(t *testing.T) {
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleGetChaos(rec, req)
+		api.handleGetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -194,7 +194,7 @@ func TestHandleGetChaos(t *testing.T) {
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleGetChaos(rec, req)
+		api.handleGetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -231,7 +231,7 @@ func TestHandleGetChaos(t *testing.T) {
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleGetChaos(rec, req)
+		api.handleGetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -252,7 +252,7 @@ func TestHandleGetChaos(t *testing.T) {
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleGetChaos(rec, req)
+		api.requireEngine(api.handleGetChaos)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 
@@ -285,7 +285,7 @@ func TestHandleSetChaos(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Contains(t, rec.Body.String(), "ok")
@@ -317,7 +317,7 @@ func TestHandleSetChaos(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -352,7 +352,7 @@ func TestHandleSetChaos(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -387,7 +387,7 @@ func TestHandleSetChaos(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -430,7 +430,7 @@ func TestHandleSetChaos(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -455,7 +455,7 @@ func TestHandleSetChaos(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 		assert.Contains(t, rec.Body.String(), "invalid JSON")
@@ -473,7 +473,7 @@ func TestHandleSetChaos(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.requireEngine(api.handleSetChaos)(rec, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 
@@ -493,7 +493,7 @@ func TestHandleSetChaos(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 
 		// Should return bad request for empty body (invalid JSON)
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -512,7 +512,7 @@ func TestHandleSetChaos(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.True(t, server.chaosConfig.Enabled)
@@ -543,7 +543,7 @@ func TestChaosConfigValidation(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, float64(0), server.chaosConfig.Latency.Probability)
@@ -569,7 +569,7 @@ func TestChaosConfigValidation(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Equal(t, 1.0, server.chaosConfig.Latency.Probability)
@@ -598,7 +598,7 @@ func TestChaosConfigValidation(t *testing.T) {
 				req.Header.Set("Content-Type", "application/json")
 				rec := httptest.NewRecorder()
 
-				api.handleSetChaos(rec, req)
+				api.handleSetChaos(rec, req, server.client())
 
 				assert.Equal(t, http.StatusOK, rec.Code)
 				assert.Equal(t, statusCode, server.chaosConfig.ErrorRate.DefaultCode)
@@ -618,7 +618,7 @@ func TestChaosHandlerRoundTrip(t *testing.T) {
 		// Get initial config
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
-		api.handleGetChaos(rec, req)
+		api.handleGetChaos(rec, req, server.client())
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		var initialConfig engineclient.ChaosConfig
@@ -639,13 +639,13 @@ func TestChaosHandlerRoundTrip(t *testing.T) {
 		req = httptest.NewRequest("PUT", "/chaos", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		rec = httptest.NewRecorder()
-		api.handleSetChaos(rec, req)
+		api.handleSetChaos(rec, req, server.client())
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		// Get updated config
 		req = httptest.NewRequest("GET", "/chaos", nil)
 		rec = httptest.NewRecorder()
-		api.handleGetChaos(rec, req)
+		api.handleGetChaos(rec, req, server.client())
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		var updatedConfig engineclient.ChaosConfig
@@ -681,7 +681,7 @@ func TestChaosHandlerConcurrency(t *testing.T) {
 			go func() {
 				req := httptest.NewRequest("GET", "/chaos", nil)
 				rec := httptest.NewRecorder()
-				api.handleGetChaos(rec, req)
+				api.handleGetChaos(rec, req, server.client())
 				assert.Equal(t, http.StatusOK, rec.Code)
 				done <- true
 			}()

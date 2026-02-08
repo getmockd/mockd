@@ -8,15 +8,10 @@ import (
 )
 
 // handleGetChaos returns the current chaos configuration.
-func (a *AdminAPI) handleGetChaos(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleGetChaos(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	chaosConfig, err := a.localEngine.GetChaos(ctx)
+	chaosConfig, err := engine.GetChaos(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
 		return
@@ -27,13 +22,8 @@ func (a *AdminAPI) handleGetChaos(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSetChaos updates the chaos configuration.
-func (a *AdminAPI) handleSetChaos(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleSetChaos(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
-
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
 
 	var config engineclient.ChaosConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
@@ -41,7 +31,7 @@ func (a *AdminAPI) handleSetChaos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.localEngine.SetChaos(ctx, &config); err != nil {
+	if err := engine.SetChaos(ctx, &config); err != nil {
 		http.Error(w, `{"error":"failed to set chaos config: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}

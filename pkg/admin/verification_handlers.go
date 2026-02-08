@@ -13,7 +13,7 @@ import (
 
 // handleGetMockVerification handles GET /mocks/{id}/verify.
 // Returns call count and last called time for a specific mock.
-func (a *AdminAPI) handleGetMockVerification(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleGetMockVerification(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -21,13 +21,8 @@ func (a *AdminAPI) handleGetMockVerification(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
 	// Check if mock exists
-	_, err := a.localEngine.GetMock(ctx, id)
+	_, err := engine.GetMock(ctx, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
@@ -40,7 +35,7 @@ func (a *AdminAPI) handleGetMockVerification(w http.ResponseWriter, r *http.Requ
 	// Get invocations for this mock from request logs
 	// Note: We need to filter by matched mock ID - the engine client ListRequests
 	// doesn't currently support this filter, so we get all and filter client-side
-	result, err := a.localEngine.ListRequests(ctx, nil)
+	result, err := engine.ListRequests(ctx, nil)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
 		return
@@ -72,7 +67,7 @@ func (a *AdminAPI) handleGetMockVerification(w http.ResponseWriter, r *http.Requ
 
 // handleVerifyMock handles POST /mocks/{id}/verify.
 // Checks if mock was called according to specified criteria.
-func (a *AdminAPI) handleVerifyMock(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleVerifyMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -80,13 +75,8 @@ func (a *AdminAPI) handleVerifyMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
 	// Check if mock exists
-	_, err := a.localEngine.GetMock(ctx, id)
+	_, err := engine.GetMock(ctx, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
@@ -109,7 +99,7 @@ func (a *AdminAPI) handleVerifyMock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get call count for this mock
-	result, err := a.localEngine.ListRequests(ctx, nil)
+	result, err := engine.ListRequests(ctx, nil)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
 		return
@@ -198,7 +188,7 @@ func (a *AdminAPI) evaluateVerification(req VerifyRequest, actualCount int) Veri
 
 // handleListMockInvocations handles GET /mocks/{id}/invocations.
 // Returns request history for a specific mock with pagination.
-func (a *AdminAPI) handleListMockInvocations(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleListMockInvocations(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -206,13 +196,8 @@ func (a *AdminAPI) handleListMockInvocations(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
 	// Check if mock exists
-	_, err := a.localEngine.GetMock(ctx, id)
+	_, err := engine.GetMock(ctx, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
@@ -226,7 +211,7 @@ func (a *AdminAPI) handleListMockInvocations(w http.ResponseWriter, r *http.Requ
 	limit, offset := parsePaginationParams(r.URL.Query())
 
 	// Get all requests and filter by mock ID
-	result, err := a.localEngine.ListRequests(ctx, nil)
+	result, err := engine.ListRequests(ctx, nil)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
 		return
@@ -279,7 +264,7 @@ func (a *AdminAPI) handleListMockInvocations(w http.ResponseWriter, r *http.Requ
 
 // handleResetMockVerification handles DELETE /mocks/{id}/invocations.
 // Clears invocation history for a specific mock.
-func (a *AdminAPI) handleResetMockVerification(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleResetMockVerification(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -287,13 +272,8 @@ func (a *AdminAPI) handleResetMockVerification(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
 	// Verify mock exists
-	_, err := a.localEngine.GetMock(ctx, id)
+	_, err := engine.GetMock(ctx, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
@@ -303,7 +283,7 @@ func (a *AdminAPI) handleResetMockVerification(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	count, err := a.localEngine.ClearRequestsByMockID(ctx, id)
+	count, err := engine.ClearRequestsByMockID(ctx, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
 		return
@@ -318,15 +298,10 @@ func (a *AdminAPI) handleResetMockVerification(w http.ResponseWriter, r *http.Re
 
 // handleResetAllVerification handles DELETE /verify.
 // Clears all invocation history (same as clearing all request logs).
-func (a *AdminAPI) handleResetAllVerification(w http.ResponseWriter, r *http.Request) {
+func (a *AdminAPI) handleResetAllVerification(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	count, err := a.localEngine.ClearRequests(ctx)
+	count, err := engine.ClearRequests(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
 		return
