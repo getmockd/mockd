@@ -1,13 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
-	"text/tabwriter"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/store"
 )
@@ -160,12 +159,7 @@ Examples:
 	}
 
 	if *jsonOutput {
-		output, err := json.MarshalIndent(recordings, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal recordings: %w", err)
-		}
-		fmt.Println(string(output))
-		return nil
+		return output.JSON(recordings)
 	}
 
 	if len(recordings) == 0 {
@@ -174,7 +168,7 @@ Examples:
 	}
 
 	// Table output
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := output.Table()
 	_, _ = fmt.Fprintln(w, "ID\tPROTOCOL\tPATH\tSTATUS\tFRAMES\tDURATION\tSIZE")
 	for _, r := range recordings {
 		duration := formatDurationMs(r.Duration)
@@ -229,12 +223,7 @@ Examples:
 	}
 
 	if *jsonOutput {
-		output, err := json.MarshalIndent(rec, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal recording: %w", err)
-		}
-		fmt.Println(string(output))
-		return nil
+		return output.JSON(rec)
 	}
 
 	// Human-readable output
@@ -489,12 +478,7 @@ Flags:
 	}
 
 	if *jsonOutput {
-		output, err := json.MarshalIndent(stats, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal stats: %w", err)
-		}
-		fmt.Println(string(output))
-		return nil
+		return output.JSON(stats)
 	}
 
 	fmt.Printf("Storage Statistics:\n")
@@ -585,12 +569,7 @@ Flags:
 	sessions := streamRecordingStore.GetActiveSessions()
 
 	if *jsonOutput {
-		output, err := json.MarshalIndent(sessions, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal sessions: %w", err)
-		}
-		fmt.Println(string(output))
-		return nil
+		return output.JSON(sessions)
 	}
 
 	if len(sessions) == 0 {
@@ -598,7 +577,7 @@ Flags:
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := output.Table()
 	_, _ = fmt.Fprintln(w, "ID\tPROTOCOL\tPATH\tDURATION\tFRAMES")
 	for _, s := range sessions {
 		idShort := s.ID

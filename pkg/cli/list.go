@@ -1,13 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
@@ -108,7 +107,7 @@ func outputMocksJSON(mocks []*mock.Mock) error {
 		Status  int    `json:"status,omitempty"`
 		Enabled bool   `json:"enabled"`
 	}
-	output := make([]mockSummary, 0, len(mocks))
+	summaries := make([]mockSummary, 0, len(mocks))
 	for _, m := range mocks {
 		summary := mockSummary{
 			ID:      m.ID,
@@ -121,11 +120,9 @@ func outputMocksJSON(mocks []*mock.Mock) error {
 		summary.Path = path
 		summary.Method = method
 		summary.Status = status
-		output = append(output, summary)
+		summaries = append(summaries, summary)
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(output)
+	return output.JSON(summaries)
 }
 
 // outputMocksTable outputs mocks in table format.
@@ -135,7 +132,7 @@ func outputMocksTable(mocks []*mock.Mock) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := output.Table()
 	_, _ = fmt.Fprintln(w, "ID\tTYPE\tPATH\tMETHOD\tSTATUS\tENABLED")
 
 	for _, m := range mocks {

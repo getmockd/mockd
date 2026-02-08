@@ -1,12 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -117,9 +117,7 @@ Run 'mockd get --help' for more options`)
 
 	// Output result
 	if *jsonOutput {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(mock)
+		return output.JSON(mock)
 	}
 
 	// Human-readable output

@@ -9,6 +9,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
@@ -167,7 +168,7 @@ Examples:
 		}
 		persistentStore = file.New(storeCfg)
 		if err := persistentStore.Open(context.Background()); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to initialize persistent store: %v\n", err)
+			output.Warn("failed to initialize persistent store: %v", err)
 		} else {
 			server.SetStore(persistentStore)
 			// Ensure store is closed on shutdown
@@ -235,7 +236,7 @@ Examples:
 		// Add loaded mocks to engine via HTTP
 		for _, mock := range result.Collection.Mocks {
 			if _, err := engClient.CreateMock(ctx, mock); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to add mock %s: %v\n", mock.ID, err)
+				output.Warn("failed to add mock %s: %v", mock.ID, err)
 			}
 		}
 
@@ -346,7 +347,7 @@ func handleWatchEvents(eventCh <-chan config.WatchEvent, loader *config.Director
 		// Update mocks in engine via HTTP
 		for _, mock := range collection.Mocks {
 			if _, err := engClient.CreateMock(ctx, mock); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to update mock %s: %v\n", mock.ID, err)
+				output.Warn("failed to update mock %s: %v", mock.ID, err)
 			}
 		}
 

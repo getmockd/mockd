@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/flags"
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/gorilla/websocket"
@@ -213,14 +213,13 @@ Examples:
 			return fmt.Errorf("read error: %v", err)
 		case msg := <-msgChan:
 			if *jsonOutput {
-				output := map[string]interface{}{
+				msg := map[string]interface{}{
 					"type":      messageTypeString(msg.Type),
 					"data":      string(msg.Data),
 					"timestamp": time.Now().Format(time.RFC3339),
 				}
-				enc := json.NewEncoder(os.Stdout)
-				if err := enc.Encode(output); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to encode output: %v\n", err)
+				if err := output.JSONCompact(msg); err != nil {
+					output.Warn("failed to encode output: %v", err)
 				}
 			} else {
 				fmt.Printf("< %s\n", string(msg.Data))
@@ -233,15 +232,14 @@ Examples:
 				return fmt.Errorf("send error: %v", err)
 			}
 			if *jsonOutput {
-				output := map[string]interface{}{
+				sent := map[string]interface{}{
 					"direction": "sent",
 					"type":      "text",
 					"data":      input,
 					"timestamp": time.Now().Format(time.RFC3339),
 				}
-				enc := json.NewEncoder(os.Stdout)
-				if err := enc.Encode(output); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to encode output: %v\n", err)
+				if err := output.JSONCompact(sent); err != nil {
+					output.Warn("failed to encode output: %v", err)
 				}
 			} else {
 				fmt.Printf("> %s\n", input)
@@ -379,15 +377,13 @@ Examples:
 	_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 	if *jsonOutput {
-		output := map[string]interface{}{
+		result := map[string]interface{}{
 			"success":   true,
 			"url":       url,
 			"message":   message,
 			"timestamp": time.Now().Format(time.RFC3339),
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(result)
 	}
 
 	fmt.Printf("Sent to %s: %s\n", url, message)
@@ -535,15 +531,14 @@ Examples:
 			}
 
 			if *jsonOutput {
-				output := map[string]interface{}{
+				msg := map[string]interface{}{
 					"type":      messageTypeString(messageType),
 					"data":      string(message),
 					"timestamp": time.Now().Format(time.RFC3339),
 					"index":     received,
 				}
-				enc := json.NewEncoder(os.Stdout)
-				if err := enc.Encode(output); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to encode output: %v\n", err)
+				if err := output.JSONCompact(msg); err != nil {
+					output.Warn("failed to encode output: %v", err)
 				}
 			} else {
 				fmt.Println(string(message))
@@ -602,9 +597,7 @@ Examples:
 			"endpoints": mocks,
 			"count":     len(mocks),
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(result)
+		return output.JSON(result)
 	}
 
 	// Pretty print status

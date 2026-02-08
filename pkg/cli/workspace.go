@@ -11,9 +11,9 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -266,7 +266,7 @@ Examples:
 	currentWorkspace := cliconfig.GetWorkspaceFromContext()
 
 	if *jsonOutput {
-		output := struct {
+		result := struct {
 			CurrentWorkspace string          `json:"currentWorkspace"`
 			Workspaces       []*WorkspaceDTO `json:"workspaces"`
 			Count            int             `json:"count"`
@@ -275,9 +275,7 @@ Examples:
 			Workspaces:       workspaces,
 			Count:            len(workspaces),
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(result)
 	}
 
 	if len(workspaces) == 0 {
@@ -285,7 +283,7 @@ Examples:
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := output.Table()
 	_, _ = fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tDESCRIPTION")
 
 	for _, ws := range workspaces {
@@ -389,9 +387,7 @@ Examples:
 	}
 
 	if *jsonOutput {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(ws)
+		return output.JSON(ws)
 	}
 
 	fmt.Printf("Created workspace %q (ID: %s)\n", ws.Name, ws.ID)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
@@ -301,7 +302,7 @@ func (uctx *upContext) run() error {
 	// Write PID file
 	pidPath := defaultUpPIDPath()
 	if err := uctx.writePIDFile(pidPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to write PID file: %v\n", err)
+		output.Warn("failed to write PID file: %v", err)
 	}
 	defer func() { _ = os.Remove(pidPath) }()
 
@@ -418,7 +419,7 @@ func (uctx *upContext) startAll() error {
 		if engineCfg.Tunnel != nil && engineCfg.Tunnel.Enabled {
 			if err := uctx.startTunnel(engineCfg); err != nil {
 				// Tunnel failure is non-fatal -- log and continue
-				fmt.Fprintf(os.Stderr, "Warning: tunnel for engine '%s' failed: %v\n", engineCfg.Name, err)
+				output.Warn("tunnel for engine '%s' failed: %v", engineCfg.Name, err)
 			}
 		}
 	}

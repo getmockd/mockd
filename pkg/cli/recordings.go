@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"text/tabwriter"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/recording"
 )
@@ -130,12 +130,7 @@ Examples:
 	}
 
 	if *jsonOutput {
-		output, err := json.MarshalIndent(recordings, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal recordings: %w", err)
-		}
-		fmt.Println(string(output))
-		return nil
+		return output.JSON(recordings)
 	}
 
 	if len(recordings) == 0 {
@@ -144,7 +139,7 @@ Examples:
 	}
 
 	// Table output
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := output.Table()
 	_, _ = fmt.Fprintln(w, "ID\tMETHOD\tPATH\tSTATUS\tDURATION")
 	for _, r := range recordings {
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%v\n",

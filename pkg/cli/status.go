@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -304,16 +305,14 @@ func formatDuration(d time.Duration) string {
 // printNotRunning prints the "not running" status.
 func printNotRunning(jsonOutput bool) error {
 	if jsonOutput {
-		output := StatusOutput{
+		result := StatusOutput{
 			Running: false,
 			Components: StatusComponents{
 				Admin:  StatusComponentInfo{Status: "stopped"},
 				Engine: StatusComponentInfo{Status: "stopped"},
 			},
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(result)
 	}
 
 	fmt.Println("mockd is not running")
@@ -402,10 +401,8 @@ func fetchLiveStats(adminURL string) (*StatusStats, *HealthInfo) {
 }
 
 // printJSONStatus prints status in JSON format.
-func printJSONStatus(output StatusOutput) error {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(output)
+func printJSONStatus(status StatusOutput) error {
+	return output.JSON(status)
 }
 
 // printHumanStatus prints status in human-readable format.

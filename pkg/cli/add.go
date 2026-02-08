@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/flags"
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
@@ -859,16 +860,13 @@ func outputResult(result *CreateMockResult, mockType mock.MockType, jsonOutput b
 
 // outputJSONResult outputs the created or merged mock in JSON format.
 func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-
 	created := result.Mock
 
 	// For merge results, include merge-specific information
 	if result.IsMerge() {
 		switch mockType {
 		case mock.MockTypeGRPC:
-			return enc.Encode(struct {
+			return output.JSON(struct {
 				ID            string   `json:"id"`
 				Type          string   `json:"type"`
 				Action        string   `json:"action"`
@@ -882,7 +880,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 				TotalServices: result.TotalServices,
 			})
 		case mock.MockTypeMQTT:
-			return enc.Encode(struct {
+			return output.JSON(struct {
 				ID          string   `json:"id"`
 				Type        string   `json:"type"`
 				Action      string   `json:"action"`
@@ -911,7 +909,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 		if created.HTTP != nil && created.HTTP.Response != nil {
 			createdStatus = created.HTTP.Response.StatusCode
 		}
-		return enc.Encode(struct {
+		return output.JSON(struct {
 			ID         string `json:"id"`
 			Type       string `json:"type"`
 			Action     string `json:"action"`
@@ -936,7 +934,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 				echoEnabled = *created.WebSocket.EchoMode
 			}
 		}
-		return enc.Encode(struct {
+		return output.JSON(struct {
 			ID     string `json:"id"`
 			Type   string `json:"type"`
 			Action string `json:"action"`
@@ -959,7 +957,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 				operations = append(operations, op)
 			}
 		}
-		return enc.Encode(struct {
+		return output.JSON(struct {
 			ID         string   `json:"id"`
 			Type       string   `json:"type"`
 			Action     string   `json:"action"`
@@ -984,7 +982,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 				}
 			}
 		}
-		return enc.Encode(struct {
+		return output.JSON(struct {
 			ID       string   `json:"id"`
 			Type     string   `json:"type"`
 			Action   string   `json:"action"`
@@ -1005,7 +1003,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 			mqttTopic = created.MQTT.Topics[0].Topic
 			mqttQoS = created.MQTT.Topics[0].QoS
 		}
-		return enc.Encode(struct {
+		return output.JSON(struct {
 			ID     string `json:"id"`
 			Type   string `json:"type"`
 			Action string `json:"action"`
@@ -1032,7 +1030,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 				}
 			}
 		}
-		return enc.Encode(struct {
+		return output.JSON(struct {
 			ID          string   `json:"id"`
 			Type        string   `json:"type"`
 			Action      string   `json:"action"`
@@ -1050,5 +1048,5 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 	}
 
 	// Fallback for unknown types
-	return enc.Encode(created)
+	return output.JSON(created)
 }

@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/proxy"
 	"github.com/getmockd/mockd/pkg/recording"
@@ -220,7 +221,7 @@ Examples:
 
 	fmt.Println("\nShutting down proxy...")
 	if err := server.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: server shutdown error: %v\n", err)
+		output.Warn("server shutdown error: %v", err)
 	}
 
 	proxyServer.running = false

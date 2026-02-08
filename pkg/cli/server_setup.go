@@ -15,6 +15,7 @@ import (
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/audit"
 	"github.com/getmockd/mockd/pkg/chaos"
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
@@ -345,12 +346,12 @@ func WaitForShutdownWithCallback(server *engine.Server, adminAPI *admin.AdminAPI
 
 	// Stop admin API first
 	if err := adminAPI.Stop(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: admin API shutdown error: %v\n", err)
+		output.Warn("admin API shutdown error: %v", err)
 	}
 
 	// Stop mock server
 	if err := server.Stop(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: server shutdown error: %v\n", err)
+		output.Warn("server shutdown error: %v", err)
 	}
 
 	fmt.Println("Server stopped")
@@ -377,12 +378,12 @@ func WaitForShutdownWithContext(ctx context.Context, server *engine.Server, admi
 
 	// Stop admin API first
 	if err := adminAPI.Stop(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: admin API shutdown error: %v\n", err)
+		output.Warn("admin API shutdown error: %v", err)
 	}
 
 	// Stop mock server
 	if err := server.Stop(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: server shutdown error: %v\n", err)
+		output.Warn("server shutdown error: %v", err)
 	}
 
 	fmt.Println("Server stopped")

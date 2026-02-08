@@ -1,12 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"sort"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -155,13 +155,11 @@ func printPortsFromPIDFile(info *PIDFile, jsonOutput, verbose bool) error {
 // printPorts prints the port information in the requested format.
 func printPorts(ports []PortInfo, jsonOutput, verbose bool) error {
 	if jsonOutput {
-		output := PortsOutput{
+		result := PortsOutput{
 			Ports:   ports,
 			Running: len(ports) > 0,
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(result)
 	}
 
 	if len(ports) == 0 {
@@ -221,13 +219,11 @@ func printPorts(ports []PortInfo, jsonOutput, verbose bool) error {
 // printNotRunningPorts prints a message when mockd is not running.
 func printNotRunningPorts(jsonOutput bool) error {
 	if jsonOutput {
-		output := PortsOutput{
+		result := PortsOutput{
 			Ports:   []PortInfo{},
 			Running: false,
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(result)
 	}
 
 	fmt.Println("mockd is not running")

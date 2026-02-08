@@ -2,15 +2,14 @@ package cli
 
 import (
 	"bufio"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"net/url"
 	"os"
 	"sort"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -339,7 +338,7 @@ Examples:
 	}
 
 	if *jsonOutput {
-		output := struct {
+		result := struct {
 			Name    string          `json:"name"`
 			Context *contextForJSON `json:"context"`
 			Current bool            `json:"current"`
@@ -348,9 +347,7 @@ Examples:
 			Context: sanitizeContextForJSON(ctx),
 			Current: cfg.CurrentContext == name,
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(result)
 	}
 
 	fmt.Printf("Added context %q\n", name)
@@ -390,16 +387,14 @@ Examples:
 	}
 
 	if *jsonOutput {
-		output := struct {
+		result := struct {
 			CurrentContext string                     `json:"currentContext"`
 			Contexts       map[string]*contextForJSON `json:"contexts"`
 		}{
 			CurrentContext: cfg.CurrentContext,
 			Contexts:       sanitizeContextsForJSON(cfg.Contexts),
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(result)
 	}
 
 	if len(cfg.Contexts) == 0 {
@@ -415,7 +410,7 @@ Examples:
 	}
 	sort.Strings(names)
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := output.Table()
 	_, _ = fmt.Fprintln(w, "CURRENT\tNAME\tADMIN URL\tWORKSPACE\tDESCRIPTION")
 
 	for _, name := range names {

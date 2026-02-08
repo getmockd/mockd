@@ -17,6 +17,7 @@ import (
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/audit"
 	"github.com/getmockd/mockd/pkg/chaos"
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
@@ -616,7 +617,7 @@ func initializePersistentStore(sctx *serveContext) error {
 
 	sctx.store = file.New(storeCfg)
 	if err := sctx.store.Open(sctx.ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to initialize persistent store: %v\n", err)
+		output.Warn("failed to initialize persistent store: %v", err)
 		sctx.store = nil
 		return nil
 	}
@@ -625,7 +626,7 @@ func initializePersistentStore(sctx *serveContext) error {
 
 	// Load mocks from store and register protocol handlers (GraphQL, SOAP, etc.)
 	if err := sctx.server.LoadFromStore(sctx.ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to load from store: %v\n", err)
+		output.Warn("failed to load from store: %v", err)
 	}
 
 	return nil
@@ -709,7 +710,7 @@ func handleRuntimeMode(sctx *serveContext) error {
 
 	// Pull initial deployments
 	if err := sctx.runtimeClient.PullDeployments(sctx.ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to pull initial deployments: %v\n", err)
+		output.Warn("failed to pull initial deployments: %v", err)
 	}
 
 	// Start heartbeat loop in background
@@ -739,7 +740,7 @@ func handlePullMode(sctx *serveContext) error {
 	// Cache the content if cache dir specified
 	if f.cacheDir != "" {
 		if err := cachePulledContent(f.cacheDir, f.pull, content); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to cache content: %v\n", err)
+			output.Warn("failed to cache content: %v", err)
 		}
 	}
 
@@ -878,7 +879,7 @@ func runMainLoop(sctx *serveContext) error {
 	// Remove PID file if it was written
 	if f.detach && f.pidFile != "" {
 		if err := RemovePIDFile(f.pidFile); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to remove PID file: %v\n", err)
+			output.Warn("failed to remove PID file: %v", err)
 		}
 	}
 
@@ -896,35 +897,35 @@ func runMainLoop(sctx *serveContext) error {
 	// Stop MCP server if running
 	if sctx.mcpServer != nil {
 		if err := sctx.mcpServer.Stop(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: MCP server shutdown error: %v\n", err)
+			output.Warn("MCP server shutdown error: %v", err)
 		}
 	}
 
 	// Stop admin API first (uses internal 5s timeout)
 	if sctx.adminAPI != nil {
 		if err := sctx.adminAPI.Stop(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: admin API shutdown error: %v\n", err)
+			output.Warn("admin API shutdown error: %v", err)
 		}
 	}
 
 	// Stop mock server (uses internal 5s timeout)
 	if sctx.server != nil {
 		if err := sctx.server.Stop(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: server shutdown error: %v\n", err)
+			output.Warn("server shutdown error: %v", err)
 		}
 	}
 
 	// Stop MQTT broker if running
 	if sctx.mqttBroker != nil {
 		if err := sctx.mqttBroker.Stop(shutdownCtx, shutdownTimeout); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: MQTT broker shutdown error: %v\n", err)
+			output.Warn("MQTT broker shutdown error: %v", err)
 		}
 	}
 
 	// Shutdown tracer (flush remaining spans)
 	if sctx.tracer != nil {
 		if err := sctx.tracer.Shutdown(shutdownCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: tracer shutdown error: %v\n", err)
+			output.Warn("tracer shutdown error: %v", err)
 		}
 	}
 
@@ -1039,7 +1040,7 @@ func daemonize(_ []string, pidFilePath string, httpPort, adminPort int) error {
 	// Verify the daemon started by checking PID file
 	pidInfo, err := ReadPIDFile(pidFilePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: daemon may have failed to start (could not read PID file: %v)\n", err)
+		output.Warn("daemon may have failed to start (could not read PID file: %v)", err)
 		return nil
 	}
 

@@ -15,6 +15,12 @@ func JSON(v interface{}) error {
 	return enc.Encode(v)
 }
 
+// JSONCompact writes compact (non-indented) JSON to stdout.
+// Used for streaming output where each line is a separate JSON object.
+func JSONCompact(v interface{}) error {
+	return json.NewEncoder(os.Stdout).Encode(v)
+}
+
 // Table creates an aligned table writer for stdout.
 // Remember to call Flush() when done writing.
 func Table() *tabwriter.Writer {
