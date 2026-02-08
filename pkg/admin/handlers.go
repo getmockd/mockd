@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 	types "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/httputil"
-	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/store"
 	"gopkg.in/yaml.v3"
 )
@@ -91,206 +89,10 @@ func (a *API) handleGetStatus(w http.ResponseWriter, r *http.Request, engine *en
 	})
 }
 
-// handleListMocks handles GET /mocks.
-func (a *API) handleListMocks(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
-	ctx := r.Context()
-
-	mocks, err := engine.ListMocks(ctx)
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "list mocks"))
-		return
-	}
-
-	// Filter by enabled status if specified
-	enabledParam := r.URL.Query().Get("enabled")
-	if enabledParam != "" {
-		enabled := enabledParam == "true"
-		filtered := make([]*config.MockConfiguration, 0)
-		for _, mock := range mocks {
-			mockEnabled := mock.Enabled == nil || *mock.Enabled
-			if mockEnabled == enabled {
-				filtered = append(filtered, mock)
-			}
-		}
-		mocks = filtered
-	}
-
-	// Filter by parentId if specified
-	parentIDParam := r.URL.Query().Get("parentId")
-	if parentIDParam != "" {
-		filtered := make([]*config.MockConfiguration, 0)
-		for _, mock := range mocks {
-			if mock.ParentID == parentIDParam {
-				filtered = append(filtered, mock)
-			}
-		}
-		mocks = filtered
-	}
-
-	// Sort by metaSortKey (ascending order - lower values first, including negative for newest-first)
-	sortParam := r.URL.Query().Get("sort")
-	if sortParam == "" || sortParam == "metaSortKey" {
-		sortMocksByMetaSortKey(mocks)
-	}
-
-	writeJSON(w, http.StatusOK, MockListResponse{
-		Mocks: mocks,
-		Count: len(mocks),
-	})
-}
-
-// sortMocksByMetaSortKey sorts mocks by their MetaSortKey in ascending order.
-func sortMocksByMetaSortKey(mocks []*config.MockConfiguration) {
-	sort.Slice(mocks, func(i, j int) bool {
-		return mocks[i].MetaSortKey < mocks[j].MetaSortKey
-	})
-}
-
-// handleCreateMock handles POST /mocks.
-func (a *API) handleCreateMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
-	ctx := r.Context()
-
-	var mock config.MockConfiguration
-	if err := json.NewDecoder(r.Body).Decode(&mock); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
-		return
-	}
-
-	// Set defaults
-	if mock.Enabled == nil {
-		enabled := true
-		mock.Enabled = &enabled
-	}
-	now := time.Now()
-	mock.CreatedAt = now
-	mock.UpdatedAt = now
-
-	// Set default metaSortKey to negative timestamp if not provided (newest first)
-	if mock.MetaSortKey == 0 {
-		mock.MetaSortKey = -float64(now.UnixMilli())
-	}
-
-	created, err := engine.CreateMock(ctx, &mock)
-	if err != nil {
-		if errors.Is(err, engineclient.ErrDuplicate) {
-			writeError(w, http.StatusConflict, "duplicate_id", ErrMsgConflict)
-			return
-		}
-		writeError(w, http.StatusBadRequest, "validation_error", sanitizeValidationError(err, a.log))
-		return
-	}
-	writeJSON(w, http.StatusCreated, created)
-}
-
-// handleGetMock handles GET /mocks/{id}.
-func (a *API) handleGetMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
-	ctx := r.Context()
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")
-		return
-	}
-
-	mock, err := engine.GetMock(ctx, id)
-	if err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
-			return
-		}
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "get mock"))
-		return
-	}
-	writeJSON(w, http.StatusOK, mock)
-}
-
-// handleUpdateMock handles PUT /mocks/{id}.
-func (a *API) handleUpdateMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
-	ctx := r.Context()
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")
-		return
-	}
-
-	var mock config.MockConfiguration
-	if err := json.NewDecoder(r.Body).Decode(&mock); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
-		return
-	}
-
-	updated, err := engine.UpdateMock(ctx, id, &mock)
-	if err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
-			return
-		}
-		writeError(w, http.StatusBadRequest, "validation_error", sanitizeValidationError(err, a.log))
-		return
-	}
-	writeJSON(w, http.StatusOK, updated)
-}
-
-// handleDeleteMock handles DELETE /mocks/{id}.
-func (a *API) handleDeleteMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
-	ctx := r.Context()
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")
-		return
-	}
-
-	if err := engine.DeleteMock(ctx, id); err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
-			return
-		}
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "delete mock"))
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// ToggleRequest is an alias for the shared toggle request type.
-type ToggleRequest = types.ToggleRequest
-
-// handleToggleMock handles POST /mocks/{id}/toggle.
-func (a *API) handleToggleMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
-	ctx := r.Context()
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")
-		return
-	}
-
-	var req ToggleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
-		return
-	}
-
-	mock, err := engine.ToggleMock(ctx, id, req.Enabled)
-	if err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", sanitizeError(err, a.log, "toggle mock", "id", id))
-		return
-	}
-	writeJSON(w, http.StatusOK, mock)
-}
-
 // ConfigImportRequest represents a config import request.
 type ConfigImportRequest struct {
 	Replace bool                   `json:"replace"`
 	Config  *config.MockCollection `json:"config"`
-}
-
-// RequestLogListResponse represents a list of request logs response.
-type RequestLogListResponse struct {
-	Requests []*requestlog.Entry `json:"requests"`
-	Count    int                 `json:"count"`
-	Total    int                 `json:"total"`
 }
 
 // handleExportConfig handles GET /config.
@@ -311,7 +113,8 @@ func (a *API) handleExportConfig(w http.ResponseWriter, r *http.Request, engine 
 	if strings.EqualFold(r.URL.Query().Get("format"), "yaml") {
 		out, err := yaml.Marshal(collection)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "export_error", "Failed to marshal YAML: "+err.Error())
+			a.log.Error("failed to marshal YAML export", "error", err)
+			writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/x-yaml")
@@ -328,17 +131,21 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	ctx := r.Context()
 	var req ConfigImportRequest
 
+	// Override the default body limit — config imports can be large.
+	const maxImportBodySize = 10 << 20 // 10MB
+	r.Body = http.MaxBytesReader(w, r.Body, maxImportBodySize)
+
 	// Detect YAML content type and decode accordingly.
 	ct := r.Header.Get("Content-Type")
 	if strings.Contains(ct, "yaml") {
-		const maxImportBodySize = 10 << 20 // 10MB
-		body, err := io.ReadAll(io.LimitReader(r.Body, maxImportBodySize))
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "read_error", "Failed to read request body")
 			return
 		}
 		if err := yaml.Unmarshal(body, &req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_yaml", "Invalid YAML: "+err.Error())
+			a.log.Debug("YAML parsing failed", "error", err)
+			writeError(w, http.StatusBadRequest, "invalid_yaml", "Invalid YAML in request body")
 			return
 		}
 	} else {
