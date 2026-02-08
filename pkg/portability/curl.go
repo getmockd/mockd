@@ -282,7 +282,7 @@ func (i *CURLImporter) parsedToMock(parsed *curlParsed, id int, now time.Time) *
 	enabled := true
 	m := &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Name:      fmt.Sprintf("%s %s", parsed.method, path),
 		Enabled:   &enabled,
 		CreatedAt: now,

@@ -8,7 +8,7 @@ import (
 )
 
 // handleStateOverview returns information about all stateful resources.
-func (a *AdminAPI) handleStateOverview(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleStateOverview(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	overview, err := engine.GetStateOverview(ctx)
@@ -23,7 +23,7 @@ func (a *AdminAPI) handleStateOverview(w http.ResponseWriter, r *http.Request, e
 }
 
 // handleStateReset resets stateful resources to their seed data.
-func (a *AdminAPI) handleStateReset(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleStateReset(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	// Get optional resource filter from query param
@@ -40,7 +40,7 @@ func (a *AdminAPI) handleStateReset(w http.ResponseWriter, r *http.Request, engi
 }
 
 // handleResetStateResource resets a specific stateful resource to its seed data.
-func (a *AdminAPI) handleResetStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleResetStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 	if name == "" {
@@ -59,7 +59,7 @@ func (a *AdminAPI) handleResetStateResource(w http.ResponseWriter, r *http.Reque
 }
 
 // handleListStateResources returns a list of all registered stateful resources.
-func (a *AdminAPI) handleListStateResources(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleListStateResources(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	overview, err := engine.GetStateOverview(ctx)
@@ -74,7 +74,7 @@ func (a *AdminAPI) handleListStateResources(w http.ResponseWriter, r *http.Reque
 }
 
 // handleGetStateResource returns details about a specific stateful resource.
-func (a *AdminAPI) handleGetStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	name := r.PathValue("name")
@@ -99,7 +99,7 @@ func (a *AdminAPI) handleGetStateResource(w http.ResponseWriter, r *http.Request
 }
 
 // handleClearStateResource clears all items from a specific resource (does not restore seed data).
-func (a *AdminAPI) handleClearStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	name := r.PathValue("name")

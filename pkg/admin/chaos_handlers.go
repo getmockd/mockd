@@ -8,7 +8,7 @@ import (
 )
 
 // handleGetChaos returns the current chaos configuration.
-func (a *AdminAPI) handleGetChaos(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleGetChaos(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	chaosConfig, err := engine.GetChaos(ctx)
@@ -22,7 +22,7 @@ func (a *AdminAPI) handleGetChaos(w http.ResponseWriter, r *http.Request, engine
 }
 
 // handleSetChaos updates the chaos configuration.
-func (a *AdminAPI) handleSetChaos(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleSetChaos(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	var config engineclient.ChaosConfig

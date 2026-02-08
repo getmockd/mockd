@@ -323,7 +323,7 @@ func normalizeLatency(s string) string {
 }
 
 // WaitForShutdown blocks until interrupt, then gracefully stops servers.
-func WaitForShutdown(server *engine.Server, adminAPI *admin.AdminAPI) {
+func WaitForShutdown(server *engine.Server, adminAPI *admin.API) {
 	WaitForShutdownWithCallback(server, adminAPI, nil)
 }
 
@@ -332,7 +332,7 @@ type ShutdownCallback func()
 
 // WaitForShutdownWithCallback blocks until interrupt, then gracefully stops servers.
 // The callback is invoked before stopping servers for additional cleanup (e.g., deregistration).
-func WaitForShutdownWithCallback(server *engine.Server, adminAPI *admin.AdminAPI, callback ShutdownCallback) {
+func WaitForShutdownWithCallback(server *engine.Server, adminAPI *admin.API, callback ShutdownCallback) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -360,7 +360,7 @@ func WaitForShutdownWithCallback(server *engine.Server, adminAPI *admin.AdminAPI
 // WaitForShutdownWithContext blocks until interrupt or context cancellation,
 // then gracefully stops servers. This variant supports context cancellation
 // for coordinated shutdown (e.g., runtime mode with heartbeat loops).
-func WaitForShutdownWithContext(ctx context.Context, server *engine.Server, adminAPI *admin.AdminAPI, callback ShutdownCallback) {
+func WaitForShutdownWithContext(ctx context.Context, server *engine.Server, adminAPI *admin.API, callback ShutdownCallback) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 

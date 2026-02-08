@@ -132,7 +132,7 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 	m := &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
 		Name:      mapping.Name,
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,

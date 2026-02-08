@@ -39,7 +39,7 @@ func getUniquePort() int {
 // portConflictTestBundle groups server and admin API for port conflict tests
 type portConflictTestBundle struct {
 	Server         *engine.Server
-	AdminAPI       *admin.AdminAPI
+	AdminAPI       *admin.API
 	HTTPPort       int
 	AdminPort      int
 	ManagementPort int
@@ -68,7 +68,7 @@ func setupPortConflictServer(t *testing.T) *portConflictTestBundle {
 	require.NoError(t, err)
 
 	// Create admin API with data dir for persistence
-	adminAPI := admin.NewAdminAPI(adminPort,
+	adminAPI := admin.NewAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
 		admin.WithDataDir(dataDir),

@@ -259,7 +259,7 @@ Examples:
 	if sf.DataDir != "" {
 		adminOpts = append(adminOpts, admin.WithDataDir(sf.DataDir))
 	}
-	adminAPI := admin.NewAdminAPI(sf.AdminPort, adminOpts...)
+	adminAPI := admin.NewAPI(sf.AdminPort, adminOpts...)
 	if err := adminAPI.Start(); err != nil {
 		_ = server.Stop()
 		return fmt.Errorf("failed to start admin API: %w", err)

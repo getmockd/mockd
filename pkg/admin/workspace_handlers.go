@@ -34,13 +34,13 @@ type WorkspaceDTO struct {
 
 // getWorkspaceStore returns the workspace store to use.
 // Uses the file-based workspace store.
-func (a *AdminAPI) getWorkspaceStore() store.WorkspaceStore {
+func (a *API) getWorkspaceStore() store.WorkspaceStore {
 	return a.workspaceStore
 }
 
 // handleListWorkspaces returns all workspaces.
 // GET /workspaces
-func (a *AdminAPI) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	wsStore := a.getWorkspaceStore()
 	ctx := r.Context()
 	workspaces, err := wsStore.List(ctx)
@@ -63,7 +63,7 @@ func (a *AdminAPI) handleListWorkspaces(w http.ResponseWriter, r *http.Request) 
 
 // handleGetWorkspace returns a specific workspace.
 // GET /workspaces/{id}
-func (a *AdminAPI) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Workspace ID is required")
@@ -87,7 +87,7 @@ func (a *AdminAPI) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 
 // handleCreateWorkspace creates a new workspace.
 // POST /workspaces
-func (a *AdminAPI) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name        string  `json:"name"`
 		Type        *string `json:"type,omitempty"`
@@ -184,7 +184,7 @@ func (a *AdminAPI) handleCreateWorkspace(w http.ResponseWriter, r *http.Request)
 
 // handleUpdateWorkspace updates an existing workspace.
 // PUT /workspaces/{id}
-func (a *AdminAPI) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Workspace ID is required")
@@ -278,7 +278,7 @@ func (a *AdminAPI) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request)
 
 // handleDeleteWorkspace deletes a workspace.
 // DELETE /workspaces/{id}
-func (a *AdminAPI) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Workspace ID is required")

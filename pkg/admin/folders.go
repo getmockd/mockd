@@ -30,7 +30,7 @@ type UpdateFolderRequest struct {
 }
 
 // getFolderStore returns the folder store to use.
-func (a *AdminAPI) getFolderStore() store.FolderStore {
+func (a *API) getFolderStore() store.FolderStore {
 	if a.dataStore == nil {
 		return nil
 	}
@@ -38,7 +38,7 @@ func (a *AdminAPI) getFolderStore() store.FolderStore {
 }
 
 // handleListFolders returns all folders, optionally filtered by workspace.
-func (a *AdminAPI) handleListFolders(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListFolders(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Folder management requires persistent storage - coming soon")
@@ -62,7 +62,7 @@ func (a *AdminAPI) handleListFolders(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetFolder returns a single folder by ID.
-func (a *AdminAPI) handleGetFolder(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetFolder(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Folder management requires persistent storage - coming soon")
@@ -89,7 +89,7 @@ func (a *AdminAPI) handleGetFolder(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCreateFolder creates a new folder.
-func (a *AdminAPI) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Folder management requires persistent storage - coming soon")
@@ -168,7 +168,7 @@ func (a *AdminAPI) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUpdateFolder updates an existing folder.
-func (a *AdminAPI) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Folder management requires persistent storage - coming soon")
@@ -264,7 +264,7 @@ func isDescendant(ctx context.Context, folderStore store.FolderStore, targetID, 
 }
 
 // handleDeleteFolder deletes a folder.
-func (a *AdminAPI) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Folder management requires persistent storage - coming soon")

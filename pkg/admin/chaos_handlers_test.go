@@ -60,7 +60,7 @@ func TestHandleGetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -90,7 +90,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -122,7 +122,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -158,7 +158,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -189,7 +189,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -226,7 +226,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -247,7 +247,7 @@ func TestHandleGetChaos(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0) // No engine
+		api := NewAPI(0) // No engine
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -269,7 +269,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -302,7 +302,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -332,7 +332,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -376,7 +376,7 @@ func TestHandleSetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: false,
@@ -409,7 +409,7 @@ func TestHandleSetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		// Update to different config
 		newConfig := engineclient.ChaosConfig{
@@ -449,7 +449,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("PUT", "/chaos", bytes.NewReader([]byte("invalid json")))
 		req.Header.Set("Content-Type", "application/json")
@@ -462,7 +462,7 @@ func TestHandleSetChaos(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0) // No engine
+		api := NewAPI(0) // No engine
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -487,7 +487,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("PUT", "/chaos", bytes.NewReader([]byte("")))
 		req.Header.Set("Content-Type", "application/json")
@@ -503,7 +503,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		// Send config with explicit null values
 		body := []byte(`{"enabled": true, "latency": null, "errorRate": null}`)
@@ -527,7 +527,7 @@ func TestChaosConfigValidation(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -553,7 +553,7 @@ func TestChaosConfigValidation(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -583,7 +583,7 @@ func TestChaosConfigValidation(t *testing.T) {
 				server := newMockChaosEngineServer()
 				defer server.Close()
 
-				api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+				api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 				chaosConfig := engineclient.ChaosConfig{
 					Enabled: true,
@@ -613,7 +613,7 @@ func TestChaosHandlerRoundTrip(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		// Get initial config
 		req := httptest.NewRequest("GET", "/chaos", nil)
@@ -673,7 +673,7 @@ func TestChaosHandlerConcurrency(t *testing.T) {
 			},
 		}
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		// Make multiple concurrent GET requests
 		done := make(chan bool, 10)

@@ -50,7 +50,7 @@ func TestSSEHandler_FlusherDetection(t *testing.T) {
 	mockCfg := &config.MockConfiguration{
 		ID:   "test-sse",
 		Name: "Test SSE",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			SSE: &mock.SSEConfig{
 				Events: []mock.SSEEventDef{

@@ -16,7 +16,7 @@ type SSEConnectionListResponse struct {
 }
 
 // handleListSSEConnections handles GET /sse/connections.
-func (a *AdminAPI) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if a.localEngine == nil {
@@ -67,7 +67,7 @@ func (a *AdminAPI) handleListSSEConnections(w http.ResponseWriter, r *http.Reque
 }
 
 // handleGetSSEConnection handles GET /sse/connections/{id}.
-func (a *AdminAPI) handleGetSSEConnection(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetSSEConnection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -104,7 +104,7 @@ type CloseConnectionRequest struct {
 }
 
 // handleCloseSSEConnection handles DELETE /sse/connections/{id}.
-func (a *AdminAPI) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -139,7 +139,7 @@ func (a *AdminAPI) handleCloseSSEConnection(w http.ResponseWriter, r *http.Reque
 }
 
 // handleGetSSEStats handles GET /sse/stats.
-func (a *AdminAPI) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if a.localEngine == nil {
@@ -169,7 +169,7 @@ func (a *AdminAPI) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListMockSSEConnections handles GET /mocks/{id}/sse/connections.
-func (a *AdminAPI) handleListMockSSEConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleListMockSSEConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	mockID := r.PathValue("id")
 	if mockID == "" {
@@ -213,7 +213,7 @@ func (a *AdminAPI) handleListMockSSEConnections(w http.ResponseWriter, r *http.R
 }
 
 // handleCloseMockSSEConnections handles DELETE /mocks/{id}/sse/connections.
-func (a *AdminAPI) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	mockID := r.PathValue("id")
 	if mockID == "" {
@@ -257,7 +257,7 @@ func (a *AdminAPI) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.
 
 // handleGetMockSSEBuffer handles GET /mocks/{id}/sse/buffer.
 // Note: Buffer access requires direct engine access - not yet available via HTTP.
-func (a *AdminAPI) handleGetMockSSEBuffer(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetMockSSEBuffer(w http.ResponseWriter, r *http.Request) {
 	mockID := r.PathValue("id")
 	if mockID == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")
@@ -269,7 +269,7 @@ func (a *AdminAPI) handleGetMockSSEBuffer(w http.ResponseWriter, r *http.Request
 
 // handleClearMockSSEBuffer handles DELETE /mocks/{id}/sse/buffer.
 // Note: Buffer access requires direct engine access - not yet available via HTTP.
-func (a *AdminAPI) handleClearMockSSEBuffer(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleClearMockSSEBuffer(w http.ResponseWriter, r *http.Request) {
 	mockID := r.PathValue("id")
 	if mockID == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")

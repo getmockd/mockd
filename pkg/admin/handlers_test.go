@@ -216,7 +216,7 @@ func TestHandleListMocks(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/mocks", nil)
 		rec := httptest.NewRecorder()
@@ -241,16 +241,16 @@ func TestHandleListMocks(t *testing.T) {
 			ID:      "mock-1",
 			Name:    "Test Mock 1",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		})
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-2",
 			Name:    "Test Mock 2",
 			Enabled: boolPtr(false),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/mocks", nil)
 		rec := httptest.NewRecorder()
@@ -273,16 +273,16 @@ func TestHandleListMocks(t *testing.T) {
 			ID:      "mock-enabled",
 			Name:    "Enabled Mock",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		})
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-disabled",
 			Name:    "Disabled Mock",
 			Enabled: boolPtr(false),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/mocks?enabled=true", nil)
 		rec := httptest.NewRecorder()
@@ -307,16 +307,16 @@ func TestHandleListMocks(t *testing.T) {
 			ID:       "mock-root",
 			Name:     "Root Mock",
 			ParentID: "",
-			Type:     mock.MockTypeHTTP,
+			Type:     mock.TypeHTTP,
 		})
 		server.addMock(&config.MockConfiguration{
 			ID:       "mock-folder1",
 			Name:     "Folder 1 Mock",
 			ParentID: "folder-1",
-			Type:     mock.MockTypeHTTP,
+			Type:     mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/mocks?parentId=folder-1", nil)
 		rec := httptest.NewRecorder()
@@ -333,7 +333,7 @@ func TestHandleListMocks(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0) // No engine
+		api := NewAPI(0) // No engine
 
 		req := httptest.NewRequest("GET", "/mocks", nil)
 		rec := httptest.NewRecorder()
@@ -359,7 +359,7 @@ func TestHandleGetMock(t *testing.T) {
 			ID:      "mock-123",
 			Name:    "Test Mock",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -373,7 +373,7 @@ func TestHandleGetMock(t *testing.T) {
 		}
 		server.addMock(testMock)
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/mocks/mock-123", nil)
 		req.SetPathValue("id", "mock-123")
@@ -394,7 +394,7 @@ func TestHandleGetMock(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/mocks/nonexistent", nil)
 		req.SetPathValue("id", "nonexistent")
@@ -414,7 +414,7 @@ func TestHandleGetMock(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/mocks/", nil)
 		req.SetPathValue("id", "")
@@ -431,7 +431,7 @@ func TestHandleGetMock(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		req := httptest.NewRequest("GET", "/mocks/mock-123", nil)
 		req.SetPathValue("id", "mock-123")
@@ -454,7 +454,7 @@ func TestHandleCreateMock(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		mockData := map[string]interface{}{
 			"id":      "new-mock",
@@ -493,7 +493,7 @@ func TestHandleCreateMock(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("POST", "/mocks", bytes.NewReader([]byte("invalid json")))
 		req.Header.Set("Content-Type", "application/json")
@@ -516,10 +516,10 @@ func TestHandleCreateMock(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:   "existing-mock",
 			Name: "Existing Mock",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		mockData := map[string]interface{}{
 			"id":   "existing-mock",
@@ -543,7 +543,7 @@ func TestHandleCreateMock(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		mockData := map[string]interface{}{
 			"id":   "new-mock",
@@ -571,10 +571,10 @@ func TestHandleUpdateMock(t *testing.T) {
 			ID:      "mock-to-update",
 			Name:    "Original Name",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		updateData := map[string]interface{}{
 			"name":    "Updated Name",
@@ -603,7 +603,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		updateData := map[string]interface{}{
 			"name": "Updated Name",
@@ -632,10 +632,10 @@ func TestHandleUpdateMock(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:   "mock-to-update",
 			Name: "Original Name",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("PUT", "/mocks/mock-to-update", bytes.NewReader([]byte("invalid")))
 		req.SetPathValue("id", "mock-to-update")
@@ -656,7 +656,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("PUT", "/mocks/", bytes.NewReader([]byte("{}")))
 		req.SetPathValue("id", "")
@@ -668,7 +668,7 @@ func TestHandleUpdateMock(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		updateData := map[string]interface{}{
 			"name": "Updated Name",
@@ -694,10 +694,10 @@ func TestHandleDeleteMock(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:   "mock-to-delete",
 			Name: "To Be Deleted",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("DELETE", "/mocks/mock-to-delete", nil)
 		req.SetPathValue("id", "mock-to-delete")
@@ -715,7 +715,7 @@ func TestHandleDeleteMock(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("DELETE", "/mocks/nonexistent", nil)
 		req.SetPathValue("id", "nonexistent")
@@ -735,7 +735,7 @@ func TestHandleDeleteMock(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("DELETE", "/mocks/", nil)
 		req.SetPathValue("id", "")
@@ -747,7 +747,7 @@ func TestHandleDeleteMock(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		req := httptest.NewRequest("DELETE", "/mocks/mock-123", nil)
 		req.SetPathValue("id", "mock-123")
@@ -769,10 +769,10 @@ func TestHandleToggleMock(t *testing.T) {
 			ID:      "mock-toggle",
 			Name:    "Toggle Mock",
 			Enabled: boolPtr(false),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		body := `{"enabled": true}`
 		req := httptest.NewRequest("POST", "/mocks/mock-toggle/toggle", bytes.NewReader([]byte(body)))
@@ -799,10 +799,10 @@ func TestHandleToggleMock(t *testing.T) {
 			ID:      "mock-toggle",
 			Name:    "Toggle Mock",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		body := `{"enabled": false}`
 		req := httptest.NewRequest("POST", "/mocks/mock-toggle/toggle", bytes.NewReader([]byte(body)))
@@ -825,7 +825,7 @@ func TestHandleToggleMock(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		body := `{"enabled": true}`
 		req := httptest.NewRequest("POST", "/mocks/nonexistent/toggle", bytes.NewReader([]byte(body)))
@@ -845,10 +845,10 @@ func TestHandleToggleMock(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:   "mock-toggle",
 			Name: "Toggle Mock",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("POST", "/mocks/mock-toggle/toggle", bytes.NewReader([]byte("invalid")))
 		req.SetPathValue("id", "mock-toggle")
@@ -860,7 +860,7 @@ func TestHandleToggleMock(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		body := `{"enabled": true}`
 		req := httptest.NewRequest("POST", "/mocks/mock-123/toggle", bytes.NewReader([]byte(body)))
@@ -876,7 +876,7 @@ func TestHandleToggleMock(t *testing.T) {
 // TestHandleHealth tests the GET /health handler.
 func TestHandleHealth(t *testing.T) {
 	t.Run("returns healthy status", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		req := httptest.NewRequest("GET", "/health", nil)
 		rec := httptest.NewRecorder()
@@ -901,15 +901,15 @@ func TestHandleGetStatus(t *testing.T) {
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-1",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		})
 		server.addMock(&config.MockConfiguration{
 			ID:      "mock-2",
 			Enabled: boolPtr(false),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(8080, WithLocalEngineClient(server.client()))
+		api := NewAPI(8080, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/status", nil)
 		rec := httptest.NewRecorder()
@@ -928,7 +928,7 @@ func TestHandleGetStatus(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		req := httptest.NewRequest("GET", "/status", nil)
 		rec := httptest.NewRecorder()
@@ -949,10 +949,10 @@ func TestHandleExportConfig(t *testing.T) {
 			ID:      "mock-1",
 			Name:    "Export Test Mock",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		})
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/config", nil)
 		rec := httptest.NewRecorder()
@@ -969,7 +969,7 @@ func TestHandleExportConfig(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		req := httptest.NewRequest("GET", "/config", nil)
 		rec := httptest.NewRecorder()
@@ -986,7 +986,7 @@ func TestHandleImportConfig(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		importData := map[string]interface{}{
 			"config": map[string]interface{}{
@@ -1017,7 +1017,7 @@ func TestHandleImportConfig(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		importData := map[string]interface{}{
 			"replace": false,
@@ -1042,7 +1042,7 @@ func TestHandleImportConfig(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("POST", "/config", bytes.NewReader([]byte("invalid")))
 		req.Header.Set("Content-Type", "application/json")
@@ -1054,7 +1054,7 @@ func TestHandleImportConfig(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		importData := map[string]interface{}{
 			"config": map[string]interface{}{
@@ -1079,7 +1079,7 @@ func TestHandleListRequests(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/requests", nil)
 		rec := httptest.NewRecorder()
@@ -1090,7 +1090,7 @@ func TestHandleListRequests(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		req := httptest.NewRequest("GET", "/requests", nil)
 		rec := httptest.NewRecorder()
@@ -1107,7 +1107,7 @@ func TestHandleGetRequest(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/requests/req-123", nil)
 		req.SetPathValue("id", "req-123")
@@ -1122,7 +1122,7 @@ func TestHandleGetRequest(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/requests/", nil)
 		req.SetPathValue("id", "")
@@ -1134,7 +1134,7 @@ func TestHandleGetRequest(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		req := httptest.NewRequest("GET", "/requests/req-123", nil)
 		req.SetPathValue("id", "req-123")
@@ -1152,7 +1152,7 @@ func TestHandleClearRequests(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("DELETE", "/requests", nil)
 		rec := httptest.NewRecorder()
@@ -1163,7 +1163,7 @@ func TestHandleClearRequests(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		req := httptest.NewRequest("DELETE", "/requests", nil)
 		rec := httptest.NewRecorder()
@@ -1265,7 +1265,7 @@ func TestAdminAPIWithTimeout(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
@@ -1285,7 +1285,7 @@ func TestAdminAPIWithTimeout(t *testing.T) {
 func TestHandleListEngines(t *testing.T) {
 	t.Run("returns empty list when no local engine configured", func(t *testing.T) {
 		// Create API without local engine
-		api := NewAdminAPI(0)
+		api := NewAPI(0)
 
 		req := httptest.NewRequest("GET", "/engines", nil)
 		rec := httptest.NewRecorder()
@@ -1306,7 +1306,7 @@ func TestHandleListEngines(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/engines", nil)
 		rec := httptest.NewRecorder()
@@ -1333,7 +1333,7 @@ func TestHandleListEngines(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
 
 		// Register a remote engine
 		remoteEngine := &store.Engine{
@@ -1367,7 +1367,7 @@ func TestHandleListEngines(t *testing.T) {
 	t.Run("returns offline status when local engine is unreachable", func(t *testing.T) {
 		// Create a client that points to a non-existent server
 		client := engineclient.New("http://localhost:99999")
-		api := NewAdminAPI(0, WithLocalEngineClient(client))
+		api := NewAPI(0, WithLocalEngineClient(client))
 
 		req := httptest.NewRequest("GET", "/engines", nil)
 		rec := httptest.NewRecorder()

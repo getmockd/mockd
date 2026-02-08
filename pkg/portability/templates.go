@@ -93,7 +93,7 @@ func newMock(id, name, method, path string, statusCode int, body string, now tim
 	return &config.MockConfiguration{
 		ID:        id,
 		Name:      name,
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,

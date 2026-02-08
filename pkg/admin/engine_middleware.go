@@ -20,12 +20,12 @@ type EngineHandlerFunc func(w http.ResponseWriter, r *http.Request, engine *engi
 //
 //	mux.HandleFunc("GET /mocks", a.requireEngine(a.handleListMocksWithEngine))
 //
-//	func (a *AdminAPI) handleListMocksWithEngine(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+//	func (a *API) handleListMocksWithEngine(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 //	    // engine is guaranteed to be non-nil here
 //	    mocks, err := engine.ListMocks(r.Context())
 //	    ...
 //	}
-func (a *AdminAPI) requireEngine(handler EngineHandlerFunc) http.HandlerFunc {
+func (a *API) requireEngine(handler EngineHandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if a.localEngine == nil {
 			writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
@@ -41,7 +41,7 @@ func (a *AdminAPI) requireEngine(handler EngineHandlerFunc) http.HandlerFunc {
 // Usage:
 //
 //	mux.HandleFunc("GET /mocks", a.requireEngineOr(a.handleListMocksWithEngine, a.handleNoEngine))
-func (a *AdminAPI) requireEngineOr(handler EngineHandlerFunc, fallback http.HandlerFunc) http.HandlerFunc {
+func (a *API) requireEngineOr(handler EngineHandlerFunc, fallback http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if a.localEngine == nil {
 			fallback(w, r)
@@ -53,13 +53,13 @@ func (a *AdminAPI) requireEngineOr(handler EngineHandlerFunc, fallback http.Hand
 
 // HasEngine returns true if an engine is connected.
 // Useful for conditional logic in templates or status endpoints.
-func (a *AdminAPI) HasEngine() bool {
+func (a *API) HasEngine() bool {
 	return a.localEngine != nil
 }
 
 // Engine returns the engine client, or nil if not connected.
 // Prefer using requireEngine() for handlers instead of direct access.
-func (a *AdminAPI) Engine() *engineclient.Client {
+func (a *API) Engine() *engineclient.Client {
 	return a.localEngine
 }
 
@@ -68,14 +68,14 @@ func (a *AdminAPI) Engine() *engineclient.Client {
 //
 // Usage:
 //
-//	func (a *AdminAPI) handleSomething(w http.ResponseWriter, r *http.Request) {
+//	func (a *API) handleSomething(w http.ResponseWriter, r *http.Request) {
 //	    engine := a.withEngine(w)
 //	    if engine == nil {
 //	        return // Error already written
 //	    }
 //	    // Continue with engine...
 //	}
-func (a *AdminAPI) withEngine(w http.ResponseWriter) *engineclient.Client {
+func (a *API) withEngine(w http.ResponseWriter) *engineclient.Client {
 	if a.localEngine == nil {
 		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
 		return nil

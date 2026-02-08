@@ -1,4 +1,4 @@
-// Option functions for configuring AdminAPI.
+// Option functions for configuring API.
 
 package admin
 
@@ -10,27 +10,27 @@ import (
 	"github.com/getmockd/mockd/pkg/tracing"
 )
 
-// Option configures an AdminAPI.
-type Option func(*AdminAPI)
+// Option configures an API.
+type Option func(*API)
 
 // WithLocalEngine configures the admin API to use an HTTP client
 // to communicate with a local engine at the given URL.
 func WithLocalEngine(url string) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.localEngine = engineclient.New(url)
 	}
 }
 
 // WithLocalEngineClient configures the admin API to use the given engine client.
 func WithLocalEngineClient(client *engineclient.Client) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.localEngine = client
 	}
 }
 
 // WithRegistrationTokenExpiration sets the expiration duration for registration tokens.
 func WithRegistrationTokenExpiration(d time.Duration) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		if d > 0 {
 			a.registrationTokenExpiration = d
 		}
@@ -39,7 +39,7 @@ func WithRegistrationTokenExpiration(d time.Duration) Option {
 
 // WithEngineTokenExpiration sets the expiration duration for engine tokens.
 func WithEngineTokenExpiration(d time.Duration) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		if d > 0 {
 			a.engineTokenExpiration = d
 		}
@@ -49,7 +49,7 @@ func WithEngineTokenExpiration(d time.Duration) Option {
 // WithRateLimiter configures a custom rate limiter for the admin API.
 // If not set, a default rate limiter (100 req/s, burst 200) is used.
 func WithRateLimiter(rl *ratelimit.PerIPLimiter) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.rateLimiter = rl
 	}
 }
@@ -57,7 +57,7 @@ func WithRateLimiter(rl *ratelimit.PerIPLimiter) Option {
 // WithCORS configures the CORS settings for the admin API.
 // If not set, a default permissive configuration (allow all origins) is used.
 func WithCORS(config CORSConfig) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.corsConfig = config
 	}
 }
@@ -65,7 +65,7 @@ func WithCORS(config CORSConfig) Option {
 // WithTracer sets the tracer for distributed tracing.
 // When set, tracing middleware will be applied to capture request spans.
 func WithTracer(t *tracing.Tracer) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.tracer = t
 	}
 }
@@ -73,7 +73,7 @@ func WithTracer(t *tracing.Tracer) Option {
 // WithAPIKey sets a specific API key for authentication.
 // If not set, a random key will be generated on startup.
 func WithAPIKey(key string) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.apiKeyConfig.Key = key
 		a.apiKeyConfig.Enabled = true
 	}
@@ -81,7 +81,7 @@ func WithAPIKey(key string) Option {
 
 // WithAPIKeyConfig sets the full API key configuration.
 func WithAPIKeyConfig(config APIKeyConfig) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.apiKeyConfig = config
 	}
 }
@@ -89,7 +89,7 @@ func WithAPIKeyConfig(config APIKeyConfig) Option {
 // WithAPIKeyDisabled disables API key authentication entirely.
 // WARNING: This makes the admin API accessible without any authentication.
 func WithAPIKeyDisabled() Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.apiKeyConfig.Enabled = false
 	}
 }
@@ -97,14 +97,14 @@ func WithAPIKeyDisabled() Option {
 // WithAPIKeyAllowLocalhost allows requests from localhost without API key.
 // This is useful for development but should not be used in production.
 func WithAPIKeyAllowLocalhost(allow bool) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.apiKeyConfig.AllowLocalhost = allow
 	}
 }
 
 // WithAPIKeyFilePath sets a custom path for storing/loading the API key.
 func WithAPIKeyFilePath(path string) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.apiKeyConfig.KeyFilePath = path
 	}
 }
@@ -112,7 +112,7 @@ func WithAPIKeyFilePath(path string) Option {
 // WithDataDir sets a custom data directory for the Admin API's persistent store.
 // This allows test isolation by using separate data directories.
 func WithDataDir(dir string) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.dataDir = dir
 	}
 }
@@ -120,7 +120,7 @@ func WithDataDir(dir string) Option {
 // WithVersion sets the version string returned by the status endpoint.
 // If not set, defaults to "dev".
 func WithVersion(version string) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.version = version
 	}
 }
@@ -129,7 +129,7 @@ func WithVersion(version string) Option {
 // This is useful for development but should not be used in production.
 // Default is false - authentication is always required.
 func WithAllowLocalhostBypass(allow bool) Option {
-	return func(a *AdminAPI) {
+	return func(a *API) {
 		a.allowLocalhostBypass = allow
 	}
 }

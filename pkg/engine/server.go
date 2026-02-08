@@ -447,7 +447,7 @@ func (s *Server) listMocks() []*config.MockConfiguration {
 // listHTTPMocks returns only HTTP mock configurations.
 // This is an internal method - external callers should use the HTTP API.
 func (s *Server) listHTTPMocks() []*config.MockConfiguration {
-	return s.mockManager.ListByType(mock.MockTypeHTTP)
+	return s.mockManager.ListByType(mock.TypeHTTP)
 }
 
 // IsRunning returns whether the server is running.

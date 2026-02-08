@@ -20,7 +20,7 @@ type MockStore interface {
 	List() []*mock.Mock
 
 	// ListByType returns all mocks of a specific type.
-	ListByType(mockType mock.MockType) []*mock.Mock
+	ListByType(mockType mock.Type) []*mock.Mock
 
 	// Count returns the number of stored mocks.
 	Count() int

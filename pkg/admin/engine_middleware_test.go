@@ -17,7 +17,7 @@ func TestRequireEngine(t *testing.T) {
 	t.Run("returns 503 when no engine connected", func(t *testing.T) {
 		t.Parallel()
 
-		api := &AdminAPI{
+		api := &API{
 			localEngine: nil, // No engine
 		}
 
@@ -45,7 +45,7 @@ func TestRequireEngine(t *testing.T) {
 
 		// Create a minimal mock engine client
 		mockEngine := &engineclient.Client{}
-		api := &AdminAPI{
+		api := &API{
 			localEngine: mockEngine,
 		}
 
@@ -74,7 +74,7 @@ func TestRequireEngineOr(t *testing.T) {
 	t.Run("calls fallback when no engine connected", func(t *testing.T) {
 		t.Parallel()
 
-		api := &AdminAPI{
+		api := &API{
 			localEngine: nil,
 		}
 
@@ -105,7 +105,7 @@ func TestRequireEngineOr(t *testing.T) {
 		t.Parallel()
 
 		mockEngine := &engineclient.Client{}
-		api := &AdminAPI{
+		api := &API{
 			localEngine: mockEngine,
 		}
 
@@ -138,13 +138,13 @@ func TestHasEngine(t *testing.T) {
 
 	t.Run("returns false when no engine", func(t *testing.T) {
 		t.Parallel()
-		api := &AdminAPI{localEngine: nil}
+		api := &API{localEngine: nil}
 		assert.False(t, api.HasEngine())
 	})
 
 	t.Run("returns true when engine connected", func(t *testing.T) {
 		t.Parallel()
-		api := &AdminAPI{localEngine: &engineclient.Client{}}
+		api := &API{localEngine: &engineclient.Client{}}
 		assert.True(t, api.HasEngine())
 	})
 }
@@ -155,7 +155,7 @@ func TestWithEngine(t *testing.T) {
 	t.Run("returns nil and writes error when no engine", func(t *testing.T) {
 		t.Parallel()
 
-		api := &AdminAPI{localEngine: nil}
+		api := &API{localEngine: nil}
 		rec := httptest.NewRecorder()
 
 		engine := api.withEngine(rec)
@@ -168,7 +168,7 @@ func TestWithEngine(t *testing.T) {
 		t.Parallel()
 
 		mockEngine := &engineclient.Client{}
-		api := &AdminAPI{localEngine: mockEngine}
+		api := &API{localEngine: mockEngine}
 		rec := httptest.NewRecorder()
 
 		engine := api.withEngine(rec)

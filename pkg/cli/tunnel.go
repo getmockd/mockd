@@ -161,7 +161,7 @@ Environment Variables:
 
 	// Create and start the admin API
 	engineURL := fmt.Sprintf("http://localhost:%d", server.ManagementPort())
-	adminAPI := admin.NewAdminAPI(*adminPort, admin.WithLocalEngine(engineURL))
+	adminAPI := admin.NewAPI(*adminPort, admin.WithLocalEngine(engineURL))
 	if err := adminAPI.Start(); err != nil {
 		_ = server.Stop()
 		return fmt.Errorf("failed to start admin API: %w", err)

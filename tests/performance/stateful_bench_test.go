@@ -24,7 +24,7 @@ import (
 // benchServerBundle groups server, admin API, and ports for benchmark tests
 type benchServerBundle struct {
 	Server    *engine.Server
-	AdminAPI  *admin.AdminAPI
+	AdminAPI  *admin.API
 	HTTPPort  int
 	AdminPort int
 }
@@ -84,7 +84,7 @@ func createBenchmarkServer(b *testing.B, seedCount int) *benchServerBundle {
 		b.Fatalf("failed to register resource: %v", err)
 	}
 
-	adminAPI := admin.NewAdminAPI(adminPort,
+	adminAPI := admin.NewAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
 	)
@@ -149,7 +149,7 @@ func createTestServer(t *testing.T, seedCount int) *benchServerBundle {
 	}
 	require.NoError(t, srv.ImportConfig(collection, false))
 
-	adminAPI := admin.NewAdminAPI(adminPort,
+	adminAPI := admin.NewAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
 	)

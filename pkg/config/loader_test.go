@@ -111,7 +111,7 @@ func TestSaveToFile_Success(t *testing.T) {
 			{
 				ID:      "save-mock",
 				Enabled: &enabled,
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 5,
 					Matcher: &mock.HTTPMatcher{
@@ -176,7 +176,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 			{
 				ID:      "mock-1",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 10,
 					Matcher: &mock.HTTPMatcher{
@@ -198,7 +198,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 			{
 				ID:      "mock-2",
 				Enabled: boolPtr(false),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 5,
 					Matcher: &mock.HTTPMatcher{
@@ -307,7 +307,7 @@ func TestSaveMocksToFile(t *testing.T) {
 		{
 			ID:      "sm1",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Path: "/test",

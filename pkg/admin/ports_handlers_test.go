@@ -16,7 +16,7 @@ func TestHandleListPorts_NoEngine(t *testing.T) {
 	defer metrics.Reset()
 
 	// Create admin API without engine
-	api := NewAdminAPI(4290)
+	api := NewAPI(4290)
 	defer api.Stop()
 
 	// Create request

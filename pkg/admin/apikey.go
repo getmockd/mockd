@@ -330,7 +330,7 @@ func (a *apiKeyAuth) getInfo(includeFullKey bool) APIKeyInfo {
 
 // handleGetAPIKey handles GET /admin/api-key.
 // Returns information about the API key (without the full key by default).
-func (a *AdminAPI) handleGetAPIKey(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetAPIKey(w http.ResponseWriter, r *http.Request) {
 	if a.apiKeyAuth == nil {
 		writeError(w, http.StatusNotImplemented, "not_configured", "API key authentication is not configured")
 		return
@@ -345,7 +345,7 @@ func (a *AdminAPI) handleGetAPIKey(w http.ResponseWriter, r *http.Request) {
 
 // handleRotateAPIKey handles POST /admin/api-key/rotate.
 // Generates a new API key and returns it.
-func (a *AdminAPI) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 	if a.apiKeyAuth == nil {
 		writeError(w, http.StatusNotImplemented, "not_configured", "API key authentication is not configured")
 		return
@@ -372,7 +372,7 @@ func (a *AdminAPI) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 
 // APIKey returns the current API key.
 // This is used by the desktop app to get the key for local CLI operations.
-func (a *AdminAPI) APIKey() string {
+func (a *API) APIKey() string {
 	if a.apiKeyAuth == nil {
 		return ""
 	}

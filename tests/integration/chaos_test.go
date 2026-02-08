@@ -74,7 +74,7 @@ func setupBasicMock(t *testing.T, client *engineclient.Client, path string, body
 	mockCfg := &config.MockConfiguration{
 		Name:    "Test Mock",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -640,7 +640,7 @@ func TestChaosMethodSpecificRules(t *testing.T) {
 	mockCfg := &config.MockConfiguration{
 		Name:    "Method Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Path: "/api/test",

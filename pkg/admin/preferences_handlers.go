@@ -9,14 +9,14 @@ import (
 
 // getPreferencesStore returns the preferences store to use.
 // TODO: Implement admin's own persistent store for preferences.
-func (a *AdminAPI) getPreferencesStore() store.PreferencesStore {
+func (a *API) getPreferencesStore() store.PreferencesStore {
 	// TODO: Admin should have its own persistent store for preferences
 	// For now, return nil - preferences feature requires persistent storage
 	return nil
 }
 
 // handleGetPreferences handles GET /preferences.
-func (a *AdminAPI) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	prefsStore := a.getPreferencesStore()
@@ -35,7 +35,7 @@ func (a *AdminAPI) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleUpdatePreferences handles PUT /preferences.
-func (a *AdminAPI) handleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	prefsStore := a.getPreferencesStore()

@@ -13,7 +13,7 @@ import (
 
 // handleGetMockVerification handles GET /mocks/{id}/verify.
 // Returns call count and last called time for a specific mock.
-func (a *AdminAPI) handleGetMockVerification(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleGetMockVerification(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -67,7 +67,7 @@ func (a *AdminAPI) handleGetMockVerification(w http.ResponseWriter, r *http.Requ
 
 // handleVerifyMock handles POST /mocks/{id}/verify.
 // Checks if mock was called according to specified criteria.
-func (a *AdminAPI) handleVerifyMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleVerifyMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -118,7 +118,7 @@ func (a *AdminAPI) handleVerifyMock(w http.ResponseWriter, r *http.Request, engi
 }
 
 // evaluateVerification evaluates the verification criteria against the actual call count.
-func (a *AdminAPI) evaluateVerification(req VerifyRequest, actualCount int) VerifyResponse {
+func (a *API) evaluateVerification(req VerifyRequest, actualCount int) VerifyResponse {
 	response := VerifyResponse{
 		Passed: true,
 		Actual: actualCount,
@@ -188,7 +188,7 @@ func (a *AdminAPI) evaluateVerification(req VerifyRequest, actualCount int) Veri
 
 // handleListMockInvocations handles GET /mocks/{id}/invocations.
 // Returns request history for a specific mock with pagination.
-func (a *AdminAPI) handleListMockInvocations(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleListMockInvocations(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -264,7 +264,7 @@ func (a *AdminAPI) handleListMockInvocations(w http.ResponseWriter, r *http.Requ
 
 // handleResetMockVerification handles DELETE /mocks/{id}/invocations.
 // Clears invocation history for a specific mock.
-func (a *AdminAPI) handleResetMockVerification(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleResetMockVerification(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -298,7 +298,7 @@ func (a *AdminAPI) handleResetMockVerification(w http.ResponseWriter, r *http.Re
 
 // handleResetAllVerification handles DELETE /verify.
 // Clears all invocation history (same as clearing all request logs).
-func (a *AdminAPI) handleResetAllVerification(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleResetAllVerification(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	count, err := engine.ClearRequests(ctx)

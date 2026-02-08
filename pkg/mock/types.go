@@ -10,17 +10,17 @@ import (
 	"github.com/getmockd/mockd/pkg/validation"
 )
 
-// MockType represents the type of mock.
-type MockType string
+// Type represents the type of mock.
+type Type string
 
 const (
-	MockTypeHTTP      MockType = "http"
-	MockTypeWebSocket MockType = "websocket"
-	MockTypeGraphQL   MockType = "graphql"
-	MockTypeGRPC      MockType = "grpc"
-	MockTypeSOAP      MockType = "soap"
-	MockTypeMQTT      MockType = "mqtt"
-	MockTypeOAuth     MockType = "oauth"
+	TypeHTTP      Type = "http"
+	TypeWebSocket Type = "websocket"
+	TypeGraphQL   Type = "graphql"
+	TypeGRPC      Type = "grpc"
+	TypeSOAP      Type = "soap"
+	TypeMQTT      Type = "mqtt"
+	TypeOAuth     Type = "oauth"
 )
 
 // Mock represents a unified mock definition that can be any of the supported types.
@@ -30,7 +30,7 @@ type Mock struct {
 	ID string `json:"id" yaml:"id"`
 
 	// Type determines the mock type and which spec field is populated
-	Type MockType `json:"type" yaml:"type"`
+	Type Type `json:"type" yaml:"type"`
 
 	// Name is a human-readable name for the mock
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
@@ -74,7 +74,7 @@ type Mock struct {
 func (m *Mock) UnmarshalJSON(data []byte) error {
 	// Probe for format detection using RawMessage for field presence
 	var probe struct {
-		Type    MockType        `json:"type"`
+		Type    Type        `json:"type"`
 		Matcher json.RawMessage `json:"matcher"`
 		HTTP    json.RawMessage `json:"http"`
 	}
@@ -122,7 +122,7 @@ func (m *Mock) unmarshalLegacyHTTP(data []byte) error {
 
 	// Convert to new unified format
 	m.ID = legacy.ID
-	m.Type = MockTypeHTTP
+	m.Type = TypeHTTP
 	m.Name = legacy.Name
 	m.Description = legacy.Description
 	m.Enabled = &legacy.Enabled
@@ -146,19 +146,19 @@ func (m *Mock) unmarshalLegacyHTTP(data []byte) error {
 // GetSpec returns the type-specific spec as an interface.
 func (m *Mock) GetSpec() interface{} {
 	switch m.Type {
-	case MockTypeHTTP:
+	case TypeHTTP:
 		return m.HTTP
-	case MockTypeWebSocket:
+	case TypeWebSocket:
 		return m.WebSocket
-	case MockTypeGraphQL:
+	case TypeGraphQL:
 		return m.GraphQL
-	case MockTypeGRPC:
+	case TypeGRPC:
 		return m.GRPC
-	case MockTypeSOAP:
+	case TypeSOAP:
 		return m.SOAP
-	case MockTypeMQTT:
+	case TypeMQTT:
 		return m.MQTT
-	case MockTypeOAuth:
+	case TypeOAuth:
 		return m.OAuth
 	default:
 		return nil
@@ -168,34 +168,34 @@ func (m *Mock) GetSpec() interface{} {
 // GetPath returns the path/endpoint for this mock (for display purposes).
 func (m *Mock) GetPath() string {
 	switch m.Type {
-	case MockTypeHTTP:
+	case TypeHTTP:
 		if m.HTTP != nil && m.HTTP.Matcher != nil {
 			if m.HTTP.Matcher.Path != "" {
 				return m.HTTP.Matcher.Path
 			}
 			return m.HTTP.Matcher.PathPattern
 		}
-	case MockTypeWebSocket:
+	case TypeWebSocket:
 		if m.WebSocket != nil {
 			return m.WebSocket.Path
 		}
-	case MockTypeGraphQL:
+	case TypeGraphQL:
 		if m.GraphQL != nil {
 			return m.GraphQL.Path
 		}
-	case MockTypeGRPC:
+	case TypeGRPC:
 		if m.GRPC != nil {
 			return formatPort(m.GRPC.Port)
 		}
-	case MockTypeSOAP:
+	case TypeSOAP:
 		if m.SOAP != nil {
 			return m.SOAP.Path
 		}
-	case MockTypeMQTT:
+	case TypeMQTT:
 		if m.MQTT != nil {
 			return formatPort(m.MQTT.Port)
 		}
-	case MockTypeOAuth:
+	case TypeOAuth:
 		if m.OAuth != nil {
 			return m.OAuth.Issuer
 		}
@@ -205,7 +205,7 @@ func (m *Mock) GetPath() string {
 
 // GetMethod returns the HTTP method (only applicable for HTTP mocks).
 func (m *Mock) GetMethod() string {
-	if m.Type == MockTypeHTTP && m.HTTP != nil && m.HTTP.Matcher != nil {
+	if m.Type == TypeHTTP && m.HTTP != nil && m.HTTP.Matcher != nil {
 		return m.HTTP.Matcher.Method
 	}
 	return ""

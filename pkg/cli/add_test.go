@@ -183,7 +183,7 @@ func TestBuildHTTPMock(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if cfg.Type != mock.MockTypeHTTP {
+			if cfg.Type != mock.TypeHTTP {
 				t.Errorf("type: got %s, want http", cfg.Type)
 			}
 
@@ -306,7 +306,7 @@ func TestBuildWebSocketMock(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if cfg.Type != mock.MockTypeWebSocket {
+			if cfg.Type != mock.TypeWebSocket {
 				t.Errorf("type: got %s, want websocket", cfg.Type)
 			}
 
@@ -409,7 +409,7 @@ func TestBuildGraphQLMock(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if cfg.Type != mock.MockTypeGraphQL {
+			if cfg.Type != mock.TypeGraphQL {
 				t.Errorf("type: got %s, want graphql", cfg.Type)
 			}
 
@@ -518,7 +518,7 @@ func TestBuildGRPCMock(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if cfg.Type != mock.MockTypeGRPC {
+			if cfg.Type != mock.TypeGRPC {
 				t.Errorf("type: got %s, want grpc", cfg.Type)
 			}
 
@@ -608,7 +608,7 @@ func TestBuildMQTTMock(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if cfg.Type != mock.MockTypeMQTT {
+			if cfg.Type != mock.TypeMQTT {
 				t.Errorf("type: got %s, want mqtt", cfg.Type)
 			}
 
@@ -694,7 +694,7 @@ func TestBuildSOAPMock(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if cfg.Type != mock.MockTypeSOAP {
+			if cfg.Type != mock.TypeSOAP {
 				t.Errorf("type: got %s, want soap", cfg.Type)
 			}
 
@@ -752,7 +752,7 @@ func TestOutputJSONResult(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		err := outputJSONResult(createResult, mock.MockTypeHTTP)
+		err := outputJSONResult(createResult, mock.TypeHTTP)
 
 		w.Close()
 		os.Stdout = oldStdout

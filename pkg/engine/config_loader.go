@@ -199,13 +199,13 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 
 // SaveToFile saves the current mock configurations to a file.
 func (cl *ConfigLoader) SaveToFile(path string, name string) error {
-	mocks := cl.server.Store().ListByType(mock.MockTypeHTTP)
+	mocks := cl.server.Store().ListByType(mock.TypeHTTP)
 	return config.SaveMocksToFile(path, mocks, name)
 }
 
 // Export exports the current configuration as a MockCollection.
 func (cl *ConfigLoader) Export(name string) *config.MockCollection {
-	mocks := cl.server.Store().ListByType(mock.MockTypeHTTP)
+	mocks := cl.server.Store().ListByType(mock.TypeHTTP)
 	return &config.MockCollection{
 		Version: "1.0",
 		Name:    name,

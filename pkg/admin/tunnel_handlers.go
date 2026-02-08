@@ -97,7 +97,7 @@ type TunnelListResponse struct {
 // ============================================================================
 
 // handleEnableTunnel handles POST /engines/{id}/tunnel/enable.
-func (a *AdminAPI) handleEnableTunnel(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleEnableTunnel(w http.ResponseWriter, r *http.Request) {
 	engineID := r.PathValue("id")
 	if engineID == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -174,7 +174,7 @@ func (a *AdminAPI) handleEnableTunnel(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDisableTunnel handles POST /engines/{id}/tunnel/disable.
-func (a *AdminAPI) handleDisableTunnel(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleDisableTunnel(w http.ResponseWriter, r *http.Request) {
 	engineID := r.PathValue("id")
 	if engineID == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -197,7 +197,7 @@ func (a *AdminAPI) handleDisableTunnel(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetTunnelConfig handles GET /engines/{id}/tunnel/config.
-func (a *AdminAPI) handleGetTunnelConfig(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetTunnelConfig(w http.ResponseWriter, r *http.Request) {
 	engineID := r.PathValue("id")
 	if engineID == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -221,7 +221,7 @@ func (a *AdminAPI) handleGetTunnelConfig(w http.ResponseWriter, r *http.Request)
 }
 
 // handleUpdateTunnelConfig handles PUT /engines/{id}/tunnel/config.
-func (a *AdminAPI) handleUpdateTunnelConfig(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleUpdateTunnelConfig(w http.ResponseWriter, r *http.Request) {
 	engineID := r.PathValue("id")
 	if engineID == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -279,7 +279,7 @@ func (a *AdminAPI) handleUpdateTunnelConfig(w http.ResponseWriter, r *http.Reque
 }
 
 // handleGetTunnelStatus handles GET /engines/{id}/tunnel/status.
-func (a *AdminAPI) handleGetTunnelStatus(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetTunnelStatus(w http.ResponseWriter, r *http.Request) {
 	engineID := r.PathValue("id")
 	if engineID == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -318,7 +318,7 @@ func (a *AdminAPI) handleGetTunnelStatus(w http.ResponseWriter, r *http.Request)
 }
 
 // handleTunnelPreview handles POST /engines/{id}/tunnel/preview.
-func (a *AdminAPI) handleTunnelPreview(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleTunnelPreview(w http.ResponseWriter, r *http.Request) {
 	engineID := r.PathValue("id")
 	if engineID == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -360,7 +360,7 @@ func (a *AdminAPI) handleTunnelPreview(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListTunnels handles GET /tunnels.
-func (a *AdminAPI) handleListTunnels(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListTunnels(w http.ResponseWriter, r *http.Request) {
 	var items []TunnelListItem
 
 	// Check local engine tunnel
@@ -417,7 +417,7 @@ func (a *AdminAPI) handleListTunnels(w http.ResponseWriter, r *http.Request) {
 // ============================================================================
 
 // resolveEngine resolves an engine by ID, supporting "local" for co-located engine.
-func (a *AdminAPI) resolveEngine(id string) (*store.Engine, error) {
+func (a *API) resolveEngine(id string) (*store.Engine, error) {
 	if id == LocalEngineID {
 		if a.localEngine == nil {
 			return nil, store.ErrNotFound
@@ -432,7 +432,7 @@ func (a *AdminAPI) resolveEngine(id string) (*store.Engine, error) {
 }
 
 // getTunnelConfig retrieves tunnel config for an engine (local or registry).
-func (a *AdminAPI) getTunnelConfig(engineID string) (*store.TunnelConfig, error) {
+func (a *API) getTunnelConfig(engineID string) (*store.TunnelConfig, error) {
 	if engineID == LocalEngineID {
 		return a.getLocalTunnelConfig(), nil
 	}
@@ -440,14 +440,14 @@ func (a *AdminAPI) getTunnelConfig(engineID string) (*store.TunnelConfig, error)
 }
 
 // getLocalTunnelConfig returns the local engine's tunnel config.
-func (a *AdminAPI) getLocalTunnelConfig() *store.TunnelConfig {
+func (a *API) getLocalTunnelConfig() *store.TunnelConfig {
 	a.tunnelMu.RLock()
 	defer a.tunnelMu.RUnlock()
 	return a.localTunnel
 }
 
 // setLocalTunnelConfig stores the local engine's tunnel config.
-func (a *AdminAPI) setLocalTunnelConfig(cfg *store.TunnelConfig) {
+func (a *API) setLocalTunnelConfig(cfg *store.TunnelConfig) {
 	a.tunnelMu.Lock()
 	defer a.tunnelMu.Unlock()
 	a.localTunnel = cfg
@@ -464,7 +464,7 @@ func generateSubdomain(engineID string) string {
 
 // previewExposedMocks returns the mocks that would be exposed given an exposure config.
 // For MVP this does a simple enumeration from the data store.
-func (a *AdminAPI) previewExposedMocks(r *http.Request, expose store.TunnelExposure) []TunnelPreviewMock {
+func (a *API) previewExposedMocks(r *http.Request, expose store.TunnelExposure) []TunnelPreviewMock {
 	if expose.Mode == "none" {
 		return []TunnelPreviewMock{}
 	}

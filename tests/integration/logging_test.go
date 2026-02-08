@@ -24,7 +24,7 @@ import (
 type loggingTestBundle struct {
 	Server         *engine.Server
 	Client         *engineclient.Client
-	AdminAPI       *admin.AdminAPI
+	AdminAPI       *admin.API
 	HTTPPort       int
 	AdminPort      int
 	ManagementPort int
@@ -49,7 +49,7 @@ func setupLoggingServer(t *testing.T) *loggingTestBundle {
 	require.NoError(t, err)
 
 	tempDir := t.TempDir() // Use temp dir for test isolation
-	adminAPI := admin.NewAdminAPI(adminPort,
+	adminAPI := admin.NewAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
 		admin.WithDataDir(tempDir),
@@ -84,7 +84,7 @@ func TestLoggingRequestsAreLogged(t *testing.T) {
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "log-test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -131,7 +131,7 @@ func TestLoggingRetrieveViaAPI(t *testing.T) {
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "api-log-test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Path: "/api/data",
@@ -172,7 +172,7 @@ func TestLoggingFilterByCriteria(t *testing.T) {
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "users-mock",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -189,7 +189,7 @@ func TestLoggingFilterByCriteria(t *testing.T) {
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "orders-mock",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "POST",
@@ -253,7 +253,7 @@ func TestLoggingClearLogs(t *testing.T) {
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "clear-test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Path: "/api/test",
@@ -311,7 +311,7 @@ func TestLoggingGetSingleRequest(t *testing.T) {
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "single-test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Path: "/api/single",
@@ -367,7 +367,7 @@ func TestLoggingPostRequestWithBody(t *testing.T) {
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "post-body-test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "POST",
@@ -461,7 +461,7 @@ func TestLoggingLimitAndOffset(t *testing.T) {
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "pagination-test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Path: "/api/test",

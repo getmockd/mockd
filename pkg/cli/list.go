@@ -78,7 +78,7 @@ Examples:
 
 	// Filter by type if specified
 	if *mockType != "" {
-		filterType := mock.MockType(strings.ToLower(*mockType))
+		filterType := mock.Type(strings.ToLower(*mockType))
 		filtered := make([]*mock.Mock, 0)
 		for _, m := range mocks {
 			if m.Type == filterType {
@@ -169,7 +169,7 @@ func outputMocksTable(mocks []*mock.Mock) error {
 // extractMockDetails extracts path, method, and status from a mock based on its type.
 func extractMockDetails(m *mock.Mock) (path, method string, status int) {
 	switch m.Type {
-	case mock.MockTypeHTTP, "":
+	case mock.TypeHTTP, "":
 		if m.HTTP != nil {
 			if m.HTTP.Matcher != nil {
 				path = m.HTTP.Matcher.Path
@@ -182,29 +182,29 @@ func extractMockDetails(m *mock.Mock) (path, method string, status int) {
 				status = m.HTTP.Response.StatusCode
 			}
 		}
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		if m.WebSocket != nil {
 			path = m.WebSocket.Path
 			method = "WS"
 		}
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if m.GraphQL != nil {
 			path = m.GraphQL.Path
 			method = "GQL"
 		}
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if m.GRPC != nil {
 			if m.GRPC.Port > 0 {
 				path = fmt.Sprintf(":%d", m.GRPC.Port)
 			}
 			method = "gRPC"
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		if m.MQTT != nil {
 			path = fmt.Sprintf(":%d", m.MQTT.Port)
 			method = "MQTT"
 		}
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if m.SOAP != nil {
 			path = m.SOAP.Path
 			method = "SOAP"

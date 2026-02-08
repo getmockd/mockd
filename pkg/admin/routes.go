@@ -7,7 +7,7 @@ import (
 )
 
 // registerRoutes sets up all API routes.
-func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
+func (a *API) registerRoutes(mux *http.ServeMux) {
 	// Health check, status, metrics, and ports
 	mux.HandleFunc("GET /health", a.handleHealth)
 	mux.HandleFunc("GET /status", a.requireEngine(a.handleGetStatus))
@@ -234,31 +234,24 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /handlers/{id}", a.requireEngine(a.handleGetHandler))
 	mux.HandleFunc("GET /handlers/{id}/health", a.requireEngine(a.handleGetHandlerHealth))
 	mux.HandleFunc("GET /handlers/{id}/stats", a.requireEngine(a.handleGetHandlerStats))
-	mux.HandleFunc("POST /handlers/{id}/start", a.handleStartHandler)
-	mux.HandleFunc("POST /handlers/{id}/stop", a.handleStopHandler)
-	mux.HandleFunc("POST /handlers/{id}/recording/enable", a.handleEnableHandlerRecording)
-	mux.HandleFunc("POST /handlers/{id}/recording/disable", a.handleDisableHandlerRecording)
-	mux.HandleFunc("GET /handlers/{id}/connections", a.handleListHandlerConnections)
-	mux.HandleFunc("DELETE /handlers/{id}/connections/{connId}", a.handleCloseHandlerConnection)
-	mux.HandleFunc("POST /handlers/{id}/broadcast", a.handleBroadcastHandler)
 }
 
 // handleConvertRecordings wraps the convert handler to pass the engine client.
-func (a *AdminAPI) handleConvertRecordings(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleConvertRecordings(w http.ResponseWriter, r *http.Request) {
 	a.proxyManager.handleConvertRecordings(w, r, a.localEngine)
 }
 
 // handleConvertSingleRecording wraps the single recording convert handler.
-func (a *AdminAPI) handleConvertSingleRecording(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleConvertSingleRecording(w http.ResponseWriter, r *http.Request) {
 	a.proxyManager.handleConvertSingleRecording(w, r, a.localEngine)
 }
 
 // handleConvertSession wraps the session convert handler.
-func (a *AdminAPI) handleConvertSession(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleConvertSession(w http.ResponseWriter, r *http.Request) {
 	a.proxyManager.handleConvertSession(w, r, a.localEngine)
 }
 
 // handleConvertStreamRecording wraps the stream recording convert handler.
-func (a *AdminAPI) handleConvertStreamRecording(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleConvertStreamRecording(w http.ResponseWriter, r *http.Request) {
 	a.streamRecordingManager.handleConvertStreamRecording(w, r, a.localEngine)
 }

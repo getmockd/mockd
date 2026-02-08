@@ -156,7 +156,7 @@ func (m *MockServer) Mock(method, path string) *MockBuilder {
 
 	enabled := true
 	mockCfg := &config.MockConfiguration{
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		Enabled: &enabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{

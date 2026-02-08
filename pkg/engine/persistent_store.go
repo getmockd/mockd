@@ -64,7 +64,7 @@ func (p *PersistentMockStore) List() []*mock.Mock {
 }
 
 // ListByType returns all mocks of a specific type.
-func (p *PersistentMockStore) ListByType(mockType mock.MockType) []*mock.Mock {
+func (p *PersistentMockStore) ListByType(mockType mock.Type) []*mock.Mock {
 	mocks, err := p.store.List(p.ctx, &store.MockFilter{Type: mockType})
 	if err != nil {
 		return nil

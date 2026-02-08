@@ -335,7 +335,7 @@ func TestEnhanceMock(t *testing.T) {
 
 		mockCfg := &config.MockConfiguration{
 			Name: "Test Mock",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -374,7 +374,7 @@ func TestEnhanceMock(t *testing.T) {
 
 		mockCfg := &config.MockConfiguration{
 			Name: "Test Mock",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -423,7 +423,7 @@ func TestEnhanceMock(t *testing.T) {
 
 		mockCfg := &config.MockConfiguration{
 			Name: "Test Mock",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Response: nil,
 			},

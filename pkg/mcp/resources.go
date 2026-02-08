@@ -371,7 +371,7 @@ func (p *ResourceProvider) readContextResource() ([]ResourceContent, *JSONRPCErr
 // Works for all protocol types, not just HTTP.
 func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 	switch m.Type {
-	case mock.MockTypeHTTP:
+	case mock.TypeHTTP:
 		if m.HTTP == nil || m.HTTP.Matcher == nil {
 			return "", "", ""
 		}
@@ -385,7 +385,7 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 		if desc == "" {
 			desc = "Mock endpoint for " + m.HTTP.Matcher.Path
 		}
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		if m.WebSocket == nil {
 			return "", "", ""
 		}
@@ -395,7 +395,7 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 		if desc == "" {
 			desc = "WebSocket endpoint " + m.WebSocket.Path
 		}
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if m.GraphQL == nil {
 			return "", "", ""
 		}
@@ -405,7 +405,7 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 		if desc == "" {
 			desc = "GraphQL endpoint " + m.GraphQL.Path
 		}
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if m.GRPC == nil {
 			return "", "", ""
 		}
@@ -415,7 +415,7 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 		if desc == "" {
 			desc = "gRPC mock on port " + formatInt(m.GRPC.Port)
 		}
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if m.SOAP == nil {
 			return "", "", ""
 		}
@@ -425,7 +425,7 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 		if desc == "" {
 			desc = "SOAP endpoint " + m.SOAP.Path
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		if m.MQTT == nil {
 			return "", "", ""
 		}
@@ -435,7 +435,7 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 		if desc == "" {
 			desc = "MQTT broker on port " + formatInt(m.MQTT.Port)
 		}
-	case mock.MockTypeOAuth:
+	case mock.TypeOAuth:
 		if m.OAuth == nil {
 			return "", "", ""
 		}

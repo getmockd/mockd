@@ -1170,7 +1170,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		{
 			ID:        "1",
 			Enabled:   &enabled,
-			Type:      mock.MockTypeHTTP,
+			Type:      mock.TypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
 			HTTP: &mock.HTTPSpec{
@@ -1181,7 +1181,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		{
 			ID:        "2",
 			Enabled:   &enabled,
-			Type:      mock.MockTypeHTTP,
+			Type:      mock.TypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
 			HTTP: &mock.HTTPSpec{
@@ -1192,7 +1192,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		{
 			ID:        "3",
 			Enabled:   &enabled,
-			Type:      mock.MockTypeHTTP,
+			Type:      mock.TypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
 			HTTP: &mock.HTTPSpec{
@@ -1203,7 +1203,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		{
 			ID:        "4",
 			Enabled:   &enabled,
-			Type:      mock.MockTypeHTTP,
+			Type:      mock.TypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
 			HTTP: &mock.HTTPSpec{

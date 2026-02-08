@@ -4,12 +4,14 @@ import (
 	"errors"
 
 	types "github.com/getmockd/mockd/pkg/api/types"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 // Sentinel errors for engine client operations.
 var (
-	// ErrNotFound is returned when a resource is not found.
-	ErrNotFound = errors.New("not found")
+	// ErrNotFound is an alias for store.ErrNotFound so that errors.Is works
+	// consistently across packages.
+	ErrNotFound = store.ErrNotFound
 	// ErrDuplicate is returned when a resource already exists.
 	ErrDuplicate = errors.New("resource already exists")
 )

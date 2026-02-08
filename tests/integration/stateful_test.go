@@ -79,7 +79,7 @@ func parseJSONResponse(t *testing.T, rec *httptest.ResponseRecorder, v interface
 // testServerBundle groups server, admin API, and ports for easy cleanup
 type testServerBundle struct {
 	Server    *engine.Server
-	AdminAPI  *admin.AdminAPI
+	AdminAPI  *admin.API
 	HTTPPort  int
 	AdminPort int
 }
@@ -148,7 +148,7 @@ func createStatefulServerWithAdmin(t *testing.T, resources ...*statefulResourceC
 	// Create and start admin API
 	// The engine client connects lazily, so it's OK that the server isn't started yet
 	tempDir := t.TempDir() // Use temp dir for test isolation
-	adminAPI := admin.NewAdminAPI(adminPort,
+	adminAPI := admin.NewAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
 		admin.WithDataDir(tempDir),

@@ -20,7 +20,7 @@ func ConvertMockEntry(entry MockEntry) (*mock.Mock, error) {
 
 	m := &mock.Mock{
 		ID:          entry.ID,
-		Type:        mock.MockType(entry.Type),
+		Type:        mock.Type(entry.Type),
 		Enabled:     &enabled,
 		WorkspaceID: entry.Workspace,
 		CreatedAt:   now,
@@ -34,7 +34,7 @@ func ConvertMockEntry(entry MockEntry) (*mock.Mock, error) {
 
 	// Default type to HTTP
 	if m.Type == "" {
-		m.Type = mock.MockTypeHTTP
+		m.Type = mock.TypeHTTP
 	}
 
 	// Convert HTTP-specific config
@@ -127,22 +127,22 @@ func convertHTTPMockConfig(cfg *HTTPMockConfig) (*mock.HTTPSpec, error) {
 }
 
 // generateIDForType generates a prefixed mock ID based on the mock type.
-func generateIDForType(t mock.MockType) string {
+func generateIDForType(t mock.Type) string {
 	prefix := "mock"
 	switch t {
-	case mock.MockTypeHTTP:
+	case mock.TypeHTTP:
 		prefix = "http"
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		prefix = "ws"
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		prefix = "gql"
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		prefix = "grpc"
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		prefix = "soap"
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		prefix = "mqtt"
-	case mock.MockTypeOAuth:
+	case mock.TypeOAuth:
 		prefix = "oauth"
 	}
 	return fmt.Sprintf("%s_%x", prefix, time.Now().UnixNano())

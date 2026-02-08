@@ -31,7 +31,7 @@ type PortsResponse struct {
 // Returns all ports in use by mockd, grouped by component.
 // Query params:
 //   - verbose=true: include engine ID, name, workspace, PID
-func (a *AdminAPI) handleListPorts(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListPorts(w http.ResponseWriter, r *http.Request) {
 	verbose := r.URL.Query().Get("verbose") == "true"
 	var ports []PortInfo
 

@@ -40,19 +40,19 @@ func (m *Mock) Validate() error {
 
 	// Validate based on type
 	switch m.Type {
-	case MockTypeHTTP:
+	case TypeHTTP:
 		return m.validateHTTP()
-	case MockTypeWebSocket:
+	case TypeWebSocket:
 		return m.validateWebSocket()
-	case MockTypeGraphQL:
+	case TypeGraphQL:
 		return m.validateGraphQL()
-	case MockTypeGRPC:
+	case TypeGRPC:
 		return m.validateGRPC()
-	case MockTypeSOAP:
+	case TypeSOAP:
 		return m.validateSOAP()
-	case MockTypeMQTT:
+	case TypeMQTT:
 		return m.validateMQTT()
-	case MockTypeOAuth:
+	case TypeOAuth:
 		return m.validateOAuth()
 	case "":
 		// Legacy format - check if HTTP spec is present

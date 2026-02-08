@@ -127,7 +127,7 @@ func TestIsLocalhost_InvalidIP_ReturnsFalse(t *testing.T) {
 
 func TestLocalhostBypass_Disabled_RequiresAuth(t *testing.T) {
 	// Create API with localhost bypass DISABLED (default)
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithAPIKey("test-api-key"),
 		WithAllowLocalhostBypass(false),
 	)
@@ -149,7 +149,7 @@ func TestLocalhostBypass_Disabled_RequiresAuth(t *testing.T) {
 
 func TestLocalhostBypass_Enabled_AllowsLocalhost(t *testing.T) {
 	// Create API with localhost bypass ENABLED
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithAPIKey("test-api-key"),
 		WithAPIKeyAllowLocalhost(true),
 	)
@@ -173,7 +173,7 @@ func TestLocalhostBypass_Enabled_AllowsLocalhost(t *testing.T) {
 
 func TestLocalhostBypass_Enabled_ExternalStillRequiresAuth(t *testing.T) {
 	// Create API with localhost bypass ENABLED
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithAPIKey("test-api-key"),
 		WithAPIKeyAllowLocalhost(true),
 	)
@@ -200,14 +200,14 @@ func TestBulkCreate_DuplicateIDs_ReturnsError(t *testing.T) {
 	// Create temp directory for test isolation
 	tmpDir := t.TempDir()
 
-	api := NewAdminAPI(0, WithDataDir(tmpDir))
+	api := NewAPI(0, WithDataDir(tmpDir))
 	defer api.Stop()
 
 	// Request body with duplicate IDs
 	mocks := []*mock.Mock{
-		{ID: "duplicate-id", Name: "Mock 1", Type: mock.MockTypeHTTP},
-		{ID: "unique-id", Name: "Mock 2", Type: mock.MockTypeHTTP},
-		{ID: "duplicate-id", Name: "Mock 3 - Duplicate", Type: mock.MockTypeHTTP},
+		{ID: "duplicate-id", Name: "Mock 1", Type: mock.TypeHTTP},
+		{ID: "unique-id", Name: "Mock 2", Type: mock.TypeHTTP},
+		{ID: "duplicate-id", Name: "Mock 3 - Duplicate", Type: mock.TypeHTTP},
 	}
 	body, _ := json.Marshal(mocks)
 
@@ -231,14 +231,14 @@ func TestBulkCreate_DuplicateIDs_ReturnsError(t *testing.T) {
 func TestBulkCreate_UniqueIDs_Succeeds(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	api := NewAdminAPI(0, WithDataDir(tmpDir))
+	api := NewAPI(0, WithDataDir(tmpDir))
 	defer api.Stop()
 
 	// Request body with unique IDs
 	mocks := []*mock.Mock{
-		{ID: "mock-1", Name: "Mock 1", Type: mock.MockTypeHTTP},
-		{ID: "mock-2", Name: "Mock 2", Type: mock.MockTypeHTTP},
-		{ID: "mock-3", Name: "Mock 3", Type: mock.MockTypeHTTP},
+		{ID: "mock-1", Name: "Mock 1", Type: mock.TypeHTTP},
+		{ID: "mock-2", Name: "Mock 2", Type: mock.TypeHTTP},
+		{ID: "mock-3", Name: "Mock 3", Type: mock.TypeHTTP},
 	}
 	body, _ := json.Marshal(mocks)
 
@@ -260,7 +260,7 @@ func TestBulkCreate_UniqueIDs_Succeeds(t *testing.T) {
 func TestBulkCreate_PortConflictWithinBatch_ReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	api := NewAdminAPI(0, WithDataDir(tmpDir))
+	api := NewAPI(0, WithDataDir(tmpDir))
 	defer api.Stop()
 
 	// Two MQTT mocks using the same port in the same batch
@@ -268,14 +268,14 @@ func TestBulkCreate_PortConflictWithinBatch_ReturnsError(t *testing.T) {
 		{
 			ID:          "mqtt-1",
 			Name:        "MQTT Mock 1",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		},
 		{
 			ID:          "mqtt-2",
 			Name:        "MQTT Mock 2",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 1883}, // Same port - conflict
 		},
@@ -387,7 +387,7 @@ func TestCreateMock_EngineFailure_RollsBack(t *testing.T) {
 	server := newMockFailingEngineServer("will-fail", "port 8080 is already in use")
 	defer server.Close()
 
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithDataDir(tmpDir),
 		WithLocalEngineClient(server.client()),
 	)
@@ -399,7 +399,7 @@ func TestCreateMock_EngineFailure_RollsBack(t *testing.T) {
 	mockData := &mock.Mock{
 		ID:   "will-fail",
 		Name: "Mock That Fails",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/test"},
 			Response: &mock.HTTPResponse{StatusCode: 200},
@@ -549,7 +549,7 @@ func TestStatefulHandler_GetResource_SetsContentType(t *testing.T) {
 	server := newMockEngineServer()
 	defer server.Close()
 
-	api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+	api := NewAPI(0, WithLocalEngineClient(server.client()))
 	defer api.Stop()
 
 	req := httptest.NewRequest("GET", "/state/resources/users", nil)
@@ -568,7 +568,7 @@ func TestStatefulHandler_ClearResource_SetsContentType(t *testing.T) {
 	server := newMockEngineServer()
 	defer server.Close()
 
-	api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+	api := NewAPI(0, WithLocalEngineClient(server.client()))
 	defer api.Stop()
 
 	req := httptest.NewRequest("DELETE", "/state/resources/users/clear", nil)
@@ -588,7 +588,7 @@ func TestStatefulHandler_ClearResource_SetsContentType(t *testing.T) {
 // ============================================================================
 
 func TestHealthHandler_ReturnsOK(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -606,7 +606,7 @@ func TestHealthHandler_ReturnsOK(t *testing.T) {
 }
 
 func TestHealthHandler_ReturnsUptime(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	api.startTime = time.Now().Add(-10 * time.Second) // Simulate 10 seconds uptime
 	defer api.Stop()
 
@@ -627,7 +627,7 @@ func TestHealthHandler_ReturnsUptime(t *testing.T) {
 // ============================================================================
 
 func TestGenerateToken_ReturnsNonEmpty(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	token, err := api.GenerateRegistrationToken()
@@ -639,7 +639,7 @@ func TestGenerateToken_ReturnsNonEmpty(t *testing.T) {
 }
 
 func TestGenerateToken_ReturnsUnique(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	tokens := make(map[string]bool)
@@ -652,7 +652,7 @@ func TestGenerateToken_ReturnsUnique(t *testing.T) {
 }
 
 func TestValidateToken_ValidToken_ReturnsTrue(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	token, err := api.GenerateRegistrationToken()
@@ -664,7 +664,7 @@ func TestValidateToken_ValidToken_ReturnsTrue(t *testing.T) {
 }
 
 func TestValidateToken_InvalidToken_ReturnsFalse(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	// Try to validate a token that was never generated
@@ -674,7 +674,7 @@ func TestValidateToken_InvalidToken_ReturnsFalse(t *testing.T) {
 
 func TestValidateToken_ExpiredToken_ReturnsFalse(t *testing.T) {
 	// Create API with very short token expiration
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithRegistrationTokenExpiration(50*time.Millisecond),
 	)
 	defer api.Stop()
@@ -690,7 +690,7 @@ func TestValidateToken_ExpiredToken_ReturnsFalse(t *testing.T) {
 }
 
 func TestValidateToken_ConsumedOnUse(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	token, err := api.GenerateRegistrationToken()
@@ -710,7 +710,7 @@ func TestValidateToken_ConsumedOnUse(t *testing.T) {
 // ============================================================================
 
 func TestEngineToken_ValidToken_ReturnsTrue(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	engineID := "test-engine-1"
@@ -722,7 +722,7 @@ func TestEngineToken_ValidToken_ReturnsTrue(t *testing.T) {
 }
 
 func TestEngineToken_WrongEngineID_ReturnsFalse(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	engineID := "test-engine-1"
@@ -735,7 +735,7 @@ func TestEngineToken_WrongEngineID_ReturnsFalse(t *testing.T) {
 }
 
 func TestEngineToken_WrongToken_ReturnsFalse(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	engineID := "test-engine-1"
@@ -748,7 +748,7 @@ func TestEngineToken_WrongToken_ReturnsFalse(t *testing.T) {
 }
 
 func TestEngineToken_NonExistentEngine_ReturnsFalse(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	isValid := api.ValidateEngineToken("non-existent", "any-token")

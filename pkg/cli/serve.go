@@ -121,7 +121,7 @@ type serveContext struct {
 	flags         *serveFlags
 	serverCfg     *config.ServerConfiguration
 	server        *engine.Server
-	adminAPI      *admin.AdminAPI
+	adminAPI      *admin.API
 	runtimeClient *runtime.Client
 	mqttBroker    *mqtt.Broker
 	chaosInjector *chaos.Injector
@@ -783,7 +783,7 @@ func startServers(sctx *serveContext) error {
 		adminOpts = append(adminOpts, admin.WithTracer(sctx.tracer))
 	}
 
-	sctx.adminAPI = admin.NewAdminAPI(f.adminPort, adminOpts...)
+	sctx.adminAPI = admin.NewAPI(f.adminPort, adminOpts...)
 	sctx.adminAPI.SetLogger(sctx.log.With("component", "admin"))
 	if err := sctx.adminAPI.Start(); err != nil {
 		_ = sctx.server.Stop()

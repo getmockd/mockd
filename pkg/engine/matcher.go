@@ -50,7 +50,7 @@ func SelectBestMatchWithCaptures(mocks []*mock.Mock, r *http.Request) *MatchResu
 		}
 
 		// Only HTTP mocks can be matched against HTTP requests
-		if m.Type != mock.MockTypeHTTP || m.HTTP == nil || m.HTTP.Matcher == nil {
+		if m.Type != mock.TypeHTTP || m.HTTP == nil || m.HTTP.Matcher == nil {
 			continue
 		}
 

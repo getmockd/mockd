@@ -181,32 +181,32 @@ func (mm *MockManager) unregisterHandlerLocked(cfg *config.MockConfiguration) {
 	}
 
 	switch cfg.Type {
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if mm.protocolManager != nil {
 			if err := mm.protocolManager.StopGRPCServer(cfg.ID); err != nil {
 				mm.log.Warn("failed to stop gRPC server", "id", cfg.ID, "error", err)
 			}
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		if mm.protocolManager != nil {
 			if err := mm.protocolManager.StopMQTTBroker(cfg.ID); err != nil {
 				mm.log.Warn("failed to stop MQTT broker", "id", cfg.ID, "error", err)
 			}
 		}
 
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		if mm.handler != nil && cfg.WebSocket != nil {
 			mm.handler.UnregisterWebSocketEndpoint(cfg.WebSocket.Path)
 		}
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if mm.handler != nil && cfg.GraphQL != nil {
 			mm.handler.UnregisterGraphQLHandler(cfg.GraphQL.Path)
 		}
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if mm.handler != nil && cfg.SOAP != nil {
 			mm.handler.UnregisterSOAPHandler(cfg.SOAP.Path)
 		}
-	case mock.MockTypeOAuth:
+	case mock.TypeOAuth:
 		if mm.handler != nil && cfg.OAuth != nil {
 			mm.handler.UnregisterOAuthHandler(cfg.OAuth.Issuer)
 		}
@@ -228,7 +228,7 @@ func (mm *MockManager) List() []*config.MockConfiguration {
 }
 
 // ListByType returns mocks of a specific type.
-func (mm *MockManager) ListByType(t mock.MockType) []*config.MockConfiguration {
+func (mm *MockManager) ListByType(t mock.Type) []*config.MockConfiguration {
 	mm.mu.RLock()
 	defer mm.mu.RUnlock()
 	return mm.store.ListByType(t)
@@ -300,42 +300,42 @@ func (mm *MockManager) registerHandlerLocked(cfg *config.MockConfiguration) erro
 	}
 
 	switch cfg.Type {
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		if cfg.WebSocket != nil {
 			if err := mm.registerWebSocketMock(cfg); err != nil {
 				mm.log.Warn("failed to register WebSocket handler", "name", cfg.Name, "error", err)
 				// WebSocket uses shared HTTP port, don't fail the operation
 			}
 		}
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if cfg.GraphQL != nil {
 			if err := mm.registerGraphQLMock(cfg); err != nil {
 				mm.log.Warn("failed to register GraphQL handler", "name", cfg.Name, "error", err)
 				// GraphQL uses shared HTTP port, don't fail the operation
 			}
 		}
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if cfg.SOAP != nil {
 			if err := mm.registerSOAPMock(cfg); err != nil {
 				mm.log.Warn("failed to register SOAP handler", "name", cfg.Name, "error", err)
 				// SOAP uses shared HTTP port, don't fail the operation
 			}
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		if cfg.MQTT != nil {
 			if err := mm.registerMQTTMock(cfg); err != nil {
 				// MQTT requires exclusive port binding - propagate the error
 				return fmt.Errorf("failed to start MQTT broker: %w", err)
 			}
 		}
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if cfg.GRPC != nil {
 			if err := mm.registerGRPCMock(cfg); err != nil {
 				// gRPC requires exclusive port binding - propagate the error
 				return fmt.Errorf("failed to start gRPC server: %w", err)
 			}
 		}
-	case mock.MockTypeOAuth:
+	case mock.TypeOAuth:
 		if cfg.OAuth != nil {
 			if err := mm.registerOAuthMock(cfg); err != nil {
 				mm.log.Warn("failed to register OAuth handler", "name", cfg.Name, "error", err)

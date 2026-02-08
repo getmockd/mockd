@@ -54,7 +54,7 @@ func testServer(t *testing.T) (*mcp.Server, *engine.Server, func()) {
 	// Create admin API with engine client
 	adminPort := getFreePort()
 	tempDir := t.TempDir() // Use temp dir for test isolation
-	adminAPI := admin.NewAdminAPI(adminPort,
+	adminAPI := admin.NewAPI(adminPort,
 		admin.WithLocalEngine(engineURL),
 		admin.WithAPIKeyDisabled(),
 		admin.WithDataDir(tempDir),
@@ -414,7 +414,7 @@ func TestMCP_GetMock(t *testing.T) {
 	// Add a mock via admin client
 	testMock := &config.MockConfiguration{
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -469,7 +469,7 @@ func TestMCP_ListMocks(t *testing.T) {
 	// Add GET and POST mocks via admin client
 	getMock := &config.MockConfiguration{
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -483,7 +483,7 @@ func TestMCP_ListMocks(t *testing.T) {
 	}
 	postMock := &config.MockConfiguration{
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "POST",
@@ -612,7 +612,7 @@ func TestMCP_ResourcesList(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		testMock := &config.MockConfiguration{
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -652,7 +652,7 @@ func TestMCP_ResourcesList_MockURIs(t *testing.T) {
 
 	testMock := &config.MockConfiguration{
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -698,7 +698,7 @@ func TestMCP_ResourcesRead(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		Name:    "Test Users",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -757,7 +757,7 @@ func TestMCP_ResourcesRead_DynamicUpdates(t *testing.T) {
 	// Add a mock via admin client
 	testMock := &config.MockConfiguration{
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",

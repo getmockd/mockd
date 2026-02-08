@@ -71,7 +71,7 @@ func createHTTPMock(t *testing.T, bundle *templatingTestBundle, name string, met
 	testMock := &config.MockConfiguration{
 		Name:    name,
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method:      method,
@@ -245,7 +245,7 @@ func TestHTTPTemplating_RequestRawBody(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		Name:    "raw-body-test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "POST",

@@ -447,7 +447,7 @@ func TestHandleCreateMock(t *testing.T) {
 		engine.mocks["existing-mock"] = &config.MockConfiguration{
 			ID:   "existing-mock",
 			Name: "Existing Mock",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 		}
 		server := newTestServer(engine)
 
@@ -525,13 +525,13 @@ func TestHandleListMocks(t *testing.T) {
 			ID:      "mock-1",
 			Name:    "Test Mock 1",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		}
 		engine.mocks["mock-2"] = &config.MockConfiguration{
 			ID:      "mock-2",
 			Name:    "Test Mock 2",
 			Enabled: boolPtr(false),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		}
 		server := newTestServer(engine)
 
@@ -558,7 +558,7 @@ func TestHandleGetMock(t *testing.T) {
 			ID:      "mock-123",
 			Name:    "Test Mock",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -617,7 +617,7 @@ func TestHandleUpdateMock(t *testing.T) {
 			ID:      "mock-to-update",
 			Name:    "Original Name",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		}
 		server := newTestServer(engine)
 
@@ -674,7 +674,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		engine.mocks["mock-to-update"] = &config.MockConfiguration{
 			ID:   "mock-to-update",
 			Name: "Original Name",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 		}
 		server := newTestServer(engine)
 
@@ -698,7 +698,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		engine.mocks["mock-to-update"] = &config.MockConfiguration{
 			ID:   "mock-to-update",
 			Name: "Original Name",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 		}
 		engine.updateMockErr = errors.New("validation failed")
 		server := newTestServer(engine)
@@ -728,7 +728,7 @@ func TestHandleUpdateMock(t *testing.T) {
 		engine.mocks["mock-123"] = &config.MockConfiguration{
 			ID:   "mock-123",
 			Name: "Original",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 		}
 		server := newTestServer(engine)
 
@@ -763,7 +763,7 @@ func TestHandleDeleteMock(t *testing.T) {
 		engine.mocks["mock-to-delete"] = &config.MockConfiguration{
 			ID:   "mock-to-delete",
 			Name: "To Be Deleted",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 		}
 		server := newTestServer(engine)
 
@@ -807,7 +807,7 @@ func TestHandleToggleMock(t *testing.T) {
 			ID:      "mock-toggle",
 			Name:    "Toggle Mock",
 			Enabled: boolPtr(false),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		}
 		server := newTestServer(engine)
 
@@ -833,7 +833,7 @@ func TestHandleToggleMock(t *testing.T) {
 			ID:      "mock-toggle",
 			Name:    "Toggle Mock",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		}
 		server := newTestServer(engine)
 
@@ -873,7 +873,7 @@ func TestHandleToggleMock(t *testing.T) {
 		engine.mocks["mock-toggle"] = &config.MockConfiguration{
 			ID:   "mock-toggle",
 			Name: "Toggle Mock",
-			Type: mock.MockTypeHTTP,
+			Type: mock.TypeHTTP,
 		}
 		server := newTestServer(engine)
 
@@ -895,8 +895,8 @@ func TestHandleDeploy(t *testing.T) {
 
 		deployData := DeployRequest{
 			Mocks: []*config.MockConfiguration{
-				{ID: "mock-1", Name: "Mock 1", Type: mock.MockTypeHTTP},
-				{ID: "mock-2", Name: "Mock 2", Type: mock.MockTypeHTTP},
+				{ID: "mock-1", Name: "Mock 1", Type: mock.TypeHTTP},
+				{ID: "mock-2", Name: "Mock 2", Type: mock.TypeHTTP},
 			},
 			Replace: false,
 		}
@@ -924,7 +924,7 @@ func TestHandleDeploy(t *testing.T) {
 
 		deployData := DeployRequest{
 			Mocks: []*config.MockConfiguration{
-				{ID: "new-mock", Name: "New Mock", Type: mock.MockTypeHTTP},
+				{ID: "new-mock", Name: "New Mock", Type: mock.TypeHTTP},
 			},
 			Replace: true,
 		}
@@ -1305,7 +1305,7 @@ func TestHandleExportMocks(t *testing.T) {
 			ID:      "mock-1",
 			Name:    "Export Test Mock",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 		}
 		server := newTestServer(engine)
 
@@ -1352,8 +1352,8 @@ func TestHandleImportConfig(t *testing.T) {
 			Config: &config.MockCollection{
 				Version: "1.0",
 				Mocks: []*config.MockConfiguration{
-					{ID: "imported-1", Name: "Imported Mock 1", Type: mock.MockTypeHTTP},
-					{ID: "imported-2", Name: "Imported Mock 2", Type: mock.MockTypeHTTP},
+					{ID: "imported-1", Name: "Imported Mock 1", Type: mock.TypeHTTP},
+					{ID: "imported-2", Name: "Imported Mock 2", Type: mock.TypeHTTP},
 				},
 			},
 			Replace: false,
@@ -1383,7 +1383,7 @@ func TestHandleImportConfig(t *testing.T) {
 			Config: &config.MockCollection{
 				Version: "1.0",
 				Mocks: []*config.MockConfiguration{
-					{ID: "new", Name: "New Mock", Type: mock.MockTypeHTTP},
+					{ID: "new", Name: "New Mock", Type: mock.TypeHTTP},
 				},
 			},
 			Replace: true,

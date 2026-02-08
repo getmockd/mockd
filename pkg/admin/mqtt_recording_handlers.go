@@ -442,7 +442,7 @@ func (m *MQTTRecordingManager) handleGetMQTTStatusInternal(w http.ResponseWriter
 
 // handleListMQTTBrokers handles GET /mqtt.
 // Queries MQTT mocks from the engine (over HTTP) to build broker list.
-func (a *AdminAPI) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
 	// First check local recording manager for directly registered brokers.
 	a.mqttRecordingManager.mu.RLock()
 	localBrokers := len(a.mqttRecordingManager.brokers)
@@ -481,7 +481,7 @@ func (a *AdminAPI) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request)
 
 // handleGetMQTTStatus handles GET /mqtt/status.
 // Queries MQTT mocks from the engine (over HTTP) to build aggregate status.
-func (a *AdminAPI) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
 	// First check local recording manager for directly registered brokers.
 	a.mqttRecordingManager.mu.RLock()
 	localBrokers := len(a.mqttRecordingManager.brokers)

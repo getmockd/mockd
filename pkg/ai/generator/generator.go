@@ -299,7 +299,7 @@ func (g *Generator) parseMockResponse(response string) ([]*config.MockConfigurat
 		enabled := true
 		mocks[i] = &config.MockConfiguration{
 			ID:        fmt.Sprintf("ai-generated-%d", i+1),
-			Type:      mock.MockTypeHTTP,
+			Type:      mock.TypeHTTP,
 			Name:      ep.Name,
 			Enabled:   &enabled,
 			CreatedAt: now,

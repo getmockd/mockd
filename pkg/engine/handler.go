@@ -101,7 +101,7 @@ func (h *Handler) SetStore(store storage.MockStore) {
 
 // HasMatch checks if any mock matches the given request without recording metrics.
 func (h *Handler) HasMatch(r *http.Request) bool {
-	mocks := h.store.ListByType(mock.MockTypeHTTP)
+	mocks := h.store.ListByType(mock.TypeHTTP)
 	return SelectBestMatchWithCaptures(mocks, r) != nil
 }
 
@@ -185,7 +185,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get all mocks (already sorted by priority) - only HTTP type mocks
-	mocks := h.store.ListByType(mock.MockTypeHTTP)
+	mocks := h.store.ListByType(mock.TypeHTTP)
 
 	// Find best matching mock using scoring algorithm (with regex captures)
 	matchResult := SelectBestMatchWithCaptures(mocks, r)

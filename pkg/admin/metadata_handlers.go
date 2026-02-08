@@ -113,7 +113,7 @@ var templateCategories = map[string]string{
 }
 
 // handleListFormats handles GET /formats.
-func (a *AdminAPI) handleListFormats(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListFormats(w http.ResponseWriter, r *http.Request) {
 	formats := make([]SupportedFormat, 0, len(portability.AllFormats()))
 
 	for _, f := range portability.AllFormats() {
@@ -129,7 +129,7 @@ func (a *AdminAPI) handleListFormats(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListTemplates handles GET /templates.
-func (a *AdminAPI) handleListTemplates(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 	portTemplates := portability.ListTemplates()
 	templates := make([]MockTemplate, 0, len(portTemplates))
 
@@ -164,7 +164,7 @@ func (a *AdminAPI) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGenerateFromTemplate handles POST /templates/{name}.
-func (a *AdminAPI) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	name := r.PathValue("name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "missing_name", "Template name is required")

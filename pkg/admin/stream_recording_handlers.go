@@ -511,7 +511,7 @@ func (m *StreamRecordingManager) addWebSocketMock(ctx context.Context, result *r
 	wsEnabled := true
 	wsMock := &config.MockConfiguration{
 		Name:    scenarioName,
-		Type:    mock.MockTypeWebSocket,
+		Type:    mock.TypeWebSocket,
 		Enabled: &wsEnabled,
 		WebSocket: &mock.WebSocketSpec{
 			Path:     req.EndpointPath,
@@ -550,7 +550,7 @@ func (m *StreamRecordingManager) addSSEMock(ctx context.Context, result *recordi
 	sseEnabled := true
 	sseMock := &config.MockConfiguration{
 		Name:    mockName,
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		Enabled: &sseEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{

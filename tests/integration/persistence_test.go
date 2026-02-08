@@ -26,7 +26,7 @@ import (
 type persistenceTestBundle struct {
 	Server         *engine.Server
 	Client         *engineclient.Client
-	AdminAPI       *admin.AdminAPI
+	AdminAPI       *admin.API
 	HTTPPort       int
 	AdminPort      int
 	ManagementPort int
@@ -50,7 +50,7 @@ func setupPersistenceServer(t *testing.T) *persistenceTestBundle {
 	require.NoError(t, err)
 
 	tempDir := t.TempDir() // Use temp dir for test isolation
-	adminAPI := admin.NewAdminAPI(adminPort,
+	adminAPI := admin.NewAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
 		admin.WithDataDir(tempDir),
@@ -86,7 +86,7 @@ func TestPersistenceSaveConfigToFile(t *testing.T) {
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "persist-mock-1",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 10,
 			Matcher: &mock.HTTPMatcher{
@@ -104,7 +104,7 @@ func TestPersistenceSaveConfigToFile(t *testing.T) {
 	_, err = bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "persist-mock-2",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 5,
 			Matcher: &mock.HTTPMatcher{
@@ -177,7 +177,7 @@ func TestPersistenceRestartWithConfigFile(t *testing.T) {
 	_, err = client1.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "restart-mock",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
 			Matcher: &mock.HTTPMatcher{
@@ -303,7 +303,7 @@ func TestPersistenceExportViaAdminAPI(t *testing.T) {
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "export-mock",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
 			Matcher: &mock.HTTPMatcher{
@@ -344,7 +344,7 @@ func TestPersistenceImportMerge(t *testing.T) {
 	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
 		ID:      "existing-mock",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
 			Matcher: &mock.HTTPMatcher{
@@ -418,7 +418,7 @@ func TestNewServerWithMocksFromFile(t *testing.T) {
 			{
 				ID:      "preload-mock",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 0,
 					Matcher: &mock.HTTPMatcher{

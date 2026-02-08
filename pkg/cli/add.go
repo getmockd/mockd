@@ -227,13 +227,13 @@ Examples:
 	mt := strings.ToLower(*mockType)
 
 	// Validate mock type
-	validTypes := map[string]mock.MockType{
-		"http":      mock.MockTypeHTTP,
-		"websocket": mock.MockTypeWebSocket,
-		"graphql":   mock.MockTypeGraphQL,
-		"grpc":      mock.MockTypeGRPC,
-		"mqtt":      mock.MockTypeMQTT,
-		"soap":      mock.MockTypeSOAP,
+	validTypes := map[string]mock.Type{
+		"http":      mock.TypeHTTP,
+		"websocket": mock.TypeWebSocket,
+		"graphql":   mock.TypeGraphQL,
+		"grpc":      mock.TypeGRPC,
+		"mqtt":      mock.TypeMQTT,
+		"soap":      mock.TypeSOAP,
 	}
 
 	mockTypeEnum, ok := validTypes[mt]
@@ -246,18 +246,18 @@ Examples:
 	var err error
 
 	switch mockTypeEnum {
-	case mock.MockTypeHTTP:
+	case mock.TypeHTTP:
 		m, err = buildHTTPMock(*name, *path, *method, *status, *body, *bodyFile, *priority, *delay, headers, matchHeaders, matchQueries,
 			*sse, sseEvents, *sseDelay, *sseTemplate, *sseRepeat, *sseKeepalive)
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		m, err = buildWebSocketMock(*name, *path, *message, *echo)
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		m, err = buildGraphQLMock(*name, *path, *operation, *opType, *response)
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		m, err = buildGRPCMock(*name, *service, *rpcMethod, *response, *grpcPort, protoFiles, protoPaths)
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		m, err = buildMQTTMock(*name, *topic, *payload, *qos, *mqttPort)
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		m, err = buildSOAPMock(*name, *path, *operation, *soapAction, *response)
 	}
 
@@ -332,7 +332,7 @@ Run 'mockd add --help' for more options`)
 	enabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		Enabled: &enabled,
 		HTTP: &mock.HTTPSpec{
 			Priority: priority,
@@ -474,7 +474,7 @@ Run 'mockd add --help' for more options`)
 	wsEnabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
-		Type:    mock.MockTypeWebSocket,
+		Type:    mock.TypeWebSocket,
 		Enabled: &wsEnabled,
 		WebSocket: &mock.WebSocketSpec{
 			Path: path,
@@ -529,7 +529,7 @@ Run 'mockd add --help' for more options`)
 	gqlEnabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
-		Type:    mock.MockTypeGraphQL,
+		Type:    mock.TypeGraphQL,
 		Enabled: &gqlEnabled,
 		GraphQL: &mock.GraphQLSpec{
 			Path:      path,
@@ -633,7 +633,7 @@ Run 'mockd add --help' for more options`)
 	grpcEnabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
-		Type:    mock.MockTypeGRPC,
+		Type:    mock.TypeGRPC,
 		Enabled: &grpcEnabled,
 		GRPC: &mock.GRPCSpec{
 			Port:       port,
@@ -692,7 +692,7 @@ Run 'mockd add --help' for more options`)
 	mqttEnabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
-		Type:    mock.MockTypeMQTT,
+		Type:    mock.TypeMQTT,
 		Enabled: &mqttEnabled,
 		MQTT: &mock.MQTTSpec{
 			Port: port,
@@ -735,7 +735,7 @@ Run 'mockd add --help' for more options`)
 	soapEnabled := true
 	m := &config.MockConfiguration{
 		Name:    name,
-		Type:    mock.MockTypeSOAP,
+		Type:    mock.TypeSOAP,
 		Enabled: &soapEnabled,
 		SOAP: &mock.SOAPSpec{
 			Path:       path,
@@ -757,7 +757,7 @@ Run 'mockd add --help' for more options`)
 }
 
 // outputResult formats and prints the created or merged mock result.
-func outputResult(result *CreateMockResult, mockType mock.MockType, jsonOutput bool) error {
+func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool) error {
 	if jsonOutput {
 		return outputJSONResult(result, mockType)
 	}
@@ -770,7 +770,7 @@ func outputResult(result *CreateMockResult, mockType mock.MockType, jsonOutput b
 		fmt.Printf("  Type: %s\n", created.Type)
 
 		switch mockType {
-		case mock.MockTypeGRPC:
+		case mock.TypeGRPC:
 			if len(result.AddedServices) > 0 {
 				fmt.Printf("  Added:\n")
 				for _, svc := range result.AddedServices {
@@ -783,7 +783,7 @@ func outputResult(result *CreateMockResult, mockType mock.MockType, jsonOutput b
 					fmt.Printf("    - %s\n", svc)
 				}
 			}
-		case mock.MockTypeMQTT:
+		case mock.TypeMQTT:
 			if len(result.AddedTopics) > 0 {
 				fmt.Printf("  Added:\n")
 				for _, topic := range result.AddedTopics {
@@ -805,7 +805,7 @@ func outputResult(result *CreateMockResult, mockType mock.MockType, jsonOutput b
 	fmt.Printf("  Type: %s\n", created.Type)
 
 	switch mockType {
-	case mock.MockTypeHTTP:
+	case mock.TypeHTTP:
 		if created.HTTP != nil {
 			if created.HTTP.Matcher != nil {
 				fmt.Printf("  Method: %s\n", created.HTTP.Matcher.Method)
@@ -815,21 +815,21 @@ func outputResult(result *CreateMockResult, mockType mock.MockType, jsonOutput b
 				fmt.Printf("  Status: %d\n", created.HTTP.Response.StatusCode)
 			}
 		}
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		if created.WebSocket != nil {
 			fmt.Printf("  Path: %s\n", created.WebSocket.Path)
 			if created.WebSocket.EchoMode != nil && *created.WebSocket.EchoMode {
 				fmt.Printf("  Echo: enabled\n")
 			}
 		}
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if created.GraphQL != nil {
 			fmt.Printf("  Path: %s\n", created.GraphQL.Path)
 			for op := range created.GraphQL.Resolvers {
 				fmt.Printf("  Operation: %s\n", op)
 			}
 		}
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if created.GRPC != nil {
 			for svc, cfg := range created.GRPC.Services {
 				fmt.Printf("  Service: %s\n", svc)
@@ -838,12 +838,12 @@ func outputResult(result *CreateMockResult, mockType mock.MockType, jsonOutput b
 				}
 			}
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		if created.MQTT != nil && len(created.MQTT.Topics) > 0 {
 			fmt.Printf("  Topic: %s\n", created.MQTT.Topics[0].Topic)
 			fmt.Printf("  QoS: %d\n", created.MQTT.Topics[0].QoS)
 		}
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if created.SOAP != nil {
 			fmt.Printf("  Path: %s\n", created.SOAP.Path)
 			for op, cfg := range created.SOAP.Operations {
@@ -859,13 +859,13 @@ func outputResult(result *CreateMockResult, mockType mock.MockType, jsonOutput b
 }
 
 // outputJSONResult outputs the created or merged mock in JSON format.
-func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
+func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 	created := result.Mock
 
 	// For merge results, include merge-specific information
 	if result.IsMerge() {
 		switch mockType {
-		case mock.MockTypeGRPC:
+		case mock.TypeGRPC:
 			return output.JSON(struct {
 				ID            string   `json:"id"`
 				Type          string   `json:"type"`
@@ -879,7 +879,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 				AddedServices: result.AddedServices,
 				TotalServices: result.TotalServices,
 			})
-		case mock.MockTypeMQTT:
+		case mock.TypeMQTT:
 			return output.JSON(struct {
 				ID          string   `json:"id"`
 				Type        string   `json:"type"`
@@ -898,7 +898,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 
 	// Standard create output
 	switch mockType {
-	case mock.MockTypeHTTP:
+	case mock.TypeHTTP:
 		createdMethod := ""
 		createdPath := ""
 		createdStatus := 0
@@ -925,7 +925,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 			StatusCode: createdStatus,
 		})
 
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		wsPath := ""
 		echoEnabled := false
 		if created.WebSocket != nil {
@@ -948,7 +948,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 			Echo:   echoEnabled,
 		})
 
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		gqlPath := ""
 		var operations []string
 		if created.GraphQL != nil {
@@ -971,7 +971,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 			Operations: operations,
 		})
 
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		var services []string
 		var methods []string
 		if created.GRPC != nil {
@@ -996,7 +996,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 			Methods:  methods,
 		})
 
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		mqttTopic := ""
 		mqttQoS := 0
 		if created.MQTT != nil && len(created.MQTT.Topics) > 0 {
@@ -1017,7 +1017,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.MockType) error {
 			QoS:    mqttQoS,
 		})
 
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		soapPath := ""
 		var operations []string
 		var soapActions []string

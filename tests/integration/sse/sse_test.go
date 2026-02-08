@@ -70,7 +70,7 @@ func TestSSEBasicStream(t *testing.T) {
 	sseMock := &config.MockConfiguration{
 		ID:      "test-sse",
 		Name:    "Test SSE Mock",
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		Enabled: &sseEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -168,7 +168,7 @@ func TestSSEOpenAITemplate(t *testing.T) {
 	openaiMock := &config.MockConfiguration{
 		ID:      "openai-mock",
 		Name:    "OpenAI Streaming Mock",
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		Enabled: &openaiEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -274,7 +274,7 @@ func TestSSEWithEventTypes(t *testing.T) {
 	typedMock := &config.MockConfiguration{
 		ID:      "typed-events",
 		Name:    "Typed Events Mock",
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		Enabled: &typedEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -366,7 +366,7 @@ func TestSSEChunkedResponse(t *testing.T) {
 	chunkedMock := &config.MockConfiguration{
 		ID:      "chunked-mock",
 		Name:    "Chunked Response Mock",
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		Enabled: &chunkedEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -444,7 +444,7 @@ func TestSSENDJSONResponse(t *testing.T) {
 	ndjsonMock := &config.MockConfiguration{
 		ID:      "ndjson-mock",
 		Name:    "NDJSON Response Mock",
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		Enabled: &ndjsonEnabled,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
@@ -552,7 +552,7 @@ func TestSSE_FullServer_WithMiddleware(t *testing.T) {
 	sseMwEnabled := true
 	sseMock := &config.MockConfiguration{
 		ID:      "sse_middleware_test",
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		Name:    "SSE Middleware Test",
 		Enabled: &sseMwEnabled,
 		HTTP: &mock.HTTPSpec{

@@ -33,7 +33,7 @@ import (
 // ObservabilityTestBundle holds test resources for observability tests.
 type ObservabilityTestBundle struct {
 	Server         *engine.Server
-	AdminAPI       *admin.AdminAPI
+	AdminAPI       *admin.API
 	HTTPPort       int
 	AdminPort      int
 	ManagementPort int
@@ -71,7 +71,7 @@ func setupObservabilityTest(t *testing.T) *ObservabilityTestBundle {
 	tempDir := t.TempDir()
 
 	// Create admin API with metrics enabled and auth disabled for testing
-	adminAPI := admin.NewAdminAPI(adminPort,
+	adminAPI := admin.NewAPI(adminPort,
 		admin.WithAPIKeyDisabled(),
 		admin.WithDataDir(tempDir),
 	)
@@ -187,7 +187,7 @@ func TestObservability_PrometheusMetricsEndpoint(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		Name:    "Metrics Endpoint Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -259,7 +259,7 @@ func TestObservability_RequestCounterMetrics(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		Name:    "Request Counter Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -312,7 +312,7 @@ func TestObservability_RequestDurationHistogram(t *testing.T) {
 	delayedMock := &config.MockConfiguration{
 		Name:    "Delayed Response Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -379,7 +379,7 @@ func TestObservability_ErrorRateMetrics(t *testing.T) {
 	errorMock := &config.MockConfiguration{
 		Name:    "Error Response Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -496,7 +496,7 @@ func TestObservability_MockCountMetrics(t *testing.T) {
 		testMock := &config.MockConfiguration{
 			Name:    fmt.Sprintf("Mock Count Test %d", i),
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -588,7 +588,7 @@ func TestObservability_OpenTelemetryTraces(t *testing.T) {
 		ID:      "trace-test-mock",
 		Name:    "Trace Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -685,7 +685,7 @@ func TestObservability_TraceContextPropagation(t *testing.T) {
 		ID:      "propagation-test-mock",
 		Name:    "Propagation Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -760,7 +760,7 @@ func TestObservability_HealthCheckMetrics(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		Name:    "Health Check Test Mock",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -876,7 +876,7 @@ func TestObservability_ProtocolSpecificMetrics_SSE(t *testing.T) {
 	sseMock := &config.MockConfiguration{
 		Name:    "SSE Metrics Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -948,7 +948,7 @@ func TestObservability_MatchHitsMissesMetrics(t *testing.T) {
 		ID:      "match-hit-test",
 		Name:    "Match Hit Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -1105,7 +1105,7 @@ func TestObservability_MetricLabelCardinalityControl(t *testing.T) {
 	wildcardMock := &config.MockConfiguration{
 		Name:    "Cardinality Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -1180,7 +1180,7 @@ func TestObservability_ConcurrentMetricsUpdates(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		Name:    "Concurrent Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -1242,7 +1242,7 @@ func TestObservability_ErrorMetricsTypes(t *testing.T) {
 		errorMock := &config.MockConfiguration{
 			Name:    fmt.Sprintf("Error %d Test", code),
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -1295,7 +1295,7 @@ func TestObservability_MetricsPersistenceAcrossRequests(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		Name:    "Persistence Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -1358,7 +1358,7 @@ func TestObservability_HistogramQuantileAccuracy(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		Name:    "Quantile Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -1490,7 +1490,7 @@ func TestObservability_TracingSkipPaths(t *testing.T) {
 		ID:      "skip-path-test",
 		Name:    "Skip Path Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -1558,7 +1558,7 @@ func TestObservability_MultipleStatusCodeTracking(t *testing.T) {
 		mock := &config.MockConfiguration{
 			Name:    fmt.Sprintf("Status %d Test", code),
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",
@@ -1653,7 +1653,7 @@ func TestObservability_FullRequestLifecycle(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		Name:    "Lifecycle Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "POST",

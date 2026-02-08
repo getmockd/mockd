@@ -12,17 +12,8 @@ type HandlersListResponse struct {
 	Total    int                             `json:"total"`
 }
 
-// BroadcastRequest represents a request to broadcast a message.
-type BroadcastRequest struct {
-	Type    string            `json:"type,omitempty"`
-	Data    string            `json:"data"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Group   string            `json:"group,omitempty"`
-	ConnIDs []string          `json:"connectionIds,omitempty"`
-}
-
 // GET /handlers
-func (a *AdminAPI) handleListHandlers(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListHandlers(w http.ResponseWriter, r *http.Request) {
 	if a.localEngine == nil {
 		writeJSON(w, http.StatusOK, HandlersListResponse{Handlers: []*engineclient.ProtocolHandler{}, Total: 0})
 		return
@@ -42,7 +33,7 @@ func (a *AdminAPI) handleListHandlers(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /handlers/{id}
-func (a *AdminAPI) handleGetHandler(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleGetHandler(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
@@ -63,7 +54,7 @@ func (a *AdminAPI) handleGetHandler(w http.ResponseWriter, r *http.Request, engi
 }
 
 // GET /handlers/{id}/health
-func (a *AdminAPI) handleGetHandlerHealth(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleGetHandlerHealth(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
@@ -88,7 +79,7 @@ func (a *AdminAPI) handleGetHandlerHealth(w http.ResponseWriter, r *http.Request
 }
 
 // GET /handlers/{id}/stats
-func (a *AdminAPI) handleGetHandlerStats(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleGetHandlerStats(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
@@ -110,94 +101,4 @@ func (a *AdminAPI) handleGetHandlerStats(w http.ResponseWriter, r *http.Request,
 		"connections": handler.Connections,
 		"status":      handler.Status,
 	})
-}
-
-// POST /handlers/{id}/start
-func (a *AdminAPI) handleStartHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
-		return
-	}
-
-	// TODO: Implement handler start via engine API
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Handler start/stop control is not yet available via HTTP API")
-}
-
-// POST /handlers/{id}/stop
-func (a *AdminAPI) handleStopHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
-		return
-	}
-
-	// TODO: Implement handler stop via engine API
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Handler start/stop control is not yet available via HTTP API")
-}
-
-// POST /handlers/{id}/recording/enable
-func (a *AdminAPI) handleEnableHandlerRecording(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
-		return
-	}
-
-	// TODO: Implement recording control via engine API
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Handler recording control is not yet available via HTTP API")
-}
-
-// POST /handlers/{id}/recording/disable
-func (a *AdminAPI) handleDisableHandlerRecording(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
-		return
-	}
-
-	// TODO: Implement recording control via engine API
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Handler recording control is not yet available via HTTP API")
-}
-
-// GET /handlers/{id}/connections
-func (a *AdminAPI) handleListHandlerConnections(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
-		return
-	}
-
-	// TODO: Implement connection listing via engine API
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Handler connection listing is not yet available via HTTP API")
-}
-
-// DELETE /handlers/{id}/connections/{connId}
-func (a *AdminAPI) handleCloseHandlerConnection(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
-		return
-	}
-
-	connID := r.PathValue("connId")
-	if connID == "" {
-		writeError(w, http.StatusBadRequest, "missing_conn_id", "connection id is required")
-		return
-	}
-
-	// TODO: Implement connection close via engine API
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Handler connection management is not yet available via HTTP API")
-}
-
-// POST /handlers/{id}/broadcast
-func (a *AdminAPI) handleBroadcastHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "missing_id", "handler id is required")
-		return
-	}
-
-	// TODO: Implement broadcast via engine API
-	writeError(w, http.StatusNotImplemented, "not_implemented", "Handler broadcast is not yet available via HTTP API")
 }

@@ -63,7 +63,7 @@ func (f *FilteredMockStore) List() []*mock.Mock {
 }
 
 // ListByType returns all mocks of a specific type belonging to this workspace.
-func (f *FilteredMockStore) ListByType(mockType mock.MockType) []*mock.Mock {
+func (f *FilteredMockStore) ListByType(mockType mock.Type) []*mock.Mock {
 	all := f.underlying.ListByType(mockType)
 	filtered := make([]*mock.Mock, 0)
 	for _, m := range all {

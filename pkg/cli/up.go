@@ -33,7 +33,7 @@ type upContext struct {
 	cancel     context.CancelFunc
 
 	// Running services (process-level)
-	admins  map[string]*admin.AdminAPI
+	admins  map[string]*admin.API
 	engines map[string]*engine.Server
 	tunnels map[string]*tunnel.TunnelManager // engine name -> tunnel manager
 
@@ -143,7 +143,7 @@ Examples:
 		detach:       *detach,
 		ctx:          ctx,
 		cancel:       cancel,
-		admins:       make(map[string]*admin.AdminAPI),
+		admins:       make(map[string]*admin.API),
 		engines:      make(map[string]*engine.Server),
 		tunnels:      make(map[string]*tunnel.TunnelManager),
 		adminClients: make(map[string]AdminClient),
@@ -559,7 +559,7 @@ func (uctx *upContext) startAdmin(adminCfg config.AdminConfig) error {
 	}
 
 	// Create admin API
-	adminAPI := admin.NewAdminAPI(adminCfg.Port, opts...)
+	adminAPI := admin.NewAPI(adminCfg.Port, opts...)
 	adminAPI.SetLogger(uctx.log.With("component", "admin", "name", adminCfg.Name))
 
 	// Start admin

@@ -327,7 +327,7 @@ func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ 
 	enabled := true
 	return &config.MockConfiguration{
 		ID:        generateImportID(),
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Name:      name,
 		Enabled:   &enabled,
 		CreatedAt: now,
@@ -443,7 +443,7 @@ func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *Swagge
 	enabled2 := true
 	return &config.MockConfiguration{
 		ID:        generateImportID(),
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Name:      name,
 		Enabled:   &enabled2,
 		CreatedAt: now,

@@ -30,8 +30,8 @@ const DefaultRateLimit float64 = 100
 // DefaultBurstSize is the default burst size for the admin API.
 const DefaultBurstSize int = 200
 
-// AdminAPI exposes a REST API for managing mock configurations.
-type AdminAPI struct {
+// API exposes a REST API for managing mock configurations.
+type API struct {
 	// localEngine is the HTTP client for communicating with the local engine.
 	localEngine *engineclient.Client
 
@@ -90,8 +90,8 @@ type AdminAPI struct {
 	tunnelMu    sync.RWMutex
 }
 
-// NewAdminAPI creates a new AdminAPI.
-func NewAdminAPI(port int, opts ...Option) *AdminAPI {
+// NewAPI creates a new API.
+func NewAPI(port int, opts ...Option) *API {
 	log := logging.Nop() // Default to no-op, can be set with SetLogger
 
 	// Create context for background goroutines
@@ -103,7 +103,7 @@ func NewAdminAPI(port int, opts ...Option) *AdminAPI {
 	// Initialize metrics registry
 	metricsRegistry := metrics.Init()
 
-	api := &AdminAPI{
+	api := &API{
 		proxyManager:                NewProxyManager(),
 		streamRecordingManager:      NewStreamRecordingManager(),
 		mqttRecordingManager:        NewMQTTRecordingManager(),
@@ -195,60 +195,60 @@ func NewAdminAPI(port int, opts ...Option) *AdminAPI {
 }
 
 // InitializeStreamRecordings initializes the stream recording manager with the given data directory.
-func (a *AdminAPI) InitializeStreamRecordings(dataDir string) error {
+func (a *API) InitializeStreamRecordings(dataDir string) error {
 	return a.streamRecordingManager.Initialize(dataDir)
 }
 
 // StreamRecordingManager returns the stream recording manager.
-func (a *AdminAPI) StreamRecordingManager() *StreamRecordingManager {
+func (a *API) StreamRecordingManager() *StreamRecordingManager {
 	return a.streamRecordingManager
 }
 
 // MQTTRecordingManager returns the MQTT recording manager.
-func (a *AdminAPI) MQTTRecordingManager() *MQTTRecordingManager {
+func (a *API) MQTTRecordingManager() *MQTTRecordingManager {
 	return a.mqttRecordingManager
 }
 
 // SOAPRecordingManager returns the SOAP recording manager.
-func (a *AdminAPI) SOAPRecordingManager() *SOAPRecordingManager {
+func (a *API) SOAPRecordingManager() *SOAPRecordingManager {
 	return a.soapRecordingManager
 }
 
 // EngineRegistry returns the engine registry.
-func (a *AdminAPI) EngineRegistry() *store.EngineRegistry {
+func (a *API) EngineRegistry() *store.EngineRegistry {
 	return a.engineRegistry
 }
 
 // WorkspaceManager returns the workspace manager for multi-workspace serving.
-func (a *AdminAPI) WorkspaceManager() *engine.WorkspaceManager {
+func (a *API) WorkspaceManager() *engine.WorkspaceManager {
 	return a.workspaceManager
 }
 
 // LocalEngine returns the local engine HTTP client.
 // Returns nil if no local engine is configured.
-func (a *AdminAPI) LocalEngine() *engineclient.Client {
+func (a *API) LocalEngine() *engineclient.Client {
 	return a.localEngine
 }
 
 // SetLocalEngine sets the local engine client after the admin has started.
 // This allows connecting an engine that was started after the admin.
-func (a *AdminAPI) SetLocalEngine(client *engineclient.Client) {
+func (a *API) SetLocalEngine(client *engineclient.Client) {
 	a.localEngine = client
 }
 
 // MetricsRegistry returns the metrics registry for Prometheus metrics.
-func (a *AdminAPI) MetricsRegistry() *metrics.Registry {
+func (a *API) MetricsRegistry() *metrics.Registry {
 	return a.metricsRegistry
 }
 
 // HasLocalEngine returns true if a local engine is configured.
-func (a *AdminAPI) HasLocalEngine() bool {
+func (a *API) HasLocalEngine() bool {
 	return a.localEngine != nil
 }
 
 // withMiddleware wraps the handler with rate limiting, logging, security headers, CORS, API key auth, and tracing middleware.
 // Middleware order (outermost to innermost): Tracing -> Security Headers -> CORS -> API Key Auth -> Rate Limiting -> Handler
-func (a *AdminAPI) withMiddleware(handler http.Handler) http.Handler {
+func (a *API) withMiddleware(handler http.Handler) http.Handler {
 	// Apply rate limiting first (innermost middleware)
 	rateLimited := ratelimit.Middleware(a.rateLimiter, ratelimit.WithTextResponse())(handler)
 
@@ -323,7 +323,7 @@ var skipTracingPaths = map[string]bool{
 }
 
 // tracingMiddleware wraps a handler with distributed tracing support.
-func (a *AdminAPI) tracingMiddleware(next http.Handler) http.Handler {
+func (a *API) tracingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip tracing for health/metrics endpoints to avoid noise
 		if skipTracingPaths[r.URL.Path] {
@@ -404,12 +404,12 @@ func (w *adminStatusCapturingResponseWriter) Unwrap() http.ResponseWriter {
 }
 
 // Tracer returns the tracer, if configured.
-func (a *AdminAPI) Tracer() *tracing.Tracer {
+func (a *API) Tracer() *tracing.Tracer {
 	return a.tracer
 }
 
 // Start starts the admin API server.
-func (a *AdminAPI) Start() error {
+func (a *API) Start() error {
 	a.startTime = time.Now()
 
 	// Start the engine health check background goroutine
@@ -428,7 +428,7 @@ func (a *AdminAPI) Start() error {
 }
 
 // SetLogger sets the operational logger for the admin API.
-func (a *AdminAPI) SetLogger(log *slog.Logger) {
+func (a *API) SetLogger(log *slog.Logger) {
 	if log != nil {
 		a.log = log
 	} else {
@@ -437,7 +437,7 @@ func (a *AdminAPI) SetLogger(log *slog.Logger) {
 }
 
 // Stop gracefully shuts down the admin API server.
-func (a *AdminAPI) Stop() error {
+func (a *API) Stop() error {
 	// Stop background goroutines
 	a.cancel()
 	a.engineRegistry.Stop()
@@ -467,6 +467,6 @@ func (a *AdminAPI) Stop() error {
 }
 
 // Uptime returns the API uptime in seconds.
-func (a *AdminAPI) Uptime() int {
+func (a *API) Uptime() int {
 	return int(time.Since(a.startTime).Seconds())
 }

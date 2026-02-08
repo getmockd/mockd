@@ -534,7 +534,7 @@ func (s *WorkspaceServer) ListMocks() []*config.MockConfiguration {
 	if s.store == nil {
 		return nil
 	}
-	return s.store.ListByType(mock.MockTypeHTTP)
+	return s.store.ListByType(mock.TypeHTTP)
 }
 
 // GetMock retrieves a mock by ID.

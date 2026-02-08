@@ -41,7 +41,7 @@ func writeError(w http.ResponseWriter, status int, errCode, message string) {
 }
 
 // handleHealth handles GET /health.
-func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, HealthResponse{
 		Status: "ok",
 		Uptime: a.Uptime(),
@@ -49,7 +49,7 @@ func (a *AdminAPI) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetStatus handles GET /status and returns detailed server status.
-func (a *AdminAPI) handleGetStatus(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleGetStatus(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	engineStatus, err := engine.Status(ctx)
@@ -92,7 +92,7 @@ func (a *AdminAPI) handleGetStatus(w http.ResponseWriter, r *http.Request, engin
 }
 
 // handleListMocks handles GET /mocks.
-func (a *AdminAPI) handleListMocks(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleListMocks(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	mocks, err := engine.ListMocks(ctx)
@@ -147,7 +147,7 @@ func sortMocksByMetaSortKey(mocks []*config.MockConfiguration) {
 }
 
 // handleCreateMock handles POST /mocks.
-func (a *AdminAPI) handleCreateMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleCreateMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	var mock config.MockConfiguration
@@ -183,7 +183,7 @@ func (a *AdminAPI) handleCreateMock(w http.ResponseWriter, r *http.Request, engi
 }
 
 // handleGetMock handles GET /mocks/{id}.
-func (a *AdminAPI) handleGetMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleGetMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -204,7 +204,7 @@ func (a *AdminAPI) handleGetMock(w http.ResponseWriter, r *http.Request, engine 
 }
 
 // handleUpdateMock handles PUT /mocks/{id}.
-func (a *AdminAPI) handleUpdateMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleUpdateMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -231,7 +231,7 @@ func (a *AdminAPI) handleUpdateMock(w http.ResponseWriter, r *http.Request, engi
 }
 
 // handleDeleteMock handles DELETE /mocks/{id}.
-func (a *AdminAPI) handleDeleteMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleDeleteMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -254,7 +254,7 @@ func (a *AdminAPI) handleDeleteMock(w http.ResponseWriter, r *http.Request, engi
 type ToggleRequest = types.ToggleRequest
 
 // handleToggleMock handles POST /mocks/{id}/toggle.
-func (a *AdminAPI) handleToggleMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleToggleMock(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -294,7 +294,7 @@ type RequestLogListResponse struct {
 }
 
 // handleExportConfig handles GET /config.
-func (a *AdminAPI) handleExportConfig(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleExportConfig(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	name := r.URL.Query().Get("name")
 	if name == "" {
@@ -324,7 +324,7 @@ func (a *AdminAPI) handleExportConfig(w http.ResponseWriter, r *http.Request, en
 }
 
 // handleImportConfig handles POST /config.
-func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	var req ConfigImportRequest
 
@@ -479,7 +479,7 @@ func (a *AdminAPI) handleImportConfig(w http.ResponseWriter, r *http.Request, en
 //   - graphqlOpType: Filter GraphQL by operation type (query, mutation, subscription)
 //   - wsConnectionId: Filter WebSocket by connection ID
 //   - sseConnectionId: Filter SSE by connection ID
-func (a *AdminAPI) handleListRequests(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleListRequests(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	// Build filter from query parameters
@@ -518,7 +518,7 @@ func (a *AdminAPI) handleListRequests(w http.ResponseWriter, r *http.Request, en
 }
 
 // handleGetRequest handles GET /requests/{id}.
-func (a *AdminAPI) handleGetRequest(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleGetRequest(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 	if id == "" {
@@ -539,7 +539,7 @@ func (a *AdminAPI) handleGetRequest(w http.ResponseWriter, r *http.Request, engi
 }
 
 // handleClearRequests handles DELETE /requests.
-func (a *AdminAPI) handleClearRequests(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleClearRequests(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
 	count, err := engine.ClearRequests(ctx)
@@ -554,7 +554,7 @@ func (a *AdminAPI) handleClearRequests(w http.ResponseWriter, r *http.Request, e
 }
 
 // handleStreamRequests handles GET /requests/stream - SSE endpoint for streaming new requests.
-func (a *AdminAPI) handleStreamRequests(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+func (a *API) handleStreamRequests(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")

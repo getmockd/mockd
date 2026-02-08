@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getmockd/mockd/internal/id"
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/config"
-	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/store"
 )
 
@@ -89,7 +89,7 @@ type EngineWorkspaceConfigEntry struct {
 }
 
 // handleGenerateRegistrationToken handles POST /admin/tokens/registration.
-func (a *AdminAPI) handleGenerateRegistrationToken(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGenerateRegistrationToken(w http.ResponseWriter, r *http.Request) {
 	token, err := a.GenerateRegistrationToken()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "token_generation_failed", "Failed to generate registration token: "+err.Error())
@@ -101,7 +101,7 @@ func (a *AdminAPI) handleGenerateRegistrationToken(w http.ResponseWriter, r *htt
 }
 
 // handleListRegistrationTokens handles GET /admin/tokens/registration.
-func (a *AdminAPI) handleListRegistrationTokens(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListRegistrationTokens(w http.ResponseWriter, r *http.Request) {
 	tokens := a.ListRegistrationTokens()
 	writeJSON(w, http.StatusOK, TokenListResponse{
 		Tokens: tokens,
@@ -113,7 +113,7 @@ func (a *AdminAPI) handleListRegistrationTokens(w http.ResponseWriter, r *http.R
 const LocalEngineID = "local"
 
 // handleListEngines handles GET /engines.
-func (a *AdminAPI) handleListEngines(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListEngines(w http.ResponseWriter, r *http.Request) {
 	engines := a.engineRegistry.List()
 
 	// Include local engine if configured
@@ -133,7 +133,7 @@ func (a *AdminAPI) handleListEngines(w http.ResponseWriter, r *http.Request) {
 
 // buildLocalEngineEntry creates a store.Engine representation of the local engine.
 // Returns nil if the local engine status cannot be retrieved.
-func (a *AdminAPI) buildLocalEngineEntry(ctx context.Context) *store.Engine {
+func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 	if a.localEngine == nil {
 		return nil
 	}
@@ -182,7 +182,7 @@ func (a *AdminAPI) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 }
 
 // handleRegisterEngine handles POST /engines/register.
-func (a *AdminAPI) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	// Check if localhost bypass is allowed AND request is from localhost,
 	// or if API key auth is disabled (trusted network / dev mode).
 	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
@@ -221,7 +221,7 @@ func (a *AdminAPI) handleRegisterEngine(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Generate a new engine ID
-	id := recording.NewULID()
+	id := id.ULID()
 
 	// Generate an engine-specific token for subsequent calls
 	engineToken, err := a.generateEngineToken(id)
@@ -271,7 +271,7 @@ func (a *AdminAPI) handleRegisterEngine(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleGetEngine handles GET /engines/{id}.
-func (a *AdminAPI) handleGetEngine(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetEngine(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -288,7 +288,7 @@ func (a *AdminAPI) handleGetEngine(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUnregisterEngine handles DELETE /engines/{id}.
-func (a *AdminAPI) handleUnregisterEngine(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleUnregisterEngine(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -324,7 +324,7 @@ func (a *AdminAPI) handleUnregisterEngine(w http.ResponseWriter, r *http.Request
 }
 
 // handleEngineHeartbeat handles POST /engines/{id}/heartbeat.
-func (a *AdminAPI) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -382,7 +382,7 @@ func (a *AdminAPI) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request)
 }
 
 // handleAssignWorkspace handles PUT /engines/{id}/workspace.
-func (a *AdminAPI) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -428,7 +428,7 @@ func (a *AdminAPI) handleAssignWorkspace(w http.ResponseWriter, r *http.Request)
 }
 
 // handleAddEngineWorkspace handles POST /engines/{id}/workspaces.
-func (a *AdminAPI) handleAddEngineWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleAddEngineWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -495,7 +495,7 @@ func (a *AdminAPI) handleAddEngineWorkspace(w http.ResponseWriter, r *http.Reque
 }
 
 // handleRemoveEngineWorkspace handles DELETE /engines/{id}/workspaces/{workspaceId}.
-func (a *AdminAPI) handleRemoveEngineWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleRemoveEngineWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	workspaceID := r.PathValue("workspaceId")
 
@@ -522,7 +522,7 @@ func (a *AdminAPI) handleRemoveEngineWorkspace(w http.ResponseWriter, r *http.Re
 }
 
 // handleUpdateEngineWorkspace handles PUT /engines/{id}/workspaces/{workspaceId}.
-func (a *AdminAPI) handleUpdateEngineWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleUpdateEngineWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	workspaceID := r.PathValue("workspaceId")
 
@@ -551,7 +551,7 @@ func (a *AdminAPI) handleUpdateEngineWorkspace(w http.ResponseWriter, r *http.Re
 }
 
 // handleSyncEngineWorkspace handles POST /engines/{id}/workspaces/{workspaceId}/sync.
-func (a *AdminAPI) handleSyncEngineWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleSyncEngineWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	workspaceID := r.PathValue("workspaceId")
 
@@ -574,7 +574,7 @@ func (a *AdminAPI) handleSyncEngineWorkspace(w http.ResponseWriter, r *http.Requ
 }
 
 // handleGetEngineConfig handles GET /engines/{id}/config.
-func (a *AdminAPI) handleGetEngineConfig(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetEngineConfig(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Engine ID is required")
@@ -610,7 +610,7 @@ func (a *AdminAPI) handleGetEngineConfig(w http.ResponseWriter, r *http.Request)
 // syncPersistedStatefulResources pushes stateful resources from the file store
 // to the engine. This runs asynchronously after the first engine registers so
 // that resources imported in a previous admin session are restored.
-func (a *AdminAPI) syncPersistedStatefulResources() {
+func (a *API) syncPersistedStatefulResources() {
 	if a.dataStore == nil || a.localEngine == nil {
 		return
 	}
