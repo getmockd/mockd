@@ -120,13 +120,29 @@ mqtt_mock_id() {
   echo "$sub_out" | grep -q "humidity"
 }
 
-@test "MQTT-008: Delete MQTT mock returns 204" {
+@test "MQTT-008: Toggle mock disabled stops broker" {
+  local mock_id
+  mock_id=$(mqtt_mock_id)
+  api POST "/mocks/${mock_id}/toggle" -d '{"enabled": false}'
+  [[ "$STATUS" == "200" ]]
+  # Wait for MQTT port to go down
+  wait_for_port_down mockd "$MQTT_PORT"
+  # Verify broker is unreachable
+  local pub_out
+  pub_out=$(mosquitto_pub -h mockd -p "$MQTT_PORT" -t "test/disabled" -m "x" 2>&1) || true
+  echo "$pub_out" | grep -qi "refused\|error\|reset\|No route"
+  # Re-enable so subsequent tests (delete) still work
+  api POST "/mocks/${mock_id}/toggle" -d '{"enabled": true}'
+  wait_for_port mockd "$MQTT_PORT"
+}
+
+@test "MQTT-009: Delete MQTT mock returns 204" {
   api DELETE "/mocks/$(mqtt_mock_id)"
   [[ "$STATUS" == "204" ]]
   wait_for_port_down mockd "$MQTT_PORT"
 }
 
-@test "MQTT-009: Broker stopped after mock deletion" {
+@test "MQTT-010: Broker stopped after mock deletion" {
   local post_del_out
   post_del_out=$(mosquitto_pub -h mockd -p "$MQTT_PORT" -t "test/gone" -m "x" 2>&1) || true
   echo "$post_del_out" | grep -qi "refused\|error\|reset\|No route"

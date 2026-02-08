@@ -12,7 +12,7 @@ setup_file() {
     "name": "Test GraphQL API",
     "graphql": {
       "path": "/graphql",
-      "schema": "type Query { user(id: ID!): User\n  users: [User!]! }\ntype User { id: ID!\n  name: String!\n  email: String! }",
+      "schema": "type Query { user(id: ID!): User\n  users: [User!]! }\ntype Mutation { createUser(name: String!, email: String!): User }\ntype User { id: ID!\n  name: String!\n  email: String! }",
       "introspection": true,
       "resolvers": {
         "Query.user": {
@@ -27,6 +27,13 @@ setup_file() {
             {"id": "1", "name": "Alice", "email": "alice@example.com"},
             {"id": "2", "name": "Bob", "email": "bob@example.com"}
           ]
+        },
+        "Mutation.createUser": {
+          "response": {
+            "id": "99",
+            "name": "New User",
+            "email": "new@example.com"
+          }
         }
       }
     }
@@ -86,4 +93,32 @@ setup() {
 @test "GQL-007: Handlers list includes registered handler" {
   api GET /handlers
   [[ "$STATUS" == "200" ]]
+}
+
+# ── Mutation & error tests ───────────────────────────────────────────────────
+
+@test "GQL-008: Mutation createUser returns response" {
+  engine POST /graphql -d '{"query": "mutation { createUser(name: \"New User\", email: \"new@example.com\") { id name email } }"}'
+  [[ "$STATUS" == "200" ]]
+  [[ "$BODY" == *"New User"* ]]
+}
+
+@test "GQL-009: Invalid query returns error" {
+  engine POST /graphql -d '{"query": "{ nonExistentField }"}'
+  # Should get 200 with errors array, or 400 — either indicates proper error handling
+  if [[ "$STATUS" == "200" ]]; then
+    [[ "$BODY" == *"error"* ]]
+  else
+    [[ "$STATUS" == "400" ]]
+  fi
+}
+
+@test "GQL-010: Malformed query body returns error status" {
+  engine POST /graphql -d '{"query": "not valid graphql {{{"}'
+  # Engine should reject with an error response
+  if [[ "$STATUS" == "200" ]]; then
+    [[ "$BODY" == *"error"* ]]
+  else
+    [[ "$STATUS" == "400" ]] || [[ "$STATUS" == "422" ]]
+  fi
 }

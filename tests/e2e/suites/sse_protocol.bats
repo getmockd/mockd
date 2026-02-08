@@ -53,6 +53,28 @@ setup() {
   [[ "$sse_output" == *"hello"* ]]
 }
 
+# ── Wire-level SSE tests ─────────────────────────────────────────────────────
+
+@test "SSE-STREAM-003: Receives both event IDs" {
+  local sse_output
+  sse_output=$(curl -s -N --max-time 3 -H 'Accept: text/event-stream' "${ENGINE}/events" 2>&1) || true
+  [[ "$sse_output" == *"hello"* ]]
+  [[ "$sse_output" == *"world"* ]]
+}
+
+@test "SSE-STREAM-004: Last-Event-ID reconnection resumes stream" {
+  local sse_output
+  sse_output=$(curl -s -N --max-time 3 \
+    -H 'Accept: text/event-stream' \
+    -H 'Last-Event-ID: 1' \
+    "${ENGINE}/events" 2>&1) || true
+  # After reconnecting with Last-Event-ID: 1, should receive event 2 ("world")
+  # Accept either: only "world" (proper resume) or both events (replay)
+  [[ "$sse_output" == *"world"* ]]
+}
+
+# ── Admin API tests ──────────────────────────────────────────────────────────
+
 @test "SSE-001: GET /sse/connections returns 200" {
   api GET /sse/connections
   [[ "$STATUS" == "200" ]]

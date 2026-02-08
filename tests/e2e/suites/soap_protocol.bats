@@ -50,23 +50,26 @@ setup() {
 }
 
 @test "SOAP-002: SOAP GetUser request returns 200" {
-  local soap_resp
-  soap_resp=$(curl -s -w '\n%{http_code}' -X POST "${ENGINE}/soap/user" \
+  local tmpfile
+  tmpfile=$(mktemp)
+  STATUS=$(curl -s -w '%{http_code}' -o "$tmpfile" -X POST "${ENGINE}/soap/user" \
     -H 'Content-Type: text/xml' \
     -H 'SOAPAction: http://example.com/GetUser' \
-    -d '<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetUser><userId>123</userId></GetUser></soap:Body></soap:Envelope>' 2>&1) || true
-  BODY=$(echo "$soap_resp" | sed '$d')
-  STATUS=$(echo "$soap_resp" | tail -n 1)
+    -d '<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetUser><userId>123</userId></GetUser></soap:Body></soap:Envelope>' 2>/dev/null) || STATUS="000"
+  BODY=$(cat "$tmpfile")
+  rm -f "$tmpfile"
   [[ "$STATUS" == "200" ]]
 }
 
 @test "SOAP-003: Response contains user name" {
-  local soap_resp
-  soap_resp=$(curl -s -w '\n%{http_code}' -X POST "${ENGINE}/soap/user" \
+  local tmpfile
+  tmpfile=$(mktemp)
+  STATUS=$(curl -s -w '%{http_code}' -o "$tmpfile" -X POST "${ENGINE}/soap/user" \
     -H 'Content-Type: text/xml' \
     -H 'SOAPAction: http://example.com/GetUser' \
-    -d '<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetUser><userId>123</userId></GetUser></soap:Body></soap:Envelope>' 2>&1) || true
-  BODY=$(echo "$soap_resp" | sed '$d')
+    -d '<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetUser><userId>123</userId></GetUser></soap:Body></soap:Envelope>' 2>/dev/null) || STATUS="000"
+  BODY=$(cat "$tmpfile")
+  rm -f "$tmpfile"
   [[ "$BODY" == *"John Doe"* ]]
 }
 
@@ -74,4 +77,18 @@ setup() {
   engine GET '/soap/user?wsdl'
   # WSDL may not be implemented — accept 200 or skip
   [[ "$STATUS" == "200" ]] || skip "WSDL not available (status $STATUS)"
+}
+
+@test "SOAP-005: CreateUser operation returns response" {
+  local tmpfile
+  tmpfile=$(mktemp)
+  STATUS=$(curl -s -w '%{http_code}' -o "$tmpfile" -X POST "${ENGINE}/soap/user" \
+    -H 'Content-Type: text/xml' \
+    -H 'SOAPAction: http://example.com/CreateUser' \
+    -d '<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><CreateUser><name>Jane</name><email>jane@example.com</email></CreateUser></soap:Body></soap:Envelope>' 2>/dev/null) || STATUS="000"
+  BODY=$(cat "$tmpfile")
+  rm -f "$tmpfile"
+  [[ "$STATUS" == "200" ]]
+  [[ "$BODY" == *"new-001"* ]]
+  [[ "$BODY" == *"created"* ]]
 }
