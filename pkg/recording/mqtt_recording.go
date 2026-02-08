@@ -83,6 +83,12 @@ func generateMQTTID() string {
 	return fmt.Sprintf("mqtt-%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
+// GetID returns the recording ID (implements Recordable).
+func (r MQTTRecording) GetID() string { return r.ID }
+
+// GetTimestamp returns the recording timestamp (implements Recordable).
+func (r MQTTRecording) GetTimestamp() time.Time { return r.Timestamp }
+
 // SetMessageID sets the MQTT packet identifier.
 func (r *MQTTRecording) SetMessageID(id uint16) {
 	r.MessageID = id

@@ -70,6 +70,12 @@ func generateSOAPID() string {
 	return fmt.Sprintf("soap-%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
+// GetID returns the recording ID (implements Recordable).
+func (r SOAPRecording) GetID() string { return r.ID }
+
+// GetTimestamp returns the recording timestamp (implements Recordable).
+func (r SOAPRecording) GetTimestamp() time.Time { return r.Timestamp }
+
 // SetSOAPAction sets the SOAPAction header value.
 func (r *SOAPRecording) SetSOAPAction(action string) {
 	r.SOAPAction = action
