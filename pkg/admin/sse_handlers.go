@@ -29,13 +29,15 @@ func (a *API) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 
 	stats, err := a.localEngine.GetSSEStats(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		a.log.Error("failed to get SSE stats", "error", err)
+		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
 		return
 	}
 
 	connections, err := a.localEngine.ListSSEConnections(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		a.log.Error("failed to list SSE connections", "error", err)
+		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
 		return
 	}
 
@@ -86,7 +88,8 @@ func (a *API) handleGetSSEConnection(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "Connection not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		a.log.Error("failed to get SSE connection", "error", err, "connectionID", id)
+		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
 		return
 	}
 
@@ -127,7 +130,8 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "Connection not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		a.log.Error("failed to close SSE connection", "error", err, "connectionID", id)
+		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
 		return
 	}
 
@@ -151,7 +155,8 @@ func (a *API) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 
 	stats, err := a.localEngine.GetSSEStats(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		a.log.Error("failed to get SSE stats", "error", err)
+		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
 		return
 	}
 
@@ -184,14 +189,14 @@ func (a *API) handleListMockSSEConnections(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get mock for SSE connections"))
 		return
 	}
 
 	// Get all SSE connections and filter by mock
 	connections, err := engine.ListSSEConnections(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "list SSE connections for mock"))
 		return
 	}
 
@@ -228,14 +233,14 @@ func (a *API) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.Reque
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get mock for close SSE connections"))
 		return
 	}
 
 	// Get all SSE connections and close those for this mock
 	connections, err := engine.ListSSEConnections(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "list SSE connections for close"))
 		return
 	}
 

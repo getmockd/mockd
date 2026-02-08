@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -158,7 +159,7 @@ func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.R
 
 	var req ConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -225,7 +226,7 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 	var req ExportRequest
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 	}
@@ -259,7 +260,8 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 	}
 
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "export_error", "Failed to export recordings: "+err.Error())
+		log.Printf("Failed to export recordings: %v\n", err)
+		writeError(w, http.StatusInternalServerError, "export_error", "Failed to export recordings")
 		return
 	}
 

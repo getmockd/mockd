@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -553,7 +554,7 @@ func (m *MQTTRecordingManager) handleConvertMQTTRecording(w http.ResponseWriter,
 	var req MQTTConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 	}
@@ -589,7 +590,7 @@ func (m *MQTTRecordingManager) handleConvertMQTTRecordings(w http.ResponseWriter
 	// Parse request
 	var req MQTTConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -641,7 +642,8 @@ func (m *MQTTRecordingManager) handleExportMQTTRecordings(w http.ResponseWriter,
 
 	data, err := m.store.Export()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "export_error", "Failed to export recordings: "+err.Error())
+		log.Printf("Failed to export MQTT recordings: %v\n", err)
+		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 		return
 	}
 

@@ -13,7 +13,7 @@ func (a *API) handleGetChaos(w http.ResponseWriter, r *http.Request, engine *eng
 
 	chaosConfig, err := engine.GetChaos(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get chaos config"))
 		return
 	}
 
@@ -27,12 +27,12 @@ func (a *API) handleSetChaos(w http.ResponseWriter, r *http.Request, engine *eng
 
 	var config engineclient.ChaosConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
-		http.Error(w, `{"error":"invalid JSON: `+err.Error()+`"}`, http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
 	if err := engine.SetChaos(ctx, &config); err != nil {
-		http.Error(w, `{"error":"failed to set chaos config: `+err.Error()+`"}`, http.StatusInternalServerError)
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "set chaos config"))
 		return
 	}
 

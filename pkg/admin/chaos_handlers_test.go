@@ -458,7 +458,7 @@ func TestHandleSetChaos(t *testing.T) {
 		api.handleSetChaos(rec, req, server.client())
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "invalid JSON")
+		assert.Contains(t, rec.Body.String(), "Invalid JSON in request body")
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {

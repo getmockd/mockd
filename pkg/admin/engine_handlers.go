@@ -92,7 +92,8 @@ type EngineWorkspaceConfigEntry struct {
 func (a *API) handleGenerateRegistrationToken(w http.ResponseWriter, r *http.Request) {
 	token, err := a.GenerateRegistrationToken()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "token_generation_failed", "Failed to generate registration token: "+err.Error())
+		a.log.Error("failed to generate registration token", "error", err)
+		writeError(w, http.StatusInternalServerError, "token_generation_failed", ErrMsgInternalError)
 		return
 	}
 	writeJSON(w, http.StatusCreated, GenerateTokenResponse{
@@ -202,7 +203,7 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 
 	var req RegisterEngineRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
@@ -226,7 +227,8 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	// Generate an engine-specific token for subsequent calls
 	engineToken, err := a.generateEngineToken(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "token_generation_failed", "Failed to generate engine token: "+err.Error())
+		a.log.Error("failed to generate engine token", "error", err, "engineID", id)
+		writeError(w, http.StatusInternalServerError, "token_generation_failed", ErrMsgInternalError)
 		return
 	}
 
@@ -245,7 +247,8 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 
 	if err := a.engineRegistry.Register(engine); err != nil {
 		a.removeEngineToken(id) // Clean up the token on failure
-		writeError(w, http.StatusInternalServerError, "registration_failed", "Failed to register engine: "+err.Error())
+		a.log.Error("failed to register engine", "error", err, "engineID", id)
+		writeError(w, http.StatusInternalServerError, "registration_failed", ErrMsgInternalError)
 		return
 	}
 
@@ -352,7 +355,7 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 	var req HeartbeatRequest
 	if r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 			return
 		}
 	}
@@ -366,7 +369,8 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// If status was provided, update it
 	if req.Status != "" {
 		if err := a.engineRegistry.UpdateStatus(id, req.Status); err != nil {
-			writeError(w, http.StatusInternalServerError, "update_failed", "Failed to update status: "+err.Error())
+			a.log.Error("failed to update engine status", "error", err, "engineID", id)
+			writeError(w, http.StatusInternalServerError, "update_failed", ErrMsgInternalError)
 			return
 		}
 	}
@@ -374,7 +378,8 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// Return updated engine
 	engine, err := a.engineRegistry.Get(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "get_failed", "Failed to get engine: "+err.Error())
+		a.log.Error("failed to get engine after heartbeat", "error", err, "engineID", id)
+		writeError(w, http.StatusInternalServerError, "get_failed", ErrMsgInternalError)
 		return
 	}
 
@@ -408,7 +413,7 @@ func (a *API) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	var req AssignWorkspaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
@@ -420,7 +425,8 @@ func (a *API) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
 	// Return updated engine
 	engine, err := a.engineRegistry.Get(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "get_failed", "Failed to get engine: "+err.Error())
+		a.log.Error("failed to get engine after workspace assignment", "error", err, "engineID", id)
+		writeError(w, http.StatusInternalServerError, "get_failed", ErrMsgInternalError)
 		return
 	}
 
@@ -437,7 +443,7 @@ func (a *API) handleAddEngineWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	var req AddEngineWorkspaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
@@ -537,7 +543,7 @@ func (a *API) handleUpdateEngineWorkspace(w http.ResponseWriter, r *http.Request
 
 	var req UpdateEngineWorkspaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 

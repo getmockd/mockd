@@ -27,7 +27,8 @@ func (a *API) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 
 	prefs, err := prefsStore.Get(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "get_failed", "Failed to get preferences: "+err.Error())
+		a.log.Error("failed to get preferences", "error", err)
+		writeError(w, http.StatusInternalServerError, "get_failed", ErrMsgInternalError)
 		return
 	}
 
@@ -46,12 +47,13 @@ func (a *API) handleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
 
 	var prefs store.Preferences
 	if err := json.NewDecoder(r.Body).Decode(&prefs); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
 	if err := prefsStore.Set(ctx, &prefs); err != nil {
-		writeError(w, http.StatusInternalServerError, "update_failed", "Failed to update preferences: "+err.Error())
+		a.log.Error("failed to update preferences", "error", err)
+		writeError(w, http.StatusInternalServerError, "update_failed", ErrMsgInternalError)
 		return
 	}
 

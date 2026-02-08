@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -428,7 +429,7 @@ func (m *SOAPRecordingManager) handleConvertSOAPRecording(w http.ResponseWriter,
 	var req SOAPConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 	}
@@ -463,7 +464,7 @@ func (m *SOAPRecordingManager) handleConvertSOAPRecordings(w http.ResponseWriter
 	// Parse request
 	var req SOAPConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -516,7 +517,8 @@ func (m *SOAPRecordingManager) handleExportSOAPRecordings(w http.ResponseWriter,
 
 	data, err := m.store.Export()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "export_error", "Failed to export recordings: "+err.Error())
+		log.Printf("Failed to export SOAP recordings: %v\n", err)
+		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 		return
 	}
 

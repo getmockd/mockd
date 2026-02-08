@@ -87,7 +87,7 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 
 	var req ProxyStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -140,7 +140,8 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 
 		ca = proxy.NewCAManager(req.CAPath+"/ca.crt", req.CAPath+"/ca.key")
 		if err := ca.EnsureCA(); err != nil {
-			writeError(w, http.StatusInternalServerError, "ca_error", "Failed to initialize CA: "+err.Error())
+			log.Printf("Failed to initialize CA: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "ca_error", "Failed to initialize CA certificate")
 			return
 		}
 	}
@@ -177,7 +178,7 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 	addr := fmt.Sprintf(":%d", req.Port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "port_error", "Failed to listen on port: "+err.Error())
+		writeError(w, http.StatusBadRequest, "port_error", fmt.Sprintf("Failed to listen on port %d", req.Port))
 		return
 	}
 
@@ -217,7 +218,8 @@ func (pm *ProxyManager) handleProxyStop(w http.ResponseWriter, r *http.Request) 
 
 	if pm.server != nil {
 		if err := pm.server.Close(); err != nil {
-			writeError(w, http.StatusInternalServerError, "stop_error", "Failed to stop proxy: "+err.Error())
+			log.Printf("Failed to stop proxy: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "stop_error", "Failed to stop proxy server")
 			return
 		}
 	}
@@ -246,7 +248,7 @@ func (pm *ProxyManager) handleProxyMode(w http.ResponseWriter, r *http.Request) 
 
 	var req ModeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -294,7 +296,7 @@ func (pm *ProxyManager) handleSetFilters(w http.ResponseWriter, r *http.Request)
 
 	var req FilterConfigUpdate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -360,7 +362,8 @@ func (pm *ProxyManager) handleGenerateCA(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := ca.Generate(); err != nil {
-		writeError(w, http.StatusInternalServerError, "generate_error", "Failed to generate CA: "+err.Error())
+		log.Printf("Failed to generate CA: %v\n", err)
+		writeError(w, http.StatusInternalServerError, "generate_error", "Failed to generate CA certificate")
 		return
 	}
 
@@ -393,7 +396,8 @@ func (pm *ProxyManager) handleDownloadCA(w http.ResponseWriter, r *http.Request)
 
 	certPEM, err := pm.ca.CACertPEM()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "read_error", "Failed to read CA certificate: "+err.Error())
+		log.Printf("Failed to read CA certificate: %v\n", err)
+		writeError(w, http.StatusInternalServerError, "read_error", "Failed to read CA certificate")
 		return
 	}
 

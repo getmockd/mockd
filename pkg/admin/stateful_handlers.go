@@ -13,7 +13,7 @@ func (a *API) handleStateOverview(w http.ResponseWriter, r *http.Request, engine
 
 	overview, err := engine.GetStateOverview(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get state overview"))
 		return
 	}
 
@@ -30,7 +30,7 @@ func (a *API) handleStateReset(w http.ResponseWriter, r *http.Request, engine *e
 	resourceName := r.URL.Query().Get("resource")
 
 	if err := engine.ResetState(ctx, resourceName); err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "reset state"))
 		return
 	}
 
@@ -49,7 +49,7 @@ func (a *API) handleResetStateResource(w http.ResponseWriter, r *http.Request, e
 	}
 
 	if err := engine.ResetState(ctx, name); err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "reset state resource"))
 		return
 	}
 
@@ -64,7 +64,7 @@ func (a *API) handleListStateResources(w http.ResponseWriter, r *http.Request, e
 
 	overview, err := engine.GetStateOverview(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "list state resources"))
 		return
 	}
 
@@ -87,9 +87,7 @@ func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, eng
 
 	resource, err := engine.GetStateResource(ctx, name)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "resource": name})
+		writeError(w, http.StatusNotFound, "not_found", "Resource not found")
 		return
 	}
 
@@ -111,9 +109,7 @@ func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, e
 	}
 
 	if err := engine.ClearStateResource(ctx, name); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "resource": name})
+		writeError(w, http.StatusNotFound, "not_found", "Resource not found")
 		return
 	}
 

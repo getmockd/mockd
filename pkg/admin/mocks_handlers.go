@@ -502,7 +502,7 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 	if a.localEngine != nil {
 		mocks, err := a.localEngine.ListMocks(r.Context())
 		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "engine_unavailable", "Failed to list mocks: "+err.Error())
+			writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "list mocks"))
 			return
 		}
 
@@ -571,7 +571,8 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 
 	mocks, err := mockStore.List(r.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "list_error", err.Error())
+		a.log.Error("failed to list mocks from store", "error", err)
+		writeError(w, http.StatusInternalServerError, "list_error", ErrMsgInternalError)
 		return
 	}
 
@@ -615,7 +616,8 @@ func (a *API) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "get_error", err.Error())
+		a.log.Error("failed to get mock from store", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "get_error", ErrMsgInternalError)
 		return
 	}
 
@@ -633,7 +635,7 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	var m mock.Mock
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
@@ -715,7 +717,8 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "duplicate_id", "Mock with this ID already exists")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "create_error", err.Error())
+		a.log.Error("failed to create mock in store", "id", m.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, "create_error", ErrMsgInternalError)
 		return
 	}
 
@@ -728,13 +731,13 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 				a.log.Warn("failed to rollback mock after engine error", "id", m.ID, "error", deleteErr)
 			}
 
+			a.log.Error("failed to activate mock in engine", "id", m.ID, "error", err)
 			errMsg := err.Error()
 			if isPortError(errMsg) {
 				writeError(w, http.StatusConflict, "port_unavailable",
-					fmt.Sprintf("Failed to start mock: %s. The port may be in use by another process.", errMsg))
+					"Failed to start mock: the port may be in use by another process")
 			} else {
-				writeError(w, http.StatusInternalServerError, "engine_error",
-					fmt.Sprintf("Failed to activate mock: %s", errMsg))
+				writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
 			}
 			return
 		}
@@ -780,8 +783,8 @@ func (a *API) handleMergeMock(w http.ResponseWriter, r *http.Request, newMock *m
 	// Update the target mock in the store
 	target.UpdatedAt = time.Now()
 	if err := mockStore.Update(r.Context(), target); err != nil {
-		writeError(w, http.StatusInternalServerError, "update_error",
-			fmt.Sprintf("Failed to merge into existing mock: %s", err.Error()))
+		a.log.Error("failed to merge mock into store", "targetId", target.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, "update_error", ErrMsgInternalError)
 		return
 	}
 
@@ -833,7 +836,7 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	var m mock.Mock
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
@@ -854,7 +857,8 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "get_error", err.Error())
+		a.log.Error("failed to get mock for update", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "get_error", ErrMsgInternalError)
 		return
 	}
 
@@ -891,13 +895,15 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	// Persist to store (source of truth)
 	if err := mockStore.Update(r.Context(), &m); err != nil {
-		writeError(w, http.StatusInternalServerError, "update_error", err.Error())
+		a.log.Error("failed to update mock in store", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "update_error", ErrMsgInternalError)
 		return
 	}
 
 	// Notify engine so it can update the running mock
 	if a.localEngine != nil {
 		if _, err := a.localEngine.UpdateMock(r.Context(), id, &m); err != nil {
+			a.log.Error("failed to update mock in engine", "id", m.ID, "error", err)
 			errMsg := err.Error()
 			// Check if this is a port-related error
 			if isPortError(errMsg) {
@@ -906,11 +912,10 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 					a.log.Warn("failed to rollback mock update after engine error", "id", m.ID, "error", rollbackErr)
 				}
 				writeError(w, http.StatusConflict, "port_unavailable",
-					fmt.Sprintf("Failed to update mock: %s. The port may be in use by another process.", errMsg))
+					"Failed to update mock: the port may be in use by another process")
 				return
 			}
-			// For other errors, log but don't fail
-			a.log.Warn("failed to notify engine of mock update", "id", m.ID, "error", err)
+			// For other errors, log but don't fail (already logged above)
 		}
 	}
 
@@ -929,7 +934,7 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	// Decode patch into a map first to see which fields are being updated
 	var patch map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
 		return
 	}
 
@@ -946,7 +951,8 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "get_error", err.Error())
+		a.log.Error("failed to get mock for patch", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "get_error", ErrMsgInternalError)
 		return
 	}
 
@@ -955,7 +961,8 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	// Persist to store (source of truth)
 	if err := mockStore.Update(r.Context(), existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "update_error", err.Error())
+		a.log.Error("failed to update mock in store (patch)", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "update_error", ErrMsgInternalError)
 		return
 	}
 
@@ -990,7 +997,8 @@ func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "delete_error", err.Error())
+		a.log.Error("failed to delete mock from store", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "delete_error", ErrMsgInternalError)
 		return
 	}
 
@@ -1023,7 +1031,8 @@ func (a *API) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Request
 	}
 
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "delete_error", err.Error())
+		a.log.Error("failed to delete mocks from store", "type", mockType, "error", err)
+		writeError(w, http.StatusInternalServerError, "delete_error", ErrMsgInternalError)
 		return
 	}
 
@@ -1052,7 +1061,8 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		newEnabled := !currentEnabled
 		updated, err := a.localEngine.ToggleMock(r.Context(), id, newEnabled)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "toggle_error", err.Error())
+			a.log.Error("failed to toggle mock in engine", "id", id, "error", err)
+			writeError(w, http.StatusInternalServerError, "toggle_error", ErrMsgInternalError)
 			return
 		}
 		writeJSON(w, http.StatusOK, updated)
@@ -1072,7 +1082,8 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "get_error", err.Error())
+		a.log.Error("failed to get mock for toggle", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "get_error", ErrMsgInternalError)
 		return
 	}
 
@@ -1082,7 +1093,8 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	m.UpdatedAt = time.Now()
 
 	if err := mockStore.Update(r.Context(), m); err != nil {
-		writeError(w, http.StatusInternalServerError, "update_error", err.Error())
+		a.log.Error("failed to update mock toggle in store", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "update_error", ErrMsgInternalError)
 		return
 	}
 
@@ -1195,7 +1207,7 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 
 	var mocks []*mock.Mock
 	if err := json.NewDecoder(r.Body).Decode(&mocks); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_body", "invalid request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_body", sanitizeJSONError(err, a.log))
 		return
 	}
 
@@ -1262,7 +1274,8 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusConflict, "already_exists", "one or more mocks already exist")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "bulk_create_error", err.Error())
+		a.log.Error("failed to bulk create mocks in store", "error", err)
+		writeError(w, http.StatusInternalServerError, "bulk_create_error", ErrMsgInternalError)
 		return
 	}
 
@@ -1272,13 +1285,12 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 	if a.localEngine != nil {
 		for _, m := range mocks {
 			if _, err := a.localEngine.CreateMock(r.Context(), m); err != nil {
-				errMsg := err.Error()
-				if isPortError(errMsg) {
+				a.log.Warn("failed to notify engine of bulk mock create", "id", m.ID, "error", err)
+				if isPortError(err.Error()) {
 					// Port error from engine - this shouldn't happen if our validation is correct
 					// but handle it gracefully
-					engineErrors = append(engineErrors, fmt.Sprintf("%s: %s", m.ID, errMsg))
+					engineErrors = append(engineErrors, fmt.Sprintf("%s: port may be in use by another process", m.ID))
 				}
-				a.log.Warn("failed to notify engine of bulk mock create", "id", m.ID, "error", err)
 			}
 		}
 	}

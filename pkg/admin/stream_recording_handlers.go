@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -210,7 +211,8 @@ func (m *StreamRecordingManager) handleListStreamRecordings(w http.ResponseWrite
 
 	recordings, total, err := m.store.List(filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "list_error", "Failed to list recordings: "+err.Error())
+		log.Printf("Failed to list stream recordings: %v\n", err)
+		writeError(w, http.StatusInternalServerError, "list_error", ErrMsgInternalError)
 		return
 	}
 
@@ -285,7 +287,8 @@ func (m *StreamRecordingManager) handleGetStreamRecordingStats(w http.ResponseWr
 
 	stats, err := m.store.GetStats()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "stats_error", "Failed to get stats: "+err.Error())
+		log.Printf("Failed to get stream recording stats: %v\n", err)
+		writeError(w, http.StatusInternalServerError, "stats_error", ErrMsgInternalError)
 		return
 	}
 	writeJSON(w, http.StatusOK, StreamRecordingStatsResponse{
@@ -305,7 +308,7 @@ func (m *StreamRecordingManager) handleStartRecording(w http.ResponseWriter, r *
 
 	var req StartRecordingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -326,7 +329,8 @@ func (m *StreamRecordingManager) handleStartRecording(w http.ResponseWriter, r *
 	// Start recording session
 	session, err := m.store.StartRecording(protocol, metadata)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "start_error", "Failed to start recording: "+err.Error())
+		log.Printf("Failed to start stream recording: %v\n", err)
+		writeError(w, http.StatusInternalServerError, "start_error", ErrMsgInternalError)
 		return
 	}
 
@@ -359,7 +363,7 @@ func (m *StreamRecordingManager) handleStopRecording(w http.ResponseWriter, r *h
 
 	rec, err := m.store.CompleteRecording(id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", fmt.Sprintf("Session not found: %v", err))
+		writeError(w, http.StatusNotFound, "not_found", "Session not found")
 		return
 	}
 
@@ -424,7 +428,7 @@ func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWri
 
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 
@@ -452,7 +456,8 @@ func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWri
 	// Convert
 	result, err := recording.ConvertStreamRecording(rec, opts)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "convert_error", "Failed to convert recording: "+err.Error())
+		log.Printf("Failed to convert stream recording %s: %v\n", id, err)
+		writeError(w, http.StatusBadRequest, "convert_error", "Failed to convert recording")
 		return
 	}
 
@@ -465,7 +470,8 @@ func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWri
 	if req.AddToServer && client != nil {
 		mockID, addErr := m.addStreamMockToEngine(r.Context(), rec.Protocol, result, req, client)
 		if addErr != nil {
-			writeError(w, http.StatusInternalServerError, "add_error", "Failed to add mock to engine: "+addErr.Error())
+			log.Printf("Failed to add stream mock to engine: %v\n", addErr)
+			writeError(w, http.StatusInternalServerError, "add_error", ErrMsgInternalError)
 			return
 		}
 		response.MockID = mockID
@@ -587,7 +593,7 @@ func (m *StreamRecordingManager) handleStartReplay(w http.ResponseWriter, r *htt
 
 	var req StartReplayRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -615,7 +621,8 @@ func (m *StreamRecordingManager) handleStartReplay(w http.ResponseWriter, r *htt
 
 	session, err := m.replay.StartReplay(config)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "replay_error", "Failed to start replay: "+err.Error())
+		log.Printf("Failed to start replay for recording %s: %v\n", id, err)
+		writeError(w, http.StatusBadRequest, "replay_error", "Failed to start replay")
 		return
 	}
 
@@ -701,7 +708,7 @@ func (m *StreamRecordingManager) handleAdvanceReplay(w http.ResponseWriter, r *h
 
 	var req AdvanceReplayRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -712,7 +719,8 @@ func (m *StreamRecordingManager) handleAdvanceReplay(w http.ResponseWriter, r *h
 
 	resp, err := m.replay.Advance(id, advReq)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "advance_error", fmt.Sprintf("Failed to advance replay: %v", err))
+		log.Printf("Failed to advance replay %s: %v\n", id, err)
+		writeError(w, http.StatusBadRequest, "advance_error", "Failed to advance replay")
 		return
 	}
 
@@ -765,7 +773,8 @@ func (m *StreamRecordingManager) handlePauseReplay(w http.ResponseWriter, r *htt
 	}
 
 	if err := m.replay.PauseReplay(id); err != nil {
-		writeError(w, http.StatusBadRequest, "pause_error", fmt.Sprintf("Failed to pause replay: %v", err))
+		log.Printf("Failed to pause replay %s: %v\n", id, err)
+		writeError(w, http.StatusBadRequest, "pause_error", "Failed to pause replay")
 		return
 	}
 
@@ -789,7 +798,8 @@ func (m *StreamRecordingManager) handleResumeReplay(w http.ResponseWriter, r *ht
 	}
 
 	if err := m.replay.ResumeReplay(id); err != nil {
-		writeError(w, http.StatusBadRequest, "resume_error", fmt.Sprintf("Failed to resume replay: %v", err))
+		log.Printf("Failed to resume replay %s: %v\n", id, err)
+		writeError(w, http.StatusBadRequest, "resume_error", "Failed to resume replay")
 		return
 	}
 
@@ -808,7 +818,8 @@ func (m *StreamRecordingManager) handleVacuum(w http.ResponseWriter, r *http.Req
 
 	count, freedBytes, err := m.store.Vacuum()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "vacuum_error", "Failed to vacuum: "+err.Error())
+		log.Printf("Failed to vacuum stream recordings: %v\n", err)
+		writeError(w, http.StatusInternalServerError, "vacuum_error", ErrMsgInternalError)
 		return
 	}
 
