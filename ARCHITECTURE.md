@@ -151,13 +151,18 @@ The matcher (`internal/matching/matcher.go`) uses a scoring system:
 
 ```go
 // Scoring weights (internal/matching/scores.go)
-ScoreMethod      = 100   // Method matches
-ScorePath        = 200   // Exact path matches  
-ScorePathPattern = 150   // Regex path matches
-ScoreHeader      = 50    // Each header match
-ScoreQueryParam  = 50    // Each query param match
-ScoreBodyEquals  = 300   // Exact body match
-ScoreBodyContains = 100  // Body contains string
+ScoreMethod       = 10   // Method matches
+ScorePathExact    = 15   // Exact path matches
+ScorePathPattern  = 14   // Regex path matches
+ScorePathNamedParams = 12 // Named parameter path matches
+ScorePathWildcard = 10   // Wildcard path matches
+ScoreHeader       = 10   // Each header match
+ScoreQueryParam   = 5    // Each query param match
+ScoreBodyEquals   = 25   // Exact body match
+ScoreBodyPattern  = 22   // Body regex pattern match
+ScoreBodyContains = 20   // Body contains string
+ScoreBodyNoCriteria = 1  // No body criteria specified
+ScoreJSONPathCondition = 15 // Per matched JSONPath condition
 ```
 
 ### Protocol Handler Interface

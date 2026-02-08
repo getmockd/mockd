@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/metrics"
+	"github.com/getmockd/mockd/pkg/util"
 )
 
 // NewConnectionManager creates a new SSE connection manager.
@@ -229,7 +230,7 @@ func formatDuration(d time.Duration) string {
 
 // formatMillis formats milliseconds.
 func formatMillis(ms int64) string {
-	return formatInt64(ms)
+	return util.FormatInt64(ms)
 }
 
 // formatFloat formats a float with 1 decimal place.
@@ -237,9 +238,9 @@ func formatFloat(f float64) string {
 	whole := int64(f)
 	frac := int64((f - float64(whole)) * 10)
 	if frac == 0 {
-		return formatInt64(whole)
+		return util.FormatInt64(whole)
 	}
-	return formatInt64(whole) + "." + formatInt64(frac)
+	return util.FormatInt64(whole) + "." + util.FormatInt64(frac)
 }
 
 // SSEConnectionManagerOption is a functional option for the connection manager.

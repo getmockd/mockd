@@ -8,6 +8,7 @@ import (
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/util"
 )
 
 // ResourceProvider provides MCP resources from the mock engine.
@@ -59,7 +60,7 @@ func (p *ResourceProvider) List() []ResourceDefinition {
 			uri := "mock://stateful/" + name
 			description := "Stateful resource: " + name
 			if info != nil {
-				description = "CRUD operations on " + name + " (" + formatInt(info.ItemCount) + " items)"
+				description = "CRUD operations on " + name + " (" + util.FormatInt(info.ItemCount) + " items)"
 			}
 
 			resources = append(resources, ResourceDefinition{
@@ -301,34 +302,6 @@ func (p *ResourceProvider) readConfigResource() ([]ResourceContent, *JSONRPCErro
 	}, nil
 }
 
-// formatInt formats an int as a string without fmt.
-func formatInt(n int) string {
-	if n == 0 {
-		return "0"
-	}
-
-	negative := n < 0
-	if negative {
-		n = -n
-	}
-
-	var digits [20]byte
-	i := len(digits)
-
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
-	}
-
-	if negative {
-		i--
-		digits[i] = '-'
-	}
-
-	return string(digits[i:])
-}
-
 // readContextResource reads the context resource (available contexts from config).
 func (p *ResourceProvider) readContextResource() ([]ResourceContent, *JSONRPCError) {
 	ctxConfig, _ := cliconfig.LoadContextConfig()
@@ -410,10 +383,10 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 			return "", "", ""
 		}
 		uri = "mock://grpc/" + m.ID
-		name = "gRPC :" + formatInt(m.GRPC.Port)
+		name = "gRPC :" + util.FormatInt(m.GRPC.Port)
 		desc = m.Name
 		if desc == "" {
-			desc = "gRPC mock on port " + formatInt(m.GRPC.Port)
+			desc = "gRPC mock on port " + util.FormatInt(m.GRPC.Port)
 		}
 	case mock.TypeSOAP:
 		if m.SOAP == nil {
@@ -430,10 +403,10 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 			return "", "", ""
 		}
 		uri = "mock://mqtt/" + m.ID
-		name = "MQTT :" + formatInt(m.MQTT.Port)
+		name = "MQTT :" + util.FormatInt(m.MQTT.Port)
 		desc = m.Name
 		if desc == "" {
-			desc = "MQTT broker on port " + formatInt(m.MQTT.Port)
+			desc = "MQTT broker on port " + util.FormatInt(m.MQTT.Port)
 		}
 	case mock.TypeOAuth:
 		if m.OAuth == nil {

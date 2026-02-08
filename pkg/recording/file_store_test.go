@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/getmockd/mockd/internal/id"
 )
 
 // TestNewFileStore tests creating a new FileStore with various configurations.
@@ -534,7 +536,7 @@ func TestGet(t *testing.T) {
 		store := newTestStore(t)
 
 		// Create a corrupted recording file
-		corruptedID := NewULID()
+		corruptedID := id.ULID()
 		filename := store.recordingFilename(corruptedID)
 		corruptedData := `{"id":"invalid-ulid","protocol":"websocket","status":"complete"}`
 		if err := os.WriteFile(filename, []byte(corruptedData), 0600); err != nil {

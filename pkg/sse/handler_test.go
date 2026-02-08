@@ -10,6 +10,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/getmockd/mockd/pkg/util"
 )
 
 func TestSSEHandler_SetSSEHeaders(t *testing.T) {
@@ -249,9 +250,9 @@ func TestFormatInt64(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		result := formatInt64(tc.n)
+		result := util.FormatInt64(tc.n)
 		if result != tc.expected {
-			t.Errorf("formatInt64(%d) = %q, expected %q", tc.n, result, tc.expected)
+			t.Errorf("util.FormatInt64(%d) = %q, expected %q", tc.n, result, tc.expected)
 		}
 	}
 }

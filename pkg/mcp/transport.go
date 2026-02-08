@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/util"
 )
 
 // HTTP headers used by MCP protocol.
@@ -26,10 +28,10 @@ const (
 
 // SSEWriter handles writing Server-Sent Events.
 type SSEWriter struct {
-	w        http.ResponseWriter
-	flusher  http.Flusher
-	eventID  atomic.Int64
-	closed   bool
+	w       http.ResponseWriter
+	flusher http.Flusher
+	eventID atomic.Int64
+	closed  bool
 }
 
 // NewSSEWriter creates a new SSE writer.
@@ -70,7 +72,7 @@ func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 		// Auto-generate ID
 		id := s.eventID.Add(1)
 		sb.WriteString("id: ")
-		sb.WriteString(formatInt64(id))
+		sb.WriteString(util.FormatInt64(id))
 		sb.WriteByte('\n')
 	}
 
@@ -84,7 +86,7 @@ func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 	// Retry hint
 	if event.Retry > 0 {
 		sb.WriteString("retry: ")
-		sb.WriteString(formatInt64(int64(event.Retry)))
+		sb.WriteString(util.FormatInt64(int64(event.Retry)))
 		sb.WriteByte('\n')
 	}
 
@@ -131,34 +133,6 @@ func (s *SSEWriter) WriteKeepalive() error {
 // Close marks the writer as closed.
 func (s *SSEWriter) Close() {
 	s.closed = true
-}
-
-// formatInt64 formats an int64 as string without using fmt.
-func formatInt64(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-
-	negative := n < 0
-	if negative {
-		n = -n
-	}
-
-	var digits [20]byte
-	i := len(digits)
-
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
-	}
-
-	if negative {
-		i--
-		digits[i] = '-'
-	}
-
-	return string(digits[i:])
 }
 
 // TransportConfig holds transport-specific configuration.

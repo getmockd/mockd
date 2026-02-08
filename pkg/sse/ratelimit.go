@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/ratelimit"
+	"github.com/getmockd/mockd/pkg/util"
 )
 
 // RateLimiter implements token bucket rate limiting for SSE streams.
@@ -105,7 +106,7 @@ func (r *RateLimiter) RateLimitHeaders() map[string]string {
 // formatFloat64 formats a float64 as a string.
 func formatFloat64(f float64) string {
 	// Simple formatting - just integer part for rate limits
-	return formatInt64(int64(f))
+	return util.FormatInt64(int64(f))
 }
 
 // BackpressureHandler manages backpressure for SSE streams.

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/getmockd/mockd/internal/id"
 )
 
 // Replay errors
@@ -125,7 +127,7 @@ func (c *ReplayController) StartReplay(config ReplayConfig) (*ReplaySession, err
 	// Create session
 	ctx, cancel := context.WithCancel(context.Background())
 	session := &ReplaySession{
-		ID:           NewULID(),
+		ID:           id.ULID(),
 		RecordingID:  config.RecordingID,
 		Config:       config,
 		Status:       ReplayStatusPending,
