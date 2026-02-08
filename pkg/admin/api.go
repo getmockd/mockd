@@ -246,11 +246,21 @@ func (a *API) HasLocalEngine() bool {
 	return a.localEngine != nil
 }
 
+// maxRequestBodySize is the default maximum request body size for admin API handlers (2MB).
+// Individual handlers that need larger bodies (e.g., config import, bulk create) override this.
+const maxRequestBodySize = 2 << 20
+
 // withMiddleware wraps the handler with rate limiting, logging, security headers, CORS, API key auth, and tracing middleware.
-// Middleware order (outermost to innermost): Tracing -> Security Headers -> CORS -> API Key Auth -> Rate Limiting -> Handler
+// Middleware order (outermost to innermost): Tracing -> Security Headers -> CORS -> API Key Auth -> Rate Limiting -> Body Limit -> Handler
 func (a *API) withMiddleware(handler http.Handler) http.Handler {
-	// Apply rate limiting first (innermost middleware)
-	rateLimited := ratelimit.Middleware(a.rateLimiter, ratelimit.WithTextResponse())(handler)
+	// Body size limit (innermost — protects all handlers from oversized request bodies)
+	bodyCapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+		handler.ServeHTTP(w, r)
+	})
+
+	// Apply rate limiting
+	rateLimited := ratelimit.Middleware(a.rateLimiter, ratelimit.WithTextResponse())(bodyCapped)
 
 	// API key authentication wraps rate limiting
 	authenticated := rateLimited

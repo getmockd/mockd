@@ -1091,13 +1091,13 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 // BulkPortConflict represents a port conflict found during bulk operations.
 type BulkPortConflict struct {
-	MockIndex    int           `json:"mockIndex"`
-	MockID       string        `json:"mockId"`
-	MockName     string        `json:"mockName"`
-	Port         int           `json:"port"`
-	ConflictWith string        `json:"conflictWith"` // "existing" or mock ID from the batch
-	ConflictID   string        `json:"conflictId,omitempty"`
-	ConflictName string        `json:"conflictName,omitempty"`
+	MockIndex    int       `json:"mockIndex"`
+	MockID       string    `json:"mockId"`
+	MockName     string    `json:"mockName"`
+	Port         int       `json:"port"`
+	ConflictWith string    `json:"conflictWith"` // "existing" or mock ID from the batch
+	ConflictID   string    `json:"conflictId,omitempty"`
+	ConflictName string    `json:"conflictName,omitempty"`
 	ConflictType mock.Type `json:"conflictType,omitempty"`
 }
 
@@ -1189,6 +1189,9 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Unified mocks API requires persistent storage - coming soon")
 		return
 	}
+
+	// Override the default body limit — bulk imports can be large.
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10MB
 
 	var mocks []*mock.Mock
 	if err := json.NewDecoder(r.Body).Decode(&mocks); err != nil {

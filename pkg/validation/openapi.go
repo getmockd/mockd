@@ -14,6 +14,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
+	"github.com/getmockd/mockd/pkg/util"
 )
 
 // OpenAPIValidator validates requests against OpenAPI specs
@@ -54,6 +55,9 @@ func NewOpenAPIValidator(config *ValidationConfig) (*OpenAPIValidator, error) {
 	// Load spec from one of the sources
 	switch {
 	case config.SpecFile != "":
+		if _, ok := util.SafeFilePathAllowAbsolute(config.SpecFile); !ok {
+			return nil, fmt.Errorf("specFile path cannot contain '..'")
+		}
 		doc, err = LoadSpec(config.SpecFile)
 	case config.SpecURL != "":
 		doc, err = LoadSpecFromURL(config.SpecURL)
