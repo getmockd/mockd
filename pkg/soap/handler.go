@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -83,9 +84,14 @@ func NewHandler(config *SOAPConfig) (*Handler, error) {
 // Returns an error if a file is configured but cannot be read.
 func (h *Handler) loadWSDL() error {
 	if h.config.WSDLFile != "" {
-		data, err := os.ReadFile(h.config.WSDLFile)
+		// Prevent path traversal attacks
+		cleanPath := filepath.Clean(h.config.WSDLFile)
+		if strings.Contains(cleanPath, "..") {
+			return fmt.Errorf("path traversal detected in WSDLFile: %q", h.config.WSDLFile)
+		}
+		data, err := os.ReadFile(cleanPath)
 		if err != nil {
-			return fmt.Errorf("failed to load WSDL file %q: %w", h.config.WSDLFile, err)
+			return fmt.Errorf("failed to load WSDL file %q: %w", cleanPath, err)
 		}
 		h.wsdlData = data
 	} else if h.config.WSDL != "" {

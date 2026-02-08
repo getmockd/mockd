@@ -3,6 +3,7 @@ package tunnel
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"io"
@@ -36,7 +37,7 @@ func (h *EngineHandler) checkAuth(req *TunnelMessage) error {
 		if token == "" {
 			token = req.Headers["x-auth-token"]
 		}
-		if token != h.auth.Token {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(h.auth.Token)) != 1 {
 			return errors.New("invalid or missing auth token")
 		}
 	case "basic":
@@ -52,7 +53,9 @@ func (h *EngineHandler) checkAuth(req *TunnelMessage) error {
 			return errors.New("invalid basic auth encoding")
 		}
 		parts := strings.SplitN(string(decoded), ":", 2)
-		if len(parts) != 2 || parts[0] != h.auth.Username || parts[1] != h.auth.Password {
+		if len(parts) != 2 ||
+			subtle.ConstantTimeCompare([]byte(parts[0]), []byte(h.auth.Username)) != 1 ||
+			subtle.ConstantTimeCompare([]byte(parts[1]), []byte(h.auth.Password)) != 1 {
 			return errors.New("invalid credentials")
 		}
 	case "ip":

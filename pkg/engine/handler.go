@@ -9,6 +9,8 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +32,10 @@ import (
 
 // MaxStatefulBodySize is the maximum allowed request body size for stateful POST/PUT operations (1MB).
 const MaxStatefulBodySize = 1 << 20 // 1MB
+
+// MaxRequestBodySize is the maximum allowed request body size for mock matching (10MB).
+// This prevents denial-of-service via oversized request bodies.
+const MaxRequestBodySize = 10 << 20 // 10MB
 
 // Handler handles incoming HTTP requests and matches them against configured mocks.
 type Handler struct {
@@ -150,11 +156,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(mtls.WithIdentity(r.Context(), identity))
 	}
 
-	// Capture request body for logging
+	// Capture request body for logging (bounded to prevent memory exhaustion)
 	var bodyBytes []byte
 	if r.Body != nil {
 		var err error
-		bodyBytes, err = io.ReadAll(r.Body)
+		bodyBytes, err = io.ReadAll(io.LimitReader(r.Body, MaxRequestBodySize))
 		if err != nil {
 			h.log.Warn("failed to read request body", "path", r.URL.Path, "error", err)
 		}
@@ -345,11 +351,17 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 	// Determine body content - check inline body first, then file
 	body := resp.Body
 	if body == "" && resp.BodyFile != "" {
-		data, err := os.ReadFile(resp.BodyFile)
-		if err != nil {
-			h.log.Error("failed to read body file", "file", resp.BodyFile, "error", err)
+		// Prevent path traversal attacks
+		cleanPath := filepath.Clean(resp.BodyFile)
+		if strings.Contains(cleanPath, "..") {
+			h.log.Error("path traversal detected in bodyFile", "file", resp.BodyFile)
 		} else {
-			body = string(data)
+			data, err := os.ReadFile(cleanPath)
+			if err != nil {
+				h.log.Error("failed to read body file", "file", cleanPath, "error", err)
+			} else {
+				body = string(data)
+			}
 		}
 	}
 
