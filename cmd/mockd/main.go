@@ -4,7 +4,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"slices"
 
 	"github.com/getmockd/mockd/pkg/cli"
 )
@@ -16,6 +15,123 @@ var (
 	BuildDate = "unknown"
 )
 
+// Command represents a registered CLI command.
+type Command struct {
+	Name     string
+	Short    string
+	Category string
+	Run      func(args []string) error
+	Hidden   bool
+}
+
+// Registry holds all registered commands.
+type Registry struct {
+	commands map[string]*Command
+	ordered  []*Command
+}
+
+func newRegistry() *Registry {
+	return &Registry{commands: make(map[string]*Command)}
+}
+
+func (r *Registry) register(cmd *Command) {
+	r.commands[cmd.Name] = cmd
+	r.ordered = append(r.ordered, cmd)
+}
+
+func (r *Registry) lookup(name string) (*Command, bool) {
+	cmd, ok := r.commands[name]
+	return cmd, ok
+}
+
+func (r *Registry) isCommand(name string) bool {
+	_, ok := r.commands[name]
+	return ok
+}
+
+// buildRegistry creates the command registry with all CLI commands.
+func buildRegistry() *Registry {
+	reg := newRegistry()
+
+	// Core
+	reg.register(&Command{Name: "up", Short: "Start services from mockd.yaml (Docker Compose style)", Category: "Core", Run: cli.RunUp})
+	reg.register(&Command{Name: "down", Short: "Stop services started by 'mockd up'", Category: "Core", Run: cli.RunDown})
+	reg.register(&Command{Name: "ps", Short: "Show running services", Category: "Core", Run: cli.RunPs})
+	reg.register(&Command{Name: "serve", Short: "Start the mock server (default command)", Category: "Core", Run: cli.RunServe})
+	reg.register(&Command{Name: "init", Short: "Create a starter config file", Category: "Core", Run: cli.RunInit})
+	reg.register(&Command{Name: "start", Short: "Start the mock server (alias for serve)", Category: "Core", Run: cli.RunStart})
+	reg.register(&Command{Name: "stop", Short: "Stop a running mockd server", Category: "Core", Run: cli.RunStop})
+	reg.register(&Command{Name: "status", Short: "Show status of running mockd server", Category: "Core", Run: cli.RunStatus})
+	reg.register(&Command{Name: "ports", Short: "Show all ports in use by mockd", Category: "Core", Run: cli.RunPorts})
+	reg.register(&Command{Name: "validate", Short: "Validate config file without starting services", Category: "Core", Run: cli.RunValidate})
+
+	// Configuration
+	reg.register(&Command{Name: "context", Short: "Manage contexts (admin server + workspace pairs)", Category: "Configuration", Run: cli.RunContext})
+	reg.register(&Command{Name: "workspace", Short: "Manage workspaces within the current context", Category: "Configuration", Run: cli.RunWorkspace})
+	reg.register(&Command{Name: "config", Short: "Show effective configuration", Category: "Configuration", Run: cli.RunConfig})
+
+	// Mock Management
+	reg.register(&Command{Name: "add", Short: "Add a new mock endpoint", Category: "Mock Management", Run: cli.RunAdd})
+	reg.register(&Command{Name: "new", Short: "Create mocks from templates (crud, auth, etc.)", Category: "Mock Management", Run: cli.RunNew})
+	reg.register(&Command{Name: "list", Short: "List all configured mocks", Category: "Mock Management", Run: cli.RunList})
+	reg.register(&Command{Name: "get", Short: "Get details of a specific mock", Category: "Mock Management", Run: cli.RunGet})
+	reg.register(&Command{Name: "delete", Short: "Delete a mock by ID", Category: "Mock Management", Run: cli.RunDelete})
+	reg.register(&Command{Name: "import", Short: "Import mocks from a configuration file", Category: "Mock Management", Run: cli.RunImport})
+	reg.register(&Command{Name: "export", Short: "Export current mocks to stdout or file", Category: "Mock Management", Run: cli.RunExport})
+	reg.register(&Command{Name: "logs", Short: "View request logs", Category: "Mock Management", Run: cli.RunLogs})
+
+	// Utilities
+	reg.register(&Command{Name: "completion", Short: "Generate shell completion scripts", Category: "Utilities", Run: cli.RunCompletion})
+	reg.register(&Command{
+		Name: "version", Short: "Show version information", Category: "Utilities",
+		Run: func(args []string) error {
+			return cli.RunVersion(cli.BuildInfo{Version: Version, Commit: Commit, BuildDate: BuildDate}, args)
+		},
+	})
+	reg.register(&Command{Name: "doctor", Short: "Diagnose common setup issues", Category: "Utilities", Run: cli.RunDoctor})
+	reg.register(&Command{Name: "help", Short: "Show help for a topic or command", Category: "Utilities", Run: cli.RunHelp})
+
+	// Proxy
+	reg.register(&Command{Name: "proxy", Short: "Manage the MITM proxy for recording API traffic", Category: "Proxy", Run: cli.RunProxy})
+	reg.register(&Command{Name: "recordings", Short: "Manage recorded API traffic", Category: "Proxy", Run: cli.RunRecordings})
+	reg.register(&Command{Name: "stream-recordings", Short: "Manage WebSocket and SSE stream recordings", Category: "Proxy", Run: cli.RunStreamRecordings})
+
+	// AI
+	reg.register(&Command{Name: "generate", Short: "Generate mocks from OpenAPI or natural language (with --ai)", Category: "AI", Run: cli.RunGenerate})
+	reg.register(&Command{Name: "enhance", Short: "Enhance existing mocks with AI-generated data", Category: "AI", Run: cli.RunEnhance})
+	reg.register(&Command{Name: "convert", Short: "Convert recordings to mock definitions", Category: "AI", Run: cli.RunConvert})
+
+	// GraphQL
+	reg.register(&Command{Name: "graphql", Short: "Validate schemas and execute GraphQL queries", Category: "GraphQL", Run: cli.RunGraphQL})
+
+	// Chaos
+	reg.register(&Command{Name: "chaos", Short: "Manage chaos injection (enable, disable, status)", Category: "Chaos", Run: cli.RunChaos})
+
+	// gRPC
+	reg.register(&Command{Name: "grpc", Short: "Manage and test gRPC endpoints", Category: "gRPC", Run: cli.RunGRPC})
+
+	// MQTT
+	reg.register(&Command{Name: "mqtt", Short: "Publish, subscribe, and manage MQTT broker", Category: "MQTT", Run: cli.RunMQTT})
+
+	// WebSocket
+	reg.register(&Command{Name: "websocket", Short: "Connect, send, and listen to WebSocket endpoints", Category: "WebSocket", Run: cli.RunWebSocket})
+
+	// SOAP
+	reg.register(&Command{Name: "soap", Short: "Validate WSDL files and call SOAP operations", Category: "SOAP", Run: cli.RunSOAP})
+
+	// MCP
+	reg.register(&Command{Name: "mcp", Short: "Start MCP server for AI assistants (stdio transport)", Category: "MCP", Run: cli.RunMCP})
+
+	// Templates
+	reg.register(&Command{Name: "templates", Short: "List and add templates from the official library", Category: "Templates", Run: cli.RunTemplates})
+
+	// Cloud
+	reg.register(&Command{Name: "tunnel", Short: "Expose local mocks via secure tunnel", Category: "Cloud", Run: cli.RunTunnel})
+	reg.register(&Command{Name: "tunnel-quic", Short: "Expose local mocks via QUIC tunnel", Category: "Cloud", Run: cli.RunTunnelQUIC, Hidden: true})
+
+	return reg
+}
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -24,6 +140,8 @@ func main() {
 }
 
 func run(args []string) error {
+	reg := buildRegistry()
+
 	// Determine command and args
 	command := ""
 	var cmdArgs []string
@@ -37,7 +155,7 @@ func run(args []string) error {
 		if first == "" || first[0] == '-' {
 			// Flag passed directly (e.g., --help, --version, --port), handle global flags or run serve
 			if first == "--help" || first == "-h" {
-				printUsage()
+				printUsage(reg)
 				return nil
 			}
 			if first == "--version" || first == "-v" {
@@ -50,7 +168,7 @@ func run(args []string) error {
 			// Other flags, run serve with them
 			command = "serve"
 			cmdArgs = args
-		} else if isCommand(first) {
+		} else if reg.isCommand(first) {
 			command = first
 			cmdArgs = args[1:]
 		} else {
@@ -60,185 +178,47 @@ func run(args []string) error {
 		}
 	}
 
-	switch command {
-	case "version":
-		return cli.RunVersion(cli.BuildInfo{
-			Version:   Version,
-			Commit:    Commit,
-			BuildDate: BuildDate,
-		}, cmdArgs)
-	case "start":
-		return cli.RunStart(cmdArgs)
-	case "serve":
-		return cli.RunServe(cmdArgs)
-	case "stop":
-		return cli.RunStop(cmdArgs)
-	case "status":
-		return cli.RunStatus(cmdArgs)
-	case "add":
-		return cli.RunAdd(cmdArgs)
-	case "new":
-		return cli.RunNew(cmdArgs)
-	case "init":
-		return cli.RunInit(cmdArgs)
-	case "list":
-		return cli.RunList(cmdArgs)
-	case "get":
-		return cli.RunGet(cmdArgs)
-	case "delete":
-		return cli.RunDelete(cmdArgs)
-	case "import":
-		return cli.RunImport(cmdArgs)
-	case "export":
-		return cli.RunExport(cmdArgs)
-	case "logs":
-		return cli.RunLogs(cmdArgs)
-	case "config":
-		return cli.RunConfig(cmdArgs)
-	case "completion":
-		return cli.RunCompletion(cmdArgs)
-	case "proxy":
-		return cli.RunProxy(cmdArgs)
-	case "recordings":
-		return cli.RunRecordings(cmdArgs)
-	case "tunnel":
-		return cli.RunTunnel(cmdArgs)
-	case "tunnel-quic":
-		return cli.RunTunnelQUIC(cmdArgs)
-	case "templates":
-		return cli.RunTemplates(cmdArgs)
-	case "stream-recordings":
-		return cli.RunStreamRecordings(cmdArgs)
-	case "graphql":
-		return cli.RunGraphQL(cmdArgs)
-	case "chaos":
-		return cli.RunChaos(cmdArgs)
-	case "grpc":
-		return cli.RunGRPC(cmdArgs)
-	case "mqtt":
-		return cli.RunMQTT(cmdArgs)
-	case "mcp":
-		return cli.RunMCP(cmdArgs)
-	case "websocket":
-		return cli.RunWebSocket(cmdArgs)
-	case "soap":
-		return cli.RunSOAP(cmdArgs)
-	case "convert":
-		return cli.RunConvert(cmdArgs)
-	case "generate":
-		return cli.RunGenerate(cmdArgs)
-	case "enhance":
-		return cli.RunEnhance(cmdArgs)
-	case "help":
-		return cli.RunHelp(cmdArgs)
-	case "doctor":
-		return cli.RunDoctor(cmdArgs)
-	case "ports":
-		return cli.RunPorts(cmdArgs)
-	case "validate":
-		return cli.RunValidate(cmdArgs)
-	case "up":
-		return cli.RunUp(cmdArgs)
-	case "down":
-		return cli.RunDown(cmdArgs)
-	case "ps":
-		return cli.RunPs(cmdArgs)
-	case "context":
-		return cli.RunContext(cmdArgs)
-	case "workspace":
-		return cli.RunWorkspace(cmdArgs)
-	case "--help", "-h":
-		printUsage()
-		return nil
-	default:
+	cmd, ok := reg.lookup(command)
+	if !ok {
 		return fmt.Errorf("unknown command: %s\n\nRun 'mockd --help' for usage", command)
 	}
+	return cmd.Run(cmdArgs)
 }
 
-func printUsage() {
-	fmt.Print(`mockd - Local-first HTTP/HTTPS mock server
+func printUsage(reg *Registry) {
+	fmt.Print("mockd - Local-first mock server for API development\n\n")
+	fmt.Print("Usage:\n")
+	fmt.Print("  mockd                          Start mock server with defaults\n")
+	fmt.Print("  mockd <command> [flags]        Run a specific command\n")
+	fmt.Print("  mockd --help                   Show this help message\n\n")
 
-Usage:
-  mockd                          Start mock server with defaults
-  mockd <command> [flags]        Run a specific command
+	// Group commands by category in display order.
+	categories := []string{
+		"Core", "Configuration", "Mock Management", "Utilities",
+		"Proxy", "AI", "GraphQL", "Chaos", "gRPC", "MQTT",
+		"WebSocket", "SOAP", "MCP", "Templates", "Cloud",
+	}
 
-Commands:
-  up          Start services from mockd.yaml (Docker Compose style)
-  down        Stop services started by 'mockd up'
-  ps          Show running services
-  serve       Start the mock server (default command)
-  init        Create a starter config file
-  start       Start the mock server (alias for serve)
-  stop        Stop a running mockd server
-  status      Show status of running mockd server
-  ports       Show all ports in use by mockd
-  validate    Validate config file without starting services
+	groups := make(map[string][]*Command)
+	for _, cmd := range reg.ordered {
+		if !cmd.Hidden {
+			groups[cmd.Category] = append(groups[cmd.Category], cmd)
+		}
+	}
 
-Configuration:
-  context     Manage contexts (admin server + workspace pairs)
-  workspace   Manage workspaces within the current context
-  config      Show effective configuration
+	for _, cat := range categories {
+		cmds := groups[cat]
+		if len(cmds) == 0 {
+			continue
+		}
+		fmt.Printf("%s:\n", cat)
+		for _, cmd := range cmds {
+			fmt.Printf("  %-24s %s\n", cmd.Name, cmd.Short)
+		}
+		fmt.Println()
+	}
 
-Mock Management:
-  add         Add a new mock endpoint
-  new         Create mocks from templates (crud, auth, etc.)
-  list        List all configured mocks
-  get         Get details of a specific mock
-  delete      Delete a mock by ID
-  import      Import mocks from a configuration file
-  export      Export current mocks to stdout or file
-  logs        View request logs
-
-Utilities:
-  completion  Generate shell completion scripts
-  version     Show version information
-  doctor      Diagnose common setup issues
-
-Proxy Commands:
-  proxy             Manage the MITM proxy for recording API traffic
-  recordings        Manage recorded API traffic
-  convert           Convert recordings to mock definitions
-
-AI Commands:
-  generate          Generate mocks from OpenAPI or natural language (with --ai)
-  enhance           Enhance existing mocks with AI-generated data
-
-Stream Recording Commands:
-  stream-recordings Manage WebSocket and SSE stream recordings
-
-GraphQL Commands:
-  graphql     Validate schemas and execute GraphQL queries
-
-Chaos Engineering Commands:
-  chaos       Manage chaos injection (enable, disable, status)
-
-gRPC Commands:
-  grpc        Manage and test gRPC endpoints
-
-MQTT Commands:
-  mqtt        Publish, subscribe, and manage MQTT broker
-
-WebSocket Commands:
-  websocket   Connect, send, and listen to WebSocket endpoints
-
-SOAP Commands:
-  soap        Validate WSDL files and call SOAP operations
-
-MCP (Model Context Protocol):
-  mcp         Start MCP server for AI assistants (stdio transport)
-
-Template Commands:
-  templates   List and add templates from the official library
-
-Cloud Commands:
-  tunnel              Expose local mocks via secure tunnel
-  tunnel enable       Enable tunnel on an engine
-  tunnel disable      Disable tunnel on an engine
-  tunnel status       Show tunnel connection status
-  tunnel list         List all active tunnels
-  tunnel preview      Preview which mocks would be exposed
-
-Global Flags:
+	fmt.Print(`Global Flags:
   -h, --help      Show this help message
   -v, --version   Show version information
 
@@ -295,17 +275,4 @@ Additional Help Topics:
 
 Run 'mockd <command> --help' for more information on a command.
 `)
-}
-
-// isCommand checks if the given string is a known mockd command.
-func isCommand(s string) bool {
-	commands := []string{
-		"start", "serve", "add", "new", "list", "get", "delete",
-		"import", "export", "logs", "config", "completion", "version",
-		"proxy", "recordings", "convert", "generate", "enhance",
-		"stream-recordings", "graphql", "chaos", "grpc", "mqtt", "soap",
-		"templates", "tunnel", "tunnel-quic", "init", "help", "status", "stop", "doctor",
-		"websocket", "context", "workspace", "ports", "validate", "up", "down", "ps", "mcp",
-	}
-	return slices.Contains(commands, s)
 }
