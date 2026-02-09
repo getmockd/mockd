@@ -3,11 +3,12 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
 
+	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/mqtt"
 	"github.com/getmockd/mockd/pkg/recording"
 )
@@ -15,6 +16,7 @@ import (
 // MQTTRecordingManager manages MQTT recording operations for the Admin API.
 type MQTTRecordingManager struct {
 	mu      sync.RWMutex
+	log     *slog.Logger
 	store   *recording.MQTTStore
 	brokers map[string]*mqtt.Broker // broker ID -> broker
 }
@@ -22,6 +24,7 @@ type MQTTRecordingManager struct {
 // NewMQTTRecordingManager creates a new MQTT recording manager.
 func NewMQTTRecordingManager() *MQTTRecordingManager {
 	return &MQTTRecordingManager{
+		log:     logging.Nop(),
 		store:   recording.NewMQTTStore(1000),
 		brokers: make(map[string]*mqtt.Broker),
 	}
@@ -642,7 +645,7 @@ func (m *MQTTRecordingManager) handleExportMQTTRecordings(w http.ResponseWriter,
 
 	data, err := m.store.Export()
 	if err != nil {
-		log.Printf("Failed to export MQTT recordings: %v\n", err)
+		m.log.Error("failed to export MQTT recordings", "error", err)
 		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 		return
 	}

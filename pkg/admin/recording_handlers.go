@@ -3,7 +3,6 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 
@@ -260,7 +259,7 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 	}
 
 	if err != nil {
-		log.Printf("Failed to export recordings: %v\n", err)
+		pm.log.Error("failed to export recordings", "error", err)
 		writeError(w, http.StatusInternalServerError, "export_error", "Failed to export recordings")
 		return
 	}
@@ -334,7 +333,7 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 	addToServer := req.AddToServer || r.URL.Query().Get("add") == "true"
 	if addToServer && client != nil {
 		if _, err := client.CreateMock(r.Context(), mock); err != nil {
-			log.Printf("Failed to add mock to engine: %v\n", err)
+			pm.log.Error("failed to add mock to engine", "error", err)
 			writeError(w, http.StatusInternalServerError, "add_error", ErrMsgInternalError)
 			return
 		}

@@ -3,7 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/proxy"
 	"github.com/getmockd/mockd/pkg/recording"
 )
@@ -18,6 +19,7 @@ import (
 // ProxyManager manages the proxy server lifecycle for the Admin API.
 type ProxyManager struct {
 	mu        sync.RWMutex
+	log       *slog.Logger
 	proxy     *proxy.Proxy
 	store     *recording.Store
 	ca        *proxy.CAManager
@@ -31,7 +33,9 @@ type ProxyManager struct {
 
 // NewProxyManager creates a new ProxyManager.
 func NewProxyManager() *ProxyManager {
-	return &ProxyManager{}
+	return &ProxyManager{
+		log: logging.Nop(),
+	}
 }
 
 // ProxyStartRequest represents a request to start the proxy.
@@ -140,7 +144,7 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 
 		ca = proxy.NewCAManager(req.CAPath+"/ca.crt", req.CAPath+"/ca.key")
 		if err := ca.EnsureCA(); err != nil {
-			log.Printf("Failed to initialize CA: %v\n", err)
+			pm.log.Error("failed to initialize CA", "error", err)
 			writeError(w, http.StatusInternalServerError, "ca_error", "Failed to initialize CA certificate")
 			return
 		}
@@ -164,8 +168,7 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create proxy with logger
-	// Use the same output as the default logger
-	logger := log.New(log.Writer(), "[proxy] ", log.LstdFlags)
+	logger := slog.NewLogLogger(pm.log.Handler(), slog.LevelInfo)
 	p := proxy.New(proxy.Options{
 		Mode:      mode,
 		Store:     store,
@@ -199,7 +202,7 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 	// Start server in goroutine
 	go func() {
 		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-			log.Printf("Proxy server error: %v\n", err)
+			pm.log.Error("proxy server error", "error", err)
 		}
 	}()
 
@@ -218,7 +221,7 @@ func (pm *ProxyManager) handleProxyStop(w http.ResponseWriter, r *http.Request) 
 
 	if pm.server != nil {
 		if err := pm.server.Close(); err != nil {
-			log.Printf("Failed to stop proxy: %v\n", err)
+			pm.log.Error("failed to stop proxy", "error", err)
 			writeError(w, http.StatusInternalServerError, "stop_error", "Failed to stop proxy server")
 			return
 		}
@@ -362,7 +365,7 @@ func (pm *ProxyManager) handleGenerateCA(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := ca.Generate(); err != nil {
-		log.Printf("Failed to generate CA: %v\n", err)
+		pm.log.Error("failed to generate CA", "error", err)
 		writeError(w, http.StatusInternalServerError, "generate_error", "Failed to generate CA certificate")
 		return
 	}
@@ -396,7 +399,7 @@ func (pm *ProxyManager) handleDownloadCA(w http.ResponseWriter, r *http.Request)
 
 	certPEM, err := pm.ca.CACertPEM()
 	if err != nil {
-		log.Printf("Failed to read CA certificate: %v\n", err)
+		pm.log.Error("failed to read CA certificate", "error", err)
 		writeError(w, http.StatusInternalServerError, "read_error", "Failed to read CA certificate")
 		return
 	}

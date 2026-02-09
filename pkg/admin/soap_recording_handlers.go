@@ -3,11 +3,12 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
 
+	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/soap"
 )
@@ -15,6 +16,7 @@ import (
 // SOAPRecordingManager manages SOAP recording operations for the Admin API.
 type SOAPRecordingManager struct {
 	mu       sync.RWMutex
+	log      *slog.Logger
 	store    *recording.SOAPStore
 	handlers map[string]*soap.Handler // handler ID -> handler
 }
@@ -22,6 +24,7 @@ type SOAPRecordingManager struct {
 // NewSOAPRecordingManager creates a new SOAP recording manager.
 func NewSOAPRecordingManager() *SOAPRecordingManager {
 	return &SOAPRecordingManager{
+		log:      logging.Nop(),
 		store:    recording.NewSOAPStore(1000),
 		handlers: make(map[string]*soap.Handler),
 	}
@@ -517,7 +520,7 @@ func (m *SOAPRecordingManager) handleExportSOAPRecordings(w http.ResponseWriter,
 
 	data, err := m.store.Export()
 	if err != nil {
-		log.Printf("Failed to export SOAP recordings: %v\n", err)
+		m.log.Error("failed to export SOAP recordings", "error", err)
 		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 		return
 	}

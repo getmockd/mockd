@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/recording"
 )
@@ -18,6 +19,7 @@ import (
 // StreamRecordingManager manages stream recording operations for the Admin API.
 type StreamRecordingManager struct {
 	mu          sync.RWMutex
+	log         *slog.Logger
 	store       *recording.FileStore
 	replay      *recording.ReplayController
 	initialized bool
@@ -25,7 +27,9 @@ type StreamRecordingManager struct {
 
 // NewStreamRecordingManager creates a new stream recording manager.
 func NewStreamRecordingManager() *StreamRecordingManager {
-	return &StreamRecordingManager{}
+	return &StreamRecordingManager{
+		log: logging.Nop(),
+	}
 }
 
 // Initialize initializes the manager with a file store.
@@ -211,7 +215,7 @@ func (m *StreamRecordingManager) handleListStreamRecordings(w http.ResponseWrite
 
 	recordings, total, err := m.store.List(filter)
 	if err != nil {
-		log.Printf("Failed to list stream recordings: %v\n", err)
+		m.log.Error("failed to list stream recordings", "error", err)
 		writeError(w, http.StatusInternalServerError, "list_error", ErrMsgInternalError)
 		return
 	}
@@ -287,7 +291,7 @@ func (m *StreamRecordingManager) handleGetStreamRecordingStats(w http.ResponseWr
 
 	stats, err := m.store.GetStats()
 	if err != nil {
-		log.Printf("Failed to get stream recording stats: %v\n", err)
+		m.log.Error("failed to get stream recording stats", "error", err)
 		writeError(w, http.StatusInternalServerError, "stats_error", ErrMsgInternalError)
 		return
 	}
@@ -329,7 +333,7 @@ func (m *StreamRecordingManager) handleStartRecording(w http.ResponseWriter, r *
 	// Start recording session
 	session, err := m.store.StartRecording(protocol, metadata)
 	if err != nil {
-		log.Printf("Failed to start stream recording: %v\n", err)
+		m.log.Error("failed to start stream recording", "error", err)
 		writeError(w, http.StatusInternalServerError, "start_error", ErrMsgInternalError)
 		return
 	}
@@ -456,7 +460,7 @@ func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWri
 	// Convert
 	result, err := recording.ConvertStreamRecording(rec, opts)
 	if err != nil {
-		log.Printf("Failed to convert stream recording %s: %v\n", id, err)
+		m.log.Error("failed to convert stream recording", "id", id, "error", err)
 		writeError(w, http.StatusBadRequest, "convert_error", "Failed to convert recording")
 		return
 	}
@@ -470,7 +474,7 @@ func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWri
 	if req.AddToServer && client != nil {
 		mockID, addErr := m.addStreamMockToEngine(r.Context(), rec.Protocol, result, req, client)
 		if addErr != nil {
-			log.Printf("Failed to add stream mock to engine: %v\n", addErr)
+			m.log.Error("failed to add stream mock to engine", "error", addErr)
 			writeError(w, http.StatusInternalServerError, "add_error", ErrMsgInternalError)
 			return
 		}
@@ -621,7 +625,7 @@ func (m *StreamRecordingManager) handleStartReplay(w http.ResponseWriter, r *htt
 
 	session, err := m.replay.StartReplay(config)
 	if err != nil {
-		log.Printf("Failed to start replay for recording %s: %v\n", id, err)
+		m.log.Error("failed to start replay for recording", "id", id, "error", err)
 		writeError(w, http.StatusBadRequest, "replay_error", "Failed to start replay")
 		return
 	}
@@ -719,7 +723,7 @@ func (m *StreamRecordingManager) handleAdvanceReplay(w http.ResponseWriter, r *h
 
 	resp, err := m.replay.Advance(id, advReq)
 	if err != nil {
-		log.Printf("Failed to advance replay %s: %v\n", id, err)
+		m.log.Error("failed to advance replay", "id", id, "error", err)
 		writeError(w, http.StatusBadRequest, "advance_error", "Failed to advance replay")
 		return
 	}
@@ -773,7 +777,7 @@ func (m *StreamRecordingManager) handlePauseReplay(w http.ResponseWriter, r *htt
 	}
 
 	if err := m.replay.PauseReplay(id); err != nil {
-		log.Printf("Failed to pause replay %s: %v\n", id, err)
+		m.log.Error("failed to pause replay", "id", id, "error", err)
 		writeError(w, http.StatusBadRequest, "pause_error", "Failed to pause replay")
 		return
 	}
@@ -798,7 +802,7 @@ func (m *StreamRecordingManager) handleResumeReplay(w http.ResponseWriter, r *ht
 	}
 
 	if err := m.replay.ResumeReplay(id); err != nil {
-		log.Printf("Failed to resume replay %s: %v\n", id, err)
+		m.log.Error("failed to resume replay", "id", id, "error", err)
 		writeError(w, http.StatusBadRequest, "resume_error", "Failed to resume replay")
 		return
 	}
@@ -818,7 +822,7 @@ func (m *StreamRecordingManager) handleVacuum(w http.ResponseWriter, r *http.Req
 
 	count, freedBytes, err := m.store.Vacuum()
 	if err != nil {
-		log.Printf("Failed to vacuum stream recordings: %v\n", err)
+		m.log.Error("failed to vacuum stream recordings", "error", err)
 		writeError(w, http.StatusInternalServerError, "vacuum_error", ErrMsgInternalError)
 		return
 	}

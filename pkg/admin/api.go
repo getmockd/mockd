@@ -437,13 +437,19 @@ func (a *API) Start() error {
 	return nil
 }
 
-// SetLogger sets the operational logger for the admin API.
+// SetLogger sets the operational logger for the admin API and propagates it
+// to all manager subsystems.
 func (a *API) SetLogger(log *slog.Logger) {
 	if log != nil {
 		a.log = log
 	} else {
 		a.log = logging.Nop()
 	}
+	// Fan out to managers so structured logging flows through all subsystems.
+	a.proxyManager.log = a.log.With("component", "proxy")
+	a.streamRecordingManager.log = a.log.With("component", "stream-recording")
+	a.mqttRecordingManager.log = a.log.With("component", "mqtt-recording")
+	a.soapRecordingManager.log = a.log.With("component", "soap-recording")
 }
 
 // Stop gracefully shuts down the admin API server.

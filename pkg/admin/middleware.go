@@ -1,11 +1,13 @@
 package admin
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/logging"
 )
 
 // CORSConfig holds the configuration for CORS middleware.
@@ -42,9 +44,8 @@ type CORSConfig struct {
 // - Consider the security implications if AllowCredentials is enabled with wildcards
 func DefaultCORSConfig() CORSConfig {
 	// Log warning about wildcard CORS configuration
-	log.Println("[SECURITY WARNING] CORS configured with wildcard origin (*). " +
-		"This allows cross-origin requests from any domain. " +
-		"For production, specify explicit allowed origins using NewCORSMiddlewareWithConfig().")
+	slog.Warn("CORS configured with wildcard origin (*), allows cross-origin requests from any domain",
+		"recommendation", "specify explicit allowed origins using NewCORSMiddlewareWithConfig()")
 
 	return CORSConfig{
 		AllowedOrigins:   []string{"*"},
@@ -125,12 +126,16 @@ func (c *CORSConfig) getMaxAge() string {
 
 // LoggingMiddleware logs HTTP requests.
 type LoggingMiddleware struct {
+	log     *slog.Logger
 	handler http.Handler
 }
 
 // NewLoggingMiddleware creates a new logging middleware.
 func NewLoggingMiddleware(handler http.Handler) *LoggingMiddleware {
-	return &LoggingMiddleware{handler: handler}
+	return &LoggingMiddleware{
+		log:     logging.Nop(),
+		handler: handler,
+	}
 }
 
 // ServeHTTP implements the http.Handler interface.
@@ -142,11 +147,11 @@ func (m *LoggingMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	m.handler.ServeHTTP(lrw, r)
 
-	log.Printf("[ADMIN] %s %s %d %v",
-		r.Method,
-		r.URL.Path,
-		lrw.statusCode,
-		time.Since(start),
+	m.log.Info("request completed",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"status", lrw.statusCode,
+		"duration", time.Since(start),
 	)
 }
 
