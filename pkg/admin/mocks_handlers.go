@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -612,7 +613,7 @@ func (a *API) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	m, err := mockStore.Get(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
@@ -713,7 +714,7 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	// No conflict, no merge - create new mock
 	if err := mockStore.Create(r.Context(), &m); err != nil {
-		if err == store.ErrAlreadyExists {
+		if errors.Is(err, store.ErrAlreadyExists) {
 			writeError(w, http.StatusConflict, "duplicate_id", "Mock with this ID already exists")
 			return
 		}
@@ -853,7 +854,7 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	// Get existing mock to preserve createdAt and workspaceID
 	existing, err := mockStore.Get(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
@@ -947,7 +948,7 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	// Get existing mock from store
 	existing, err := mockStore.Get(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
@@ -993,7 +994,7 @@ func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	// Delete from store (source of truth)
 	if err := mockStore.Delete(r.Context(), id); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
@@ -1078,7 +1079,7 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	m, err := mockStore.Get(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
@@ -1270,7 +1271,7 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := mockStore.BulkCreate(r.Context(), mocks); err != nil {
-		if err == store.ErrAlreadyExists {
+		if errors.Is(err, store.ErrAlreadyExists) {
 			writeError(w, http.StatusConflict, "already_exists", "one or more mocks already exist")
 			return
 		}

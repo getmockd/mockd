@@ -207,7 +207,7 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 			// Use Create (skip duplicates) to populate the file store.
 			if err := mockStore.Create(ctx, m); err != nil {
 				// If it already exists, update it instead.
-				if err == store.ErrAlreadyExists {
+				if errors.Is(err, store.ErrAlreadyExists) {
 					_ = mockStore.Update(ctx, m)
 				} else {
 					a.logger().Warn("failed to write imported mock to file store",
@@ -228,7 +228,7 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 				continue
 			}
 			if err := resStore.Create(ctx, res); err != nil {
-				if err == store.ErrAlreadyExists {
+				if errors.Is(err, store.ErrAlreadyExists) {
 					// Resource already exists; on replace we already cleared, so this
 					// shouldn't happen, but handle gracefully.
 					a.logger().Debug("stateful resource already exists in file store", "name", res.Name)

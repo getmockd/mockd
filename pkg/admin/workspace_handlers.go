@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -75,7 +76,7 @@ func (a *API) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ws, err := wsStore.Get(ctx, id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Workspace not found")
 			return
 		}
@@ -174,7 +175,7 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	// Persist workspace
 	ctx := r.Context()
 	if err := wsStore.Create(ctx, ws); err != nil {
-		if err == store.ErrAlreadyExists {
+		if errors.Is(err, store.ErrAlreadyExists) {
 			writeError(w, http.StatusConflict, "already_exists", "Workspace with this ID already exists")
 			return
 		}
@@ -208,7 +209,7 @@ func (a *API) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	// Get existing workspace
 	ws, err := wsStore.Get(ctx, id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Workspace not found")
 			return
 		}
@@ -304,7 +305,7 @@ func (a *API) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	// Check if workspace exists
 	_, err := wsStore.Get(ctx, id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Workspace not found")
 			return
 		}

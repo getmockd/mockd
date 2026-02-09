@@ -4,6 +4,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -78,7 +79,7 @@ func (a *API) handleGetFolder(w http.ResponseWriter, r *http.Request) {
 
 	folder, err := folderStore.Get(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
@@ -187,7 +188,7 @@ func (a *API) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	existing, err := folderStore.Get(ctx, id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
@@ -284,7 +285,7 @@ func (a *API) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if err := folderStore.Delete(ctx, id); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
