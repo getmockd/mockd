@@ -55,7 +55,8 @@ func (a *API) handleListFolders(w http.ResponseWriter, r *http.Request) {
 
 	folders, err := folderStore.List(r.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.log.Error("failed to list folders", "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 	writeJSON(w, http.StatusOK, folders)
@@ -81,7 +82,8 @@ func (a *API) handleGetFolder(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.log.Error("failed to get folder", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
@@ -161,7 +163,8 @@ func (a *API) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 	folder.WorkspaceID = workspaceID
 
 	if err := folderStore.Create(ctx, folder); err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.log.Error("failed to create folder", "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 	writeJSON(w, http.StatusCreated, folder)
@@ -188,7 +191,8 @@ func (a *API) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.log.Error("failed to get folder for update", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
@@ -233,7 +237,8 @@ func (a *API) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 	existing.UpdatedAt = time.Now()
 
 	if err := folderStore.Update(ctx, existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.log.Error("failed to update folder", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 	writeJSON(w, http.StatusOK, existing)
@@ -283,7 +288,8 @@ func (a *API) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.log.Error("failed to delete folder", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 

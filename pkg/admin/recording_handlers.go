@@ -309,7 +309,7 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 	var req SingleConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 	}
@@ -334,7 +334,8 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 	addToServer := req.AddToServer || r.URL.Query().Get("add") == "true"
 	if addToServer && client != nil {
 		if _, err := client.CreateMock(r.Context(), mock); err != nil {
-			writeError(w, http.StatusInternalServerError, "add_error", "Failed to add mock to engine: "+err.Error())
+			log.Printf("Failed to add mock to engine: %v\n", err)
+			writeError(w, http.StatusInternalServerError, "add_error", ErrMsgInternalError)
 			return
 		}
 	}
@@ -404,7 +405,7 @@ func (pm *ProxyManager) handleConvertSession(w http.ResponseWriter, r *http.Requ
 	var req SessionConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 	}

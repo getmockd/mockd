@@ -358,7 +358,8 @@ func (a *API) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 
 	newKey, err := a.apiKeyAuth.rotateKey()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "rotation_failed", "Failed to rotate API key: "+err.Error())
+		a.log.Error("failed to rotate API key", "error", err)
+		writeError(w, http.StatusInternalServerError, "rotation_failed", ErrMsgInternalError)
 		return
 	}
 
