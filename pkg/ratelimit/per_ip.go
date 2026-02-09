@@ -42,6 +42,7 @@ type PerIPLimiter struct {
 	mu              sync.RWMutex
 	stopCh          chan struct{}
 	stoppedCh       chan struct{}
+	stopOnce        sync.Once
 	trustedProxies  []*net.IPNet
 	trustProxy      bool
 	cleanupInterval time.Duration
@@ -212,10 +213,13 @@ func (rl *PerIPLimiter) ClientIP(r *http.Request) string {
 	return remoteIP
 }
 
-// Stop stops the cleanup goroutine. Must be called when the limiter is no longer needed.
+// Stop stops the cleanup goroutine. Must be called when the limiter is no
+// longer needed. Safe to call multiple times; subsequent calls are no-ops.
 func (rl *PerIPLimiter) Stop() {
-	close(rl.stopCh)
-	<-rl.stoppedCh
+	rl.stopOnce.Do(func() {
+		close(rl.stopCh)
+		<-rl.stoppedCh
+	})
 }
 
 // cleanup periodically removes stale entries.
