@@ -330,7 +330,12 @@ func (b *Broker) notifySubscribers(topic string, payload []byte) {
 func (b *Broker) GetClients() []string {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	return b.getClientsLocked()
+}
 
+// getClientsLocked returns connected client IDs.
+// The caller must hold b.mu (read or write).
+func (b *Broker) getClientsLocked() []string {
 	if b.server == nil {
 		return nil
 	}
@@ -436,7 +441,7 @@ func (b *Broker) GetStats() BrokerStats {
 
 	stats := BrokerStats{
 		Running:     b.running,
-		ClientCount: len(b.GetClients()),
+		ClientCount: len(b.getClientsLocked()),
 		TopicCount:  len(b.config.Topics),
 		Port:        b.config.Port,
 		TLSEnabled:  b.config.TLS != nil && b.config.TLS.Enabled,
