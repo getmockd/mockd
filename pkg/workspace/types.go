@@ -1,6 +1,11 @@
 // Package workspace defines shared types and interfaces for workspace server
 // management. This package is imported by both pkg/admin (the consumer) and
 // pkg/engine (the implementer), keeping the two layers decoupled.
+//
+// Note: this package imports internal/storage for the MockStore interface used
+// by Manager.SetCentralStore. This is acceptable because mockd is a CLI tool
+// (not a library) and internal/ packages are module-scoped. If mockd were ever
+// published as a Go library, MockStore should be redefined here or in pkg/store.
 package workspace
 
 import (

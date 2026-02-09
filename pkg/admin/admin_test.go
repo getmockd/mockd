@@ -508,6 +508,9 @@ func TestProxyHandler_CAPath_RejectsAbsolute(t *testing.T) {
 }
 
 func TestProxyHandler_CAPath_AcceptsValidRelative(t *testing.T) {
+	// NOTE: This test uses os.Chdir which affects the entire process.
+	// Do NOT add t.Parallel() to this test or run it concurrently with
+	// other tests that depend on the working directory.
 	pm := NewProxyManager()
 
 	// Create a valid temp directory for CA files

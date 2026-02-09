@@ -303,6 +303,7 @@ func DefaultRateLimitConfig() *RateLimitConfig {
 		Enabled:           true,
 		RequestsPerSecond: 1000,
 		BurstSize:         2000,
+		MaxBuckets:        10_000,
 	}
 }
 

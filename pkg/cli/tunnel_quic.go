@@ -123,10 +123,10 @@ Examples:
   mockd tunnel-quic --port 4280
 
   # Tunnel HTTP + MQTT broker
-  mockd tunnel-quic --port 8080 --mqtt 1883
+  mockd tunnel-quic --port 4280 --mqtt 1883
 
   # Multiple named MQTT brokers (each gets a subdomain)
-  mockd tunnel-quic --port 8080 --mqtt 1883:sensors --mqtt 1884:alerts
+  mockd tunnel-quic --port 4280 --mqtt 1883:sensors --mqtt 1884:alerts
   # sensors.abc123.tunnel.mockd.io:443 (ALPN: mqtt) → localhost:1883
   # alerts.abc123.tunnel.mockd.io:443  (ALPN: mqtt) → localhost:1884
 

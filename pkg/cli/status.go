@@ -76,7 +76,7 @@ Examples:
   mockd status --pid-file /tmp/mockd.pid
 
   # Check status on custom ports
-  mockd status --port 8080 --admin-port 8090
+  mockd status --port 3000 --admin-port 3001
 `)
 	}
 
