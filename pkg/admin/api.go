@@ -3,6 +3,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -436,7 +437,7 @@ func (a *API) Start() error {
 
 	a.logger().Info("starting admin API", "port", a.port)
 	go func() {
-		if err := a.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := a.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			a.logger().Error("admin API error", "error", err)
 		}
 	}()

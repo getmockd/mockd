@@ -4,6 +4,7 @@ package engine
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -312,7 +313,7 @@ func (s *Server) Start() error {
 
 		s.log.Info("starting HTTP server", "port", s.cfg.HTTPPort)
 		go func() {
-			if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				s.log.Error("HTTP server error", "error", err)
 			}
 		}()
@@ -335,7 +336,7 @@ func (s *Server) Start() error {
 		}
 
 		go func() {
-			if err := s.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			if err := s.httpsServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				s.log.Error("HTTPS server error", "error", err)
 			}
 		}()

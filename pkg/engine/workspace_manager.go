@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -362,7 +363,7 @@ func (s *WorkspaceServer) Start() error {
 
 	// Start in background
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.mu.Lock()
 			s.status = WorkspaceServerStatusError
 			s.statusMsg = err.Error()
