@@ -358,6 +358,21 @@ func (pm *ProxyManager) handleGenerateCA(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Validate CA path to prevent path traversal
+	if strings.Contains(req.CAPath, "..") {
+		writeError(w, http.StatusBadRequest, "invalid_path", "CA path cannot contain path traversal sequences")
+		return
+	}
+	if filepath.IsAbs(req.CAPath) {
+		writeError(w, http.StatusBadRequest, "invalid_path", "CA path must be a relative path")
+		return
+	}
+	cleanPath := filepath.Clean(req.CAPath)
+	if strings.HasPrefix(cleanPath, "..") {
+		writeError(w, http.StatusBadRequest, "invalid_path", "CA path cannot escape the working directory")
+		return
+	}
+
 	ca := proxy.NewCAManager(req.CAPath+"/ca.crt", req.CAPath+"/ca.key")
 	if ca.Exists() {
 		writeError(w, http.StatusConflict, "ca_exists", "CA certificate already exists")
