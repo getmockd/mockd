@@ -85,14 +85,7 @@ func (s *SOAPStore) Stats() *SOAPRecordingStats {
 			stats.FaultCount++
 		}
 
-		if stats.OldestTimestamp == nil || r.Timestamp.Before(*stats.OldestTimestamp) {
-			t := r.Timestamp
-			stats.OldestTimestamp = &t
-		}
-		if stats.NewestTimestamp == nil || r.Timestamp.After(*stats.NewestTimestamp) {
-			t := r.Timestamp
-			stats.NewestTimestamp = &t
-		}
+		UpdateTimestampRange(&stats.OldestTimestamp, &stats.NewestTimestamp, r.Timestamp)
 	}
 
 	return stats

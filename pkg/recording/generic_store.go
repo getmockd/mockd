@@ -241,6 +241,20 @@ func (s *RecordingStore[T]) saveRecording(r *T) error {
 	return nil
 }
 
+// UpdateTimestampRange updates oldest/newest timestamp pointers
+// given a candidate timestamp. This is used by protocol-specific Stats
+// methods to deduplicate min/max timestamp tracking.
+func UpdateTimestampRange(oldest, newest **time.Time, t time.Time) {
+	if *oldest == nil || t.Before(**oldest) {
+		ts := t
+		*oldest = &ts
+	}
+	if *newest == nil || t.After(**newest) {
+		ts := t
+		*newest = &ts
+	}
+}
+
 // loadFromDisk loads recordings from the data directory.
 func (s *RecordingStore[T]) loadFromDisk() error {
 	entries, err := os.ReadDir(s.dataDir)
