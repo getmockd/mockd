@@ -244,13 +244,8 @@ func (a *apiKeyAuth) middleware(next http.Handler) http.Handler {
 			}
 		}
 		if apiKey == "" {
-			// Check query parameter as last resort
-			apiKey = r.URL.Query().Get("api_key")
-		}
-
-		if apiKey == "" {
 			writeError(w, http.StatusUnauthorized, "missing_api_key",
-				"API key required. Provide via X-API-Key header, Authorization: Bearer <key>, or api_key query parameter.")
+				"API key required. Provide via X-API-Key header or Authorization: Bearer <key>.")
 			return
 		}
 

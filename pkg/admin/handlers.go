@@ -363,15 +363,10 @@ func (a *API) handleClearRequests(w http.ResponseWriter, r *http.Request, engine
 
 // handleStreamRequests handles GET /requests/stream - SSE endpoint for streaming new requests.
 func (a *API) handleStreamRequests(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
-	// Set SSE headers
+	// Set SSE headers (CORS is handled by the middleware — do not duplicate here)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	// Use configured CORS settings instead of hardcoded "*"
-	origin := r.Header.Get("Origin")
-	if allowOrigin := a.corsConfig.getAllowOriginValue(origin); allowOrigin != "" {
-		w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-	}
 
 	// Get the flusher
 	flusher, ok := w.(http.Flusher)
