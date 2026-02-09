@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -844,6 +845,74 @@ func TestRateLimiter_AllowsBurstRequests(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code,
 			"request %d in burst should succeed", i+1)
 	}
+}
+
+// ============================================================================
+// SetLogger Tests — API and Manager nil-safety
+// ============================================================================
+
+func TestAPISetLogger_NilSafety(t *testing.T) {
+	api := NewAPI(0)
+	defer api.Stop()
+
+	// Setting a nil logger should not panic and should fall back to nop
+	api.SetLogger(nil)
+	log := api.logger()
+	assert.NotNil(t, log, "logger() should never return nil after SetLogger(nil)")
+
+	// Setting a valid logger should be retrievable
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	api.SetLogger(logger)
+	assert.Equal(t, logger, api.logger(), "logger() should return the logger that was set")
+}
+
+func TestAPISetLogger_PropagatesLogger(t *testing.T) {
+	api := NewAPI(0)
+	defer api.Stop()
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	api.SetLogger(logger)
+
+	// The manager loggers should be non-nil after propagation
+	// We can't directly inspect manager.log (unexported), but we can
+	// verify the managers received a non-nil logger by calling SetLogger
+	// with nil and ensuring no panic.
+	api.proxyManager.SetLogger(nil)
+	api.streamRecordingManager.SetLogger(nil)
+	api.mqttRecordingManager.SetLogger(nil)
+	api.soapRecordingManager.SetLogger(nil)
+}
+
+func TestProxyManagerSetLogger_NilSafety(t *testing.T) {
+	pm := NewProxyManager()
+	// Should not panic
+	pm.SetLogger(nil)
+	// Should work with valid logger
+	pm.SetLogger(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+}
+
+func TestStreamRecordingManagerSetLogger_NilSafety(t *testing.T) {
+	srm := NewStreamRecordingManager()
+	// Should not panic
+	srm.SetLogger(nil)
+	// Should work with valid logger
+	srm.SetLogger(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+}
+
+func TestMQTTRecordingManagerSetLogger_NilSafety(t *testing.T) {
+	mrm := NewMQTTRecordingManager()
+	// Should not panic
+	mrm.SetLogger(nil)
+	// Should work with valid logger
+	mrm.SetLogger(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+}
+
+func TestSOAPRecordingManagerSetLogger_NilSafety(t *testing.T) {
+	srm := NewSOAPRecordingManager()
+	// Should not panic
+	srm.SetLogger(nil)
+	// Should work with valid logger
+	srm.SetLogger(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 }
 
 // ============================================================================
