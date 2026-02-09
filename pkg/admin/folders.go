@@ -55,7 +55,7 @@ func (a *API) handleListFolders(w http.ResponseWriter, r *http.Request) {
 
 	folders, err := folderStore.List(r.Context(), filter)
 	if err != nil {
-		a.log.Error("failed to list folders", "error", err)
+		a.logger().Error("failed to list folders", "error", err)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
@@ -82,7 +82,7 @@ func (a *API) handleGetFolder(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
-		a.log.Error("failed to get folder", "id", id, "error", err)
+		a.logger().Error("failed to get folder", "id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
@@ -163,7 +163,7 @@ func (a *API) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 	folder.WorkspaceID = workspaceID
 
 	if err := folderStore.Create(ctx, folder); err != nil {
-		a.log.Error("failed to create folder", "error", err)
+		a.logger().Error("failed to create folder", "error", err)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
@@ -191,7 +191,7 @@ func (a *API) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
-		a.log.Error("failed to get folder for update", "id", id, "error", err)
+		a.logger().Error("failed to get folder for update", "id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
@@ -237,7 +237,7 @@ func (a *API) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 	existing.UpdatedAt = time.Now()
 
 	if err := folderStore.Update(ctx, existing); err != nil {
-		a.log.Error("failed to update folder", "id", id, "error", err)
+		a.logger().Error("failed to update folder", "id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
@@ -288,7 +288,7 @@ func (a *API) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
-		a.log.Error("failed to delete folder", "id", id, "error", err)
+		a.logger().Error("failed to delete folder", "id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}

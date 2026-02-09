@@ -185,13 +185,13 @@ func (a *API) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request,
 
 	collection, err := template.Generate(req.Parameters)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "generation_error", sanitizeError(err, a.log, "generate template"))
+		writeError(w, http.StatusBadRequest, "generation_error", sanitizeError(err, a.logger(), "generate template"))
 		return
 	}
 
 	// Import the generated mocks into the engine via HTTP client
 	if err := engine.ImportConfig(r.Context(), collection, false); err != nil {
-		writeError(w, http.StatusInternalServerError, "import_error", sanitizeError(err, a.log, "import template mocks"))
+		writeError(w, http.StatusInternalServerError, "import_error", sanitizeError(err, a.logger(), "import template mocks"))
 		return
 	}
 

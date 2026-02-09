@@ -34,7 +34,7 @@ func (a *API) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	// Get all mocks
 	mocks, err := a.getAllMocksForExport(ctx)
 	if err != nil {
-		a.log.Error("failed to list mocks for OpenAPI export", "error", err)
+		a.logger().Error("failed to list mocks for OpenAPI export", "error", err)
 		writeError(w, http.StatusInternalServerError, "list_error", ErrMsgInternalError)
 		return
 	}
@@ -58,7 +58,7 @@ func (a *API) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	exporter := &portability.OpenAPIExporter{AsYAML: asYAML}
 	data, err := exporter.Export(collection)
 	if err != nil {
-		a.log.Error("failed to export OpenAPI spec", "error", err)
+		a.logger().Error("failed to export OpenAPI spec", "error", err)
 		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 		return
 	}
@@ -84,7 +84,7 @@ func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 
 	mocks, err := a.getAllMocksForExport(ctx)
 	if err != nil {
-		a.log.Error("failed to list mocks for Insomnia export", "error", err)
+		a.logger().Error("failed to list mocks for Insomnia export", "error", err)
 		writeError(w, http.StatusInternalServerError, "list_error", ErrMsgInternalError)
 		return
 	}
@@ -128,7 +128,7 @@ func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 
 	data, err := json.MarshalIndent(export, "", "  ")
 	if err != nil {
-		a.log.Error("failed to marshal Insomnia export", "error", err)
+		a.logger().Error("failed to marshal Insomnia export", "error", err)
 		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 		return
 	}

@@ -74,7 +74,7 @@ func (a *API) handleStartWorkspaceServer(w http.ResponseWriter, r *http.Request)
 
 	// Start the workspace server
 	if err := a.workspaceManager.StartWorkspace(r.Context(), ws); err != nil {
-		a.log.Error("failed to start workspace server", "error", err, "workspaceID", workspaceID, "engineID", engineID)
+		a.logger().Error("failed to start workspace server", "error", err, "workspaceID", workspaceID, "engineID", engineID)
 		writeError(w, http.StatusInternalServerError, "start_failed", "Failed to start workspace server")
 		return
 	}
@@ -143,7 +143,7 @@ func (a *API) handleStopWorkspaceServer(w http.ResponseWriter, r *http.Request) 
 
 	// Stop the workspace server
 	if err := a.workspaceManager.StopWorkspace(workspaceID); err != nil {
-		a.log.Error("failed to stop workspace server", "error", err, "workspaceID", workspaceID, "engineID", engineID)
+		a.logger().Error("failed to stop workspace server", "error", err, "workspaceID", workspaceID, "engineID", engineID)
 		writeError(w, http.StatusInternalServerError, "stop_failed", "Failed to stop workspace server")
 		return
 	}
@@ -279,7 +279,7 @@ func (a *API) handleReloadWorkspaceServer(w http.ResponseWriter, r *http.Request
 
 	// Reload mocks
 	if err := a.workspaceManager.ReloadWorkspace(r.Context(), workspaceID); err != nil {
-		a.log.Error("failed to reload workspace", "error", err, "workspaceID", workspaceID, "engineID", engineID)
+		a.logger().Error("failed to reload workspace", "error", err, "workspaceID", workspaceID, "engineID", engineID)
 		writeError(w, http.StatusInternalServerError, "reload_failed", "Failed to reload workspace")
 		return
 	}

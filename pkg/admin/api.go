@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
@@ -48,7 +49,7 @@ type API struct {
 	startTime              time.Time
 	ctx                    context.Context
 	cancel                 context.CancelFunc
-	log                    *slog.Logger
+	log                    atomic.Pointer[slog.Logger]
 
 	// Token management for engine authentication
 	registrationTokens map[string]storedToken // token -> storedToken
@@ -92,8 +93,6 @@ type API struct {
 
 // NewAPI creates a new API.
 func NewAPI(port int, opts ...Option) *API {
-	log := logging.Nop() // Default to no-op, can be set with SetLogger
-
 	// Create context for background goroutines
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -109,7 +108,6 @@ func NewAPI(port int, opts ...Option) *API {
 		port:                        port,
 		ctx:                         ctx,
 		cancel:                      cancel,
-		log:                         log,
 		registrationTokens:          make(map[string]storedToken),
 		engineTokens:                make(map[string]storedToken),
 		registrationTokenExpiration: RegistrationTokenExpiration,
@@ -117,6 +115,9 @@ func NewAPI(port int, opts ...Option) *API {
 		apiKeyConfig:                DefaultAPIKeyConfig(),
 		metricsRegistry:             metricsRegistry,
 	}
+
+	// Store default nop logger (can be replaced with SetLogger before Start)
+	api.log.Store(logging.Nop())
 
 	// Apply options first so dataDir can be set
 	for _, opt := range opts {
@@ -127,7 +128,7 @@ func NewAPI(port int, opts ...Option) *API {
 	wsStore := store.NewWorkspaceFileStore(api.dataDir)
 	if err := wsStore.Open(context.Background()); err != nil {
 		// Log but don't fail - workspace features will be limited
-		log.Warn("failed to initialize workspace store", "error", err)
+		api.logger().Warn("failed to initialize workspace store", "error", err)
 	}
 	api.workspaceStore = wsStore
 
@@ -142,7 +143,7 @@ func NewAPI(port int, opts ...Option) *API {
 	}
 	if err := dataStore.Open(context.Background()); err != nil {
 		// Log but don't fail - store features will be limited
-		log.Warn("failed to initialize data store", "error", err)
+		api.logger().Warn("failed to initialize data store", "error", err)
 	}
 	api.dataStore = dataStore
 
@@ -160,20 +161,22 @@ func NewAPI(port int, opts ...Option) *API {
 		api.corsConfig = DefaultCORSConfig()
 	}
 
-	// Initialize API key authentication
+	// Initialize API key authentication.
+	// The logFn closure reads the logger dynamically via api.logger() so
+	// that it picks up any logger set later via SetLogger (C3 fix).
 	logFn := func(msg string, args ...any) {
-		log.Info(msg, args...)
+		api.logger().Info(msg, args...)
 	}
 	apiKeyAuth, err := newAPIKeyAuth(api.apiKeyConfig, logFn)
 	if err != nil {
-		log.Error("failed to initialize API key auth", "error", err)
+		api.logger().Error("failed to initialize API key auth", "error", err)
 		// Continue without API key auth - will be insecure but functional
 	}
 	api.apiKeyAuth = apiKeyAuth
 
 	// Initialize stream recording manager with data directory
 	if err := api.streamRecordingManager.Initialize(api.dataDir); err != nil {
-		log.Warn("failed to initialize stream recording manager", "error", err)
+		api.logger().Warn("failed to initialize stream recording manager", "error", err)
 		// Continue without stream recording - feature will be unavailable
 	}
 
@@ -425,29 +428,37 @@ func (a *API) Start() error {
 	// Start the token cleanup background goroutine
 	go a.startTokenCleanup(a.ctx)
 
-	a.log.Info("starting admin API", "port", a.port)
+	a.logger().Info("starting admin API", "port", a.port)
 	go func() {
 		if err := a.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			a.log.Error("admin API error", "error", err)
+			a.logger().Error("admin API error", "error", err)
 		}
 	}()
 	return nil
 }
 
-// SetLogger sets the operational logger for the admin API and propagates it
-// to all manager subsystems via their own lock-protected SetLogger methods.
+// logger returns the current logger from the atomic pointer.
+// This is safe to call from any goroutine concurrently with SetLogger.
+func (a *API) logger() *slog.Logger {
+	return a.log.Load()
+}
+
+// SetLogger atomically sets the operational logger for the admin API and
+// propagates it to all manager subsystems via their own lock-protected
+// SetLogger methods. Safe to call concurrently with handler goroutines
+// that read the logger via the logger() accessor.
 func (a *API) SetLogger(log *slog.Logger) {
-	if log != nil {
-		a.log = log
-	} else {
-		a.log = logging.Nop()
+	if log == nil {
+		log = logging.Nop()
 	}
+	a.log.Store(log)
+
 	// Fan out to managers via their lock-protected SetLogger methods so
 	// that concurrent handler goroutines never observe a torn pointer write.
-	a.proxyManager.SetLogger(a.log.With("component", "proxy"))
-	a.streamRecordingManager.SetLogger(a.log.With("component", "stream-recording"))
-	a.mqttRecordingManager.SetLogger(a.log.With("component", "mqtt-recording"))
-	a.soapRecordingManager.SetLogger(a.log.With("component", "soap-recording"))
+	a.proxyManager.SetLogger(log.With("component", "proxy"))
+	a.streamRecordingManager.SetLogger(log.With("component", "stream-recording"))
+	a.mqttRecordingManager.SetLogger(log.With("component", "mqtt-recording"))
+	a.soapRecordingManager.SetLogger(log.With("component", "soap-recording"))
 }
 
 // Stop gracefully shuts down the admin API server.
@@ -464,14 +475,14 @@ func (a *API) Stop() error {
 	// Stop all workspace servers
 	if a.workspaceManager != nil {
 		if err := a.workspaceManager.StopAll(); err != nil {
-			a.log.Warn("error stopping workspace servers", "error", err)
+			a.logger().Warn("error stopping workspace servers", "error", err)
 		}
 	}
 
 	// Close the data store
 	if a.dataStore != nil {
 		if err := a.dataStore.Close(); err != nil {
-			a.log.Warn("error closing data store", "error", err)
+			a.logger().Warn("error closing data store", "error", err)
 		}
 	}
 

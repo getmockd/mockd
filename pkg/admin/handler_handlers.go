@@ -21,7 +21,7 @@ func (a *API) handleListHandlers(w http.ResponseWriter, r *http.Request) {
 
 	handlers, err := a.localEngine.ListHandlers(r.Context())
 	if err != nil {
-		a.log.Error("failed to list handlers", "error", err)
+		a.logger().Error("failed to list handlers", "error", err)
 		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
 		return
 	}
@@ -47,7 +47,7 @@ func (a *API) handleGetHandler(w http.ResponseWriter, r *http.Request, engine *e
 			writeError(w, http.StatusNotFound, "not_found", "handler not found")
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get handler"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get handler"))
 		return
 	}
 
@@ -68,7 +68,7 @@ func (a *API) handleGetHandlerHealth(w http.ResponseWriter, r *http.Request, eng
 			writeError(w, http.StatusNotFound, "not_found", "handler not found")
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get handler health"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get handler health"))
 		return
 	}
 
@@ -93,7 +93,7 @@ func (a *API) handleGetHandlerStats(w http.ResponseWriter, r *http.Request, engi
 			writeError(w, http.StatusNotFound, "not_found", "handler not found")
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get handler stats"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get handler stats"))
 		return
 	}
 

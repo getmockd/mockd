@@ -12,7 +12,7 @@ func (a *API) handleStateOverview(w http.ResponseWriter, r *http.Request, engine
 
 	overview, err := engine.GetStateOverview(ctx)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get state overview"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get state overview"))
 		return
 	}
 
@@ -27,7 +27,7 @@ func (a *API) handleStateReset(w http.ResponseWriter, r *http.Request, engine *e
 	resourceName := r.URL.Query().Get("resource")
 
 	if err := engine.ResetState(ctx, resourceName); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "reset state"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "reset state"))
 		return
 	}
 
@@ -44,7 +44,7 @@ func (a *API) handleResetStateResource(w http.ResponseWriter, r *http.Request, e
 	}
 
 	if err := engine.ResetState(ctx, name); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "reset state resource"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "reset state resource"))
 		return
 	}
 
@@ -57,7 +57,7 @@ func (a *API) handleListStateResources(w http.ResponseWriter, r *http.Request, e
 
 	overview, err := engine.GetStateOverview(ctx)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "list state resources"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list state resources"))
 		return
 	}
 

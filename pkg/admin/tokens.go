@@ -89,7 +89,7 @@ func (a *API) ValidateRegistrationToken(token string) bool {
 	if matchedToken.isExpired() {
 		delete(a.registrationTokens, matchedKey)
 		if len(token) >= 8 {
-			a.log.Debug("registration token expired and removed during validation", "token_prefix", token[:8])
+			a.logger().Debug("registration token expired and removed during validation", "token_prefix", token[:8])
 		}
 		return false
 	}
@@ -110,7 +110,7 @@ func (a *API) ValidateEngineToken(engineID, token string) bool {
 	if stored.isExpired() {
 		// Note: we don't delete here since we only have RLock
 		// The cleanup goroutine will handle removal
-		a.log.Debug("engine token expired during validation", "engine_id", engineID)
+		a.logger().Debug("engine token expired during validation", "engine_id", engineID)
 		return false
 	}
 	return true
@@ -161,7 +161,7 @@ func (a *API) startTokenCleanup(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			a.log.Debug("token cleanup goroutine stopped")
+			a.logger().Debug("token cleanup goroutine stopped")
 			return
 		case <-ticker.C:
 			a.cleanupExpiredTokens()
@@ -195,7 +195,7 @@ func (a *API) cleanupExpiredTokens() {
 	}
 
 	if registrationCleaned > 0 || engineCleaned > 0 {
-		a.log.Debug("cleaned up expired tokens",
+		a.logger().Debug("cleaned up expired tokens",
 			"registration_tokens_removed", registrationCleaned,
 			"engine_tokens_removed", engineCleaned,
 		)

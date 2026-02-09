@@ -45,7 +45,7 @@ func (a *API) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	workspaces, err := wsStore.List(ctx)
 	if err != nil {
-		a.log.Error("failed to list workspaces", "error", err)
+		a.logger().Error("failed to list workspaces", "error", err)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
@@ -79,7 +79,7 @@ func (a *API) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "Workspace not found")
 			return
 		}
-		a.log.Error("failed to get workspace", "error", err, "workspaceID", id)
+		a.logger().Error("failed to get workspace", "error", err, "workspaceID", id)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
@@ -102,7 +102,7 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -162,7 +162,7 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	// Create workspace directory for local type
 	if wsType == store.WorkspaceTypeLocal {
 		if err := os.MkdirAll(ws.Path, 0700); err != nil {
-			a.log.Error("failed to create workspace directory", "error", err, "path", ws.Path)
+			a.logger().Error("failed to create workspace directory", "error", err, "path", ws.Path)
 			writeError(w, http.StatusInternalServerError, "filesystem_error", "Failed to create workspace directory")
 			return
 		}
@@ -178,7 +178,7 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "already_exists", "Workspace with this ID already exists")
 			return
 		}
-		a.log.Error("failed to create workspace", "error", err, "workspaceID", ws.ID)
+		a.logger().Error("failed to create workspace", "error", err, "workspaceID", ws.ID)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
@@ -212,7 +212,7 @@ func (a *API) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "Workspace not found")
 			return
 		}
-		a.log.Error("failed to get workspace for update", "error", err, "workspaceID", id)
+		a.logger().Error("failed to get workspace for update", "error", err, "workspaceID", id)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
@@ -229,7 +229,7 @@ func (a *API) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -274,7 +274,7 @@ func (a *API) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	// Update in store
 	if err := wsStore.Update(ctx, ws); err != nil {
-		a.log.Error("failed to update workspace", "error", err, "workspaceID", id)
+		a.logger().Error("failed to update workspace", "error", err, "workspaceID", id)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
@@ -308,14 +308,14 @@ func (a *API) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", "Workspace not found")
 			return
 		}
-		a.log.Error("failed to get workspace for delete", "error", err, "workspaceID", id)
+		a.logger().Error("failed to get workspace for delete", "error", err, "workspaceID", id)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
 	// Delete from store
 	if err := wsStore.Delete(ctx, id); err != nil {
-		a.log.Error("failed to delete workspace", "error", err, "workspaceID", id)
+		a.logger().Error("failed to delete workspace", "error", err, "workspaceID", id)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}

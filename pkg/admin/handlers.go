@@ -52,7 +52,7 @@ func (a *API) handleGetStatus(w http.ResponseWriter, r *http.Request, engine *en
 
 	engineStatus, err := engine.Status(ctx)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "get engine status"))
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.logger(), "get engine status"))
 		return
 	}
 
@@ -105,7 +105,7 @@ func (a *API) handleExportConfig(w http.ResponseWriter, r *http.Request, engine 
 
 	collection, err := engine.ExportConfig(ctx, name)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "export config"))
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.logger(), "export config"))
 		return
 	}
 
@@ -113,7 +113,7 @@ func (a *API) handleExportConfig(w http.ResponseWriter, r *http.Request, engine 
 	if strings.EqualFold(r.URL.Query().Get("format"), "yaml") {
 		out, err := yaml.Marshal(collection)
 		if err != nil {
-			a.log.Error("failed to marshal YAML export", "error", err)
+			a.logger().Error("failed to marshal YAML export", "error", err)
 			writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 			return
 		}
@@ -144,13 +144,13 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 			return
 		}
 		if err := yaml.Unmarshal(body, &req); err != nil {
-			a.log.Debug("YAML parsing failed", "error", err)
+			a.logger().Debug("YAML parsing failed", "error", err)
 			writeError(w, http.StatusBadRequest, "invalid_yaml", "Invalid YAML in request body")
 			return
 		}
 	} else {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+			writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 			return
 		}
 	}
@@ -210,7 +210,7 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 				if err == store.ErrAlreadyExists {
 					_ = mockStore.Update(ctx, m)
 				} else {
-					a.log.Warn("failed to write imported mock to file store",
+					a.logger().Warn("failed to write imported mock to file store",
 						"id", m.ID, "error", err)
 				}
 			}
@@ -231,9 +231,9 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 				if err == store.ErrAlreadyExists {
 					// Resource already exists; on replace we already cleared, so this
 					// shouldn't happen, but handle gracefully.
-					a.log.Debug("stateful resource already exists in file store", "name", res.Name)
+					a.logger().Debug("stateful resource already exists in file store", "name", res.Name)
 				} else {
-					a.log.Warn("failed to write stateful resource to file store",
+					a.logger().Warn("failed to write stateful resource to file store",
 						"name", res.Name, "error", err)
 				}
 			}
@@ -242,7 +242,7 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 
 	// Forward to engine for runtime registration (starts gRPC/MQTT servers, registers handlers).
 	if err := engine.ImportConfig(ctx, req.Config, req.Replace); err != nil {
-		writeError(w, http.StatusBadRequest, "import_error", sanitizeError(err, a.log, "import config"))
+		writeError(w, http.StatusBadRequest, "import_error", sanitizeError(err, a.logger(), "import config"))
 		return
 	}
 
@@ -319,7 +319,7 @@ func (a *API) handleListRequests(w http.ResponseWriter, r *http.Request, engine 
 
 	result, err := engine.ListRequests(ctx, clientFilter)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "list requests"))
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.logger(), "list requests"))
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -340,7 +340,7 @@ func (a *API) handleGetRequest(w http.ResponseWriter, r *http.Request, engine *e
 			writeError(w, http.StatusNotFound, "not_found", ErrMsgNotFound)
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "get request"))
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.logger(), "get request"))
 		return
 	}
 	writeJSON(w, http.StatusOK, entry)
@@ -352,7 +352,7 @@ func (a *API) handleClearRequests(w http.ResponseWriter, r *http.Request, engine
 
 	count, err := engine.ClearRequests(ctx)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.log, "clear requests"))
+		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.logger(), "clear requests"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

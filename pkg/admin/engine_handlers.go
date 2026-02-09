@@ -92,7 +92,7 @@ type EngineWorkspaceConfigEntry struct {
 func (a *API) handleGenerateRegistrationToken(w http.ResponseWriter, r *http.Request) {
 	token, err := a.GenerateRegistrationToken()
 	if err != nil {
-		a.log.Error("failed to generate registration token", "error", err)
+		a.logger().Error("failed to generate registration token", "error", err)
 		writeError(w, http.StatusInternalServerError, "token_generation_failed", ErrMsgInternalError)
 		return
 	}
@@ -142,7 +142,7 @@ func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 	// Query the local engine's status
 	status, err := a.localEngine.Status(ctx)
 	if err != nil {
-		a.log.Warn("failed to get local engine status", "error", err)
+		a.logger().Warn("failed to get local engine status", "error", err)
 		// Return a basic entry even if status query fails
 		return &store.Engine{
 			ID:           LocalEngineID,
@@ -203,7 +203,7 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 
 	var req RegisterEngineRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -227,7 +227,7 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	// Generate an engine-specific token for subsequent calls
 	engineToken, err := a.generateEngineToken(id)
 	if err != nil {
-		a.log.Error("failed to generate engine token", "error", err, "engineID", id)
+		a.logger().Error("failed to generate engine token", "error", err, "engineID", id)
 		writeError(w, http.StatusInternalServerError, "token_generation_failed", ErrMsgInternalError)
 		return
 	}
@@ -247,7 +247,7 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 
 	if err := a.engineRegistry.Register(engine); err != nil {
 		a.removeEngineToken(id) // Clean up the token on failure
-		a.log.Error("failed to register engine", "error", err, "engineID", id)
+		a.logger().Error("failed to register engine", "error", err, "engineID", id)
 		writeError(w, http.StatusInternalServerError, "registration_failed", ErrMsgInternalError)
 		return
 	}
@@ -258,7 +258,7 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	if a.localEngine == nil {
 		engineURL := fmt.Sprintf("http://%s:%d", req.Host, req.Port)
 		a.localEngine = engineclient.New(engineURL)
-		a.log.Info("auto-set localEngine from registration", "engineId", id, "url", engineURL)
+		a.logger().Info("auto-set localEngine from registration", "engineId", id, "url", engineURL)
 
 		// Push any persisted stateful resources to the newly connected engine.
 		// Mocks are handled separately (via BulkCreate from the CLI or re-import),
@@ -355,7 +355,7 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 	var req HeartbeatRequest
 	if r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+			writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 			return
 		}
 	}
@@ -369,7 +369,7 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// If status was provided, update it
 	if req.Status != "" {
 		if err := a.engineRegistry.UpdateStatus(id, req.Status); err != nil {
-			a.log.Error("failed to update engine status", "error", err, "engineID", id)
+			a.logger().Error("failed to update engine status", "error", err, "engineID", id)
 			writeError(w, http.StatusInternalServerError, "update_failed", ErrMsgInternalError)
 			return
 		}
@@ -378,7 +378,7 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// Return updated engine
 	engine, err := a.engineRegistry.Get(id)
 	if err != nil {
-		a.log.Error("failed to get engine after heartbeat", "error", err, "engineID", id)
+		a.logger().Error("failed to get engine after heartbeat", "error", err, "engineID", id)
 		writeError(w, http.StatusInternalServerError, "get_failed", ErrMsgInternalError)
 		return
 	}
@@ -413,7 +413,7 @@ func (a *API) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	var req AssignWorkspaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -425,7 +425,7 @@ func (a *API) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
 	// Return updated engine
 	engine, err := a.engineRegistry.Get(id)
 	if err != nil {
-		a.log.Error("failed to get engine after workspace assignment", "error", err, "engineID", id)
+		a.logger().Error("failed to get engine after workspace assignment", "error", err, "engineID", id)
 		writeError(w, http.StatusInternalServerError, "get_failed", ErrMsgInternalError)
 		return
 	}
@@ -443,7 +443,7 @@ func (a *API) handleAddEngineWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	var req AddEngineWorkspaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -488,7 +488,7 @@ func (a *API) handleAddEngineWorkspace(w http.ResponseWriter, r *http.Request) {
 		// Start the workspace server
 		if startErr := a.workspaceManager.StartWorkspace(r.Context(), ws); startErr != nil {
 			// Log the error but don't fail the request - workspace is registered but not started
-			a.log.Warn("workspace registered but failed to start", "workspaceId", ws.WorkspaceID, "error", startErr)
+			a.logger().Warn("workspace registered but failed to start", "workspaceId", ws.WorkspaceID, "error", startErr)
 			ws.Status = "error"
 		} else {
 			ws.Status = "running"
@@ -543,7 +543,7 @@ func (a *API) handleUpdateEngineWorkspace(w http.ResponseWriter, r *http.Request
 
 	var req UpdateEngineWorkspaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -626,14 +626,14 @@ func (a *API) syncPersistedStatefulResources() {
 
 	resources, err := a.dataStore.StatefulResources().List(ctx)
 	if err != nil {
-		a.log.Warn("failed to load persisted stateful resources", "error", err)
+		a.logger().Warn("failed to load persisted stateful resources", "error", err)
 		return
 	}
 	if len(resources) == 0 {
 		return
 	}
 
-	a.log.Info("restoring persisted stateful resources to engine", "count", len(resources))
+	a.logger().Info("restoring persisted stateful resources to engine", "count", len(resources))
 
 	// Build a minimal collection with only stateful resources (no mocks).
 	collection := &config.MockCollection{
@@ -643,6 +643,6 @@ func (a *API) syncPersistedStatefulResources() {
 	}
 
 	if err := a.localEngine.ImportConfig(ctx, collection, false); err != nil {
-		a.log.Warn("failed to sync persisted stateful resources to engine", "error", err)
+		a.logger().Warn("failed to sync persisted stateful resources to engine", "error", err)
 	}
 }

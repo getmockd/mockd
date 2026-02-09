@@ -28,7 +28,7 @@ func (a *API) handleGetMockVerification(w http.ResponseWriter, r *http.Request, 
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get mock for verification"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get mock for verification"))
 		return
 	}
 
@@ -37,7 +37,7 @@ func (a *API) handleGetMockVerification(w http.ResponseWriter, r *http.Request, 
 	// doesn't currently support this filter, so we get all and filter client-side
 	result, err := engine.ListRequests(ctx, nil)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "list requests for verification"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list requests for verification"))
 		return
 	}
 
@@ -82,13 +82,13 @@ func (a *API) handleVerifyMock(w http.ResponseWriter, r *http.Request, engine *e
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get mock for verify"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get mock for verify"))
 		return
 	}
 
 	var req VerifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -101,7 +101,7 @@ func (a *API) handleVerifyMock(w http.ResponseWriter, r *http.Request, engine *e
 	// Get call count for this mock
 	result, err := engine.ListRequests(ctx, nil)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "list requests for verify"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list requests for verify"))
 		return
 	}
 
@@ -203,7 +203,7 @@ func (a *API) handleListMockInvocations(w http.ResponseWriter, r *http.Request, 
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get mock for invocations"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get mock for invocations"))
 		return
 	}
 
@@ -213,7 +213,7 @@ func (a *API) handleListMockInvocations(w http.ResponseWriter, r *http.Request, 
 	// Get all requests and filter by mock ID
 	result, err := engine.ListRequests(ctx, nil)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "list requests for invocations"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list requests for invocations"))
 		return
 	}
 
@@ -279,13 +279,13 @@ func (a *API) handleResetMockVerification(w http.ResponseWriter, r *http.Request
 			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "get mock for reset verification"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get mock for reset verification"))
 		return
 	}
 
 	count, err := engine.ClearRequestsByMockID(ctx, id)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "clear requests by mock ID"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "clear requests by mock ID"))
 		return
 	}
 
@@ -303,7 +303,7 @@ func (a *API) handleResetAllVerification(w http.ResponseWriter, r *http.Request,
 
 	count, err := engine.ClearRequests(ctx)
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.log, "clear all requests"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "clear all requests"))
 		return
 	}
 

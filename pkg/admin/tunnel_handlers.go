@@ -113,7 +113,7 @@ func (a *API) handleEnableTunnel(w http.ResponseWriter, r *http.Request) {
 
 	var req TunnelEnableRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -159,7 +159,7 @@ func (a *API) handleEnableTunnel(w http.ResponseWriter, r *http.Request) {
 		a.setLocalTunnelConfig(cfg)
 	} else {
 		if err := a.engineRegistry.SetTunnelConfig(engineID, cfg); err != nil {
-			a.log.Error("failed to store tunnel config", "error", err, "engineID", engineID)
+			a.logger().Error("failed to store tunnel config", "error", err, "engineID", engineID)
 			writeError(w, http.StatusInternalServerError, "store_failed", ErrMsgInternalError)
 			return
 		}
@@ -242,7 +242,7 @@ func (a *API) handleUpdateTunnelConfig(w http.ResponseWriter, r *http.Request) {
 
 	var req TunnelConfigUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -271,7 +271,7 @@ func (a *API) handleUpdateTunnelConfig(w http.ResponseWriter, r *http.Request) {
 		a.setLocalTunnelConfig(existing)
 	} else {
 		if err := a.engineRegistry.SetTunnelConfig(engineID, existing); err != nil {
-			a.log.Error("failed to store tunnel config", "error", err, "engineID", engineID)
+			a.logger().Error("failed to store tunnel config", "error", err, "engineID", engineID)
 			writeError(w, http.StatusInternalServerError, "store_failed", ErrMsgInternalError)
 			return
 		}
@@ -335,7 +335,7 @@ func (a *API) handleTunnelPreview(w http.ResponseWriter, r *http.Request) {
 
 	var req TunnelPreviewRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.log))
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
