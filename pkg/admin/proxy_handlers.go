@@ -197,7 +197,10 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 	}
 
 	server := &http.Server{
-		Handler: p,
+		Handler:      p,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second, // Longer write timeout for proxied responses
+		IdleTimeout:  120 * time.Second,
 	}
 
 	// Store state
