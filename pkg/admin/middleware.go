@@ -43,10 +43,6 @@ type CORSConfig struct {
 // - Use NewCORSMiddlewareWithConfig() with a custom CORSConfig
 // - Consider the security implications if AllowCredentials is enabled with wildcards
 func DefaultCORSConfig() CORSConfig {
-	// Log warning about wildcard CORS configuration
-	slog.Warn("CORS configured with wildcard origin (*), allows cross-origin requests from any domain",
-		"recommendation", "specify explicit allowed origins using NewCORSMiddlewareWithConfig()")
-
 	return CORSConfig{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

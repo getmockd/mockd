@@ -672,7 +672,7 @@ func (c *adminClient) GetPortsVerbose(verbose bool) ([]PortInfo, error) {
 	return result.Ports, nil
 }
 
-// CreateWorkspace creates a new workspace on the admin.
+// ListWorkspaces lists all workspaces on the admin.
 func (c *adminClient) ListWorkspaces() ([]*WorkspaceDTO, error) {
 	resp, err := c.doRequest("GET", "/workspaces", nil)
 	if err != nil {
