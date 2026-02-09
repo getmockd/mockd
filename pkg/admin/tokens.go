@@ -27,6 +27,14 @@ const (
 
 	// TokenCleanupInterval is how often the cleanup goroutine runs.
 	TokenCleanupInterval = 5 * time.Minute
+
+	// MaxRegistrationTokens is the maximum number of active registration tokens.
+	// Prevents unbounded map growth from repeated token generation.
+	MaxRegistrationTokens = 100
+
+	// MaxEngineTokens is the maximum number of active engine tokens.
+	// One per registered engine; cap prevents runaway registration.
+	MaxEngineTokens = 1000
 )
 
 // storedToken represents a token with expiration metadata.
@@ -42,6 +50,7 @@ func (t storedToken) isExpired() bool {
 }
 
 // GenerateRegistrationToken creates a new registration token.
+// Returns an error if the maximum number of registration tokens has been reached.
 func (a *API) GenerateRegistrationToken() (string, error) {
 	token, err := generateRandomHex(32)
 	if err != nil {
@@ -50,6 +59,12 @@ func (a *API) GenerateRegistrationToken() (string, error) {
 	now := time.Now()
 	a.tokenMu.Lock()
 	defer a.tokenMu.Unlock()
+
+	// Enforce cap to prevent unbounded map growth.
+	if len(a.registrationTokens) >= MaxRegistrationTokens {
+		return "", fmt.Errorf("maximum number of registration tokens (%d) reached; wait for expiry or cleanup", MaxRegistrationTokens)
+	}
+
 	a.registrationTokens[token] = storedToken{
 		Token:     token,
 		CreatedAt: now,
@@ -117,6 +132,7 @@ func (a *API) ValidateEngineToken(engineID, token string) bool {
 }
 
 // generateEngineToken creates and stores a new token for an engine.
+// Returns an error if the maximum number of engine tokens has been reached.
 func (a *API) generateEngineToken(engineID string) (string, error) {
 	token, err := generateRandomHex(32)
 	if err != nil {
@@ -125,6 +141,13 @@ func (a *API) generateEngineToken(engineID string) (string, error) {
 	now := time.Now()
 	a.tokenMu.Lock()
 	defer a.tokenMu.Unlock()
+
+	// Allow overwriting an existing token for this engine (re-registration).
+	// Only enforce cap for genuinely new entries.
+	if _, exists := a.engineTokens[engineID]; !exists && len(a.engineTokens) >= MaxEngineTokens {
+		return "", fmt.Errorf("maximum number of engine tokens (%d) reached; wait for expiry or cleanup", MaxEngineTokens)
+	}
+
 	a.engineTokens[engineID] = storedToken{
 		Token:     token,
 		CreatedAt: now,
