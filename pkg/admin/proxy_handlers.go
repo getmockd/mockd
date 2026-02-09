@@ -42,7 +42,11 @@ func NewProxyManager() *ProxyManager {
 func (pm *ProxyManager) SetLogger(log *slog.Logger) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
-	pm.log = log
+	if log != nil {
+		pm.log = log
+	} else {
+		pm.log = logging.Nop()
+	}
 }
 
 // ProxyStartRequest represents a request to start the proxy.
@@ -149,7 +153,7 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		ca = proxy.NewCAManager(req.CAPath+"/ca.crt", req.CAPath+"/ca.key")
+		ca = proxy.NewCAManager(cleanPath+"/ca.crt", cleanPath+"/ca.key")
 		if err := ca.EnsureCA(); err != nil {
 			pm.log.Error("failed to initialize CA", "error", err)
 			writeError(w, http.StatusInternalServerError, "ca_error", "Failed to initialize CA certificate")
@@ -380,7 +384,7 @@ func (pm *ProxyManager) handleGenerateCA(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ca := proxy.NewCAManager(req.CAPath+"/ca.crt", req.CAPath+"/ca.key")
+	ca := proxy.NewCAManager(cleanPath+"/ca.crt", cleanPath+"/ca.key")
 	if ca.Exists() {
 		writeError(w, http.StatusConflict, "ca_exists", "CA certificate already exists")
 		return

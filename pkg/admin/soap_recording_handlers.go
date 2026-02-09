@@ -34,7 +34,11 @@ func NewSOAPRecordingManager() *SOAPRecordingManager {
 func (m *SOAPRecordingManager) SetLogger(log *slog.Logger) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.log = log
+	if log != nil {
+		m.log = log
+	} else {
+		m.log = logging.Nop()
+	}
 }
 
 // Store returns the SOAP recording store.

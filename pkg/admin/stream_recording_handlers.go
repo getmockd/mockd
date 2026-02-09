@@ -36,7 +36,11 @@ func NewStreamRecordingManager() *StreamRecordingManager {
 func (m *StreamRecordingManager) SetLogger(log *slog.Logger) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.log = log
+	if log != nil {
+		m.log = log
+	} else {
+		m.log = logging.Nop()
+	}
 }
 
 // Initialize initializes the manager with a file store.
