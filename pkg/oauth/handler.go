@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -98,9 +99,9 @@ func (h *Handler) verifyCodeChallenge(challenge, method, verifier string) bool {
 	case "S256":
 		hash := sha256.Sum256([]byte(verifier))
 		computed := base64.RawURLEncoding.EncodeToString(hash[:])
-		return computed == challenge
+		return subtle.ConstantTimeCompare([]byte(computed), []byte(challenge)) == 1
 	case "plain", "":
-		return verifier == challenge
+		return subtle.ConstantTimeCompare([]byte(verifier), []byte(challenge)) == 1
 	default:
 		return false
 	}

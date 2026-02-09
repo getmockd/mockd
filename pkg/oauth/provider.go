@@ -13,6 +13,16 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// maxAuthCodes is the maximum number of authorization codes stored before
+// oldest entries are evicted. Prevents unbounded memory growth under burst load.
+const maxAuthCodes = 10000
+
+// maxRefreshTokens is the maximum number of refresh tokens stored.
+const maxRefreshTokens = 10000
+
+// maxRevokedTokens is the maximum number of revoked token entries tracked.
+const maxRevokedTokens = 50000
+
 // Provider represents a mock OAuth/OIDC provider
 type Provider struct {
 	config     *OAuthConfig
@@ -224,11 +234,38 @@ func (p *Provider) ValidateToken(tokenString string) (map[string]interface{}, er
 	return claims, nil
 }
 
-// StoreAuthorizationCode stores an authorization code for later exchange
+// StoreAuthorizationCode stores an authorization code for later exchange.
+// If the map exceeds maxAuthCodes, expired entries are evicted first;
+// if still over capacity, the oldest entry by expiry is removed.
 func (p *Provider) StoreAuthorizationCode(code *AuthorizationCode) {
 	p.authCodesMu.Lock()
 	defer p.authCodesMu.Unlock()
+
 	p.authCodes[code.Code] = code
+
+	if len(p.authCodes) > maxAuthCodes {
+		now := time.Now()
+		// First pass: remove expired entries
+		for k, v := range p.authCodes {
+			if now.After(v.ExpiresAt) {
+				delete(p.authCodes, k)
+			}
+		}
+		// If still over cap, remove oldest by expiry
+		for len(p.authCodes) > maxAuthCodes {
+			var oldestKey string
+			var oldestTime time.Time
+			for k, v := range p.authCodes {
+				if oldestKey == "" || v.ExpiresAt.Before(oldestTime) {
+					oldestKey = k
+					oldestTime = v.ExpiresAt
+				}
+			}
+			if oldestKey != "" {
+				delete(p.authCodes, oldestKey)
+			}
+		}
+	}
 }
 
 // ExchangeAuthorizationCode exchanges an authorization code for tokens
@@ -258,11 +295,38 @@ func (p *Provider) ExchangeAuthorizationCode(code, clientID, redirectURI string)
 	return authCode, nil
 }
 
-// StoreRefreshToken stores a refresh token
+// StoreRefreshToken stores a refresh token.
+// If the map exceeds maxRefreshTokens, expired entries are evicted first;
+// if still over capacity, the oldest entry by expiry is removed.
 func (p *Provider) StoreRefreshToken(data *RefreshTokenData) {
 	p.refreshTokensMu.Lock()
 	defer p.refreshTokensMu.Unlock()
+
 	p.refreshTokens[data.Token] = data
+
+	if len(p.refreshTokens) > maxRefreshTokens {
+		now := time.Now()
+		// First pass: remove expired entries
+		for k, v := range p.refreshTokens {
+			if now.After(v.ExpiresAt) {
+				delete(p.refreshTokens, k)
+			}
+		}
+		// If still over cap, remove oldest by expiry
+		for len(p.refreshTokens) > maxRefreshTokens {
+			var oldestKey string
+			var oldestTime time.Time
+			for k, v := range p.refreshTokens {
+				if oldestKey == "" || v.ExpiresAt.Before(oldestTime) {
+					oldestKey = k
+					oldestTime = v.ExpiresAt
+				}
+			}
+			if oldestKey != "" {
+				delete(p.refreshTokens, oldestKey)
+			}
+		}
+	}
 }
 
 // ValidateRefreshToken validates and returns refresh token data
@@ -287,7 +351,8 @@ func (p *Provider) ValidateRefreshToken(token, clientID string) (*RefreshTokenDa
 	return data, nil
 }
 
-// RevokeToken marks a token as revoked
+// RevokeToken marks a token as revoked.
+// If the revoked tokens map exceeds maxRevokedTokens, the oldest entries are removed.
 func (p *Provider) RevokeToken(token string) {
 	// Remove from refresh tokens first (if it's a refresh token)
 	// This prevents deadlock by always acquiring locks in the same order
@@ -298,6 +363,30 @@ func (p *Provider) RevokeToken(token string) {
 	// Mark as revoked with timestamp for cleanup
 	p.revokedTokensMu.Lock()
 	p.revokedTokens[token] = time.Now()
+
+	if len(p.revokedTokens) > maxRevokedTokens {
+		// Remove oldest revoked entries first
+		cutoff := time.Now().Add(-24 * time.Hour)
+		for k, v := range p.revokedTokens {
+			if v.Before(cutoff) {
+				delete(p.revokedTokens, k)
+			}
+		}
+		// If still over cap, remove oldest
+		for len(p.revokedTokens) > maxRevokedTokens {
+			var oldestKey string
+			var oldestTime time.Time
+			for k, v := range p.revokedTokens {
+				if oldestKey == "" || v.Before(oldestTime) {
+					oldestKey = k
+					oldestTime = v
+				}
+			}
+			if oldestKey != "" {
+				delete(p.revokedTokens, oldestKey)
+			}
+		}
+	}
 	p.revokedTokensMu.Unlock()
 }
 
