@@ -12,6 +12,7 @@ import (
 const (
 	DefaultCleanupInterval = 1 * time.Minute
 	DefaultEntryTTL        = 1 * time.Minute
+	DefaultMaxBuckets      = 10_000
 )
 
 // ipBucket is an internal token bucket for a single IP.
@@ -25,6 +26,7 @@ type ipBucket struct {
 type PerIPConfig struct {
 	Rate            float64       // tokens per second
 	Burst           int           // maximum bucket capacity
+	MaxBuckets      int           // maximum number of tracked IPs (0 = default 10 000)
 	TrustedProxies  []string      // CIDR ranges of trusted proxies
 	TrustAllProxies bool          // trust proxy headers from any source (insecure)
 	CleanupInterval time.Duration // how often stale entries are cleaned up
@@ -35,6 +37,7 @@ type PerIPConfig struct {
 type PerIPLimiter struct {
 	rps             float64
 	burst           int
+	maxBuckets      int
 	buckets         map[string]*ipBucket
 	mu              sync.RWMutex
 	stopCh          chan struct{}
@@ -64,10 +67,15 @@ func NewPerIPLimiter(cfg PerIPConfig) *PerIPLimiter {
 	if entryTTL <= 0 {
 		entryTTL = DefaultEntryTTL
 	}
+	maxBuckets := cfg.MaxBuckets
+	if maxBuckets <= 0 {
+		maxBuckets = DefaultMaxBuckets
+	}
 
 	rl := &PerIPLimiter{
 		rps:             rps,
 		burst:           burst,
+		maxBuckets:      maxBuckets,
 		buckets:         make(map[string]*ipBucket),
 		stopCh:          make(chan struct{}),
 		stoppedCh:       make(chan struct{}),
@@ -124,6 +132,12 @@ func (rl *PerIPLimiter) Allow(ip string) (allowed bool, remaining int, retryAfte
 		// Double-check after acquiring write lock
 		bucket, exists = rl.buckets[ip]
 		if !exists {
+			// Reject new IPs when the bucket map is at capacity to prevent
+			// memory exhaustion from spoofed source addresses.
+			if len(rl.buckets) >= rl.maxBuckets {
+				rl.mu.Unlock()
+				return false, 0, 1
+			}
 			bucket = &ipBucket{
 				tokens:     float64(rl.burst),
 				lastUpdate: now,

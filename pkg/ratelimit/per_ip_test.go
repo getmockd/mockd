@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -463,4 +464,51 @@ func TestIsTrustedProxy(t *testing.T) {
 			t.Error("invalid IP should not be trusted")
 		}
 	})
+}
+
+func TestMaxBuckets_RejectsNewIPsAtCapacity(t *testing.T) {
+	t.Parallel()
+	limiter := NewPerIPLimiter(PerIPConfig{
+		Rate:       100,
+		Burst:      10,
+		MaxBuckets: 3,
+	})
+	defer limiter.Stop()
+
+	// Fill to capacity with 3 unique IPs.
+	for i := 0; i < 3; i++ {
+		ip := fmt.Sprintf("10.0.0.%d", i+1)
+		allowed, _, _ := limiter.Allow(ip)
+		if !allowed {
+			t.Fatalf("Allow should succeed for IP %s (bucket %d of 3)", ip, i+1)
+		}
+	}
+
+	// 4th unique IP should be rejected.
+	allowed, remaining, retryAfter := limiter.Allow("10.0.0.100")
+	if allowed {
+		t.Error("expected Allow to return false when bucket map is at capacity")
+	}
+	if remaining != 0 {
+		t.Errorf("expected remaining 0, got %d", remaining)
+	}
+	if retryAfter < 1 {
+		t.Errorf("expected retryAfter >= 1, got %d", retryAfter)
+	}
+
+	// Existing IPs should still work.
+	allowed, _, _ = limiter.Allow("10.0.0.1")
+	if !allowed {
+		t.Error("existing IP should still be allowed")
+	}
+}
+
+func TestMaxBuckets_DefaultValue(t *testing.T) {
+	t.Parallel()
+	limiter := NewPerIPLimiter(PerIPConfig{Rate: 100, Burst: 10})
+	defer limiter.Stop()
+
+	if limiter.maxBuckets != DefaultMaxBuckets {
+		t.Errorf("expected default maxBuckets %d, got %d", DefaultMaxBuckets, limiter.maxBuckets)
+	}
 }
