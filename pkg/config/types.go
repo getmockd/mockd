@@ -117,6 +117,10 @@ type RateLimitConfig struct {
 	RequestsPerSecond float64 `json:"requestsPerSecond,omitempty" yaml:"requestsPerSecond,omitempty"`
 	// BurstSize is the maximum burst size. Default: 2000
 	BurstSize int `json:"burstSize,omitempty" yaml:"burstSize,omitempty"`
+	// MaxBuckets is the maximum number of per-IP buckets tracked concurrently.
+	// Limits memory usage under high cardinality / spoofed source attacks.
+	// Default: 10000 (from ratelimit.DefaultMaxBuckets)
+	MaxBuckets int `json:"maxBuckets,omitempty" yaml:"maxBuckets,omitempty"`
 	// TrustedProxies is a list of CIDR ranges or IPs for trusted proxies.
 	// When set, X-Forwarded-For headers are trusted from these sources.
 	TrustedProxies []string `json:"trustedProxies,omitempty" yaml:"trustedProxies,omitempty"`

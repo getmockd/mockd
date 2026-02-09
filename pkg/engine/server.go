@@ -280,6 +280,7 @@ func (s *Server) Start() error {
 		s.rateLimiter = ratelimit.NewPerIPLimiter(ratelimit.PerIPConfig{
 			Rate:           s.cfg.RateLimit.RequestsPerSecond,
 			Burst:          s.cfg.RateLimit.BurstSize,
+			MaxBuckets:     s.cfg.RateLimit.MaxBuckets,
 			TrustedProxies: s.cfg.RateLimit.TrustedProxies,
 		})
 		s.httpHandler = ratelimit.Middleware(s.rateLimiter)(s.httpHandler)
