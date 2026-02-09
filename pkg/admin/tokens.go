@@ -58,23 +58,42 @@ func (a *API) GenerateRegistrationToken() (string, error) {
 	return token, nil
 }
 
-// ValidateRegistrationToken checks if a registration token is valid.
+// ValidateRegistrationToken checks if a registration token is valid using
+// constant-time comparison to prevent timing side-channel attacks.
 // If valid, it consumes the token (one-time use).
-// Returns false if the token doesn't exist or has expired.
+// Returns false if the token doesn't match any stored token or has expired.
 func (a *API) ValidateRegistrationToken(token string) bool {
 	a.tokenMu.Lock()
 	defer a.tokenMu.Unlock()
-	stored, exists := a.registrationTokens[token]
-	if !exists {
+
+	tokenBytes := []byte(token)
+	var matchedKey string
+	var matchedToken *storedToken
+
+	// Iterate all tokens with constant-time comparison so that timing
+	// does not reveal whether a token exists. The number of registration
+	// tokens is always very small (single digits).
+	for key, stored := range a.registrationTokens {
+		if subtle.ConstantTimeCompare([]byte(stored.Token), tokenBytes) == 1 {
+			matchedKey = key
+			s := stored // copy
+			matchedToken = &s
+		}
+	}
+
+	if matchedToken == nil {
 		return false
 	}
+
 	// Check expiration
-	if stored.isExpired() {
-		delete(a.registrationTokens, token)
-		a.log.Debug("registration token expired and removed during validation", "token_prefix", token[:8])
+	if matchedToken.isExpired() {
+		delete(a.registrationTokens, matchedKey)
+		if len(token) >= 8 {
+			a.log.Debug("registration token expired and removed during validation", "token_prefix", token[:8])
+		}
 		return false
 	}
-	delete(a.registrationTokens, token) // One-time use
+	delete(a.registrationTokens, matchedKey) // One-time use
 	return true
 }
 
