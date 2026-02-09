@@ -17,8 +17,7 @@ func (a *API) handleGetChaos(w http.ResponseWriter, r *http.Request, engine *eng
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(chaosConfig)
+	writeJSON(w, http.StatusOK, chaosConfig)
 }
 
 // handleSetChaos updates the chaos configuration.
@@ -36,6 +35,5 @@ func (a *API) handleSetChaos(w http.ResponseWriter, r *http.Request, engine *eng
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"status":"ok"}`))
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

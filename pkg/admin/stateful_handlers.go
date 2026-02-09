@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
@@ -17,9 +16,7 @@ func (a *API) handleStateOverview(w http.ResponseWriter, r *http.Request, engine
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(overview)
+	writeJSON(w, http.StatusOK, overview)
 }
 
 // handleStateReset resets stateful resources to their seed data.
@@ -34,9 +31,7 @@ func (a *API) handleStateReset(w http.ResponseWriter, r *http.Request, engine *e
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "reset"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "reset"})
 }
 
 // handleResetStateResource resets a specific stateful resource to its seed data.
@@ -53,9 +48,7 @@ func (a *API) handleResetStateResource(w http.ResponseWriter, r *http.Request, e
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "reset", "resource": name})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "reset", "resource": name})
 }
 
 // handleListStateResources returns a list of all registered stateful resources.
@@ -68,9 +61,7 @@ func (a *API) handleListStateResources(w http.ResponseWriter, r *http.Request, e
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(overview.Resources)
+	writeJSON(w, http.StatusOK, overview.Resources)
 }
 
 // handleGetStateResource returns details about a specific stateful resource.
@@ -79,9 +70,7 @@ func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, eng
 
 	name := r.PathValue("name")
 	if name == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resource name required"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "resource name required"})
 		return
 	}
 
@@ -91,9 +80,7 @@ func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, eng
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resource)
+	writeJSON(w, http.StatusOK, resource)
 }
 
 // handleClearStateResource clears all items from a specific resource (does not restore seed data).
@@ -102,9 +89,7 @@ func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, e
 
 	name := r.PathValue("name")
 	if name == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resource name required"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "resource name required"})
 		return
 	}
 
@@ -113,7 +98,5 @@ func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, e
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"cleared": true})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"cleared": true})
 }
