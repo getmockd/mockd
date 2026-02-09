@@ -30,6 +30,13 @@ func NewMQTTRecordingManager() *MQTTRecordingManager {
 	}
 }
 
+// SetLogger sets the logger under the manager's own lock.
+func (m *MQTTRecordingManager) SetLogger(log *slog.Logger) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.log = log
+}
+
 // Store returns the MQTT recording store.
 func (m *MQTTRecordingManager) Store() *recording.MQTTStore {
 	m.mu.RLock()

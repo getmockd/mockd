@@ -30,6 +30,13 @@ func NewSOAPRecordingManager() *SOAPRecordingManager {
 	}
 }
 
+// SetLogger sets the logger under the manager's own lock.
+func (m *SOAPRecordingManager) SetLogger(log *slog.Logger) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.log = log
+}
+
 // Store returns the SOAP recording store.
 func (m *SOAPRecordingManager) Store() *recording.SOAPStore {
 	m.mu.RLock()

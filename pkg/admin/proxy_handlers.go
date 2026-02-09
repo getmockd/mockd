@@ -38,6 +38,13 @@ func NewProxyManager() *ProxyManager {
 	}
 }
 
+// SetLogger sets the logger under the manager's own lock.
+func (pm *ProxyManager) SetLogger(log *slog.Logger) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.log = log
+}
+
 // ProxyStartRequest represents a request to start the proxy.
 type ProxyStartRequest struct {
 	Port        int                 `json:"port"`

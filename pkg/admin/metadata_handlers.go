@@ -185,8 +185,7 @@ func (a *API) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request,
 
 	collection, err := template.Generate(req.Parameters)
 	if err != nil {
-		// Template generation errors are user-facing validation messages (e.g. missing required param)
-		writeError(w, http.StatusBadRequest, "generation_error", err.Error())
+		writeError(w, http.StatusBadRequest, "generation_error", sanitizeError(err, a.log, "generate template"))
 		return
 	}
 

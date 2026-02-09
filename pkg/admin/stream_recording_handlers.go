@@ -32,6 +32,13 @@ func NewStreamRecordingManager() *StreamRecordingManager {
 	}
 }
 
+// SetLogger sets the logger under the manager's own lock.
+func (m *StreamRecordingManager) SetLogger(log *slog.Logger) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.log = log
+}
+
 // Initialize initializes the manager with a file store.
 func (m *StreamRecordingManager) Initialize(dataDir string) error {
 	m.mu.Lock()
