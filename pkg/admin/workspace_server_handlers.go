@@ -309,11 +309,12 @@ func (a *API) handleReloadWorkspaceServer(w http.ResponseWriter, r *http.Request
 // It fetches mocks from the engine via HTTP client filtered by workspace ID.
 func (a *API) fetchMocksForWorkspace(ctx context.Context, workspaceID string) ([]*config.MockConfiguration, error) {
 	// Get mocks from the engine via HTTP client
-	if a.localEngine == nil {
+	engine := a.localEngine.Load()
+	if engine == nil {
 		return nil, nil
 	}
 
-	allMocks, err := a.localEngine.ListMocks(ctx)
+	allMocks, err := engine.ListMocks(ctx)
 	if err != nil {
 		return nil, err
 	}

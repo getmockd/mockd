@@ -18,14 +18,14 @@ type Option func(*API)
 // to communicate with a local engine at the given URL.
 func WithLocalEngine(url string) Option {
 	return func(a *API) {
-		a.localEngine = engineclient.New(url)
+		a.localEngine.Store(engineclient.New(url))
 	}
 }
 
 // WithLocalEngineClient configures the admin API to use the given engine client.
 func WithLocalEngineClient(client *engineclient.Client) Option {
 	return func(a *API) {
-		a.localEngine = client
+		a.localEngine.Store(client)
 	}
 }
 

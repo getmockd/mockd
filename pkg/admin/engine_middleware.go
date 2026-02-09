@@ -27,11 +27,12 @@ type EngineHandlerFunc func(w http.ResponseWriter, r *http.Request, engine *engi
 //	}
 func (a *API) requireEngine(handler EngineHandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if a.localEngine == nil {
+		engine := a.localEngine.Load()
+		if engine == nil {
 			writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
 			return
 		}
-		handler(w, r, a.localEngine)
+		handler(w, r, engine)
 	}
 }
 
@@ -43,24 +44,25 @@ func (a *API) requireEngine(handler EngineHandlerFunc) http.HandlerFunc {
 //	mux.HandleFunc("GET /mocks", a.requireEngineOr(a.handleListMocksWithEngine, a.handleNoEngine))
 func (a *API) requireEngineOr(handler EngineHandlerFunc, fallback http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if a.localEngine == nil {
+		engine := a.localEngine.Load()
+		if engine == nil {
 			fallback(w, r)
 			return
 		}
-		handler(w, r, a.localEngine)
+		handler(w, r, engine)
 	}
 }
 
 // HasEngine returns true if an engine is connected.
 // Useful for conditional logic in templates or status endpoints.
 func (a *API) HasEngine() bool {
-	return a.localEngine != nil
+	return a.localEngine.Load() != nil
 }
 
 // Engine returns the engine client, or nil if not connected.
 // Prefer using requireEngine() for handlers instead of direct access.
 func (a *API) Engine() *engineclient.Client {
-	return a.localEngine
+	return a.localEngine.Load()
 }
 
 // withEngine is a helper for inline use when you need the engine check
@@ -76,9 +78,10 @@ func (a *API) Engine() *engineclient.Client {
 //	    // Continue with engine...
 //	}
 func (a *API) withEngine(w http.ResponseWriter) *engineclient.Client {
-	if a.localEngine == nil {
+	engine := a.localEngine.Load()
+	if engine == nil {
 		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
 		return nil
 	}
-	return a.localEngine
+	return engine
 }

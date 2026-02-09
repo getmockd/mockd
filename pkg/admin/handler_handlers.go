@@ -14,12 +14,13 @@ type HandlersListResponse struct {
 
 // GET /handlers
 func (a *API) handleListHandlers(w http.ResponseWriter, r *http.Request) {
-	if a.localEngine == nil {
+	engine := a.localEngine.Load()
+	if engine == nil {
 		writeJSON(w, http.StatusOK, HandlersListResponse{Handlers: []*engineclient.ProtocolHandler{}, Total: 0})
 		return
 	}
 
-	handlers, err := a.localEngine.ListHandlers(r.Context())
+	handlers, err := engine.ListHandlers(r.Context())
 	if err != nil {
 		a.logger().Error("failed to list handlers", "error", err)
 		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)

@@ -118,7 +118,7 @@ func (a *API) handleListEngines(w http.ResponseWriter, r *http.Request) {
 	engines := a.engineRegistry.List()
 
 	// Include local engine if configured
-	if a.localEngine != nil {
+	if a.localEngine.Load() != nil {
 		localEngine := a.buildLocalEngineEntry(r.Context())
 		if localEngine != nil {
 			// Prepend local engine to the list
@@ -135,12 +135,13 @@ func (a *API) handleListEngines(w http.ResponseWriter, r *http.Request) {
 // buildLocalEngineEntry creates a store.Engine representation of the local engine.
 // Returns nil if the local engine status cannot be retrieved.
 func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
-	if a.localEngine == nil {
+	client := a.localEngine.Load()
+	if client == nil {
 		return nil
 	}
 
 	// Query the local engine's status
-	status, err := a.localEngine.Status(ctx)
+	status, err := client.Status(ctx)
 	if err != nil {
 		a.logger().Warn("failed to get local engine status", "error", err)
 		// Return a basic entry even if status query fails
@@ -156,7 +157,7 @@ func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 	}
 
 	// Build the engine entry from status
-	engine := &store.Engine{
+	entry := &store.Engine{
 		ID:           LocalEngineID,
 		Name:         status.Name,
 		Host:         "localhost",
@@ -168,18 +169,18 @@ func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 
 	// Use ID from status if available, otherwise keep "local"
 	if status.ID != "" {
-		engine.ID = status.ID
+		entry.ID = status.ID
 	}
-	if engine.Name == "" {
-		engine.Name = "Local Engine"
+	if entry.Name == "" {
+		entry.Name = "Local Engine"
 	}
 
 	// Extract port from HTTP protocol if available
 	if httpProto, ok := status.Protocols["http"]; ok {
-		engine.Port = httpProto.Port
+		entry.Port = httpProto.Port
 	}
 
-	return engine
+	return entry
 }
 
 // handleRegisterEngine handles POST /engines/register.
@@ -255,9 +256,9 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	// Auto-set localEngine for the first registered engine.
 	// This allows all existing handler code that uses a.localEngine to work
 	// when engines register via HTTP (e.g. from `mockd up`).
-	if a.localEngine == nil {
+	if a.localEngine.Load() == nil {
 		engineURL := fmt.Sprintf("http://%s:%d", req.Host, req.Port)
-		a.localEngine = engineclient.New(engineURL)
+		a.localEngine.Store(engineclient.New(engineURL))
 		a.logger().Info("auto-set localEngine from registration", "engineId", id, "url", engineURL)
 
 		// Push any persisted stateful resources to the newly connected engine.
@@ -617,7 +618,8 @@ func (a *API) handleGetEngineConfig(w http.ResponseWriter, r *http.Request) {
 // to the engine. This runs asynchronously after the first engine registers so
 // that resources imported in a previous admin session are restored.
 func (a *API) syncPersistedStatefulResources() {
-	if a.dataStore == nil || a.localEngine == nil {
+	client := a.localEngine.Load()
+	if a.dataStore == nil || client == nil {
 		return
 	}
 
@@ -642,7 +644,7 @@ func (a *API) syncPersistedStatefulResources() {
 		StatefulResources: resources,
 	}
 
-	if err := a.localEngine.ImportConfig(ctx, collection, false); err != nil {
+	if err := client.ImportConfig(ctx, collection, false); err != nil {
 		a.logger().Warn("failed to sync persisted stateful resources to engine", "error", err)
 	}
 }

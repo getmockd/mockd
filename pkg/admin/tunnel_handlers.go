@@ -366,7 +366,7 @@ func (a *API) handleListTunnels(w http.ResponseWriter, r *http.Request) {
 	var items []TunnelListItem
 
 	// Check local engine tunnel
-	if a.localEngine != nil {
+	if a.localEngine.Load() != nil {
 		cfg := a.getLocalTunnelConfig()
 		if cfg != nil && cfg.Enabled {
 			uptime := ""
@@ -421,7 +421,7 @@ func (a *API) handleListTunnels(w http.ResponseWriter, r *http.Request) {
 // resolveEngine resolves an engine by ID, supporting "local" for co-located engine.
 func (a *API) resolveEngine(id string) (*store.Engine, error) {
 	if id == LocalEngineID {
-		if a.localEngine == nil {
+		if a.localEngine.Load() == nil {
 			return nil, store.ErrNotFound
 		}
 		return &store.Engine{

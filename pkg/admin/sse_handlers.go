@@ -19,7 +19,8 @@ type SSEConnectionListResponse struct {
 func (a *API) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if a.localEngine == nil {
+	engine := a.localEngine.Load()
+	if engine == nil {
 		writeJSON(w, http.StatusOK, SSEConnectionListResponse{
 			Connections: []sse.SSEStreamInfo{},
 			Stats:       sse.ConnectionStats{ConnectionsByMock: make(map[string]int)},
@@ -27,14 +28,14 @@ func (a *API) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats, err := a.localEngine.GetSSEStats(ctx)
+	stats, err := engine.GetSSEStats(ctx)
 	if err != nil {
 		a.logger().Error("failed to get SSE stats", "error", err)
 		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
 		return
 	}
 
-	connections, err := a.localEngine.ListSSEConnections(ctx)
+	connections, err := engine.ListSSEConnections(ctx)
 	if err != nil {
 		a.logger().Error("failed to list SSE connections", "error", err)
 		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
@@ -77,12 +78,13 @@ func (a *API) handleGetSSEConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if a.localEngine == nil {
+	engine := a.localEngine.Load()
+	if engine == nil {
 		writeError(w, http.StatusNotFound, "not_found", "Connection not found")
 		return
 	}
 
-	conn, err := a.localEngine.GetSSEConnection(ctx, id)
+	conn, err := engine.GetSSEConnection(ctx, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Connection not found")
@@ -115,7 +117,8 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if a.localEngine == nil {
+	engine := a.localEngine.Load()
+	if engine == nil {
 		writeError(w, http.StatusNotFound, "not_found", "Connection not found")
 		return
 	}
@@ -124,7 +127,7 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 	var req CloseConnectionRequest
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
-	err := a.localEngine.CloseSSEConnection(ctx, id)
+	err := engine.CloseSSEConnection(ctx, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Connection not found")
@@ -146,14 +149,15 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 func (a *API) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if a.localEngine == nil {
+	engine := a.localEngine.Load()
+	if engine == nil {
 		writeJSON(w, http.StatusOK, sse.ConnectionStats{
 			ConnectionsByMock: make(map[string]int),
 		})
 		return
 	}
 
-	stats, err := a.localEngine.GetSSEStats(ctx)
+	stats, err := engine.GetSSEStats(ctx)
 	if err != nil {
 		a.logger().Error("failed to get SSE stats", "error", err)
 		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)

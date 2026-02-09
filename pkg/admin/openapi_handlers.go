@@ -70,7 +70,6 @@ func (a *API) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	}
 
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }
@@ -93,8 +92,8 @@ func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/insomnia.yaml" || r.URL.Query().Get("format") == "yaml" || r.URL.Query().Get("format") == "v5" {
 		// Get stateful resources if available
 		var statefulResources []statefulResourceInfo
-		if a.localEngine != nil {
-			overview, err := a.localEngine.GetStateOverview(ctx)
+		if client := a.localEngine.Load(); client != nil {
+			overview, err := client.GetStateOverview(ctx)
 			if err == nil && overview != nil {
 				for _, res := range overview.Resources {
 					// Generate a sample ID - use singular form of resource name + "-1"
@@ -116,7 +115,6 @@ func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 
 		export := buildInsomniaV5Export(mocks, statefulResources, a.port)
 		w.Header().Set("Content-Type", "application/x-yaml; charset=utf-8")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Disposition", "attachment; filename=mockd-insomnia.yaml")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(export))
@@ -134,7 +132,6 @@ func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Disposition", "attachment; filename=mockd-insomnia.json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
@@ -142,8 +139,8 @@ func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 
 // getAllMocksForExport gets mocks from engine or dataStore for export
 func (a *API) getAllMocksForExport(ctx context.Context) ([]*config.MockConfiguration, error) {
-	if a.localEngine != nil {
-		return a.localEngine.ListMocks(ctx)
+	if engine := a.localEngine.Load(); engine != nil {
+		return engine.ListMocks(ctx)
 	}
 	// Fall back to dataStore
 	if a.dataStore != nil {

@@ -34,7 +34,9 @@ const DefaultBurstSize int = 200
 // API exposes a REST API for managing mock configurations.
 type API struct {
 	// localEngine is the HTTP client for communicating with the local engine.
-	localEngine *engineclient.Client
+	// Stored as atomic.Pointer to prevent data races between SetLocalEngine /
+	// handleRegisterEngine (writers) and handler goroutines (readers).
+	localEngine atomic.Pointer[engineclient.Client]
 
 	proxyManager           *ProxyManager
 	streamRecordingManager *StreamRecordingManager
@@ -188,6 +190,7 @@ func NewAPI(port int, opts ...Option) *API {
 		Handler:      api.withMiddleware(mux),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	return api
@@ -226,14 +229,16 @@ func (a *API) WorkspaceManager() workspace.Manager {
 
 // LocalEngine returns the local engine HTTP client.
 // Returns nil if no local engine is configured.
+// Safe to call from any goroutine.
 func (a *API) LocalEngine() *engineclient.Client {
-	return a.localEngine
+	return a.localEngine.Load()
 }
 
-// SetLocalEngine sets the local engine client after the admin has started.
-// This allows connecting an engine that was started after the admin.
+// SetLocalEngine atomically sets the local engine client after the admin has
+// started. This allows connecting an engine that was started after the admin.
+// Safe to call concurrently with handler goroutines that read via localEngine.Load().
 func (a *API) SetLocalEngine(client *engineclient.Client) {
-	a.localEngine = client
+	a.localEngine.Store(client)
 }
 
 // MetricsRegistry returns the metrics registry for Prometheus metrics.
@@ -242,8 +247,9 @@ func (a *API) MetricsRegistry() *metrics.Registry {
 }
 
 // HasLocalEngine returns true if a local engine is configured.
+// Safe to call from any goroutine.
 func (a *API) HasLocalEngine() bool {
-	return a.localEngine != nil
+	return a.localEngine.Load() != nil
 }
 
 // maxRequestBodySize is the default maximum request body size for admin API handlers (2MB).

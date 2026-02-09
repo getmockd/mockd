@@ -469,12 +469,13 @@ func (a *API) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// No local brokers — query engine for MQTT mocks over HTTP.
-	if a.localEngine == nil {
+	engine := a.localEngine.Load()
+	if engine == nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": []interface{}{}, "count": 0})
 		return
 	}
 
-	mocks, err := a.localEngine.ListMocks(r.Context())
+	mocks, err := engine.ListMocks(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": []interface{}{}, "count": 0})
 		return
@@ -508,12 +509,13 @@ func (a *API) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// No local brokers — query engine for MQTT mocks over HTTP.
-	if a.localEngine == nil {
+	engine2 := a.localEngine.Load()
+	if engine2 == nil {
 		writeJSON(w, http.StatusOK, MQTTGlobalStatusResponse{Brokers: []MQTTBrokerStatusResponse{}})
 		return
 	}
 
-	mocks, err := a.localEngine.ListMocks(r.Context())
+	mocks, err := engine2.ListMocks(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusOK, MQTTGlobalStatusResponse{Brokers: []MQTTBrokerStatusResponse{}})
 		return

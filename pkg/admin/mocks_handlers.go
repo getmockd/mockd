@@ -174,8 +174,8 @@ func (a *API) checkPortAvailability(ctx context.Context, m *mock.Mock, excludeID
 	var allMocks []*mock.Mock
 	var err error
 
-	if a.localEngine != nil {
-		allMocks, err = a.localEngine.ListMocks(ctx)
+	if engine := a.localEngine.Load(); engine != nil {
+		allMocks, err = engine.ListMocks(ctx)
 	} else if a.dataStore != nil {
 		allMocks, err = a.dataStore.Mocks().List(ctx, nil)
 	}
@@ -499,8 +499,8 @@ func applyMockPatch(m *mock.Mock, patch map[string]interface{}) {
 func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 	// Query from engine if available (engine is the runtime data plane)
 	// Fall back to dataStore for persistence-only scenarios
-	if a.localEngine != nil {
-		mocks, err := a.localEngine.ListMocks(r.Context())
+	if engine := a.localEngine.Load(); engine != nil {
+		mocks, err := engine.ListMocks(r.Context())
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.logger(), "list mocks"))
 			return
@@ -593,8 +593,8 @@ func (a *API) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Query from engine if available (engine is the runtime data plane)
-	if a.localEngine != nil {
-		m, err := a.localEngine.GetMock(r.Context(), id)
+	if engine := a.localEngine.Load(); engine != nil {
+		m, err := engine.GetMock(r.Context(), id)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
@@ -656,9 +656,9 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if a.localEngine != nil {
+	if engine := a.localEngine.Load(); engine != nil {
 		// Check engine for duplicate ID (engine is the runtime truth)
-		if existing, err := a.localEngine.GetMock(r.Context(), m.ID); err == nil && existing != nil {
+		if existing, err := engine.GetMock(r.Context(), m.ID); err == nil && existing != nil {
 			writeError(w, http.StatusConflict, "duplicate_id", "Mock with this ID already exists")
 			return
 		}
@@ -723,9 +723,9 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Notify the engine so it can serve the mock (Admin = control plane, Engine = data plane)
-	if a.localEngine != nil {
+	if engine := a.localEngine.Load(); engine != nil {
 		// config.MockConfiguration is an alias for mock.Mock, so pass directly
-		if _, err := a.localEngine.CreateMock(r.Context(), &m); err != nil {
+		if _, err := engine.CreateMock(r.Context(), &m); err != nil {
 			// Rollback the store operation - mock can't actually run
 			if deleteErr := mockStore.Delete(r.Context(), m.ID); deleteErr != nil {
 				a.logger().Warn("failed to rollback mock after engine error", "id", m.ID, "error", deleteErr)
@@ -789,8 +789,8 @@ func (a *API) handleMergeMock(w http.ResponseWriter, r *http.Request, newMock *m
 	}
 
 	// Notify engine to reload the mock with new services/topics
-	if a.localEngine != nil {
-		if _, err := a.localEngine.UpdateMock(r.Context(), target.ID, target); err != nil {
+	if engine := a.localEngine.Load(); engine != nil {
+		if _, err := engine.UpdateMock(r.Context(), target.ID, target); err != nil {
 			a.logger().Warn("failed to notify engine of merged mock", "id", target.ID, "error", err)
 			// Don't fail - the mock is updated in store, engine will pick it up on next load
 		}
@@ -901,8 +901,8 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Notify engine so it can update the running mock
-	if a.localEngine != nil {
-		if _, err := a.localEngine.UpdateMock(r.Context(), id, &m); err != nil {
+	if engine := a.localEngine.Load(); engine != nil {
+		if _, err := engine.UpdateMock(r.Context(), id, &m); err != nil {
 			a.logger().Error("failed to update mock in engine", "id", m.ID, "error", err)
 			errMsg := err.Error()
 			// Check if this is a port-related error
@@ -967,8 +967,8 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Notify engine so it can update the running mock
-	if a.localEngine != nil {
-		if _, err := a.localEngine.UpdateMock(r.Context(), id, existing); err != nil {
+	if engine := a.localEngine.Load(); engine != nil {
+		if _, err := engine.UpdateMock(r.Context(), id, existing); err != nil {
 			a.logger().Warn("failed to notify engine of mock patch", "id", existing.ID, "error", err)
 		}
 	}
@@ -1003,8 +1003,8 @@ func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Notify engine so it can stop serving the mock
-	if a.localEngine != nil {
-		if err := a.localEngine.DeleteMock(r.Context(), id); err != nil {
+	if engine := a.localEngine.Load(); engine != nil {
+		if err := engine.DeleteMock(r.Context(), id); err != nil {
 			a.logger().Warn("failed to notify engine of mock deletion", "id", id, "error", err)
 		}
 	}
@@ -1049,9 +1049,9 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If engine is available, toggle there (engine is the runtime data plane)
-	if a.localEngine != nil {
+	if engine := a.localEngine.Load(); engine != nil {
 		// Get current state to determine new state
-		existing, err := a.localEngine.GetMock(r.Context(), id)
+		existing, err := engine.GetMock(r.Context(), id)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
@@ -1059,7 +1059,7 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 		currentEnabled := existing.Enabled == nil || *existing.Enabled
 		newEnabled := !currentEnabled
-		updated, err := a.localEngine.ToggleMock(r.Context(), id, newEnabled)
+		updated, err := engine.ToggleMock(r.Context(), id, newEnabled)
 		if err != nil {
 			a.logger().Error("failed to toggle mock in engine", "id", id, "error", err)
 			writeError(w, http.StatusInternalServerError, "toggle_error", ErrMsgInternalError)
@@ -1252,8 +1252,8 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 			if m.ID != "" {
 				_ = mockStore.Delete(r.Context(), m.ID) // Ignore not-found errors
 				// Also remove from engine so it re-creates cleanly
-				if a.localEngine != nil {
-					_ = a.localEngine.DeleteMock(r.Context(), m.ID)
+				if engine := a.localEngine.Load(); engine != nil {
+					_ = engine.DeleteMock(r.Context(), m.ID)
 				}
 			}
 		}
@@ -1282,9 +1282,9 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 	// Notify the engine for each mock (Admin = control plane, Engine = data plane)
 	// Track any engine errors for reporting
 	var engineErrors []string
-	if a.localEngine != nil {
+	if engine := a.localEngine.Load(); engine != nil {
 		for _, m := range mocks {
-			if _, err := a.localEngine.CreateMock(r.Context(), m); err != nil {
+			if _, err := engine.CreateMock(r.Context(), m); err != nil {
 				a.logger().Warn("failed to notify engine of bulk mock create", "id", m.ID, "error", err)
 				if isPortError(err.Error()) {
 					// Port error from engine - this shouldn't happen if our validation is correct
