@@ -139,9 +139,9 @@ Examples:
 	}
 	if err != nil {
 		if resp != nil {
-			return fmt.Errorf("connection failed: %v (HTTP %d)", err, resp.StatusCode)
+			return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
 		}
-		return fmt.Errorf("connection failed: %v", err)
+		return fmt.Errorf("connection failed: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -210,7 +210,7 @@ Examples:
 				fmt.Println("Connection closed by server")
 				return nil
 			}
-			return fmt.Errorf("read error: %v", err)
+			return fmt.Errorf("read error: %w", err)
 		case msg := <-msgChan:
 			if *jsonOutput {
 				msg := map[string]interface{}{
@@ -229,7 +229,7 @@ Examples:
 				continue
 			}
 			if err := conn.WriteMessage(websocket.TextMessage, []byte(input)); err != nil {
-				return fmt.Errorf("send error: %v", err)
+				return fmt.Errorf("send error: %w", err)
 			}
 			if *jsonOutput {
 				sent := map[string]interface{}{
@@ -362,15 +362,15 @@ Examples:
 	}
 	if err != nil {
 		if resp != nil {
-			return fmt.Errorf("connection failed: %v (HTTP %d)", err, resp.StatusCode)
+			return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
 		}
-		return fmt.Errorf("connection failed: %v", err)
+		return fmt.Errorf("connection failed: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	// Send message
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
-		return fmt.Errorf("send error: %v", err)
+		return fmt.Errorf("send error: %w", err)
 	}
 
 	// Close gracefully
@@ -474,9 +474,9 @@ Examples:
 	}
 	if err != nil {
 		if resp != nil {
-			return fmt.Errorf("connection failed: %v (HTTP %d)", err, resp.StatusCode)
+			return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
 		}
-		return fmt.Errorf("connection failed: %v", err)
+		return fmt.Errorf("connection failed: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
