@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
-	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/metrics"
 	"github.com/getmockd/mockd/pkg/ratelimit"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/store/file"
 	"github.com/getmockd/mockd/pkg/tracing"
+	"github.com/getmockd/mockd/pkg/workspace"
 )
 
 // EngineHeartbeatTimeout is the duration after which an engine is marked offline
@@ -41,7 +41,7 @@ type API struct {
 	soapRecordingManager   *SOAPRecordingManager
 	workspaceStore         *store.WorkspaceFileStore
 	engineRegistry         *store.EngineRegistry
-	workspaceManager       *engine.WorkspaceManager
+	workspaceManager       workspace.Manager
 	dataStore              *file.FileStore // Persistent store for mocks and folders
 	httpServer             *http.Server
 	port                   int
@@ -97,9 +97,6 @@ func NewAPI(port int, opts ...Option) *API {
 	// Create context for background goroutines
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Create workspace manager for multi-workspace serving
-	wsManager := engine.NewWorkspaceManager(nil)
-
 	// Initialize metrics registry
 	metricsRegistry := metrics.Init()
 
@@ -109,7 +106,6 @@ func NewAPI(port int, opts ...Option) *API {
 		mqttRecordingManager:        NewMQTTRecordingManager(),
 		soapRecordingManager:        NewSOAPRecordingManager(),
 		engineRegistry:              store.NewEngineRegistry(),
-		workspaceManager:            wsManager,
 		port:                        port,
 		ctx:                         ctx,
 		cancel:                      cancel,
@@ -220,7 +216,8 @@ func (a *API) EngineRegistry() *store.EngineRegistry {
 }
 
 // WorkspaceManager returns the workspace manager for multi-workspace serving.
-func (a *API) WorkspaceManager() *engine.WorkspaceManager {
+// Returns nil if no workspace manager was configured via WithWorkspaceManager.
+func (a *API) WorkspaceManager() workspace.Manager {
 	return a.workspaceManager
 }
 

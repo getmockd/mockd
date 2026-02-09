@@ -772,7 +772,10 @@ func startServers(sctx *serveContext) error {
 
 	// Create and start the admin API
 	engineURL := fmt.Sprintf("http://localhost:%d", sctx.server.ManagementPort())
-	adminOpts := []admin.Option{admin.WithLocalEngine(engineURL)}
+	adminOpts := []admin.Option{
+		admin.WithLocalEngine(engineURL),
+		admin.WithWorkspaceManager(engine.NewWorkspaceManager(nil)),
+	}
 	if f.noAuth {
 		adminOpts = append(adminOpts, admin.WithAPIKeyDisabled())
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/ratelimit"
 	"github.com/getmockd/mockd/pkg/tracing"
+	"github.com/getmockd/mockd/pkg/workspace"
 )
 
 // Option configures an API.
@@ -131,5 +132,13 @@ func WithVersion(version string) Option {
 func WithAllowLocalhostBypass(allow bool) Option {
 	return func(a *API) {
 		a.allowLocalhostBypass = allow
+	}
+}
+
+// WithWorkspaceManager sets the workspace manager for multi-workspace serving.
+// If not set, workspace server endpoints will return errors.
+func WithWorkspaceManager(m workspace.Manager) Option {
+	return func(a *API) {
+		a.workspaceManager = m
 	}
 }
