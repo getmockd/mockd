@@ -426,6 +426,6 @@ Test data in `tests/fixtures/`:
 
 ## Further Reading
 
-- `docs/` - User documentation (mkdocs)
+- `docs/` - User documentation (Astro Starlight)
 - `CONTRIBUTING.md` - Contribution guidelines
 - `ROADMAP.md` - Project roadmap

@@ -1,6 +1,6 @@
 # mockd
 
-![CI](https://github.com/getmockd/mockd/actions/workflows/ci.yaml/badge.svg) ![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go) ![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg) ![Release](https://img.shields.io/github/v/release/getmockd/mockd?include_prereleases)
+![CI](https://github.com/getmockd/mockd/actions/workflows/ci.yaml/badge.svg) ![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go) ![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg) ![Release](https://img.shields.io/github/v/release/getmockd/mockd?include_prereleases)
 
 A high-performance, multi-protocol mock server with built-in cloud tunneling. Mock HTTP, gRPC, WebSocket, MQTT, SSE, GraphQL, and SOAP APIs locally or share them instantly via a single command.
 
@@ -247,7 +247,7 @@ Load mocks from a JSON file:
 
 ## Documentation
 
-The documentation site is built with MkDocs and deployed to GitHub Pages.
+The documentation site is built with [Astro Starlight](https://starlight.astro.build/) and deployed to GitHub Pages.
 
 ### Local Development
 
@@ -269,7 +269,7 @@ mise run docs-serve
 mise run docs-build
 ```
 
-The site will be available at `http://localhost:8000`.
+The site will be available at `http://localhost:4321`.
 
 ### Documentation Structure
 
@@ -283,10 +283,9 @@ docs/
 
 ### Adding New Pages
 
-1. Create a new `.md` file in the appropriate directory
-2. Add the page to `nav:` in `mkdocs.yml`
-3. Update the `llmstxt` plugin sections if needed
-4. Run `mkdocs serve` to preview
+1. Create a new `.md` or `.mdx` file in the appropriate `docs/src/content/docs/` directory
+2. Add the page to the sidebar config in `docs/astro.config.mjs` if needed
+3. Run `mise run docs-serve` to preview
 
 ## Extending mockd
 
