@@ -15,15 +15,23 @@ linters:
     - bodyclose      # Check HTTP response bodies are closed
     - nilerr         # Check for nil error returns
     - copyloopvar    # Check for loop variable capture issues
-    
+    - exhaustive     # Check switch statements cover all enum cases
+
     # Code quality
     - misspell       # Check for spelling errors
     - unconvert      # Remove unnecessary type conversions
     - unparam        # Detect unused function parameters
     - prealloc       # Find slice declarations that could be pre-allocated
-    
+    - dupl           # Detect copy-pasted code blocks
+    - gocyclo        # Flag functions with high cyclomatic complexity
+    - gocritic       # Broad set of style, performance, and correctness checks
+    - perfsprint     # Detect fmt.Sprintf calls that can be simplified
+
     # Security
     - gosec          # Security checks
+
+    # Dependency hygiene
+    - depguard       # Enforce package import restrictions
 
   settings:
     errcheck:
@@ -49,6 +57,32 @@ linters:
       checks:
         - all
         - -SA1019  # Deprecated usage (too strict for some stdlib)
+    gocyclo:
+      min-complexity: 30
+    dupl:
+      threshold: 150
+    exhaustive:
+      default-signifies-exhaustive: true
+    depguard:
+      rules:
+        leaf-packages:
+          files:
+            - "**/pkg/ratelimit/*.go"
+            - "**/pkg/httputil/*.go"
+            - "**/pkg/util/*.go"
+          deny:
+            - pkg: "github.com/getmockd/mockd/pkg/admin"
+              desc: "leaf packages must not import application packages"
+            - pkg: "github.com/getmockd/mockd/pkg/engine"
+              desc: "leaf packages must not import application packages"
+            - pkg: "github.com/getmockd/mockd/pkg/cli"
+              desc: "leaf packages must not import application packages"
+        no-admin-engine-coupling:
+          files:
+            - "**/pkg/admin/*.go"
+          deny:
+            - pkg: "github.com/getmockd/mockd/pkg/engine"
+              desc: "admin must not import engine directly — use engineclient HTTP interface"
 
   exclusions:
     rules:
@@ -60,15 +94,28 @@ linters:
           - ineffassign
           - unparam
           - prealloc
+          - dupl
+          - gocyclo
+          - gocritic
+          - perfsprint
+          - exhaustive
       # Benchmarks
       - path: "^benchmarks/"
         linters:
           - errcheck
           - ineffassign
           - gosec
+          - dupl
+          - gocyclo
+          - gocritic
+          - perfsprint
       - path: "^tests/"
         linters:
           - errcheck
           - gosec
           - unparam
           - prealloc
+          - dupl
+          - gocyclo
+          - gocritic
+          - perfsprint
