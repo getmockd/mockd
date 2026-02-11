@@ -2,7 +2,7 @@
 # https://github.com/jdx/mise
 
 [tools]
-go = "1.25"
+go = "1.25.7"
 node = "22"
 
 [env]
@@ -169,6 +169,26 @@ run = "go vet ./..."
 [tasks.check]
 description = "Run fmt, vet, and lint"
 depends = ["fmt", "vet", "lint"]
+
+[tasks.vulncheck]
+description = "Run govulncheck for known vulnerabilities"
+run = """
+if ! command -v govulncheck >/dev/null 2>&1; then
+    echo "Installing govulncheck..."
+    go install golang.org/x/vuln/cmd/govulncheck@latest
+fi
+govulncheck ./...
+"""
+
+[tasks.deadcode]
+description = "Find unreachable functions (informational)"
+run = """
+if ! command -v deadcode >/dev/null 2>&1; then
+    echo "Installing deadcode..."
+    go install golang.org/x/tools/cmd/deadcode@latest
+fi
+deadcode ./...
+"""
 
 # =============================================================================
 # Cleanup Tasks
