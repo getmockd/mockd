@@ -149,21 +149,6 @@ func isPortError(errMsg string) bool {
 	return false
 }
 
-// checkPortConflict checks if a mock's port conflicts with existing mocks.
-// It checks across all workspaces that share an engine with the mock's workspace.
-// If the workspace is not assigned to any engine, it only checks within the same workspace.
-// Returns nil if no conflict or merge opportunity.
-// The excludeID parameter allows excluding a mock from the check (useful for updates).
-//
-// Port sharing rules for gRPC and MQTT (follows real-world patterns):
-// - Same port + same protocol + same workspace = MERGE (services/topics added to existing)
-// - Same port + different protocol = CONFLICT (can't mix protocols on same port)
-// - Same port + different workspace = CONFLICT (workspaces can't share ports)
-func (a *API) checkPortConflict(ctx context.Context, m *mock.Mock, excludeID string) *PortConflict {
-	result := a.checkPortAvailability(ctx, m, excludeID)
-	return result.Conflict
-}
-
 // checkPortAvailability checks port availability and returns merge opportunities.
 // This is the richer version of checkPortConflict that also identifies merge targets.
 func (a *API) checkPortAvailability(ctx context.Context, m *mock.Mock, excludeID string) *PortCheckResult {

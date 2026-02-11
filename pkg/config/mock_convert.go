@@ -49,27 +49,6 @@ func ConvertMockEntry(entry MockEntry) (*mock.Mock, error) {
 	return m, nil
 }
 
-// ConvertMockEntries converts a slice of MockEntry to a slice of mock.Mock.
-// Only inline entries are converted; file/glob entries are skipped with a warning.
-func ConvertMockEntries(entries []MockEntry) ([]*mock.Mock, []error) {
-	var mocks []*mock.Mock
-	var errs []error
-
-	for _, entry := range entries {
-		if !entry.IsInline() {
-			continue
-		}
-		m, err := ConvertMockEntry(entry)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		mocks = append(mocks, m)
-	}
-
-	return mocks, errs
-}
-
 // convertHTTPMockConfig converts a config.HTTPMockConfig to a mock.HTTPSpec.
 func convertHTTPMockConfig(cfg *HTTPMockConfig) (*mock.HTTPSpec, error) {
 	spec := &mock.HTTPSpec{

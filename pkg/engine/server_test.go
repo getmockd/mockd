@@ -808,7 +808,7 @@ func TestServerMockOperations(t *testing.T) {
 		mocks := srv.listMocks()
 		assert.Len(t, mocks, 1)
 
-		httpMocks := srv.listHTTPMocks()
+		httpMocks := srv.mockManager.ListByType(mock.TypeHTTP)
 		assert.Len(t, httpMocks, 1)
 	})
 

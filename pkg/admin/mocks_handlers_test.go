@@ -432,7 +432,7 @@ func TestIsPortError(t *testing.T) {
 }
 
 // ============================================================================
-// Unit Tests for checkPortConflict
+// Unit Tests for checkPortAvailability
 // ============================================================================
 
 // TestCheckPortConflict_NoPort tests that mocks without dedicated ports return nil conflict
@@ -510,14 +510,14 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			conflict := api.checkPortConflict(context.Background(), tt.mock, "")
-			assert.Nil(t, conflict, "Should return nil for mocks without dedicated ports")
+			result := api.checkPortAvailability(context.Background(), tt.mock, "")
+			assert.Nil(t, result.Conflict, "Should return nil for mocks without dedicated ports")
 		})
 	}
 }
 
-// TestCheckPortConflict_NoBackend tests that checkPortConflict returns nil when no backend is available
-func TestCheckPortConflict_NoBackend(t *testing.T) {
+// TestCheckPortAvailability_NoBackend tests that checkPortAvailability returns no conflict when no backend is available
+func TestCheckPortAvailability_NoBackend(t *testing.T) {
 	// Create API without engine or store
 	api := &API{}
 
@@ -528,9 +528,9 @@ func TestCheckPortConflict_NoBackend(t *testing.T) {
 		MQTT:        &mock.MQTTSpec{Port: 1883},
 	}
 
-	// Should return nil (not block) even with a valid port - no backend to query
-	conflict := api.checkPortConflict(context.Background(), mqttMock, "")
-	assert.Nil(t, conflict, "Should return nil when no backend is available")
+	// Should return nil conflict (not block) even with a valid port - no backend to query
+	result := api.checkPortAvailability(context.Background(), mqttMock, "")
+	assert.Nil(t, result.Conflict, "Should return nil conflict when no backend is available")
 }
 
 // TestCheckPortConflict_ExcludeID tests the excludeID parameter

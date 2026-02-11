@@ -134,13 +134,6 @@ func (a *apiKeyAuth) setKey(key string) {
 	a.keyHash = []byte(key)
 }
 
-// getKey returns the current API key.
-func (a *apiKeyAuth) getKey() string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.key
-}
-
 // getKeyFilePath returns the path for the API key file.
 func (a *apiKeyAuth) getKeyFilePath() string {
 	if a.config.KeyFilePath != "" {
@@ -365,13 +358,4 @@ func (a *API) handleRotateAPIKey(w http.ResponseWriter, r *http.Request) {
 		"key":     newKey,
 		"message": "API key rotated successfully. All existing sessions using the old key will be invalidated.",
 	})
-}
-
-// APIKey returns the current API key.
-// This is used by the desktop app to get the key for local CLI operations.
-func (a *API) APIKey() string {
-	if a.apiKeyAuth == nil {
-		return ""
-	}
-	return a.apiKeyAuth.getKey()
 }

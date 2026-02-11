@@ -1,13 +1,9 @@
 package admin
 
 import (
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/getmockd/mockd/pkg/logging"
 )
 
 // CORSConfig holds the configuration for CORS middleware.
@@ -118,106 +114,6 @@ func (c *CORSConfig) getMaxAge() string {
 		return "86400"
 	}
 	return strconv.Itoa(c.MaxAge)
-}
-
-// LoggingMiddleware logs HTTP requests.
-type LoggingMiddleware struct {
-	log     *slog.Logger
-	handler http.Handler
-}
-
-// NewLoggingMiddleware creates a new logging middleware.
-func NewLoggingMiddleware(handler http.Handler) *LoggingMiddleware {
-	return &LoggingMiddleware{
-		log:     logging.Nop(),
-		handler: handler,
-	}
-}
-
-// ServeHTTP implements the http.Handler interface.
-func (m *LoggingMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-
-	// Wrap response writer to capture status code
-	lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
-	m.handler.ServeHTTP(lrw, r)
-
-	m.log.Info("request completed",
-		"method", r.Method,
-		"path", r.URL.Path,
-		"status", lrw.statusCode,
-		"duration", time.Since(start),
-	)
-}
-
-// loggingResponseWriter wraps http.ResponseWriter to capture status code.
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-// WriteHeader captures the status code.
-func (lrw *loggingResponseWriter) WriteHeader(code int) {
-	lrw.statusCode = code
-	lrw.ResponseWriter.WriteHeader(code)
-}
-
-// CORSMiddleware adds CORS headers to responses.
-type CORSMiddleware struct {
-	handler http.Handler
-	config  CORSConfig
-}
-
-// NewCORSMiddleware creates a new CORS middleware with default configuration.
-func NewCORSMiddleware(handler http.Handler) *CORSMiddleware {
-	return &CORSMiddleware{
-		handler: handler,
-		config:  DefaultCORSConfig(),
-	}
-}
-
-// NewCORSMiddlewareWithConfig creates a new CORS middleware with custom configuration.
-func NewCORSMiddlewareWithConfig(handler http.Handler, config CORSConfig) *CORSMiddleware {
-	return &CORSMiddleware{
-		handler: handler,
-		config:  config,
-	}
-}
-
-// ServeHTTP implements the http.Handler interface.
-func (m *CORSMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	origin := r.Header.Get("Origin")
-
-	// Always set Vary header to indicate origin-dependent response
-	w.Header().Add("Vary", "Origin")
-
-	// Get the appropriate Allow-Origin value
-	allowOrigin := m.config.getAllowOriginValue(origin)
-	if allowOrigin == "" {
-		// Origin not allowed, but still process the request (browser will block response)
-		m.handler.ServeHTTP(w, r)
-		return
-	}
-
-	// Set CORS headers
-	w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-	w.Header().Set("Access-Control-Allow-Methods", m.config.getMethods())
-	w.Header().Set("Access-Control-Allow-Headers", m.config.getHeaders())
-	w.Header().Set("Access-Control-Max-Age", m.config.getMaxAge())
-
-	// Set credentials header if enabled
-	if m.config.AllowCredentials {
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-	}
-
-	// Handle preflight requests
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	m.handler.ServeHTTP(w, r)
 }
 
 // SecurityHeadersMiddleware adds security headers to all responses.

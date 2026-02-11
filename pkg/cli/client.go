@@ -186,13 +186,6 @@ func LoadAPIKeyFromFile() (string, error) {
 	return cliconfig.LoadAPIKeyFromFile()
 }
 
-// GetAPIKeyFilePath returns the default path for the API key file.
-//
-// Deprecated: Use cliconfig.GetAPIKeyFilePath() instead.
-func GetAPIKeyFilePath() string {
-	return cliconfig.GetAPIKeyFilePath()
-}
-
 // NewAdminClient creates a new admin API client.
 // The baseURL should be the admin API base URL (e.g., "http://localhost:4290").
 func NewAdminClient(baseURL string, opts ...ClientOption) AdminClient {
@@ -218,16 +211,6 @@ func NewAdminClientWithAuth(baseURL string, opts ...ClientOption) AdminClient {
 		opts = append([]ClientOption{WithAPIKey(apiKey)}, opts...)
 	}
 	return NewAdminClient(baseURL, opts...)
-}
-
-// NewClientFromConfig creates a new admin API client using resolved configuration.
-// This is the preferred way to create a client - it handles URL and auth automatically.
-func NewClientFromConfig(flagAdminURL string, opts ...ClientOption) AdminClient {
-	cfg := cliconfig.ResolveClientConfigSimple(flagAdminURL)
-	if cfg.APIKey != "" {
-		opts = append([]ClientOption{WithAPIKey(cfg.APIKey)}, opts...)
-	}
-	return NewAdminClient(cfg.AdminURL, opts...)
 }
 
 // ListMocks returns all configured mocks.

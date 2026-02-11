@@ -32,18 +32,6 @@ func (r *SchemaValidationResult) IsValid() bool {
 	return len(r.Errors) == 0
 }
 
-// Error returns a combined error message.
-func (r *SchemaValidationResult) Error() string {
-	if r.IsValid() {
-		return ""
-	}
-	var msgs []string
-	for _, e := range r.Errors {
-		msgs = append(msgs, e.Error())
-	}
-	return strings.Join(msgs, "\n")
-}
-
 // AddError adds a validation error.
 func (r *SchemaValidationResult) AddError(path, message string) {
 	r.Errors = append(r.Errors, SchemaValidationError{Path: path, Message: message})
