@@ -34,6 +34,12 @@ type CLIConfig struct {
 
 	// Source tracks where each value came from (for debugging)
 	Sources map[string]string `yaml:"-" json:"-"`
+
+	// SetFields tracks which YAML keys were explicitly present when this
+	// config was loaded from a file. This lets MergeConfig distinguish
+	// "field absent" from "field explicitly set to zero value" (e.g.,
+	// autoCert: false vs. autoCert not mentioned at all).
+	SetFields map[string]bool `yaml:"-" json:"-"`
 }
 
 // ConfigSource identifies where a config value originated.

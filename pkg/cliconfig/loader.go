@@ -77,6 +77,9 @@ func GetGlobalConfigSearchPaths() []string {
 }
 
 // LoadConfigFile loads a CLIConfig from a YAML file.
+// It also populates SetFields to track which keys were explicitly present in
+// the YAML, which is needed so that MergeConfig can distinguish "field absent"
+// from "field explicitly set to its zero value" (important for booleans).
 func LoadConfigFile(path string) (*CLIConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -92,6 +95,17 @@ func LoadConfigFile(path string) (*CLIConfig, error) {
 	}
 
 	cfg.Sources = make(map[string]string)
+
+	// Determine which keys were explicitly present in the YAML so that
+	// MergeConfig can correctly merge boolean false values.
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err == nil {
+		cfg.SetFields = make(map[string]bool, len(raw))
+		for k := range raw {
+			cfg.SetFields[k] = true
+		}
+	}
+
 	return &cfg, nil
 }
 

@@ -200,16 +200,26 @@ func (c *ContextConfig) SetWorkspace(workspace string) error {
 }
 
 // GetAdminURLFromContext returns the admin URL for the current context.
-// Falls back to default if no context is set.
+// Returns empty string if no context is set, the context has no URL, or the
+// URL is just the built-in default (so that callers can fall through to
+// consult CLIConfig before applying the default).
 func GetAdminURLFromContext() string {
 	cfg, err := LoadContextConfig()
 	if err != nil {
-		return DefaultAdminURL(DefaultAdminPort)
+		return ""
 	}
 
 	ctx := cfg.GetCurrentContext()
 	if ctx == nil || ctx.AdminURL == "" {
-		return DefaultAdminURL(DefaultAdminPort)
+		return ""
+	}
+
+	// If the URL is the built-in default, treat it as "not explicitly set"
+	// so that CLIConfig can override it. Users who actually wrote the default
+	// URL into contexts.yaml will get the same value from the later default
+	// fallback anyway, so this is safe.
+	if ctx.AdminURL == DefaultAdminURL(DefaultAdminPort) {
+		return ""
 	}
 
 	return ctx.AdminURL

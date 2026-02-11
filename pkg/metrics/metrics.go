@@ -17,6 +17,9 @@ var ErrLabelCountMismatch = errors.New("label count mismatch")
 // ErrNegativeCounterValue is returned when attempting to add a negative value to a counter.
 var ErrNegativeCounterValue = errors.New("counter cannot be decreased")
 
+// ErrDuplicateMetric is returned when registering a metric with a name that is already registered.
+var ErrDuplicateMetric = errors.New("duplicate metric name")
+
 // atomicFloat64 provides atomic operations for float64 values.
 // It stores the bits of the float64 as a uint64 for atomic access.
 type atomicFloat64 struct {
@@ -505,12 +508,14 @@ func (v *HistogramVec) Observe(value float64) {
 type Registry struct {
 	mu      sync.RWMutex
 	metrics []Metric
+	names   map[string]struct{} // guards against duplicate registrations
 }
 
 // NewRegistry creates a new metric registry.
 func NewRegistry() *Registry {
 	return &Registry{
 		metrics: make([]Metric, 0),
+		names:   make(map[string]struct{}),
 	}
 }
 
@@ -536,9 +541,15 @@ func (r *Registry) NewHistogram(name, help string, buckets []float64, labels ...
 }
 
 // register adds a metric to the registry.
+// It panics if a metric with the same name is already registered,
+// since duplicate metric names produce invalid Prometheus output.
 func (r *Registry) register(m Metric) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, exists := r.names[m.Name()]; exists {
+		panic(fmt.Sprintf("%s: %s", ErrDuplicateMetric, m.Name()))
+	}
+	r.names[m.Name()] = struct{}{}
 	r.metrics = append(r.metrics, m)
 }
 

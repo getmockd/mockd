@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -248,8 +249,10 @@ func (e *Engine) evaluateRequest(expr string, ctx *Context) string {
 		return ""
 	case "header":
 		// request.header.HeaderName returns first value
+		// Uses canonical header key for case-insensitive lookup
 		if len(parts) == 2 {
-			if values, ok := ctx.Request.Headers[parts[1]]; ok && len(values) > 0 {
+			key := http.CanonicalHeaderKey(parts[1])
+			if values, ok := ctx.Request.Headers[key]; ok && len(values) > 0 {
 				return values[0]
 			}
 		}

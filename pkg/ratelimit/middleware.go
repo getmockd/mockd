@@ -3,7 +3,6 @@ package ratelimit
 import (
 	"net/http"
 	"strconv"
-	"time"
 )
 
 // MiddlewareOption configures the rate limiting middleware.
@@ -57,7 +56,7 @@ func Middleware(limiter *PerIPLimiter, opts ...MiddlewareOption) func(http.Handl
 			}
 
 			// Rate limit exceeded
-			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Unix()+resetOrRetry, 10))
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(resetOrRetry, 10))
 			w.Header().Set("Retry-After", strconv.FormatInt(resetOrRetry, 10))
 
 			if cfg.useTextResponse {

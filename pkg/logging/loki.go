@@ -93,7 +93,9 @@ func NewLokiHandler(url string, opts ...LokiOption) *LokiHandler {
 }
 
 func (h *LokiHandler) resetTimer() {
-	h.flushTimer.Reset(5 * time.Second)
+	if h.flushTimer != nil {
+		h.flushTimer.Reset(5 * time.Second)
+	}
 }
 
 // Enabled implements slog.Handler.

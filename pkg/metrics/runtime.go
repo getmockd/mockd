@@ -2,7 +2,7 @@ package metrics
 
 import (
 	"runtime"
-	"runtime/debug"
+	"runtime/pprof"
 	"time"
 )
 
@@ -107,8 +107,7 @@ func (rc *RuntimeCollector) Collect() {
 	// Goroutines and threads
 	_ = rc.goroutines.Set(float64(runtime.NumGoroutine()))
 
-	// Use debug.NumGoroutine for threads (this is actually goroutines, threads not directly available)
-	// Instead, we can get a rough estimate from the pprof
+	// OS thread count from pprof threadcreate profile
 	if numThreads, ok := getNumThreads(); ok {
 		_ = rc.threads.Set(float64(numThreads))
 	}
@@ -121,12 +120,9 @@ func (rc *RuntimeCollector) Collect() {
 	_ = rc.heapObjects.Set(float64(mem.HeapObjects))
 	_ = rc.stackInuse.Set(float64(mem.StackInuse))
 
-	// GC metrics
-	totalPauseNs := uint64(0)
-	for _, pause := range mem.PauseNs {
-		totalPauseNs += pause
-	}
-	_ = rc.gcPauseNs.Set(float64(totalPauseNs) / 1e9) // Convert to seconds
+	// GC metrics — use PauseTotalNs which is the authoritative cumulative total,
+	// rather than summing the PauseNs circular buffer which wraps after 256 entries.
+	_ = rc.gcPauseNs.Set(float64(mem.PauseTotalNs) / 1e9) // Convert to seconds
 
 	if mem.NumGC > 0 {
 		lastPause := mem.PauseNs[(mem.NumGC-1)%256]
@@ -135,20 +131,14 @@ func (rc *RuntimeCollector) Collect() {
 	_ = rc.numGC.Set(float64(mem.NumGC))
 }
 
-// getNumThreads attempts to get the number of OS threads.
-// Returns false if unavailable.
+// getNumThreads returns the number of OS threads via the pprof
+// "threadcreate" profile, which tracks threads created by the runtime.
 func getNumThreads() (int, bool) {
-	// Use debug.SetMaxThreads to get a sense of thread count
-	// This is a workaround as Go doesn't directly expose thread count
-	bi, ok := debug.ReadBuildInfo()
-	if !ok {
+	p := pprof.Lookup("threadcreate")
+	if p == nil {
 		return 0, false
 	}
-	_ = bi // Just checking if debug info is available
-
-	// Unfortunately, there's no direct way to get thread count in Go
-	// We'll use GOMAXPROCS as a proxy (though it's not exactly threads)
-	return runtime.GOMAXPROCS(0), true
+	return p.Count(), true
 }
 
 // StartCollector starts a goroutine that periodically collects runtime metrics.

@@ -79,13 +79,29 @@ func (s *StateStore) List() []string {
 
 // MatchPath finds a resource matching the given URL path.
 // Returns the matched resource, the extracted ID (if single resource), and path params.
+// Resources are checked in order of longest BasePath first so that more specific
+// routes (e.g. /api/users/:userId/orders) are matched before shorter ones (e.g. /api/users).
 func (s *StateStore) MatchPath(path string) (*StatefulResource, string, map[string]string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	for _, resource := range s.resources {
-		if id, params, matched := resource.MatchPath(path); matched {
-			return resource, id, params
+	// Collect keys and sort by BasePath length descending (most specific first)
+	keys := make([]string, 0, len(s.resources))
+	for name := range s.resources {
+		keys = append(keys, name)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		pi := s.resources[keys[i]].BasePath()
+		pj := s.resources[keys[j]].BasePath()
+		if len(pi) != len(pj) {
+			return len(pi) > len(pj)
+		}
+		return keys[i] < keys[j] // stable tiebreak by name
+	})
+
+	for _, name := range keys {
+		if id, params, matched := s.resources[name].MatchPath(path); matched {
+			return s.resources[name], id, params
 		}
 	}
 

@@ -42,10 +42,12 @@ func MergeConfig(target, source *CLIConfig, sourceType string) {
 		target.MaxLogEntries = source.MaxLogEntries
 		target.Sources["maxLogEntries"] = sourceType
 	}
-	// For booleans, we use the zero value check differently
-	// We'll only merge if the source struct has explicit settings
-	// This is a limitation - in practice booleans from JSON will be set
-	if source.AutoCert {
+	// For booleans, checking `if source.X` cannot detect an explicit false.
+	// We use SetFields (populated during file loading) to know whether a
+	// boolean was explicitly present in the source. If SetFields is nil
+	// (e.g., config built programmatically), fall back to the old behavior
+	// of only merging true values.
+	if boolIsSet(source, "autoCert") {
 		target.AutoCert = source.AutoCert
 		target.Sources["autoCert"] = sourceType
 	}
@@ -57,12 +59,33 @@ func MergeConfig(target, source *CLIConfig, sourceType string) {
 		target.KeyFile = source.KeyFile
 		target.Sources["keyFile"] = sourceType
 	}
-	if source.Verbose {
+	if boolIsSet(source, "verbose") {
 		target.Verbose = source.Verbose
 		target.Sources["verbose"] = sourceType
 	}
-	if source.JSON {
+	if boolIsSet(source, "json") {
 		target.JSON = source.JSON
 		target.Sources["json"] = sourceType
 	}
+}
+
+// boolIsSet reports whether a boolean field identified by its YAML key was
+// explicitly set in the source config. When SetFields is available (file-loaded
+// configs), it checks for the key's presence. Otherwise it falls back to
+// treating true as "set" (the old behavior, safe for programmatic configs).
+func boolIsSet(cfg *CLIConfig, yamlKey string) bool {
+	if cfg.SetFields != nil {
+		return cfg.SetFields[yamlKey]
+	}
+	// Fallback: only merge when the value is true (cannot detect explicit false
+	// without SetFields).
+	switch yamlKey {
+	case "autoCert":
+		return cfg.AutoCert
+	case "verbose":
+		return cfg.Verbose
+	case "json":
+		return cfg.JSON
+	}
+	return false
 }
