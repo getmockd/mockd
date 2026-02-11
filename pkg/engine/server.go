@@ -17,7 +17,6 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/grpc"
 	"github.com/getmockd/mockd/pkg/logging"
-	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/mqtt"
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/ratelimit"
@@ -204,17 +203,6 @@ func NewServerWithMocks(cfg *config.ServerConfiguration, mocks []*config.MockCon
 		}
 	}
 	return srv
-}
-
-// NewServerWithStore creates a new Server with a persistent store backend.
-// The store is used for persisting mock configurations and other data.
-// If the store is nil, an in-memory store is used (no persistence).
-//
-// Deprecated: Use NewServer with WithStore option instead:
-//
-//	NewServer(cfg, WithStore(persistentStore))
-func NewServerWithStore(cfg *config.ServerConfiguration, persistentStore store.Store) *Server {
-	return NewServer(cfg, WithStore(persistentStore))
 }
 
 // SetStore sets the persistent store backend.
@@ -444,12 +432,6 @@ func (s *Server) getMock(id string) *config.MockConfiguration {
 // This is an internal method - external callers should use the HTTP API.
 func (s *Server) listMocks() []*config.MockConfiguration {
 	return s.mockManager.List()
-}
-
-// listHTTPMocks returns only HTTP mock configurations.
-// This is an internal method - external callers should use the HTTP API.
-func (s *Server) listHTTPMocks() []*config.MockConfiguration {
-	return s.mockManager.ListByType(mock.TypeHTTP)
 }
 
 // IsRunning returns whether the server is running.

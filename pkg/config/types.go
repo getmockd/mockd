@@ -297,16 +297,6 @@ func DefaultCORSConfig() *CORSConfig {
 	}
 }
 
-// DefaultRateLimitConfig returns a RateLimitConfig with sensible defaults.
-func DefaultRateLimitConfig() *RateLimitConfig {
-	return &RateLimitConfig{
-		Enabled:           true,
-		RequestsPerSecond: 1000,
-		BurstSize:         2000,
-		MaxBuckets:        10_000,
-	}
-}
-
 // IsWildcard returns true if the CORS config allows all origins.
 func (c *CORSConfig) IsWildcard() bool {
 	if c == nil {

@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 )
 
 // Middleware wraps an http.Handler with request validation
@@ -186,31 +185,4 @@ func ValidateRequestOnly(validator *OpenAPIValidator, r *http.Request) (*Result,
 	}
 
 	return validator.ValidateRequest(r), nil
-}
-
-// MustValidateRequest returns an error if request validation fails
-// Useful for tests and handlers that need to validate requests manually
-func MustValidateRequest(validator *OpenAPIValidator, r *http.Request) error {
-	result := validator.ValidateRequest(r)
-	if !result.Valid {
-		messages := make([]string, 0, len(result.Errors))
-		for _, err := range result.Errors {
-			messages = append(messages, err.Message)
-		}
-		return &RequestValidationError{Message: "request validation failed: " + joinStrings(messages, "; ")}
-	}
-	return nil
-}
-
-// RequestValidationError represents a validation error
-type RequestValidationError struct {
-	Message string
-}
-
-func (e *RequestValidationError) Error() string {
-	return e.Message
-}
-
-func joinStrings(strs []string, sep string) string {
-	return strings.Join(strs, sep)
 }

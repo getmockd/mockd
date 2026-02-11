@@ -17,14 +17,6 @@ type TLSManager struct {
 	mtlsCfg *config.MTLSConfig
 }
 
-// NewTLSManager creates a new TLSManager.
-func NewTLSManager(cfg *config.TLSConfig, mtlsCfg *config.MTLSConfig) *TLSManager {
-	return &TLSManager{
-		cfg:     cfg,
-		mtlsCfg: mtlsCfg,
-	}
-}
-
 // NewTLSManagerFromServerConfig creates a TLSManager from server configuration.
 func NewTLSManagerFromServerConfig(cfg *config.ServerConfiguration) *TLSManager {
 	return &TLSManager{

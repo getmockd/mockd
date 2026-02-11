@@ -2,7 +2,6 @@ package template
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 
 	"github.com/getmockd/mockd/pkg/mtls"
@@ -128,19 +127,6 @@ func (c *Context) SetPathPatternCaptures(captures map[string]string) {
 	for key, value := range captures {
 		c.Request.PathPatternCaptures[key] = value
 	}
-}
-
-// NewContextFromRequest creates a template context by reading the request body.
-// The body is read completely and can be read again if needed.
-func NewContextFromRequest(r *http.Request) (*Context, error) {
-	const maxTemplateBodySize = 10 << 20 // 10MB defense-in-depth
-	bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxTemplateBodySize))
-	if err != nil {
-		return nil, err
-	}
-	_ = r.Body.Close()
-
-	return NewContext(r, bodyBytes), nil
 }
 
 // NewContextFromMap creates a template context from parsed request data.

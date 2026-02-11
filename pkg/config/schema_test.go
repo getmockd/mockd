@@ -266,7 +266,7 @@ func TestValidateProjectConfig_Valid(t *testing.T) {
 
 	result := ValidateProjectConfig(cfg)
 	if !result.IsValid() {
-		t.Errorf("ValidateProjectConfig returned errors for valid config: %v", result.Error())
+		t.Errorf("ValidateProjectConfig returned errors for valid config: %v", result.Errors)
 	}
 }
 
@@ -347,7 +347,7 @@ func TestValidateProjectConfig_RemoteAdmin(t *testing.T) {
 
 	result := ValidateProjectConfig(cfg)
 	if !result.IsValid() {
-		t.Errorf("ValidateProjectConfig returned errors for valid remote admin config: %v", result.Error())
+		t.Errorf("ValidateProjectConfig returned errors for valid remote admin config: %v", result.Errors)
 	}
 }
 
@@ -401,7 +401,7 @@ func TestValidateProjectConfig_MockFileRef(t *testing.T) {
 
 	result := ValidateProjectConfig(cfg)
 	if !result.IsValid() {
-		t.Errorf("ValidateProjectConfig returned errors for file ref mock: %v", result.Error())
+		t.Errorf("ValidateProjectConfig returned errors for file ref mock: %v", result.Errors)
 	}
 }
 
@@ -421,7 +421,7 @@ func TestValidateProjectConfig_MockGlob(t *testing.T) {
 
 	result := ValidateProjectConfig(cfg)
 	if !result.IsValid() {
-		t.Errorf("ValidateProjectConfig returned errors for glob mock: %v", result.Error())
+		t.Errorf("ValidateProjectConfig returned errors for glob mock: %v", result.Errors)
 	}
 }
 
@@ -455,7 +455,7 @@ func TestValidatePortConflicts_NoConflict(t *testing.T) {
 
 	result := ValidatePortConflicts(cfg)
 	if !result.IsValid() {
-		t.Errorf("ValidatePortConflicts returned errors for valid config: %v", result.Error())
+		t.Errorf("ValidatePortConflicts returned errors for valid config: %v", result.Errors)
 	}
 }
 

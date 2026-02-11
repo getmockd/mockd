@@ -138,34 +138,6 @@ func isValidULIDChar(c byte) bool {
 	return false
 }
 
-// ULIDTime extracts the timestamp from a ULID.
-func ULIDTime(ulid string) (time.Time, error) {
-	if !IsValidULID(ulid) {
-		return time.Time{}, fmt.Errorf("invalid ULID: %s", ulid)
-	}
-
-	var ms int64
-	for i := 0; i < 10; i++ {
-		val := decodeULIDChar(ulid[i])
-		if val < 0 {
-			return time.Time{}, fmt.Errorf("invalid ULID character at position %d", i)
-		}
-		ms = (ms << 5) | int64(val)
-	}
-
-	return time.UnixMilli(ms), nil
-}
-
-// decodeULIDChar decodes a single ULID character to its value.
-func decodeULIDChar(c byte) int {
-	for i := 0; i < len(ulidEncoding); i++ {
-		if ulidEncoding[i] == c {
-			return i
-		}
-	}
-	return -1
-}
-
 // Alphanumeric generates a random alphanumeric string of the specified length.
 // Uses uppercase, lowercase letters and digits.
 func Alphanumeric(length int) string {

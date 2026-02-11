@@ -19,13 +19,6 @@ type MatchResult struct {
 	JSONPathMatches     map[string]interface{} // Values extracted from JSONPath matching
 }
 
-// MatchScore calculates the match score for a request against a matcher.
-// Returns 0 if there's no match, higher scores indicate better matches.
-func MatchScore(matcher *mock.HTTPMatcher, r *http.Request, body []byte) int {
-	score, _ := MatchScoreWithCaptures(matcher, r, body)
-	return score
-}
-
 // MatchScoreWithCaptures calculates the match score and returns any regex captures.
 // Returns 0 if there's no match, higher scores indicate better matches.
 // Also returns a map of named capture groups from PathPattern regex matching.
@@ -147,30 +140,6 @@ func MatchScoreWithAllCaptures(matcher *mock.HTTPMatcher, r *http.Request, body 
 // MatchMethod checks if the request method matches.
 func MatchMethod(expected, actual string) bool {
 	return strings.EqualFold(expected, actual)
-}
-
-// MatchHTTPMatcher calculates the match score for a request against a mock.HTTPMatcher.
-// Returns 0 if there's no match, higher scores indicate better matches.
-//
-// Deprecated: Use MatchScore instead.
-func MatchHTTPMatcher(matcher *mock.HTTPMatcher, r *http.Request, body []byte) int {
-	return MatchScore(matcher, r, body)
-}
-
-// MatchHTTPMatcherWithCaptures calculates the match score for mock.HTTPMatcher and returns captures.
-// Returns 0 if there's no match, higher scores indicate better matches.
-//
-// Deprecated: Use MatchScoreWithCaptures instead.
-func MatchHTTPMatcherWithCaptures(matcher *mock.HTTPMatcher, r *http.Request, body []byte) (int, map[string]string) {
-	return MatchScoreWithCaptures(matcher, r, body)
-}
-
-// MatchHTTPMatcherWithAllCaptures calculates the match score for mock.HTTPMatcher and returns all captures.
-// Returns 0 if there's no match, higher scores indicate better matches.
-//
-// Deprecated: Use MatchScoreWithAllCaptures instead.
-func MatchHTTPMatcherWithAllCaptures(matcher *mock.HTTPMatcher, r *http.Request, body []byte) (int, map[string]string, map[string]interface{}) {
-	return MatchScoreWithAllCaptures(matcher, r, body)
 }
 
 // matchMTLS calculates the match score for mTLS certificate matching.

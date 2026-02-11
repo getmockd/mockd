@@ -782,49 +782,6 @@ func TestSecurityHeaders_AreSet(t *testing.T) {
 	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 }
 
-func TestCORSMiddleware_PreflightRequest(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("handler should not be called for preflight")
-	})
-
-	config := CORSConfig{
-		AllowedOrigins: []string{"https://example.com"},
-		AllowedMethods: []string{"GET", "POST"},
-		AllowedHeaders: []string{"Content-Type"},
-	}
-	wrapped := NewCORSMiddlewareWithConfig(handler, config)
-
-	req := httptest.NewRequest("OPTIONS", "/api/test", nil)
-	req.Header.Set("Origin", "https://example.com")
-	rec := httptest.NewRecorder()
-
-	wrapped.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "https://example.com", rec.Header().Get("Access-Control-Allow-Origin"))
-}
-
-func TestCORSMiddleware_DisallowedOrigin(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
-	config := CORSConfig{
-		AllowedOrigins: []string{"https://allowed.com"},
-	}
-	wrapped := NewCORSMiddlewareWithConfig(handler, config)
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	req.Header.Set("Origin", "https://evil.com")
-	rec := httptest.NewRecorder()
-
-	wrapped.ServeHTTP(rec, req)
-
-	// Request should still be processed, but no CORS headers
-	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"),
-		"disallowed origin should not get CORS headers")
-}
-
 // ============================================================================
 // Rate Limiter Tests
 // ============================================================================

@@ -460,17 +460,3 @@ func (pm *ProxyManager) getStatus() ProxyStatusResponse {
 
 	return status
 }
-
-// Store returns the recording store.
-func (pm *ProxyManager) Store() *recording.Store {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	return pm.store
-}
-
-// Running returns whether the proxy is running.
-func (pm *ProxyManager) Running() bool {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	return pm.running
-}
