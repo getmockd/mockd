@@ -16,12 +16,12 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/getmockd/mockd/pkg/template"
+	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/parser"
 )
 
 // Pre-compiled regex patterns for performance.
 var (
-	// subscriptionFieldPattern matches the first field in a subscription query.
-	subscriptionFieldPattern = regexp.MustCompile(`subscription\s*(?:\w+)?\s*(?:\([^)]*\))?\s*\{\s*(\w+)`)
 	// varsPattern matches {{vars.fieldName}} patterns.
 	varsPattern = regexp.MustCompile(`\{\{vars\.([a-zA-Z_][a-zA-Z0-9_]*)\}\}`)
 )
@@ -428,53 +428,100 @@ func (h *SubscriptionHandler) parseRandomDelay(rangeStr string) time.Duration {
 	return minDelay + time.Duration(randomMs)*time.Millisecond
 }
 
-// parseSubscriptionQuery parses a GraphQL subscription query and returns the subscription field name.
+// parseSubscriptionQuery parses a GraphQL subscription query using the gqlparser AST
+// and returns the subscription field name and merged variables.
 func (h *SubscriptionHandler) parseSubscriptionQuery(query string, inputVars map[string]interface{}) (string, map[string]interface{}, error) {
-	// Use pre-compiled regex to extract subscription field name
-	// Matches patterns like: subscription { fieldName } or subscription Name { fieldName }
-	matches := subscriptionFieldPattern.FindStringSubmatch(query)
-	if len(matches) < 2 {
+	// Parse the query into an AST using gqlparser's standalone parser.
+	// This avoids schema validation (which may fail for subscription-only
+	// queries when the schema is nil or incomplete), while still correctly
+	// handling named operations, variable definitions, inline arguments with
+	// nested objects, and multiple selection fields.
+	doc, parseErr := parser.ParseQuery(&ast.Source{Input: query})
+	if parseErr != nil {
+		return "", nil, fmt.Errorf("could not parse subscription query: %w", parseErr)
+	}
+
+	// Find the subscription operation.
+	var op *ast.OperationDefinition
+	for _, o := range doc.Operations {
+		if o.Operation == ast.Subscription {
+			op = o
+			break
+		}
+	}
+	if op == nil {
 		return "", nil, errors.New("could not parse subscription query")
 	}
 
-	fieldName := matches[1]
+	// The subscription field name is the first field in the selection set.
+	if len(op.SelectionSet) == 0 {
+		return "", nil, errors.New("subscription has no selection fields")
+	}
+	field, ok := op.SelectionSet[0].(*ast.Field)
+	if !ok {
+		return "", nil, errors.New("unexpected selection type in subscription")
+	}
+	fieldName := field.Name
 
-	// Extract variables from query arguments if present
+	// Merge input variables.
 	vars := make(map[string]interface{})
 	for k, v := range inputVars {
 		vars[k] = v
 	}
 
-	// Try to extract inline arguments like subscription { messages(channel: "test") }
-	// This pattern is dynamic based on field name, so we compile it here
-	argRe := regexp.MustCompile(fieldName + `\s*\(\s*([^)]+)\s*\)`)
-	argMatches := argRe.FindStringSubmatch(query)
-	if len(argMatches) >= 2 {
-		// Parse simple key: value or key: "value" patterns
-		argStr := argMatches[1]
-		argPairs := strings.Split(argStr, ",")
-		for _, pair := range argPairs {
-			parts := strings.SplitN(pair, ":", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
-				// Remove quotes if present
-				value = strings.Trim(value, `"'`)
-				// Check if it's a variable reference
-				if strings.HasPrefix(value, "$") {
-					varName := strings.TrimPrefix(value, "$")
-					if v, ok := inputVars[varName]; ok {
-						vars[key] = v
-					}
-				} else {
-					// Try to parse as number or boolean
-					vars[key] = parseValue(value)
-				}
-			}
-		}
+	// Extract inline arguments from the AST field.
+	for _, arg := range field.Arguments {
+		vars[arg.Name] = resolveASTValue(arg.Value, inputVars)
 	}
 
 	return fieldName, vars, nil
+}
+
+// resolveASTValue converts a gqlparser AST value into a Go value,
+// resolving variable references from the provided variables map.
+func resolveASTValue(value *ast.Value, variables map[string]interface{}) interface{} {
+	if value == nil {
+		return nil
+	}
+	switch value.Kind {
+	case ast.Variable:
+		if variables != nil {
+			return variables[value.Raw]
+		}
+		return nil
+	case ast.IntValue:
+		if i, err := strconv.ParseInt(value.Raw, 10, 64); err == nil {
+			return i
+		}
+		return value.Raw
+	case ast.FloatValue:
+		if f, err := strconv.ParseFloat(value.Raw, 64); err == nil {
+			return f
+		}
+		return value.Raw
+	case ast.StringValue, ast.BlockValue:
+		return value.Raw
+	case ast.BooleanValue:
+		return value.Raw == "true"
+	case ast.NullValue:
+		return nil
+	case ast.EnumValue:
+		return value.Raw
+	case ast.ListValue:
+		list := make([]interface{}, 0, len(value.Children))
+		for _, child := range value.Children {
+			list = append(list, resolveASTValue(child.Value, variables))
+		}
+		return list
+	case ast.ObjectValue:
+		obj := make(map[string]interface{})
+		for _, child := range value.Children {
+			obj[child.Name] = resolveASTValue(child.Value, variables)
+		}
+		return obj
+	default:
+		return value.Raw
+	}
 }
 
 // parseValue attempts to parse a string value into appropriate Go type.

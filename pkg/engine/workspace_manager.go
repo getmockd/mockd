@@ -356,12 +356,24 @@ func (s *WorkspaceServer) Start() error {
 
 	s.status = WorkspaceServerStatusStarting
 
+	// Use manager's configured timeouts, falling back to 30s defaults.
+	readTimeout := 30 * time.Second
+	writeTimeout := 30 * time.Second
+	if s.manager != nil {
+		if s.manager.defaultReadTimeout > 0 {
+			readTimeout = s.manager.defaultReadTimeout
+		}
+		if s.manager.defaultWriteTimeout > 0 {
+			writeTimeout = s.manager.defaultWriteTimeout
+		}
+	}
+
 	// Create HTTP server
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.HTTPPort),
 		Handler:      s.handler,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
 	}
 
 	// Bind the listener synchronously so we know the port is available

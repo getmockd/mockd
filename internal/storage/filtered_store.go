@@ -35,9 +35,11 @@ func (f *FilteredMockStore) Get(id string) *mock.Mock {
 }
 
 // Set stores a mock, automatically setting the workspaceID.
+// It works on a shallow copy so the caller's original mock is not mutated.
 func (f *FilteredMockStore) Set(m *mock.Mock) error {
-	m.WorkspaceID = f.workspaceID
-	return f.underlying.Set(m)
+	cp := *m
+	cp.WorkspaceID = f.workspaceID
+	return f.underlying.Set(&cp)
 }
 
 // Delete removes a mock by ID, only if it belongs to this workspace.
