@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sync"
@@ -224,7 +225,7 @@ func (c *Client) Heartbeat(ctx context.Context) error {
 	for _, cmd := range hbResp.Commands {
 		if err := c.processCommand(cmd); err != nil {
 			// Log error but continue processing other commands
-			fmt.Printf("Error processing command %s: %v\n", cmd.Type, err)
+			slog.Default().Error("error processing command", "type", cmd.Type, "error", err)
 		}
 	}
 
@@ -238,7 +239,7 @@ func (c *Client) HeartbeatLoop(ctx context.Context) error {
 
 	// Send initial heartbeat
 	if err := c.Heartbeat(ctx); err != nil {
-		fmt.Printf("Initial heartbeat failed: %v\n", err)
+		slog.Default().Warn("initial heartbeat failed", "error", err)
 	}
 
 	for {
@@ -247,7 +248,7 @@ func (c *Client) HeartbeatLoop(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			if err := c.Heartbeat(ctx); err != nil {
-				fmt.Printf("Heartbeat failed: %v\n", err)
+				slog.Default().Warn("heartbeat failed", "error", err)
 				// Continue trying - transient failures are expected
 			}
 		}
@@ -288,7 +289,7 @@ func (c *Client) handleDeploy(cmd Command) error {
 	c.deployments[cmd.DeploymentID] = deployment
 	c.mocksByPath[cmd.URLPath] = deployment
 
-	fmt.Printf("Deployed mock %s (version %d) at %s\n", cmd.MockID, cmd.MockVersion, cmd.URLPath)
+	slog.Default().Info("deployed mock", "mockID", cmd.MockID, "version", cmd.MockVersion, "path", cmd.URLPath)
 	return nil
 }
 
@@ -306,7 +307,7 @@ func (c *Client) handleUndeploy(cmd Command) error {
 	delete(c.mocksByPath, deployment.URLPath)
 	delete(c.deployments, cmd.DeploymentID)
 
-	fmt.Printf("Undeployed mock %s from %s\n", deployment.MockID, deployment.URLPath)
+	slog.Default().Info("undeployed mock", "mockID", deployment.MockID, "path", deployment.URLPath)
 	return nil
 }
 
@@ -333,11 +334,15 @@ func (c *Client) GetAllDeployments() []*Deployment {
 
 // GetRuntimeID returns the runtime ID assigned by the control plane.
 func (c *Client) GetRuntimeID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.runtimeID
 }
 
 // SetRuntimeID sets the runtime ID (for reconnection scenarios).
 func (c *Client) SetRuntimeID(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.runtimeID = id
 }
 
@@ -405,7 +410,7 @@ func (c *Client) PullDeployments(ctx context.Context) error {
 		c.mocksByPath[d.URLPath] = deployment
 	}
 
-	fmt.Printf("Pulled %d deployments from control plane\n", len(pullResp.Deployments))
+	slog.Default().Info("pulled deployments from control plane", "count", len(pullResp.Deployments))
 	return nil
 }
 

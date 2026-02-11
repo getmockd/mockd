@@ -3,7 +3,7 @@ package mqtt
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -81,7 +81,7 @@ func (s *Simulator) Start() {
 				// Start per-topic device simulation
 				s.startPerTopicDeviceSimulation(topic)
 			} else {
-				log.Printf("MQTT simulator: WARNING: deviceSimulation enabled for topic %q but topic does not contain {device_id} placeholder; skipping device simulation", topic.Topic)
+				slog.Default().Warn("deviceSimulation enabled but topic does not contain {device_id} placeholder; skipping device simulation", "topic", topic.Topic)
 				// Fall through to regular message simulation
 				for _, msg := range topic.Messages {
 					s.wg.Add(1)
@@ -102,7 +102,7 @@ func (s *Simulator) Start() {
 func (s *Simulator) startPerTopicDeviceSimulation(topic TopicConfig) {
 	sim := NewPerTopicDeviceSimulator(s.broker, topic, s.sequences)
 	if err := sim.Start(); err != nil {
-		log.Printf("MQTT simulator: failed to start device simulation for topic %s: %v", topic.Topic, err)
+		slog.Default().Error("failed to start device simulation", "topic", topic.Topic, "error", err)
 		return
 	}
 
@@ -344,7 +344,7 @@ func (p *PerTopicDeviceSimulator) publishForDevice(device *perTopicSimulatedDevi
 	payload := p.generatePayload(device.deviceID)
 
 	if err := p.broker.Publish(device.topic, payload, qos, p.topic.Retain); err != nil {
-		log.Printf("Per-topic device simulator: failed to publish for device %s: %v", device.deviceID, err)
+		slog.Default().Error("per-topic device simulator: failed to publish", "deviceID", device.deviceID, "error", err)
 		return
 	}
 
@@ -467,7 +467,7 @@ func (s *Simulator) processPayload(rawPayload, topicName string) []byte {
 
 	rendered := tmpl.Render(ctx)
 	if rendered == "" {
-		log.Printf("MQTT simulator: template rendered empty for topic %s, using raw payload", topicName)
+		slog.Default().Warn("MQTT simulator: template rendered empty, using raw payload", "topic", topicName)
 		return []byte(rawPayload)
 	}
 
@@ -819,7 +819,7 @@ func (m *MultiDeviceSimulator) publishForDevice(device *simulatedDevice, qos byt
 	payload := m.generatePayload(device.deviceID)
 
 	if err := m.broker.Publish(device.topic, payload, qos, m.config.Retain); err != nil {
-		log.Printf("Multi-device simulator: failed to publish for device %s: %v", device.deviceID, err)
+		slog.Default().Error("multi-device simulator: failed to publish", "deviceID", device.deviceID, "error", err)
 		return
 	}
 

@@ -38,6 +38,23 @@ func NewMiddleware(handler http.Handler, logger AuditLogger, config *AuditConfig
 	}
 }
 
+// eventLevel returns the audit level for a given event type.
+func eventLevel(event string) string {
+	switch event {
+	case EventError:
+		return LevelError
+	case EventMockNotFound:
+		return LevelWarn
+	case EventRequestReceived, EventResponseSent,
+		EventMockMatched, EventProxyForwarded, EventProxyResponse,
+		EventWebSocketOpen, EventWebSocketClose, EventWebSocketMessage,
+		EventSSEStreamStart, EventSSEStreamEnd, EventSSEEventSent:
+		return LevelInfo
+	default:
+		return LevelDebug
+	}
+}
+
 // ServeHTTP implements http.Handler and logs request/response information
 func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
@@ -98,18 +115,20 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Log request received
-	requestEntry := NewAuditEntry(EventRequestReceived, traceID).
-		WithRequest(requestInfo).
-		WithClient(clientInfo)
+	// Log request received (respecting configured audit level)
+	if m.config.ShouldLog(eventLevel(EventRequestReceived)) {
+		requestEntry := NewAuditEntry(EventRequestReceived, traceID).
+			WithRequest(requestInfo).
+			WithClient(clientInfo)
 
-	// Apply redaction before logging (if a redactor is registered)
-	if m.redactor != nil {
-		requestEntry = m.redactor(requestEntry)
-	}
-	if err := m.logger.Log(*requestEntry); err != nil {
-		// Log error but don't fail the request
-		_ = err
+		// Apply redaction before logging (if a redactor is registered)
+		if m.redactor != nil {
+			requestEntry = m.redactor(requestEntry)
+		}
+		if err := m.logger.Log(*requestEntry); err != nil {
+			// Log error but don't fail the request
+			_ = err
+		}
 	}
 
 	// Create response capture wrapper
@@ -148,22 +167,24 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		responseInfo.Headers = capture.Header().Clone()
 	}
 
-	// Log response sent
-	responseEntry := NewAuditEntry(EventResponseSent, traceID).
-		WithRequest(requestInfo).
-		WithResponse(responseInfo).
-		WithClient(clientInfo).
-		WithMetadata(&EntryMetadata{
-			Duration: duration.Nanoseconds(),
-		})
+	// Log response sent (respecting configured audit level)
+	if m.config.ShouldLog(eventLevel(EventResponseSent)) {
+		responseEntry := NewAuditEntry(EventResponseSent, traceID).
+			WithRequest(requestInfo).
+			WithResponse(responseInfo).
+			WithClient(clientInfo).
+			WithMetadata(&EntryMetadata{
+				Duration: duration.Nanoseconds(),
+			})
 
-	// Apply redaction before logging (if a redactor is registered)
-	if m.redactor != nil {
-		responseEntry = m.redactor(responseEntry)
-	}
-	if err := m.logger.Log(*responseEntry); err != nil {
-		// Log error but don't fail the request
-		_ = err
+		// Apply redaction before logging (if a redactor is registered)
+		if m.redactor != nil {
+			responseEntry = m.redactor(responseEntry)
+		}
+		if err := m.logger.Log(*responseEntry); err != nil {
+			// Log error but don't fail the request
+			_ = err
+		}
 	}
 }
 

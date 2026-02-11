@@ -755,6 +755,7 @@ func TestMiddleware_CapturesStatusCode(t *testing.T) {
 		{"500 Internal Server Error", http.StatusInternalServerError},
 	}
 
+	enabledConfig := &AuditConfig{Enabled: true, Level: LevelDebug, MaxBodyPreviewSize: 1024, IncludeHeaders: true}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -764,7 +765,7 @@ func TestMiddleware_CapturesStatusCode(t *testing.T) {
 				w.WriteHeader(tt.statusCode)
 			})
 
-			middleware := NewMiddleware(handler, captured, nil)
+			middleware := NewMiddleware(handler, captured, enabledConfig)
 
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
 			rec := httptest.NewRecorder()
@@ -797,7 +798,8 @@ func TestMiddleware_NoWriteHeader_Defaults200(t *testing.T) {
 		w.Write([]byte("response without explicit status"))
 	})
 
-	middleware := NewMiddleware(handler, captured, nil)
+	enabledConfig := &AuditConfig{Enabled: true, Level: LevelDebug, MaxBodyPreviewSize: 1024, IncludeHeaders: true}
+	middleware := NewMiddleware(handler, captured, enabledConfig)
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()

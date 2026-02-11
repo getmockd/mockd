@@ -170,7 +170,7 @@ func (s *preferencesStore) Get(ctx context.Context) (*store.Preferences, error) 
 			AutoScroll:       true,
 			PollingInterval:  2000,
 			MinimizeToTray:   true,
-			DefaultMockPort:  9999,
+			DefaultMockPort:  4280,
 			DefaultAdminPort: 4290,
 		}, nil
 	}

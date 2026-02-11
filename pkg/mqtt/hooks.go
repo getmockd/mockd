@@ -111,6 +111,10 @@ func matchTopic(pattern, topic string) bool {
 
 	for i, part := range patternParts {
 		if part == "#" {
+			// Per MQTT spec, '#' must be the last segment in the filter.
+			if i != len(patternParts)-1 {
+				return false
+			}
 			// # matches everything remaining
 			return true
 		}

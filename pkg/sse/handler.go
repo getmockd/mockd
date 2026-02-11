@@ -384,6 +384,20 @@ func (h *SSEHandler) runStream(stream *SSEStream, cfg *mock.SSEConfig) {
 		rateLimiter = NewRateLimiter(stream.config.RateLimit)
 	}
 
+	// Send retry directive so clients know the reconnection interval
+	retryDirective := h.encoder.FormatRetry(DefaultRetryMs)
+	stream.mu.Lock()
+	_, retryErr := stream.writer.Write([]byte(retryDirective))
+	if retryErr == nil {
+		stream.flusher.Flush()
+	}
+	stream.mu.Unlock()
+	if retryErr != nil {
+		stream.Status = StreamStatusClosed
+		return
+	}
+	stream.BytesSent += int64(len(retryDirective))
+
 	// Apply initial delay
 	if stream.config.Timing.InitialDelay > 0 {
 		select {
