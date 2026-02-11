@@ -513,9 +513,9 @@ func TestHandler_ServeHTTP_XPathMatchingNoMatch(t *testing.T) {
 	resp := w.Result()
 	body, _ := io.ReadAll(resp.Body)
 
-	// Should return unknown operation fault since XPath didn't match
-	if !strings.Contains(string(body), "Unknown operation") {
-		t.Errorf("expected unknown operation when XPath doesn't match, got %s", string(body))
+	// Should return condition mismatch fault since operation name matched but XPath didn't
+	if !strings.Contains(string(body), "No matching condition for operation") {
+		t.Errorf("expected condition mismatch when XPath doesn't match, got %s", string(body))
 	}
 }
 

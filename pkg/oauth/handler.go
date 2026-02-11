@@ -680,13 +680,14 @@ func (h *Handler) HandleOpenIDConfig(w http.ResponseWriter, r *http.Request) {
 		JwksURI:                           issuer + "/.well-known/jwks.json",
 		RevocationEndpoint:                issuer + "/revoke",
 		IntrospectionEndpoint:             issuer + "/introspect",
-		ResponseTypesSupported:            []string{"code", "token", "id_token", "code token", "code id_token", "token id_token", "code token id_token"},
+		ResponseTypesSupported:            []string{"code", "token"},
 		SubjectTypesSupported:             []string{"public"},
 		IDTokenSigningAlgValuesSupported:  []string{"RS256"},
 		ScopesSupported:                   h.provider.config.DefaultScopes,
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post"},
 		ClaimsSupported:                   []string{"sub", "iss", "aud", "exp", "iat", "auth_time", "nonce", "email", "email_verified", "name", "given_name", "family_name", "picture"},
 		GrantTypesSupported:               []string{"authorization_code", "client_credentials", "refresh_token", "password"},
+		CodeChallengeMethodsSupported:     []string{"S256", "plain"},
 	}
 
 	h.jsonResponse(w, http.StatusOK, config)

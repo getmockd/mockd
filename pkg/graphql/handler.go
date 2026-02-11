@@ -238,7 +238,8 @@ func (h *Handler) handleBatchRequest(w http.ResponseWriter, r *http.Request, bat
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(responses); err != nil {
-		h.writeError(w, http.StatusInternalServerError, "failed to encode batch response")
+		// Headers already sent via WriteHeader above — cannot call writeError
+		// without double-writing headers. Return; the client gets an empty 200 body.
 		return
 	}
 

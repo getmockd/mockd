@@ -20,9 +20,10 @@ func (e *Endpoint) HandleUpgrade(w http.ResponseWriter, r *http.Request) error {
 		return ErrEndpointDisabled
 	}
 
-	// Check if we can accept new connections
+	// Check max connections BEFORE accepting the WebSocket upgrade.
+	// This returns HTTP 503 at the HTTP level, before the protocol switch.
 	if !e.CanAccept() {
-		http.Error(w, "maximum connections reached", http.StatusServiceUnavailable)
+		http.Error(w, "max connections reached", http.StatusServiceUnavailable)
 		return ErrMaxConnectionsReached
 	}
 
@@ -70,8 +71,11 @@ func (e *Endpoint) HandleUpgrade(w http.ResponseWriter, r *http.Request) error {
 	// Create our connection wrapper
 	conn := NewConnection(wsConn, e, negotiatedProtocol, r)
 
-	// Add to endpoint
-	e.AddConnection(conn)
+	// Atomically check max connections and add — avoids TOCTOU race
+	// between CanAccept() and AddConnection().
+	if !e.TryAccept(conn) {
+		return ErrMaxConnectionsReached
+	}
 
 	// Add to manager if available
 	if e.manager != nil {

@@ -226,6 +226,7 @@ func (e *Endpoint) SetTemplateEngine(engine *template.Engine) {
 }
 
 // CanAccept returns whether a new connection can be accepted.
+// Deprecated: Use TryAccept for atomic check-and-add to avoid TOCTOU races.
 func (e *Endpoint) CanAccept() bool {
 	if e.maxConnections <= 0 {
 		return true
@@ -233,6 +234,20 @@ func (e *Endpoint) CanAccept() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return len(e.connections) < e.maxConnections
+}
+
+// TryAccept atomically checks whether a new connection can be accepted and,
+// if so, adds it to the endpoint. Returns true if the connection was added.
+// This avoids the TOCTOU race between CanAccept() and AddConnection().
+func (e *Endpoint) TryAccept(conn *Connection) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.maxConnections > 0 && len(e.connections) >= e.maxConnections {
+		return false
+	}
+	e.connections[conn.ID()] = conn
+	return true
 }
 
 // ConnectionCount returns the number of active connections.

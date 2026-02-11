@@ -597,13 +597,13 @@ func TestSOAP_US5_XPathNoMatch(t *testing.T) {
 
 	bundle := setupSOAPServer(t, cfg)
 
-	// Request with non-matching userId - should return unknown operation fault
+	// Request with non-matching userId - should return fault indicating no matching condition
 	resp, body := soapRequest(t, bundle.BaseURL, "", //nolint:bodyclose // helper closes body
 		`<GetUser><userId>456</userId></GetUser>`)
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	assert.Contains(t, string(body), "Fault")
-	assert.Contains(t, string(body), "Unknown operation")
+	assert.Contains(t, string(body), "No matching condition for operation")
 }
 
 func TestSOAP_US5_MultipleXPathConditions(t *testing.T) {

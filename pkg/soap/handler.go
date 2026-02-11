@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"regexp"
@@ -168,11 +169,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find matching operation config
-	opConfig := h.matchOperation(opName, doc)
+	opConfig, nameFound := h.matchOperation(opName, doc)
 	if opConfig == nil {
+		msg := "Unknown operation: " + opName
+		if nameFound {
+			msg = "No matching condition for operation: " + opName
+		}
 		fault := &SOAPFault{
 			Code:    "soap:Client",
-			Message: "Unknown operation: " + opName,
+			Message: msg,
 		}
 		h.writeFaultWithRecording(w, fault, version, startTime, r.URL.Path, opName, soapAction, string(body), requestHeaders, r)
 		return
@@ -350,16 +355,18 @@ func (h *Handler) extractOperation(doc *etree.Document, soapAction string) (stri
 }
 
 // matchOperation finds the matching operation config.
-func (h *Handler) matchOperation(opName string, doc *etree.Document) *OperationConfig {
+// Returns the matched operation config and whether the operation name was found
+// (nameFound is true when the operation name matched but XPath conditions did not).
+func (h *Handler) matchOperation(opName string, doc *etree.Document) (config *OperationConfig, nameFound bool) {
 	// Direct match
 	if op, ok := h.config.Operations[opName]; ok {
 		// Check XPath match conditions
 		if op.Match != nil && len(op.Match.XPath) > 0 {
 			if !MatchXPath(doc, op.Match.XPath) {
-				return nil
+				return nil, true
 			}
 		}
-		return &op
+		return &op, true
 	}
 
 	// Try without namespace prefix
@@ -368,14 +375,14 @@ func (h *Handler) matchOperation(opName string, doc *etree.Document) *OperationC
 		if op, ok := h.config.Operations[shortName]; ok {
 			if op.Match != nil && len(op.Match.XPath) > 0 {
 				if !MatchXPath(doc, op.Match.XPath) {
-					return nil
+					return nil, true
 				}
 			}
-			return &op
+			return &op, true
 		}
 	}
 
-	return nil
+	return nil, false
 }
 
 // buildResponse builds the SOAP response XML from a template.
@@ -720,9 +727,16 @@ func (h *Handler) recordRequest(data SOAPRecordingData) {
 		return
 	}
 
-	// Store recording asynchronously
+	// Store recording asynchronously with panic recovery and error logging.
 	go func() {
-		_ = store.Add(data)
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic in SOAP recording store", "recover", r)
+			}
+		}()
+		if err := store.Add(data); err != nil {
+			slog.Warn("failed to store SOAP recording", "error", err)
+		}
 	}()
 }
 
