@@ -168,17 +168,26 @@ func (s *Server) Start(ctx context.Context) error {
 // Stop stops the gRPC server gracefully.
 func (s *Server) Stop(ctx context.Context, timeout time.Duration) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if !s.running {
+		s.mu.Unlock()
 		return nil
 	}
 
-	if s.grpcServer != nil {
+	grpcSrv := s.grpcServer
+
+	// Mark as not running before releasing the lock so new callers
+	// see the state transition immediately. Health/Stats/IsRunning
+	// will no longer block while we wait for graceful shutdown.
+	s.running = false
+	s.startedAt = time.Time{}
+	s.mu.Unlock()
+
+	if grpcSrv != nil {
 		// Create a channel to signal graceful stop completion
 		done := make(chan struct{})
 		go func() {
-			s.grpcServer.GracefulStop()
+			grpcSrv.GracefulStop()
 			close(done)
 		}()
 
@@ -188,15 +197,13 @@ func (s *Server) Stop(ctx context.Context, timeout time.Duration) error {
 			// Graceful stop completed
 		case <-time.After(timeout):
 			// Timeout - force stop
-			s.grpcServer.Stop()
+			grpcSrv.Stop()
 		case <-ctx.Done():
 			// Context cancelled - force stop
-			s.grpcServer.Stop()
+			grpcSrv.Stop()
 		}
 	}
 
-	s.running = false
-	s.startedAt = time.Time{}
 	return nil
 }
 
@@ -774,8 +781,14 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 		return err
 	}
 
-	// Apply initial delay
-	s.applyDelay(methodCfg.Delay)
+	// Apply initial delay (context-aware for client cancellation)
+	ctx := stream.Context()
+	s.applyDelayWithContext(ctx, methodCfg.Delay)
+	if ctx.Err() != nil {
+		grpcErr := status.Error(codes.Canceled, "client cancelled during configured delay")
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, nil, grpcErr)
+		return grpcErr
+	}
 
 	// Return error if configured
 	if methodCfg.Error != nil {
@@ -817,9 +830,14 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 		// Collect for logging
 		collectedResponses = append(collectedResponses, dynamicMessageToMap(resp))
 
-		// Apply stream delay between messages (not after last)
+		// Apply stream delay between messages (not after last), context-aware
 		if i < len(responses)-1 {
-			s.applyDelay(methodCfg.StreamDelay)
+			s.applyDelayWithContext(ctx, methodCfg.StreamDelay)
+			if ctx.Err() != nil {
+				grpcErr := status.Error(codes.Canceled, "client cancelled during stream delay")
+				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, collectedResponses, grpcErr)
+				return grpcErr
+			}
 		}
 	}
 
@@ -874,8 +892,14 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 		return err
 	}
 
-	// Apply delay
-	s.applyDelay(methodCfg.Delay)
+	// Apply delay (context-aware for client cancellation)
+	ctx := stream.Context()
+	s.applyDelayWithContext(ctx, methodCfg.Delay)
+	if ctx.Err() != nil {
+		grpcErr := status.Error(codes.Canceled, "client cancelled during configured delay")
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
+		return grpcErr
+	}
 
 	// Return error if configured
 	if methodCfg.Error != nil {
@@ -939,8 +963,14 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 		return err
 	}
 
-	// Apply initial delay
-	s.applyDelay(methodCfg.Delay)
+	// Apply initial delay (context-aware for client cancellation)
+	ctx := stream.Context()
+	s.applyDelayWithContext(ctx, methodCfg.Delay)
+	if ctx.Err() != nil {
+		grpcErr := status.Error(codes.Canceled, "client cancelled during configured delay")
+		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, nil, nil, grpcErr)
+		return grpcErr
+	}
 
 	// Return error if configured
 	if methodCfg.Error != nil {
@@ -1005,7 +1035,12 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 			allResponses = append(allResponses, dynamicMessageToMap(resp))
 
 			respIndex++
-			s.applyDelay(methodCfg.StreamDelay)
+			s.applyDelayWithContext(ctx, methodCfg.StreamDelay)
+			if ctx.Err() != nil {
+				grpcErr := status.Error(codes.Canceled, "client cancelled during stream delay")
+				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
+				return grpcErr
+			}
 		}
 	}
 }

@@ -403,13 +403,17 @@ func (h *MessageHook) OnUnsubscribed(cl *mqtt.Client, pk packets.Packet) {
 
 	// Remove unsubscribed topics
 	currentSubs := h.broker.clientSubscriptions[clientID]
-	var newSubs []string
 
+	// Build a set of filters to remove for O(n+m) instead of O(n*m)
+	removeSet := make(map[string]struct{}, len(pk.Filters))
 	for _, filter := range pk.Filters {
-		for _, sub := range currentSubs {
-			if sub != filter.Filter {
-				newSubs = append(newSubs, sub)
-			}
+		removeSet[filter.Filter] = struct{}{}
+	}
+
+	var newSubs []string
+	for _, sub := range currentSubs {
+		if _, remove := removeSet[sub]; !remove {
+			newSubs = append(newSubs, sub)
 		}
 	}
 

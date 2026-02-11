@@ -147,7 +147,11 @@ func (r *fileSystemResolver) FindFileByPath(path string) (protocompile.SearchRes
 	for _, importPath := range r.importPaths {
 		fullPath := filepath.Join(importPath, path)
 		if _, err := os.Stat(fullPath); err == nil {
-			return protocompile.SearchResult{Source: readFile(fullPath)}, nil
+			rc, err := readFile(fullPath)
+			if err != nil {
+				return protocompile.SearchResult{}, err
+			}
+			return protocompile.SearchResult{Source: rc}, nil
 		}
 	}
 
@@ -156,24 +160,32 @@ func (r *fileSystemResolver) FindFileByPath(path string) (protocompile.SearchRes
 		dir := filepath.Dir(basePath)
 		fullPath := filepath.Join(dir, path)
 		if _, err := os.Stat(fullPath); err == nil {
-			return protocompile.SearchResult{Source: readFile(fullPath)}, nil
+			rc, err := readFile(fullPath)
+			if err != nil {
+				return protocompile.SearchResult{}, err
+			}
+			return protocompile.SearchResult{Source: rc}, nil
 		}
 	}
 
 	// Try the path directly
 	if _, err := os.Stat(path); err == nil {
-		return protocompile.SearchResult{Source: readFile(path)}, nil
+		rc, err := readFile(path)
+		if err != nil {
+			return protocompile.SearchResult{}, err
+		}
+		return protocompile.SearchResult{Source: rc}, nil
 	}
 
 	return protocompile.SearchResult{}, fs.ErrNotExist
 }
 
-func readFile(path string) io.ReadCloser {
+func readFile(path string) (io.ReadCloser, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return f
+	return f, nil
 }
 
 // GetService returns a service descriptor by its fully qualified name.

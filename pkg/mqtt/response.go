@@ -133,8 +133,9 @@ func (h *ResponseHandler) executeResponse(resp *MockResponse, triggerTopic strin
 	}
 	defer h.broker.unmarkMockResponseTopic(responseTopic)
 
-	// Publish the response and log any errors
-	if err := h.broker.Publish(responseTopic, []byte(responsePayload), 0, false); err != nil {
+	// Publish the response using the topic's configured QoS
+	qos := h.broker.topicQoS(responseTopic)
+	if err := h.broker.Publish(responseTopic, []byte(responsePayload), qos, false); err != nil {
 		h.broker.log.Error("failed to publish mock response",
 			"topic", responseTopic,
 			"responseID", resp.ID,

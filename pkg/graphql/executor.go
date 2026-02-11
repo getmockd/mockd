@@ -382,6 +382,19 @@ func (e *Executor) buildDirectivesIntrospection(doc *ast.QueryDocument, selectio
 	return result
 }
 
+// getDeprecation reads the @deprecated directive from a DirectiveList and returns
+// whether the element is deprecated and the optional reason string.
+func getDeprecation(directives ast.DirectiveList) (bool, interface{}) {
+	dep := directives.ForName("deprecated")
+	if dep == nil {
+		return false, nil
+	}
+	if arg := dep.Arguments.ForName("reason"); arg != nil && arg.Value != nil && arg.Value.Raw != "" {
+		return true, arg.Value.Raw
+	}
+	return true, "No longer supported"
+}
+
 // getTypeKind returns the GraphQL type kind string.
 func (e *Executor) getTypeKind(def *ast.Definition) string {
 	switch def.Kind {
@@ -432,9 +445,11 @@ func (e *Executor) buildFieldsIntrospection(doc *ast.QueryDocument, fields ast.F
 			case "type":
 				fieldInfo[alias] = e.buildTypeRefIntrospection(doc, field.Type, f.SelectionSet)
 			case "isDeprecated":
-				fieldInfo[alias] = false
+				isDeprecated, _ := getDeprecation(field.Directives)
+				fieldInfo[alias] = isDeprecated
 			case "deprecationReason":
-				fieldInfo[alias] = nil
+				_, reason := getDeprecation(field.Directives)
+				fieldInfo[alias] = reason
 			}
 		}
 		result = append(result, fieldInfo)
@@ -476,9 +491,11 @@ func (e *Executor) buildArgsIntrospection(doc *ast.QueryDocument, args ast.Argum
 					argInfo[alias] = nil
 				}
 			case "isDeprecated":
-				argInfo[alias] = false
+				isDeprecated, _ := getDeprecation(arg.Directives)
+				argInfo[alias] = isDeprecated
 			case "deprecationReason":
-				argInfo[alias] = nil
+				_, reason := getDeprecation(arg.Directives)
+				argInfo[alias] = reason
 			}
 		}
 		result = append(result, argInfo)
@@ -576,9 +593,11 @@ func (e *Executor) buildInputFieldsIntrospection(doc *ast.QueryDocument, fields 
 					fieldInfo[alias] = nil
 				}
 			case "isDeprecated":
-				fieldInfo[alias] = false
+				isDeprecated, _ := getDeprecation(field.Directives)
+				fieldInfo[alias] = isDeprecated
 			case "deprecationReason":
-				fieldInfo[alias] = nil
+				_, reason := getDeprecation(field.Directives)
+				fieldInfo[alias] = reason
 			}
 		}
 		result = append(result, fieldInfo)
@@ -609,9 +628,11 @@ func (e *Executor) buildEnumValuesIntrospection(doc *ast.QueryDocument, values a
 			case "description":
 				valInfo[alias] = val.Description
 			case "isDeprecated":
-				valInfo[alias] = false
+				isDeprecated, _ := getDeprecation(val.Directives)
+				valInfo[alias] = isDeprecated
 			case "deprecationReason":
-				valInfo[alias] = nil
+				_, reason := getDeprecation(val.Directives)
+				valInfo[alias] = reason
 			}
 		}
 		result = append(result, valInfo)

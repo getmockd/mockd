@@ -107,6 +107,21 @@ func (b *Broker) isMockResponseActive(topic string) bool {
 	return exists
 }
 
+// topicQoS returns the configured QoS for the first topic config that matches
+// the given topic name. Returns 0 if no matching config is found.
+func (b *Broker) topicQoS(topic string) byte {
+	b.mu.RLock()
+	topics := b.config.Topics
+	b.mu.RUnlock()
+
+	for _, tc := range topics {
+		if matchTopic(tc.Topic, topic) {
+			return byte(tc.QoS)
+		}
+	}
+	return 0
+}
+
 // NewBroker creates a new MQTT broker
 func NewBroker(config *MQTTConfig) (*Broker, error) {
 	if config == nil {

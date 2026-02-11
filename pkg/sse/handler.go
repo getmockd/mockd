@@ -689,8 +689,14 @@ func (h *SSEHandler) findResumePosition(stream *SSEStream, events []SSEEventDef)
 	if buffer != nil {
 		bufferedEvents := buffer.GetEventsAfterID(lastID)
 		if len(bufferedEvents) > 0 {
-			// Found in buffer - prepend to events
-			return 0 // Start from beginning, we'll handle buffered events separately
+			// Found in buffer - find the matching position in the events array
+			for i, e := range events {
+				if e.ID == lastID {
+					return i + 1 // Resume from next event after the matched ID
+				}
+			}
+			// ID was in buffer but not in current events array; start from beginning
+			return 0
 		}
 	}
 
