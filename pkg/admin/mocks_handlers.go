@@ -892,17 +892,20 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		if _, err := engine.UpdateMock(r.Context(), id, &m); err != nil {
 			a.logger().Error("failed to update mock in engine", "id", m.ID, "error", err)
 			errMsg := err.Error()
+			// Rollback the store operation - restore the existing mock
+			if rollbackErr := mockStore.Update(r.Context(), existing); rollbackErr != nil {
+				a.logger().Warn("failed to rollback mock update after engine error", "id", m.ID, "error", rollbackErr)
+			}
 			// Check if this is a port-related error
 			if isPortError(errMsg) {
-				// Rollback the store operation - restore the existing mock
-				if rollbackErr := mockStore.Update(r.Context(), existing); rollbackErr != nil {
-					a.logger().Warn("failed to rollback mock update after engine error", "id", m.ID, "error", rollbackErr)
-				}
 				writeError(w, http.StatusConflict, "port_unavailable",
 					"Failed to update mock: the port may be in use by another process")
 				return
 			}
-			// For other errors, log but don't fail (already logged above)
+			// For other engine errors, also fail — store and engine must stay in sync
+			writeError(w, http.StatusInternalServerError, "engine_error",
+				"Failed to update mock in engine: "+errMsg)
+			return
 		}
 	}
 
@@ -943,6 +946,9 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Save pre-patch state for rollback
+	prePatch := *existing
+
 	// Apply patch to existing mock
 	applyMockPatch(existing, patch)
 
@@ -956,7 +962,14 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	// Notify engine so it can update the running mock
 	if engine := a.localEngine.Load(); engine != nil {
 		if _, err := engine.UpdateMock(r.Context(), id, existing); err != nil {
-			a.logger().Warn("failed to notify engine of mock patch", "id", existing.ID, "error", err)
+			a.logger().Error("failed to apply mock patch in engine", "id", existing.ID, "error", err)
+			// Rollback the store to pre-patch state
+			if rollbackErr := mockStore.Update(r.Context(), &prePatch); rollbackErr != nil {
+				a.logger().Warn("failed to rollback mock patch after engine error", "id", id, "error", rollbackErr)
+			}
+			writeError(w, http.StatusInternalServerError, "engine_error",
+				"Failed to apply mock patch in engine: "+err.Error())
+			return
 		}
 	}
 
@@ -978,6 +991,18 @@ func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get the mock first so we can rollback if engine delete fails
+	existing, err := mockStore.Get(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "mock not found")
+			return
+		}
+		a.logger().Error("failed to get mock for delete", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "get_error", ErrMsgInternalError)
+		return
+	}
+
 	// Delete from store (source of truth)
 	if err := mockStore.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -992,7 +1017,14 @@ func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	// Notify engine so it can stop serving the mock
 	if engine := a.localEngine.Load(); engine != nil {
 		if err := engine.DeleteMock(r.Context(), id); err != nil {
-			a.logger().Warn("failed to notify engine of mock deletion", "id", id, "error", err)
+			a.logger().Error("failed to delete mock from engine", "id", id, "error", err)
+			// Rollback: re-create the mock in the store
+			if rollbackErr := mockStore.Create(r.Context(), existing); rollbackErr != nil {
+				a.logger().Warn("failed to rollback mock deletion after engine error", "id", id, "error", rollbackErr)
+			}
+			writeError(w, http.StatusInternalServerError, "engine_error",
+				"Failed to delete mock from engine: "+err.Error())
+			return
 		}
 	}
 
@@ -1076,14 +1108,21 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 		// Persist the toggle to store so it survives restarts
 		if mockStore := a.getMockStore(); mockStore != nil {
-			if m, err := mockStore.Get(r.Context(), id); err == nil {
+			if m, storeErr := mockStore.Get(r.Context(), id); storeErr == nil {
 				m.Enabled = &newEnabled
 				m.UpdatedAt = time.Now()
-				if err := mockStore.Update(r.Context(), m); err != nil {
-					a.logger().Warn("failed to persist mock toggle to store", "id", id, "error", err)
+				if storeErr := mockStore.Update(r.Context(), m); storeErr != nil {
+					a.logger().Error("failed to persist mock toggle to store — engine and store may be out of sync", "id", id, "error", storeErr)
+					// Revert the engine toggle so state stays consistent
+					if _, revertErr := engine.ToggleMock(r.Context(), id, currentEnabled); revertErr != nil {
+						a.logger().Warn("failed to revert engine toggle after store error", "id", id, "error", revertErr)
+					}
+					writeError(w, http.StatusInternalServerError, "persist_error",
+						"Toggle applied to engine but failed to persist — reverted")
+					return
 				}
 			} else {
-				a.logger().Warn("failed to get mock from store for toggle persist", "id", id, "error", err)
+				a.logger().Warn("failed to get mock from store for toggle persist", "id", id, "error", storeErr)
 			}
 		}
 

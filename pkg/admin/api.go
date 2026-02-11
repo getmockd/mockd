@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"sync"
@@ -437,8 +438,15 @@ func (a *API) Start() error {
 	go a.startTokenCleanup(a.ctx)
 
 	a.logger().Info("starting admin API", "port", a.port)
+
+	// Use synchronous Listen to catch port-in-use errors immediately
+	// rather than losing them inside a goroutine.
+	ln, err := net.Listen("tcp", a.httpServer.Addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on admin port %d: %w", a.port, err)
+	}
 	go func() {
-		if err := a.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := a.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			a.logger().Error("admin API error", "error", err)
 		}
 	}()

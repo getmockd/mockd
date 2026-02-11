@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -80,8 +81,12 @@ type EngineController interface {
 }
 
 // NewServer creates a new Engine Control API server.
-// The server binds to 127.0.0.1 by default to prevent remote access,
-// since this is an internal API with no authentication.
+//
+// The server binds to 127.0.0.1 ONLY to prevent remote access. This is
+// an internal API with NO authentication, NO authorization, and NO rate
+// limiting. It is designed to be called exclusively by the Admin API via
+// [engineclient.Client]. Do not expose this server on a public interface
+// or call it directly from user-facing code.
 func NewServer(engine EngineController, port int) *Server {
 	s := &Server{
 		engine: engine,
@@ -110,10 +115,16 @@ func (s *Server) SetLogger(log *slog.Logger) {
 }
 
 // Start starts the control API server.
+// Uses synchronous Listen to catch port-in-use errors immediately.
 func (s *Server) Start() error {
 	s.log.Info("starting engine control API", "port", s.port)
+
+	ln, err := net.Listen("tcp", s.httpServer.Addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on engine control port %d: %w", s.port, err)
+	}
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := s.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.log.Error("control API server error", "error", err)
 		}
 	}()

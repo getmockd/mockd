@@ -306,9 +306,14 @@ func (s *Server) Start() error {
 			WriteTimeout: time.Duration(s.cfg.WriteTimeout) * time.Second,
 		}
 
+		// Use synchronous Listen to catch port-in-use errors immediately
+		httpLn, err := net.Listen("tcp", s.httpServer.Addr)
+		if err != nil {
+			return fmt.Errorf("failed to listen on HTTP port %d: %w", s.cfg.HTTPPort, err)
+		}
 		s.log.Info("starting HTTP server", "port", s.cfg.HTTPPort)
 		go func() {
-			if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := s.httpServer.Serve(httpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				s.log.Error("HTTP server error", "error", err)
 			}
 		}()
@@ -330,8 +335,14 @@ func (s *Server) Start() error {
 			WriteTimeout: time.Duration(s.cfg.WriteTimeout) * time.Second,
 		}
 
+		// Use synchronous Listen to catch port-in-use errors immediately
+		httpsLn, err := net.Listen("tcp", s.httpsServer.Addr)
+		if err != nil {
+			return fmt.Errorf("failed to listen on HTTPS port %d: %w", s.cfg.HTTPSPort, err)
+		}
+		tlsLn := tls.NewListener(httpsLn, s.tlsConfig)
 		go func() {
-			if err := s.httpsServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := s.httpsServer.Serve(tlsLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				s.log.Error("HTTPS server error", "error", err)
 			}
 		}()
