@@ -1010,6 +1010,18 @@ func (a *API) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Request
 
 	mockType := mock.Type(r.URL.Query().Get("type"))
 
+	// List mocks before deleting so we can notify the engine for each
+	var filter *store.MockFilter
+	if mockType != "" {
+		filter = &store.MockFilter{Type: mockType}
+	}
+	mocksToDelete, listErr := mockStore.List(r.Context(), filter)
+	if listErr != nil {
+		a.logger().Error("failed to list mocks before delete-all", "type", mockType, "error", listErr)
+		writeError(w, http.StatusInternalServerError, "delete_error", ErrMsgInternalError)
+		return
+	}
+
 	var err error
 	if mockType != "" {
 		err = mockStore.DeleteByType(r.Context(), mockType)
@@ -1021,6 +1033,15 @@ func (a *API) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Request
 		a.logger().Error("failed to delete mocks from store", "type", mockType, "error", err)
 		writeError(w, http.StatusInternalServerError, "delete_error", ErrMsgInternalError)
 		return
+	}
+
+	// Notify engine so it can stop serving the deleted mocks
+	if engine := a.localEngine.Load(); engine != nil {
+		for _, m := range mocksToDelete {
+			if err := engine.DeleteMock(r.Context(), m.ID); err != nil {
+				a.logger().Warn("failed to notify engine of mock deletion (delete-all)", "id", m.ID, "error", err)
+			}
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -1052,6 +1073,20 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "toggle_error", ErrMsgInternalError)
 			return
 		}
+
+		// Persist the toggle to store so it survives restarts
+		if mockStore := a.getMockStore(); mockStore != nil {
+			if m, err := mockStore.Get(r.Context(), id); err == nil {
+				m.Enabled = &newEnabled
+				m.UpdatedAt = time.Now()
+				if err := mockStore.Update(r.Context(), m); err != nil {
+					a.logger().Warn("failed to persist mock toggle to store", "id", id, "error", err)
+				}
+			} else {
+				a.logger().Warn("failed to get mock from store for toggle persist", "id", id, "error", err)
+			}
+		}
+
 		writeJSON(w, http.StatusOK, updated)
 		return
 	}
@@ -1267,19 +1302,43 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Notify the engine for each mock (Admin = control plane, Engine = data plane)
-	// Track any engine errors for reporting
+	// Track any engine errors for reporting and roll back failed mocks from store
 	var engineErrors []string
+	var failedIDs []string
 	if engine := a.localEngine.Load(); engine != nil {
 		for _, m := range mocks {
 			if _, err := engine.CreateMock(r.Context(), m); err != nil {
 				a.logger().Warn("failed to notify engine of bulk mock create", "id", m.ID, "error", err)
+				failedIDs = append(failedIDs, m.ID)
 				if isPortError(err.Error()) {
-					// Port error from engine - this shouldn't happen if our validation is correct
-					// but handle it gracefully
 					engineErrors = append(engineErrors, m.ID+": port may be in use by another process")
+				} else {
+					engineErrors = append(engineErrors, m.ID+": "+err.Error())
 				}
 			}
 		}
+
+		// Roll back mocks that failed to register with the engine
+		for _, failedID := range failedIDs {
+			if err := mockStore.Delete(r.Context(), failedID); err != nil {
+				a.logger().Warn("failed to roll back mock from store after engine error", "id", failedID, "error", err)
+			}
+		}
+	}
+
+	// Remove failed mocks from the response list
+	if len(failedIDs) > 0 {
+		failedSet := make(map[string]bool, len(failedIDs))
+		for _, id := range failedIDs {
+			failedSet[id] = true
+		}
+		successMocks := make([]*mock.Mock, 0, len(mocks)-len(failedIDs))
+		for _, m := range mocks {
+			if !failedSet[m.ID] {
+				successMocks = append(successMocks, m)
+			}
+		}
+		mocks = successMocks
 	}
 
 	response := map[string]interface{}{
@@ -1288,6 +1347,9 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 	}
 	if len(engineErrors) > 0 {
 		response["warnings"] = engineErrors
+	}
+	if len(failedIDs) > 0 {
+		response["failedIds"] = failedIDs
 	}
 
 	writeJSON(w, http.StatusCreated, response)
