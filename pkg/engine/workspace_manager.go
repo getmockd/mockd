@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -343,6 +344,8 @@ func (s *WorkspaceServer) loadMocks(ctx context.Context) error {
 }
 
 // Start starts the HTTP server for this workspace.
+// It binds the listening socket synchronously so that when Start returns
+// successfully the port is confirmed open and the server is truly running.
 func (s *WorkspaceServer) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -361,9 +364,18 @@ func (s *WorkspaceServer) Start() error {
 		WriteTimeout: 30 * time.Second,
 	}
 
-	// Start in background
+	// Bind the listener synchronously so we know the port is available
+	// before reporting Running status.
+	ln, err := net.Listen("tcp", s.httpServer.Addr)
+	if err != nil {
+		s.status = WorkspaceServerStatusError
+		s.statusMsg = err.Error()
+		return fmt.Errorf("failed to listen on port %d: %w", s.HTTPPort, err)
+	}
+
+	// Serve in background using the already-bound listener
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := s.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.mu.Lock()
 			s.status = WorkspaceServerStatusError
 			s.statusMsg = err.Error()

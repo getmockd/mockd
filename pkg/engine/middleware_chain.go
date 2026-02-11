@@ -4,6 +4,7 @@ package engine
 import (
 	"fmt"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/getmockd/mockd/pkg/audit"
 	"github.com/getmockd/mockd/pkg/chaos"
@@ -15,7 +16,7 @@ import (
 // MiddlewareChain manages the HTTP middleware stack for the mock server.
 type MiddlewareChain struct {
 	cfg           *config.ServerConfiguration
-	chaosInjector *chaos.Injector
+	chaosInjector atomic.Pointer[chaos.Injector]
 	validator     *validation.OpenAPIValidator
 	auditLogger   audit.AuditLogger
 	tracer        *tracing.Tracer
@@ -57,7 +58,7 @@ func NewMiddlewareChain(cfg *config.ServerConfiguration, opts ...MiddlewareChain
 		if err != nil {
 			return nil, fmt.Errorf("failed to create chaos injector: %w", err)
 		}
-		mc.chaosInjector = injector
+		mc.chaosInjector.Store(injector)
 	}
 
 	// Initialize audit logger if configured
@@ -113,17 +114,19 @@ func (mc *MiddlewareChain) SetTracer(t *tracing.Tracer) {
 
 // ChaosInjector returns the chaos injector.
 func (mc *MiddlewareChain) ChaosInjector() *chaos.Injector {
-	return mc.chaosInjector
+	return mc.chaosInjector.Load()
 }
 
 // SetChaosInjector sets the chaos injector for dynamic chaos injection.
+// This is safe to call concurrently with ServeHTTP.
 func (mc *MiddlewareChain) SetChaosInjector(injector *chaos.Injector) {
-	mc.chaosInjector = injector
+	mc.chaosInjector.Store(injector)
 }
 
 // ChaosEnabled returns whether chaos injection is enabled.
 func (mc *MiddlewareChain) ChaosEnabled() bool {
-	return mc.chaosInjector != nil && mc.chaosInjector.IsEnabled()
+	ci := mc.chaosInjector.Load()
+	return ci != nil && ci.IsEnabled()
 }
 
 // Validator returns the OpenAPI validator.
@@ -156,8 +159,9 @@ type dynamicChaosHandler struct {
 }
 
 func (h *dynamicChaosHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h.chain.chaosInjector != nil && h.chain.chaosInjector.IsEnabled() {
-		chaosMiddleware := chaos.NewMiddleware(h.handler, h.chain.chaosInjector)
+	ci := h.chain.chaosInjector.Load()
+	if ci != nil && ci.IsEnabled() {
+		chaosMiddleware := chaos.NewMiddleware(h.handler, ci)
 		chaosMiddleware.ServeHTTP(w, r)
 		return
 	}

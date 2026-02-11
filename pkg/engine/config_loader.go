@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/graphql"
@@ -120,7 +119,7 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 		if m != nil {
 			// Check for duplicate before attempting to add
 			if !replace && store.Exists(m.ID) {
-				fmt.Fprintf(os.Stderr, "Warning: skipping mock with duplicate ID: %s\n", m.ID)
+				cl.log.Warn("skipping mock with duplicate ID", "id", m.ID)
 				continue
 			}
 			if err := cl.server.addMock(m); err != nil {

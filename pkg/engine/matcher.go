@@ -18,8 +18,8 @@ type MatchResult struct {
 
 // SelectBestMatch finds the best matching mock for a request.
 // Returns nil if no mock matches.
-func SelectBestMatch(mocks []*mock.Mock, r *http.Request) *mock.Mock {
-	result := SelectBestMatchWithCaptures(mocks, r)
+func SelectBestMatch(mocks []*mock.Mock, r *http.Request, preReadBody ...[]byte) *mock.Mock {
+	result := SelectBestMatchWithCaptures(mocks, r, preReadBody...)
 	if result == nil {
 		return nil
 	}
@@ -28,9 +28,17 @@ func SelectBestMatch(mocks []*mock.Mock, r *http.Request) *mock.Mock {
 
 // SelectBestMatchWithCaptures finds the best matching mock for a request.
 // Returns nil if no mock matches. Also returns any regex captures from PathPattern.
-func SelectBestMatchWithCaptures(mocks []*mock.Mock, r *http.Request) *MatchResult {
+//
+// If preReadBody is non-nil, it is used directly for body matching instead of
+// reading r.Body. This avoids a double-read when the caller (e.g. ServeHTTP)
+// has already consumed the body for logging. When preReadBody is nil the
+// function falls back to reading r.Body (capped at 10 MB) and restores it
+// via BodyReader so downstream handlers can still read it.
+func SelectBestMatchWithCaptures(mocks []*mock.Mock, r *http.Request, preReadBody ...[]byte) *MatchResult {
 	var body []byte
-	if r.Body != nil {
+	if len(preReadBody) > 0 && preReadBody[0] != nil {
+		body = preReadBody[0]
+	} else if r.Body != nil {
 		var err error
 		const maxMatchBodySize = 10 << 20 // 10MB defense-in-depth
 		body, err = io.ReadAll(io.LimitReader(r.Body, maxMatchBodySize))

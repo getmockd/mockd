@@ -29,6 +29,13 @@ import (
 
 // findFreePort finds a free port starting from the given port.
 // It checks up to 100 ports from the starting port.
+//
+// NOTE: There is an inherent TOCTOU race here — the port is verified free by
+// opening and closing a listener, but another process could bind it before
+// the caller's ListenAndServe. Ideally this would return the net.Listener
+// directly, but that would require plumbing the listener through ControlAPI
+// and its internal server which is too invasive for the current architecture.
+// In practice the window is very small and the management port is local-only.
 func findFreePort(startPort int) int {
 	for port := startPort; port < startPort+100; port++ {
 		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -398,10 +405,7 @@ func (s *Server) Stop() error {
 
 	s.running = false
 
-	if len(errs) > 0 {
-		return errs[0]
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // addMock adds a new mock configuration to the server.

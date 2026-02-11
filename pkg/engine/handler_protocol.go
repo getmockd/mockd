@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -27,7 +28,8 @@ func (h *Handler) WebSocketManager() *websocket.ConnectionManager { return h.wsM
 func (h *Handler) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	endpoint := h.wsManager.GetEndpoint(r.URL.Path)
 	if endpoint == nil {
-		http.Error(w, `{"error": "websocket_endpoint_not_found", "path": "`+r.URL.Path+`"}`, http.StatusNotFound)
+		pathJSON, _ := json.Marshal(r.URL.Path)
+		http.Error(w, `{"error": "websocket_endpoint_not_found", "path": `+string(pathJSON)+`}`, http.StatusNotFound)
 		return
 	}
 	if err := endpoint.HandleUpgrade(w, r); err != nil {

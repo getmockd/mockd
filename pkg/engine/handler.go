@@ -186,14 +186,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 	// Get all mocks (already sorted by priority) - only HTTP type mocks
 	mocks := h.store.ListByType(mock.TypeHTTP)
 
-	// Find best matching mock using scoring algorithm (with regex captures)
-	matchResult := SelectBestMatchWithCaptures(mocks, r)
+	// Find best matching mock using scoring algorithm (with regex captures).
+	// Pass the already-read bodyBytes to avoid a second 10 MB body read inside
+	// the matcher — this halves peak memory per request for large bodies.
+	matchResult := SelectBestMatchWithCaptures(mocks, r, bodyBytes)
 
 	// HEAD fallback: if no match for HEAD, retry as GET
 	if matchResult == nil && r.Method == http.MethodHead {
 		getFallback := r.Clone(r.Context())
 		getFallback.Method = http.MethodGet
-		matchResult = SelectBestMatchWithCaptures(mocks, getFallback)
+		matchResult = SelectBestMatchWithCaptures(mocks, getFallback, bodyBytes)
 	}
 
 	if matchResult != nil {

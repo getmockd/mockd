@@ -34,6 +34,7 @@ type EngineClient struct {
 	// Polling
 	pollInterval time.Duration
 	stopCh       chan struct{}
+	stopOnce     sync.Once
 	wg           sync.WaitGroup
 	mu           sync.RWMutex
 }
@@ -148,9 +149,11 @@ func (c *EngineClient) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the engine client.
+// Stop stops the engine client. Safe to call multiple times.
 func (c *EngineClient) Stop() {
-	close(c.stopCh)
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
 	c.wg.Wait()
 }
 

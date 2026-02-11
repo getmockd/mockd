@@ -4,6 +4,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/getmockd/mockd/internal/storage"
 	"github.com/getmockd/mockd/pkg/mock"
@@ -17,6 +18,7 @@ import (
 type PersistentMockStore struct {
 	store store.MockStore
 	ctx   context.Context
+	mu    sync.Mutex // guards Set to prevent TOCTOU race on Get+Create/Update
 }
 
 // NewPersistentMockStore creates a new persistent mock store adapter.
@@ -40,8 +42,13 @@ func (p *PersistentMockStore) Get(id string) *mock.Mock {
 }
 
 // Set stores or updates a mock configuration.
+// The mutex ensures the Get+Create/Update sequence is atomic, preventing
+// concurrent Set calls for the same ID from both seeing "not found" and
+// double-creating.
 func (p *PersistentMockStore) Set(m *mock.Mock) error {
-	// Check if it exists
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	existing, err := p.store.Get(p.ctx, m.ID)
 	if errors.Is(err, store.ErrNotFound) || existing == nil {
 		return p.store.Create(p.ctx, m)
