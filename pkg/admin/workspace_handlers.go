@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	idgen "github.com/getmockd/mockd/internal/id"
 	"github.com/getmockd/mockd/pkg/store"
 )
 
@@ -136,7 +137,7 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	// Generate ID and timestamps
 	now := time.Now()
-	id := fmt.Sprintf("ws_%x", now.UnixNano())
+	id := "ws_" + idgen.Short()
 
 	// Create workspace model
 	ws := &store.Workspace{

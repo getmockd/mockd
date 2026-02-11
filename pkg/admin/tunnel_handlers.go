@@ -471,6 +471,11 @@ func (a *API) previewExposedMocks(r *http.Request, expose store.TunnelExposure) 
 		return []TunnelPreviewMock{}
 	}
 
+	// Guard against nil dataStore to prevent panic.
+	if a.dataStore == nil {
+		return []TunnelPreviewMock{}
+	}
+
 	// Get all mocks from the data store
 	allMocks, err := a.dataStore.Mocks().List(r.Context(), nil)
 	if err != nil {

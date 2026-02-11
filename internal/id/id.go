@@ -140,13 +140,34 @@ func isValidULIDChar(c byte) bool {
 
 // Alphanumeric generates a random alphanumeric string of the specified length.
 // Uses uppercase, lowercase letters and digits.
+// Uses rejection sampling to avoid modulo bias.
 func Alphanumeric(length int) string {
+	if length <= 0 {
+		return ""
+	}
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const csLen = len(charset) // 62
+	// Largest multiple of 62 that fits in a byte: 248 (62*4).
+	// Reject bytes >= 248 to eliminate modulo bias.
+	const maxValid byte = byte(256 - (256 % csLen)) // 248
+
 	b := make([]byte, length)
-	randBytes := make([]byte, length)
-	_, _ = rand.Read(randBytes)
-	for i := range b {
-		b[i] = charset[int(randBytes[i])%len(charset)]
+	// Read extra bytes to reduce the chance of needing a second read.
+	buf := make([]byte, length+length/2+16)
+	_, _ = rand.Read(buf)
+	pos := 0
+	for i := 0; i < length; {
+		if pos >= len(buf) {
+			// Exhausted buffer, refill.
+			_, _ = rand.Read(buf)
+			pos = 0
+		}
+		c := buf[pos]
+		pos++
+		if c < maxValid {
+			b[i] = charset[int(c)%csLen]
+			i++
+		}
 	}
 	return string(b)
 }

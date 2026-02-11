@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/getmockd/mockd/internal/id"
 	"github.com/getmockd/mockd/pkg/mock"
 )
 
@@ -124,5 +125,5 @@ func generateIDForType(t mock.Type) string {
 	case mock.TypeOAuth:
 		prefix = "oauth"
 	}
-	return fmt.Sprintf("%s_%x", prefix, time.Now().UnixNano())
+	return prefix + "_" + id.Short()
 }

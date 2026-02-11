@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/logging"
@@ -1787,9 +1788,12 @@ func streamTypeToString(st streamType) string {
 	return string(st)
 }
 
+// grpcLogCounter is an atomic counter for generating unique gRPC log IDs.
+var grpcLogCounter atomic.Uint64
+
 // generateLogID generates a unique ID for request log entries.
 func generateLogID() string {
-	return fmt.Sprintf("grpc-%d", time.Now().UnixNano())
+	return fmt.Sprintf("grpc-%d-%d", time.Now().UnixNano(), grpcLogCounter.Add(1))
 }
 
 // logGRPCCall logs a gRPC call with all available information and records metrics.

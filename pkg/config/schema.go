@@ -475,12 +475,12 @@ func ExpandEnvVars(input string) string {
 			defaultVal = submatch[2]
 		}
 
-		// Get environment variable
-		if val := os.Getenv(varName); val != "" {
+		// Get environment variable; distinguish unset from empty.
+		if val, ok := os.LookupEnv(varName); ok {
 			return val
 		}
 
-		// Return default if specified
+		// Variable is unset — return default if specified
 		return defaultVal
 	})
 }
