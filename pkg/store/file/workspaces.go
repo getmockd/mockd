@@ -13,22 +13,23 @@ type workspaceStore struct {
 }
 
 func (s *workspaceStore) List(ctx context.Context) ([]*store.Workspace, error) {
+	s.ensureDefaultWorkspace()
+
 	s.fs.mu.RLock()
 	defer s.fs.mu.RUnlock()
 
-	// Always include the default local workspace
-	workspaces := s.ensureDefaultWorkspace()
-	result := make([]*store.Workspace, len(workspaces))
-	copy(result, workspaces)
+	result := make([]*store.Workspace, len(s.fs.data.Workspaces))
+	copy(result, s.fs.data.Workspaces)
 	return result, nil
 }
 
 func (s *workspaceStore) Get(ctx context.Context, id string) (*store.Workspace, error) {
+	s.ensureDefaultWorkspace()
+
 	s.fs.mu.RLock()
 	defer s.fs.mu.RUnlock()
 
-	workspaces := s.ensureDefaultWorkspace()
-	for _, w := range workspaces {
+	for _, w := range s.fs.data.Workspaces {
 		if w.ID == id {
 			return w, nil
 		}
@@ -109,16 +110,29 @@ func (s *workspaceStore) Delete(ctx context.Context, id string) error {
 }
 
 // ensureDefaultWorkspace ensures the default local workspace exists.
-// Must be called with s.fs.mu held (at least RLock).
-func (s *workspaceStore) ensureDefaultWorkspace() []*store.Workspace {
-	// Check if default exists
+// Acquires write lock only if the default workspace needs to be created.
+func (s *workspaceStore) ensureDefaultWorkspace() {
+	// Fast path: check under read lock
+	s.fs.mu.RLock()
 	for _, w := range s.fs.data.Workspaces {
 		if w.ID == store.DefaultWorkspaceID {
-			return s.fs.data.Workspaces
+			s.fs.mu.RUnlock()
+			return
+		}
+	}
+	s.fs.mu.RUnlock()
+
+	// Slow path: acquire write lock and create default workspace
+	s.fs.mu.Lock()
+	defer s.fs.mu.Unlock()
+
+	// Double-check under write lock (another goroutine may have created it)
+	for _, w := range s.fs.data.Workspaces {
+		if w.ID == store.DefaultWorkspaceID {
+			return
 		}
 	}
 
-	// Create default workspace (will be saved on next markDirty)
 	now := time.Now().Unix()
 	defaultWS := &store.Workspace{
 		ID:          store.DefaultWorkspaceID,
@@ -130,10 +144,5 @@ func (s *workspaceStore) ensureDefaultWorkspace() []*store.Workspace {
 		UpdatedAt:   now,
 	}
 
-	// Note: This modifies data under RLock which is technically unsafe,
-	// but ensureDefaultWorkspace is called at read time and this is an
-	// idempotent initialization. For full safety, callers should upgrade to write lock.
-	// In practice, this only happens once on first access.
 	s.fs.data.Workspaces = append([]*store.Workspace{defaultWS}, s.fs.data.Workspaces...)
-	return s.fs.data.Workspaces
 }

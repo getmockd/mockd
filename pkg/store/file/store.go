@@ -5,6 +5,7 @@ package file
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -32,7 +33,9 @@ type FileStore struct {
 	saveDebounce time.Duration
 	saveCh       chan struct{}
 	closeCh      chan struct{}
+	closeOnce    sync.Once
 	closedCh     chan struct{} // signals when saveLoop has exited
+	log          *slog.Logger
 }
 
 // storeData holds all persisted data.
@@ -66,6 +69,7 @@ func New(cfg store.Config) *FileStore {
 		saveCh:       make(chan struct{}, 1),
 		closeCh:      make(chan struct{}),
 		closedCh:     make(chan struct{}),
+		log:          slog.Default(),
 	}
 	// Start debounced save goroutine
 	go fs.saveLoop()
@@ -90,7 +94,9 @@ func (s *FileStore) saveLoop() {
 			}
 			timer = time.AfterFunc(s.saveDebounce, func() {
 				if s.dirty.Load() && !s.saving.Load() {
-					_ = s.doSave()
+					if err := s.doSave(); err != nil {
+						s.log.Error("failed to save store data", "error", err)
+					}
 				}
 			})
 		case <-s.closeCh:
@@ -99,7 +105,9 @@ func (s *FileStore) saveLoop() {
 			}
 			// Final save on close
 			if s.dirty.Load() {
-				_ = s.doSave()
+				if err := s.doSave(); err != nil {
+					s.log.Error("failed to save store data on close", "error", err)
+				}
 			}
 			return
 		}
@@ -143,9 +151,11 @@ func (s *FileStore) Open(ctx context.Context) error {
 	return nil
 }
 
-// Close saves any pending changes and closes the store.
+// Close saves any pending changes and closes the store. Safe to call multiple times.
 func (s *FileStore) Close() error {
-	close(s.closeCh)
+	s.closeOnce.Do(func() {
+		close(s.closeCh)
+	})
 	// Wait for saveLoop to complete its final save and exit
 	<-s.closedCh
 	return nil
@@ -307,6 +317,32 @@ func (t *fileTransaction) Commit() error {
 }
 
 func (t *fileTransaction) Rollback() error {
-	// Reload from disk to discard changes
-	return t.fs.Open(context.Background())
+	// Reload from disk to discard in-memory changes
+	return t.fs.reloadFromDisk()
+}
+
+// reloadFromDisk reloads the data from the JSON file, discarding in-memory changes.
+func (s *FileStore) reloadFromDisk() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	dataFile := filepath.Join(s.cfg.DataDir, "data.json")
+	data, err := os.ReadFile(dataFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			s.data = &storeData{Version: dataVersion}
+			s.dirty.Store(false)
+			return nil
+		}
+		return err
+	}
+
+	var stored storeData
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return err
+	}
+
+	s.data = &stored
+	s.dirty.Store(false)
+	return nil
 }
