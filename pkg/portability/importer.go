@@ -67,8 +67,27 @@ func Import(data []byte, filename string, opts *ImportOptions) (*ImportResult, e
 	}
 
 	// Apply options
-	if opts != nil && opts.Name != "" {
-		collection.Name = opts.Name
+	if opts != nil {
+		if opts.Name != "" {
+			collection.Name = opts.Name
+		}
+
+		// DryRun: return parsed mocks without committing (caller should not persist)
+		if opts.DryRun {
+			return &ImportResult{
+				Collection:    collection,
+				EndpointCount: len(collection.Mocks),
+				ScenarioCount: 0,
+				StatefulCount: len(collection.StatefulResources),
+			}, nil
+		}
+
+		// TODO: Merge is not yet wired — when true, the caller should merge the
+		// returned collection with an existing one instead of replacing it.
+
+		// TODO: IncludeStatic is not yet wired at this layer — it is respected
+		// directly by HARImporter.IncludeStatic. Callers should set that field
+		// on the HARImporter before invoking Import when this option is true.
 	}
 
 	result := &ImportResult{

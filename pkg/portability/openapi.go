@@ -262,7 +262,7 @@ func (i *OpenAPIImporter) importOpenAPI3(data []byte) (*config.MockCollection, e
 				continue
 			}
 
-			mock := i.operationToMock(path, opEntry.method, opEntry.op, mockID, now)
+			mock := i.operationToMock(path, opEntry.method, opEntry.op, mockID, now, spec.Components)
 			collection.Mocks = append(collection.Mocks, mock)
 			mockID++
 		}
@@ -271,8 +271,30 @@ func (i *OpenAPIImporter) importOpenAPI3(data []byte) (*config.MockCollection, e
 	return collection, nil
 }
 
+// resolveSchemaRef resolves a local $ref (e.g. "#/components/schemas/User") against
+// the spec's Components.Schemas map. Returns the resolved schema, or the original
+// schema if the $ref cannot be resolved.
+func resolveSchemaRef(schema *Schema, components *OpenAPIComponents) *Schema {
+	if schema == nil || schema.Ref == "" {
+		return schema
+	}
+	if components == nil || components.Schemas == nil {
+		return schema
+	}
+	// Only handle local references: #/components/schemas/<Name>
+	const prefix = "#/components/schemas/"
+	if !strings.HasPrefix(schema.Ref, prefix) {
+		return schema
+	}
+	name := schema.Ref[len(prefix):]
+	if resolved, ok := components.Schemas[name]; ok && resolved != nil {
+		return resolved
+	}
+	return schema
+}
+
 // operationToMock converts an OpenAPI operation to a MockConfiguration.
-func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ int, now time.Time) *config.MockConfiguration {
+func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ int, now time.Time, components *OpenAPIComponents) *config.MockConfiguration {
 	// Convert OpenAPI path params {param} to :param for mockd
 	mockPath := convertOpenAPIPath(path)
 
@@ -297,6 +319,17 @@ func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ 
 		matcher.QueryParams = queryParams
 	}
 
+	// Extract header parameters
+	headerParams := make(map[string]string)
+	for _, param := range op.Parameters {
+		if param.In == "header" && param.Example != nil {
+			headerParams[param.Name] = fmt.Sprintf("%v", param.Example)
+		}
+	}
+	if len(headerParams) > 0 {
+		matcher.Headers = headerParams
+	}
+
 	// Find the best response (prefer 200, then 201, then first success, then first)
 	statusCode, response := findBestResponse(op.Responses)
 
@@ -312,9 +345,13 @@ func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ 
 			if mediaType.Example != nil {
 				bodyBytes, _ := json.MarshalIndent(mediaType.Example, "", "  ")
 				respDef.Body = string(bodyBytes)
-			} else if mediaType.Schema != nil && mediaType.Schema.Example != nil {
-				bodyBytes, _ := json.MarshalIndent(mediaType.Schema.Example, "", "  ")
-				respDef.Body = string(bodyBytes)
+			} else if mediaType.Schema != nil {
+				// Resolve $ref before checking for example
+				resolved := resolveSchemaRef(mediaType.Schema, components)
+				if resolved.Example != nil {
+					bodyBytes, _ := json.MarshalIndent(resolved.Example, "", "  ")
+					respDef.Body = string(bodyBytes)
+				}
 			}
 			break // Use first content type
 		}
@@ -413,6 +450,22 @@ func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *Swagge
 		name = fmt.Sprintf("%s %s", method, path)
 	}
 
+	// Extract query parameters
+	queryParams := make(map[string]string)
+	for _, param := range op.Parameters {
+		if param.In == "query" && param.Example != nil {
+			queryParams[param.Name] = fmt.Sprintf("%v", param.Example)
+		}
+	}
+
+	// Extract header parameters
+	headerParams := make(map[string]string)
+	for _, param := range op.Parameters {
+		if param.In == "header" && param.Example != nil {
+			headerParams[param.Name] = fmt.Sprintf("%v", param.Example)
+		}
+	}
+
 	// Find best response
 	statusCode, response := findBestSwaggerResponse(op.Responses)
 
@@ -441,6 +494,17 @@ func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *Swagge
 		respBody = generateDefaultBody(statusCode)
 	}
 
+	matcher := &mock.HTTPMatcher{
+		Method: method,
+		Path:   mockPath,
+	}
+	if len(queryParams) > 0 {
+		matcher.QueryParams = queryParams
+	}
+	if len(headerParams) > 0 {
+		matcher.Headers = headerParams
+	}
+
 	enabled2 := true
 	return &config.MockConfiguration{
 		ID:        generateImportID(),
@@ -451,10 +515,7 @@ func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *Swagge
 		UpdatedAt: now,
 		HTTP: &mock.HTTPSpec{
 			Priority: 0,
-			Matcher: &mock.HTTPMatcher{
-				Method: method,
-				Path:   mockPath,
-			},
+			Matcher:  matcher,
 			Response: &mock.HTTPResponse{
 				StatusCode: statusCode,
 				Headers:    respHeaders,
