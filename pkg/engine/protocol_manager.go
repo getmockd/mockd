@@ -132,7 +132,10 @@ func (pm *ProtocolManager) StopAll(ctx context.Context, timeout time.Duration) [
 	pm.graphqlSubHandlers = nil
 	pm.graphqlHandlers = nil
 
-	// Clear OAuth and SOAP handlers
+	// Stop OAuth providers (cleanup goroutines) and clear handlers
+	for _, provider := range pm.oauthProviders {
+		provider.Stop()
+	}
 	pm.oauthProviders = nil
 	pm.oauthHandlers = nil
 	pm.soapHandlers = nil

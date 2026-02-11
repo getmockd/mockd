@@ -316,8 +316,12 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 		h.errorResponse(w, http.StatusUnauthorized, ErrInvalidClient, "unknown client")
 		return
 	}
-	// If client has a secret, validate it (confidential client)
-	if client.ClientSecret != "" && clientSecret != "" {
+	// If client has a secret configured, require and validate it (confidential client)
+	if client.ClientSecret != "" {
+		if clientSecret == "" {
+			h.errorResponse(w, http.StatusUnauthorized, ErrInvalidClient, "client_secret is required for confidential clients")
+			return
+		}
 		client = h.provider.ValidateClient(clientID, clientSecret)
 		if client == nil {
 			h.errorResponse(w, http.StatusUnauthorized, ErrInvalidClient, "invalid client credentials")
