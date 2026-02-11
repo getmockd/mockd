@@ -261,11 +261,11 @@ func validateMock(mock *MockEntry, path string, ids map[string]bool, workspaceNa
 		}
 
 		// Validate type
-		validTypes := map[string]bool{"http": true, "grpc": true, "graphql": true, "websocket": true}
+		validTypes := map[string]bool{"http": true, "grpc": true, "graphql": true, "websocket": true, "soap": true, "mqtt": true, "oauth": true}
 		if mock.Type == "" {
 			result.AddError(path+".type", "required for inline mock")
 		} else if !validTypes[mock.Type] {
-			result.AddError(path+".type", fmt.Sprintf("invalid type %q, must be one of: http, grpc, graphql, websocket", mock.Type))
+			result.AddError(path+".type", fmt.Sprintf("invalid type %q, must be one of: http, grpc, graphql, websocket, soap, mqtt, oauth", mock.Type))
 		}
 
 		// Validate HTTP mock

@@ -2,9 +2,8 @@ package mcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
-	"strconv"
-	"strings"
 )
 
 // ParseRequest parses a JSON-RPC request from an io.Reader.
@@ -148,62 +147,12 @@ func ToolResultErrorf(format string, args ...interface{}) *ToolResult {
 	return ToolResultError(formatString(format, args...))
 }
 
-// formatString is a simple format function for error messages.
+// formatString formats a string using fmt.Sprintf.
 func formatString(format string, args ...interface{}) string {
 	if len(args) == 0 {
 		return format
 	}
-
-	var result strings.Builder
-	result.Grow(len(format) + len(args)*8)
-
-	argIndex := 0
-	for i := 0; i < len(format); i++ {
-		if format[i] == '%' && i+1 < len(format) {
-			next := format[i+1]
-			switch next {
-			case 'v', 's', 'd':
-				if argIndex < len(args) {
-					result.WriteString(argToString(args[argIndex]))
-					argIndex++
-				} else {
-					result.WriteByte('%')
-					result.WriteByte(next)
-				}
-				i++ // Skip the format specifier
-				continue
-			case '%':
-				result.WriteByte('%')
-				i++
-				continue
-			}
-		}
-		result.WriteByte(format[i])
-	}
-
-	return result.String()
-}
-
-// argToString converts an argument to string.
-func argToString(arg interface{}) string {
-	switch v := arg.(type) {
-	case string:
-		return v
-	case error:
-		return v.Error()
-	case int:
-		return strconv.Itoa(v)
-	case int64:
-		return strconv.FormatInt(v, 10)
-	case bool:
-		if v {
-			return "true"
-		}
-		return "false"
-	default:
-		b, _ := json.Marshal(v)
-		return string(b)
-	}
+	return fmt.Sprintf(format, args...)
 }
 
 // BatchRequest represents a batch of JSON-RPC requests.

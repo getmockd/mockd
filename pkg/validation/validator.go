@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/getmockd/mockd/pkg/util"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
@@ -147,7 +148,11 @@ func (v *Validator) compileSchema() (*jsonschema.Schema, error) {
 
 	// Load from reference or use inline
 	if v.config.SchemaRef != "" {
-		data, err := os.ReadFile(v.config.SchemaRef)
+		cleanPath, safe := util.SafeFilePathAllowAbsolute(v.config.SchemaRef)
+		if !safe {
+			return nil, fmt.Errorf("unsafe schema file path: %s", v.config.SchemaRef)
+		}
+		data, err := os.ReadFile(cleanPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read schema file: %w", err)
 		}

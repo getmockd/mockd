@@ -52,7 +52,8 @@ type MCPSession struct {
 	// adminClient is the per-session admin client, rewired on switch_context.
 	adminClient cli.AdminClient
 
-	mu sync.RWMutex
+	mu        sync.RWMutex
+	closeOnce sync.Once
 }
 
 // NewSession creates a new session with a generated ID.
@@ -231,12 +232,14 @@ func (s *MCPSession) SendNotification(notif *JSONRPCNotification) bool {
 	}
 }
 
-// Close closes the session's event channel.
+// Close closes the session's event channel. Safe to call multiple times.
 func (s *MCPSession) Close() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.State = SessionStateExpired
-	close(s.EventChannel)
+	s.closeOnce.Do(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.State = SessionStateExpired
+		close(s.EventChannel)
+	})
 }
 
 // =============================================================================

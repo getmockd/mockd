@@ -167,6 +167,7 @@ func TestFormatString_EscapedPercent(t *testing.T) {
 }
 
 // TestFormatString_MissingArgs handles fewer args than placeholders.
+// With fmt.Sprintf, missing args produce %!s(MISSING) etc.
 func TestFormatString_MissingArgs(t *testing.T) {
 	t.Parallel()
 
@@ -180,19 +181,19 @@ func TestFormatString_MissingArgs(t *testing.T) {
 			name:     "one placeholder no args",
 			format:   "hello %s",
 			args:     nil,
-			expected: "hello %s",
+			expected: "hello %s", // no args triggers early return
 		},
 		{
 			name:     "two placeholders one arg",
 			format:   "%s and %s",
 			args:     []interface{}{"foo"},
-			expected: "foo and %s",
+			expected: "foo and %!s(MISSING)",
 		},
 		{
 			name:     "three placeholders one arg",
 			format:   "%s %d %v",
 			args:     []interface{}{"only"},
-			expected: "only %d %v",
+			expected: "only %!d(MISSING) %!v(MISSING)",
 		},
 	}
 
@@ -208,6 +209,7 @@ func TestFormatString_MissingArgs(t *testing.T) {
 }
 
 // TestFormatString_ExtraArgs handles more args than placeholders.
+// With fmt.Sprintf, extra args are appended with %!(EXTRA ...).
 func TestFormatString_ExtraArgs(t *testing.T) {
 	t.Parallel()
 
@@ -221,13 +223,13 @@ func TestFormatString_ExtraArgs(t *testing.T) {
 			name:     "one placeholder two args",
 			format:   "hello %s",
 			args:     []interface{}{"world", "extra"},
-			expected: "hello world",
+			expected: "hello world%!(EXTRA string=extra)",
 		},
 		{
 			name:     "no placeholders with args",
 			format:   "static text",
 			args:     []interface{}{"ignored", 123},
-			expected: "static text",
+			expected: "static text%!(EXTRA string=ignored, int=123)",
 		},
 	}
 
@@ -246,7 +248,7 @@ func TestFormatString_ExtraArgs(t *testing.T) {
 func TestFormatString_NoPlaceholders(t *testing.T) {
 	t.Parallel()
 
-	format := "this is just plain text"
+	const format = "this is just plain text"
 	result := formatString(format)
 
 	if result != format {

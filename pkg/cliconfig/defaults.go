@@ -1,5 +1,7 @@
 package cliconfig
 
+import "strconv"
+
 // DefaultPort is the default HTTP server port for mock traffic.
 const DefaultPort = 4280
 
@@ -26,29 +28,7 @@ func DefaultAdminURL(adminPort int) string {
 	if adminPort == 0 {
 		adminPort = DefaultAdminPort
 	}
-	return "http://localhost:" + itoa(adminPort)
-}
-
-// itoa converts an int to string without importing strconv.
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	// Handle negative numbers
-	if i < 0 {
-		return "-" + itoa(-i)
-	}
-	// Build digits in reverse
-	digits := make([]byte, 0, 10)
-	for i > 0 {
-		digits = append(digits, byte('0'+i%10))
-		i /= 10
-	}
-	// Reverse
-	for left, right := 0, len(digits)-1; left < right; left, right = left+1, right-1 {
-		digits[left], digits[right] = digits[right], digits[left]
-	}
-	return string(digits)
+	return "http://localhost:" + strconv.Itoa(adminPort)
 }
 
 // NewDefault creates a new CLIConfig with default values.

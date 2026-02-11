@@ -123,8 +123,9 @@ type EngineRegistry struct {
 	mu      sync.RWMutex
 
 	// For background health check goroutine
-	stopCh chan struct{}
-	wg     sync.WaitGroup
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	wg       sync.WaitGroup
 }
 
 // NewEngineRegistry creates a new engine registry.
@@ -700,9 +701,11 @@ func (r *EngineRegistry) checkEngineHealth(timeout time.Duration) {
 	}
 }
 
-// Stop stops the background health check goroutine.
+// Stop stops the background health check goroutine. Safe to call multiple times.
 func (r *EngineRegistry) Stop() {
-	close(r.stopCh)
+	r.stopOnce.Do(func() {
+		close(r.stopCh)
+	})
 	r.wg.Wait()
 }
 

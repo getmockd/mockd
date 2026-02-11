@@ -3,6 +3,7 @@ package cliconfig
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -119,7 +120,7 @@ type ConfigError struct {
 
 func (e *ConfigError) Error() string {
 	if e.Line > 0 {
-		return e.Path + " (line " + itoa(e.Line) + ", column " + itoa(e.Column) + "): " + e.Message
+		return e.Path + " (line " + strconv.Itoa(e.Line) + ", column " + strconv.Itoa(e.Column) + "): " + e.Message
 	}
 	return e.Path + ": " + e.Message
 }
