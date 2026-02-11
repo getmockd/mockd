@@ -299,7 +299,7 @@ func (i *HARImporter) entryToMock(entry HAREntry, id int, now time.Time) *config
 	enabled := true
 	m := &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Name:      fmt.Sprintf("%s %s", entry.Request.Method, path),
 		Enabled:   &enabled,
 		CreatedAt: now,

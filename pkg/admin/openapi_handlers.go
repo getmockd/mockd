@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -22,7 +23,7 @@ func yamlEscapeString(s string) string {
 // handleGetOpenAPISpec handles GET /openapi.json and GET /openapi.yaml
 // Returns an OpenAPI 3.x specification of the currently configured HTTP mocks.
 // This allows importing the mock endpoints into tools like Insomnia, Postman, or Swagger UI.
-func (a *AdminAPI) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Determine format from path or query param
@@ -34,14 +35,15 @@ func (a *AdminAPI) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) 
 	// Get all mocks
 	mocks, err := a.getAllMocksForExport(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "list_error", "Failed to list mocks: "+err.Error())
+		a.logger().Error("failed to list mocks for OpenAPI export", "error", err)
+		writeError(w, http.StatusInternalServerError, "list_error", ErrMsgInternalError)
 		return
 	}
 
 	// Filter to HTTP-only for OpenAPI (it doesn't support other protocols)
 	httpMocks := make([]*config.MockConfiguration, 0)
 	for _, m := range mocks {
-		if m.Type == mock.MockTypeHTTP {
+		if m.Type == mock.TypeHTTP {
 			httpMocks = append(httpMocks, m)
 		}
 	}
@@ -57,7 +59,8 @@ func (a *AdminAPI) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) 
 	exporter := &portability.OpenAPIExporter{AsYAML: asYAML}
 	data, err := exporter.Export(collection)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "export_error", "Failed to export OpenAPI spec: "+err.Error())
+		a.logger().Error("failed to export OpenAPI spec", "error", err)
+		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 		return
 	}
 
@@ -68,7 +71,6 @@ func (a *AdminAPI) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) 
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	}
 
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }
@@ -77,12 +79,13 @@ func (a *AdminAPI) handleGetOpenAPISpec(w http.ResponseWriter, r *http.Request) 
 // Returns an Insomnia collection with all mock types (HTTP, gRPC, WebSocket, GraphQL).
 // - /insomnia.yaml returns Insomnia v5 format (recommended for modern Insomnia)
 // - /insomnia.json returns Insomnia v4 format (legacy)
-func (a *AdminAPI) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	mocks, err := a.getAllMocksForExport(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "list_error", "Failed to list mocks: "+err.Error())
+		a.logger().Error("failed to list mocks for Insomnia export", "error", err)
+		writeError(w, http.StatusInternalServerError, "list_error", ErrMsgInternalError)
 		return
 	}
 
@@ -90,8 +93,8 @@ func (a *AdminAPI) handleGetInsomniaExport(w http.ResponseWriter, r *http.Reques
 	if r.URL.Path == "/insomnia.yaml" || r.URL.Query().Get("format") == "yaml" || r.URL.Query().Get("format") == "v5" {
 		// Get stateful resources if available
 		var statefulResources []statefulResourceInfo
-		if a.localEngine != nil {
-			overview, err := a.localEngine.GetStateOverview(ctx)
+		if client := a.localEngine.Load(); client != nil {
+			overview, err := client.GetStateOverview(ctx)
 			if err == nil && overview != nil {
 				for _, res := range overview.Resources {
 					// Generate a sample ID - use singular form of resource name + "-1"
@@ -113,7 +116,6 @@ func (a *AdminAPI) handleGetInsomniaExport(w http.ResponseWriter, r *http.Reques
 
 		export := buildInsomniaV5Export(mocks, statefulResources, a.port)
 		w.Header().Set("Content-Type", "application/x-yaml; charset=utf-8")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Disposition", "attachment; filename=mockd-insomnia.yaml")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(export))
@@ -125,27 +127,27 @@ func (a *AdminAPI) handleGetInsomniaExport(w http.ResponseWriter, r *http.Reques
 
 	data, err := json.MarshalIndent(export, "", "  ")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "export_error", "Failed to marshal Insomnia export: "+err.Error())
+		a.logger().Error("failed to marshal Insomnia export", "error", err)
+		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Disposition", "attachment; filename=mockd-insomnia.json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }
 
 // getAllMocksForExport gets mocks from engine or dataStore for export
-func (a *AdminAPI) getAllMocksForExport(ctx context.Context) ([]*config.MockConfiguration, error) {
-	if a.localEngine != nil {
-		return a.localEngine.ListMocks(ctx)
+func (a *API) getAllMocksForExport(ctx context.Context) ([]*config.MockConfiguration, error) {
+	if engine := a.localEngine.Load(); engine != nil {
+		return engine.ListMocks(ctx)
 	}
 	// Fall back to dataStore
 	if a.dataStore != nil {
 		return a.dataStore.Mocks().List(ctx, nil)
 	}
-	return nil, fmt.Errorf("no mock source available")
+	return nil, errors.New("no mock source available")
 }
 
 // Insomnia v4 export types
@@ -265,26 +267,26 @@ func buildInsomniaExport(mocks []*config.MockConfiguration, adminPort int) *inso
 	})
 
 	// Create folder groups by type
-	folders := map[mock.MockType]string{
-		mock.MockTypeHTTP:      "fld_http",
-		mock.MockTypeGraphQL:   "fld_graphql",
-		mock.MockTypeGRPC:      "fld_grpc",
-		mock.MockTypeWebSocket: "fld_websocket",
-		mock.MockTypeMQTT:      "fld_mqtt",
-		mock.MockTypeSOAP:      "fld_soap",
+	folders := map[mock.Type]string{
+		mock.TypeHTTP:      "fld_http",
+		mock.TypeGraphQL:   "fld_graphql",
+		mock.TypeGRPC:      "fld_grpc",
+		mock.TypeWebSocket: "fld_websocket",
+		mock.TypeMQTT:      "fld_mqtt",
+		mock.TypeSOAP:      "fld_soap",
 	}
 
-	folderNames := map[mock.MockType]string{
-		mock.MockTypeHTTP:      "HTTP Mocks",
-		mock.MockTypeGraphQL:   "GraphQL Mocks",
-		mock.MockTypeGRPC:      "gRPC Mocks",
-		mock.MockTypeWebSocket: "WebSocket Mocks",
-		mock.MockTypeMQTT:      "MQTT Mocks",
-		mock.MockTypeSOAP:      "SOAP Mocks",
+	folderNames := map[mock.Type]string{
+		mock.TypeHTTP:      "HTTP Mocks",
+		mock.TypeGraphQL:   "GraphQL Mocks",
+		mock.TypeGRPC:      "gRPC Mocks",
+		mock.TypeWebSocket: "WebSocket Mocks",
+		mock.TypeMQTT:      "MQTT Mocks",
+		mock.TypeSOAP:      "SOAP Mocks",
 	}
 
 	// Track which folders we need
-	usedFolders := make(map[mock.MockType]bool)
+	usedFolders := make(map[mock.Type]bool)
 	for _, m := range mocks {
 		usedFolders[m.Type] = true
 	}
@@ -337,7 +339,7 @@ func mockToInsomniaResource(m *config.MockConfiguration, parentID string, now in
 	}
 
 	switch m.Type {
-	case mock.MockTypeHTTP:
+	case mock.TypeHTTP:
 		if m.HTTP == nil || m.HTTP.Matcher == nil {
 			return nil
 		}
@@ -381,7 +383,7 @@ func mockToInsomniaResource(m *config.MockConfiguration, parentID string, now in
 			res.Headers = append(res.Headers, insomniaHeader{Name: "Accept", Value: "text/event-stream"})
 		}
 
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if m.GraphQL == nil {
 			return nil
 		}
@@ -413,7 +415,7 @@ func mockToInsomniaResource(m *config.MockConfiguration, parentID string, now in
 		res.SettingRebuildPath = boolPtr(true)
 		res.SettingFollowRedirects = "global"
 
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if m.GRPC == nil {
 			return nil
 		}
@@ -448,7 +450,7 @@ func mockToInsomniaResource(m *config.MockConfiguration, parentID string, now in
 			break // Just use first service
 		}
 
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		if m.WebSocket == nil {
 			return nil
 		}
@@ -464,7 +466,7 @@ func mockToInsomniaResource(m *config.MockConfiguration, parentID string, now in
 		res.SettingEncodeUrl = boolPtr(true)
 		res.SettingFollowRedirects = "global"
 
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if m.SOAP == nil {
 			return nil
 		}
@@ -492,7 +494,7 @@ func mockToInsomniaResource(m *config.MockConfiguration, parentID string, now in
 			}
 		}
 
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		// MQTT not directly supported by Insomnia, skip
 		return nil
 
@@ -572,16 +574,16 @@ func buildInsomniaV5Export(mocks []*config.MockConfiguration, statefulResources 
 	soapMocks := make([]*config.MockConfiguration, 0)
 
 	for _, m := range mocks {
-		switch m.Type {
-		case mock.MockTypeHTTP:
+		switch m.Type { //nolint:exhaustive // only exportable mock types need handling
+		case mock.TypeHTTP:
 			httpMocks = append(httpMocks, m)
-		case mock.MockTypeGRPC:
+		case mock.TypeGRPC:
 			grpcMocks = append(grpcMocks, m)
-		case mock.MockTypeWebSocket:
+		case mock.TypeWebSocket:
 			wsMocks = append(wsMocks, m)
-		case mock.MockTypeGraphQL:
+		case mock.TypeGraphQL:
 			graphqlMocks = append(graphqlMocks, m)
-		case mock.MockTypeSOAP:
+		case mock.TypeSOAP:
 			soapMocks = append(soapMocks, m)
 		}
 	}
@@ -745,11 +747,12 @@ func writeHTTPRequestV5(sb *strings.Builder, m *config.MockConfiguration, now in
 	if method == "POST" || method == "PUT" || method == "PATCH" {
 		// Try to use the body matcher as a sample, otherwise use a generic JSON body
 		sampleBody := `{"example": "data"}`
-		if m.HTTP.Matcher.BodyEquals != "" {
+		switch {
+		case m.HTTP.Matcher.BodyEquals != "":
 			sampleBody = m.HTTP.Matcher.BodyEquals
-		} else if m.HTTP.Matcher.BodyContains != "" {
+		case m.HTTP.Matcher.BodyContains != "":
 			sampleBody = m.HTTP.Matcher.BodyContains
-		} else if m.HTTP.Matcher.BodyJSONPath != nil {
+		case m.HTTP.Matcher.BodyJSONPath != nil:
 			if bodyBytes, err := json.Marshal(m.HTTP.Matcher.BodyJSONPath); err == nil {
 				sampleBody = string(bodyBytes)
 			}
@@ -867,7 +870,7 @@ func buildWSDescription(m *config.MockConfiguration) string {
 			}
 			switch matcher.Match.Type {
 			case "exact":
-				parts = append(parts, fmt.Sprintf("  %s", matcher.Match.Value))
+				parts = append(parts, "  "+matcher.Match.Value)
 			case "json":
 				// Build a sample JSON payload
 				if matcher.Match.Path != "" && matcher.Match.Value != "" {
@@ -925,7 +928,7 @@ func writeGraphQLRequestV5(sb *strings.Builder, m *config.MockConfiguration, now
 			if strings.HasPrefix(fieldPath, "Query.") {
 				fieldName := strings.TrimPrefix(fieldPath, "Query.")
 				sampleQuery = fmt.Sprintf("{ %s }", fieldName)
-				description = fmt.Sprintf("Try: %s", fieldName)
+				description = "Try: " + fieldName
 				break
 			}
 		}

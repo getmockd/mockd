@@ -2,17 +2,19 @@ package sse
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/ratelimit"
 )
 
 // RateLimiter implements token bucket rate limiting for SSE streams.
+// It wraps a ratelimit.Bucket for the core token math and adds
+// SSE-specific strategy handling (wait/drop/error).
 type RateLimiter struct {
-	config    *RateLimitConfig
-	tokens    float64
-	maxTokens float64
-	lastTime  time.Time
-	mu        sync.Mutex
+	config *RateLimitConfig
+	bucket *ratelimit.Bucket
 }
 
 // NewRateLimiter creates a new rate limiter.
@@ -21,134 +23,59 @@ func NewRateLimiter(config *RateLimitConfig) *RateLimiter {
 		return nil
 	}
 
-	maxTokens := float64(config.BurstSize)
-	if maxTokens <= 0 {
-		maxTokens = config.EventsPerSecond
-	}
-
 	return &RateLimiter{
-		config:    config,
-		tokens:    maxTokens, // Start with full bucket
-		maxTokens: maxTokens,
-		lastTime:  time.Now(),
+		config: config,
+		bucket: ratelimit.NewBucket(config.EventsPerSecond, config.BurstSize),
 	}
 }
 
 // Wait blocks until a token is available or context is cancelled.
 // Returns ErrRateLimited if strategy is "error" and rate is exceeded.
-// Returns nil if strategy is "drop" (caller should skip the event).
+// Returns ErrRateLimited if strategy is "drop" (caller should skip the event).
 func (r *RateLimiter) Wait(ctx context.Context) error {
-	r.mu.Lock()
-
-	// Refill tokens based on elapsed time
-	now := time.Now()
-	elapsed := now.Sub(r.lastTime).Seconds()
-	r.tokens += elapsed * r.config.EventsPerSecond
-	if r.tokens > r.maxTokens {
-		r.tokens = r.maxTokens
-	}
-	r.lastTime = now
-
-	// Check if we have tokens
-	if r.tokens >= 1 {
-		r.tokens--
-		r.mu.Unlock()
+	// Fast path: try to acquire without blocking
+	if r.bucket.TryAcquire() {
 		return nil
 	}
 
 	// No tokens available - handle based on strategy
 	switch r.config.Strategy {
 	case RateLimitStrategyDrop:
-		r.mu.Unlock()
 		return ErrRateLimited // Caller should skip this event
 
 	case RateLimitStrategyError:
-		r.mu.Unlock()
 		return ErrRateLimited
 
 	case RateLimitStrategyWait:
 		fallthrough
 	default:
-		// Calculate wait time before releasing lock
-		waitTime := time.Duration((1 - r.tokens) / r.config.EventsPerSecond * float64(time.Second))
-		r.mu.Unlock()
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(waitTime):
-			// Re-acquire lock to update tokens
-			r.mu.Lock()
-			r.tokens = 0 // Consume the token we waited for
-			r.mu.Unlock()
-			return nil
-		}
+		return r.bucket.Wait(ctx)
 	}
 }
 
 // TryAcquire attempts to acquire a token without blocking.
 // Returns true if a token was acquired, false otherwise.
 func (r *RateLimiter) TryAcquire() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Refill tokens
-	now := time.Now()
-	elapsed := now.Sub(r.lastTime).Seconds()
-	r.tokens += elapsed * r.config.EventsPerSecond
-	if r.tokens > r.maxTokens {
-		r.tokens = r.maxTokens
-	}
-	r.lastTime = now
-
-	if r.tokens >= 1 {
-		r.tokens--
-		return true
-	}
-	return false
+	return r.bucket.TryAcquire()
 }
 
 // Available returns the number of tokens currently available.
 func (r *RateLimiter) Available() float64 {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Refill tokens
-	now := time.Now()
-	elapsed := now.Sub(r.lastTime).Seconds()
-	tokens := r.tokens + elapsed*r.config.EventsPerSecond
-	if tokens > r.maxTokens {
-		tokens = r.maxTokens
-	}
-
-	return tokens
+	return r.bucket.Available()
 }
 
 // Reset resets the rate limiter to full capacity.
 func (r *RateLimiter) Reset() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.tokens = r.maxTokens
-	r.lastTime = time.Now()
+	r.bucket.Reset()
 }
 
 // Stats returns rate limiter statistics.
 func (r *RateLimiter) Stats() RateLimiterStats {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Calculate current tokens
-	now := time.Now()
-	elapsed := now.Sub(r.lastTime).Seconds()
-	tokens := r.tokens + elapsed*r.config.EventsPerSecond
-	if tokens > r.maxTokens {
-		tokens = r.maxTokens
-	}
-
+	bs := r.bucket.Stats()
 	return RateLimiterStats{
-		TokensAvailable: tokens,
-		MaxTokens:       r.maxTokens,
-		Rate:            r.config.EventsPerSecond,
+		TokensAvailable: bs.Available,
+		MaxTokens:       bs.Max,
+		Rate:            bs.Rate,
 		Strategy:        r.config.Strategy,
 	}
 }
@@ -179,7 +106,7 @@ func (r *RateLimiter) RateLimitHeaders() map[string]string {
 // formatFloat64 formats a float64 as a string.
 func formatFloat64(f float64) string {
 	// Simple formatting - just integer part for rate limits
-	return formatInt64(int64(f))
+	return strconv.FormatInt(int64(f), 10)
 }
 
 // BackpressureHandler manages backpressure for SSE streams.

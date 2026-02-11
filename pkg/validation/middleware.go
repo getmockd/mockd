@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 )
 
 // Middleware wraps an http.Handler with request validation
@@ -70,7 +71,8 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var bodyBytes []byte
 	if r.Body != nil && r.Body != http.NoBody {
 		var err error
-		bodyBytes, err = io.ReadAll(r.Body)
+		const maxValidationBodySize = 10 << 20 // 10MB defense-in-depth
+		bodyBytes, err = io.ReadAll(io.LimitReader(r.Body, maxValidationBodySize))
 		if err != nil {
 			result := &Result{Valid: false}
 			result.AddError(&FieldError{
@@ -210,12 +212,5 @@ func (e *RequestValidationError) Error() string {
 }
 
 func joinStrings(strs []string, sep string) string {
-	if len(strs) == 0 {
-		return ""
-	}
-	result := strs[0]
-	for i := 1; i < len(strs); i++ {
-		result += sep + strs[i]
-	}
-	return result
+	return strings.Join(strs, sep)
 }

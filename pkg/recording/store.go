@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+
+	"github.com/getmockd/mockd/pkg/store"
 )
 
-// ErrNotFound is returned when a recording or session is not found.
-var ErrNotFound = errors.New("not found")
+// ErrNotFound is an alias for store.ErrNotFound so that errors.Is works
+// consistently across packages.
+var ErrNotFound = store.ErrNotFound
 
 // Store provides in-memory storage for recordings and sessions.
 type Store struct {

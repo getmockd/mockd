@@ -3,7 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/flags"
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/gorilla/websocket"
@@ -108,7 +109,7 @@ Examples:
 
 	if fs.NArg() < 1 {
 		fs.Usage()
-		return fmt.Errorf("url is required")
+		return errors.New("url is required")
 	}
 
 	url := fs.Arg(0)
@@ -139,9 +140,9 @@ Examples:
 	}
 	if err != nil {
 		if resp != nil {
-			return fmt.Errorf("connection failed: %v (HTTP %d)", err, resp.StatusCode)
+			return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
 		}
-		return fmt.Errorf("connection failed: %v", err)
+		return fmt.Errorf("connection failed: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -210,17 +211,16 @@ Examples:
 				fmt.Println("Connection closed by server")
 				return nil
 			}
-			return fmt.Errorf("read error: %v", err)
+			return fmt.Errorf("read error: %w", err)
 		case msg := <-msgChan:
 			if *jsonOutput {
-				output := map[string]interface{}{
+				msg := map[string]interface{}{
 					"type":      messageTypeString(msg.Type),
 					"data":      string(msg.Data),
 					"timestamp": time.Now().Format(time.RFC3339),
 				}
-				enc := json.NewEncoder(os.Stdout)
-				if err := enc.Encode(output); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to encode output: %v\n", err)
+				if err := output.JSONCompact(msg); err != nil {
+					output.Warn("failed to encode output: %v", err)
 				}
 			} else {
 				fmt.Printf("< %s\n", string(msg.Data))
@@ -230,18 +230,17 @@ Examples:
 				continue
 			}
 			if err := conn.WriteMessage(websocket.TextMessage, []byte(input)); err != nil {
-				return fmt.Errorf("send error: %v", err)
+				return fmt.Errorf("send error: %w", err)
 			}
 			if *jsonOutput {
-				output := map[string]interface{}{
+				sent := map[string]interface{}{
 					"direction": "sent",
 					"type":      "text",
 					"data":      input,
 					"timestamp": time.Now().Format(time.RFC3339),
 				}
-				enc := json.NewEncoder(os.Stdout)
-				if err := enc.Encode(output); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to encode output: %v\n", err)
+				if err := output.JSONCompact(sent); err != nil {
+					output.Warn("failed to encode output: %v", err)
 				}
 			} else {
 				fmt.Printf("> %s\n", input)
@@ -324,7 +323,7 @@ Examples:
 
 	if fs.NArg() < 2 {
 		fs.Usage()
-		return fmt.Errorf("url and message are required")
+		return errors.New("url and message are required")
 	}
 
 	url := fs.Arg(0)
@@ -364,30 +363,28 @@ Examples:
 	}
 	if err != nil {
 		if resp != nil {
-			return fmt.Errorf("connection failed: %v (HTTP %d)", err, resp.StatusCode)
+			return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
 		}
-		return fmt.Errorf("connection failed: %v", err)
+		return fmt.Errorf("connection failed: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	// Send message
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
-		return fmt.Errorf("send error: %v", err)
+		return fmt.Errorf("send error: %w", err)
 	}
 
 	// Close gracefully
 	_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 	if *jsonOutput {
-		output := map[string]interface{}{
+		result := map[string]interface{}{
 			"success":   true,
 			"url":       url,
 			"message":   message,
 			"timestamp": time.Now().Format(time.RFC3339),
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(result)
 	}
 
 	fmt.Printf("Sent to %s: %s\n", url, message)
@@ -447,7 +444,7 @@ Examples:
 
 	if fs.NArg() < 1 {
 		fs.Usage()
-		return fmt.Errorf("url is required")
+		return errors.New("url is required")
 	}
 
 	url := fs.Arg(0)
@@ -478,9 +475,9 @@ Examples:
 	}
 	if err != nil {
 		if resp != nil {
-			return fmt.Errorf("connection failed: %v (HTTP %d)", err, resp.StatusCode)
+			return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
 		}
-		return fmt.Errorf("connection failed: %v", err)
+		return fmt.Errorf("connection failed: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -535,15 +532,14 @@ Examples:
 			}
 
 			if *jsonOutput {
-				output := map[string]interface{}{
+				msg := map[string]interface{}{
 					"type":      messageTypeString(messageType),
 					"data":      string(message),
 					"timestamp": time.Now().Format(time.RFC3339),
 					"index":     received,
 				}
-				enc := json.NewEncoder(os.Stdout)
-				if err := enc.Encode(output); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to encode output: %v\n", err)
+				if err := output.JSONCompact(msg); err != nil {
+					output.Warn("failed to encode output: %v", err)
 				}
 			} else {
 				fmt.Println(string(message))
@@ -602,9 +598,7 @@ Examples:
 			"endpoints": mocks,
 			"count":     len(mocks),
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(result)
+		return output.JSON(result)
 	}
 
 	// Pretty print status

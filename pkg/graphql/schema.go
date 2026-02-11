@@ -1,6 +1,7 @@
 package graphql
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -203,7 +204,7 @@ func (s *Schema) Validate() error {
 
 	// Check that we have at least a Query type (required by GraphQL spec)
 	if !s.HasQuery() {
-		return fmt.Errorf("schema must define a Query type with at least one field")
+		return errors.New("schema must define a Query type with at least one field")
 	}
 
 	return nil

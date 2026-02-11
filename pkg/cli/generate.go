@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/ai"
 	"github.com/getmockd/mockd/pkg/ai/generator"
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/portability"
@@ -84,7 +86,7 @@ Examples:
 
 	// Validate input
 	if *input == "" && *prompt == "" {
-		return fmt.Errorf(`either --input or --prompt is required
+		return errors.New(`either --input or --prompt is required
 
 Usage: mockd generate --ai --input openapi.yaml
        mockd generate --ai --prompt "API description"
@@ -201,7 +203,7 @@ func generateFromOpenAPI(inputFile, outputFile string, useAI bool, providerName,
 		enhanced := 0
 		for _, mock := range collection.Mocks {
 			if err := gen.EnhanceMock(ctx, mock); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to enhance %s: %v\n", mock.Name, err)
+				output.Warn("failed to enhance %s: %v", mock.Name, err)
 				continue
 			}
 			enhanced++
@@ -246,7 +248,7 @@ func outputMocks(collection *config.MockCollection, outputFile string, dryRun bo
 	var validMocks []*config.MockConfiguration
 	for _, m := range collection.Mocks {
 		if err := m.Validate(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: skipping invalid mock %q: %v\n", m.Name, err)
+			output.Warn("skipping invalid mock %q: %v", m.Name, err)
 			continue
 		}
 		validMocks = append(validMocks, m)
@@ -350,7 +352,7 @@ Examples:
 	}
 
 	if !*aiFlag {
-		return fmt.Errorf(`--ai flag is required
+		return errors.New(`--ai flag is required
 
 Usage: mockd enhance --ai
 
@@ -391,7 +393,7 @@ Run 'mockd enhance --help' for more options`)
 	enhanced := 0
 	for _, mock := range mocks {
 		if err := gen.EnhanceMock(ctx, mock); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to enhance %s: %v\n", mock.Name, err)
+			output.Warn("failed to enhance %s: %v", mock.Name, err)
 			continue
 		}
 
@@ -399,11 +401,11 @@ Run 'mockd enhance --help' for more options`)
 		// Note: This would require an UpdateMock method on the client
 		// For now, we'll delete and recreate
 		if err := client.DeleteMock(mock.ID); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to update %s: %v\n", mock.Name, err)
+			output.Warn("failed to update %s: %v", mock.Name, err)
 			continue
 		}
 		if _, err := client.CreateMock(mock); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to recreate %s: %v\n", mock.Name, err)
+			output.Warn("failed to recreate %s: %v", mock.Name, err)
 			continue
 		}
 

@@ -17,7 +17,7 @@ func TestMock_UnmarshalJSON_LegacyFormat(t *testing.T) {
 	tests := []struct {
 		name        string
 		json        string
-		wantType    MockType
+		wantType    Type
 		wantPath    string
 		wantMethod  string
 		wantErr     bool
@@ -37,7 +37,7 @@ func TestMock_UnmarshalJSON_LegacyFormat(t *testing.T) {
 					"body": "{\"users\":[]}"
 				}
 			}`,
-			wantType:    MockTypeHTTP,
+			wantType:    TypeHTTP,
 			wantPath:    "/api/users",
 			wantMethod:  "GET",
 			description: "Standard legacy format with matcher at top level",
@@ -56,7 +56,7 @@ func TestMock_UnmarshalJSON_LegacyFormat(t *testing.T) {
 					"body": "{}"
 				}
 			}`,
-			wantType:    MockTypeHTTP,
+			wantType:    TypeHTTP,
 			wantPath:    "/api/users/[0-9]+",
 			wantMethod:  "GET",
 			description: "Legacy with pathPattern instead of path",
@@ -74,7 +74,7 @@ func TestMock_UnmarshalJSON_LegacyFormat(t *testing.T) {
 					"body": "ok"
 				}
 			}`,
-			wantType:    MockTypeHTTP,
+			wantType:    TypeHTTP,
 			wantPath:    "",
 			wantMethod:  "",
 			description: "Legacy with only headers in matcher",
@@ -94,7 +94,7 @@ func TestMock_UnmarshalJSON_LegacyFormat(t *testing.T) {
 					"body": "{}"
 				}
 			}`,
-			wantType:    MockTypeHTTP,
+			wantType:    TypeHTTP,
 			wantPath:    "/api/data",
 			wantMethod:  "POST",
 			description: "Legacy format preserves priority field",
@@ -121,7 +121,7 @@ func TestMock_UnmarshalJSON_LegacyFormat(t *testing.T) {
 					"body": "ok"
 				}
 			}`,
-			wantType:    MockTypeHTTP,
+			wantType:    TypeHTTP,
 			wantPath:    "/test",
 			wantMethod:  "GET",
 			description: "Legacy with all metadata fields preserved",
@@ -151,7 +151,7 @@ func TestMock_UnmarshalJSON_NewFormat(t *testing.T) {
 	tests := []struct {
 		name        string
 		json        string
-		wantType    MockType
+		wantType    Type
 		wantPath    string
 		wantErr     bool
 		description string
@@ -173,7 +173,7 @@ func TestMock_UnmarshalJSON_NewFormat(t *testing.T) {
 					}
 				}
 			}`,
-			wantType:    MockTypeHTTP,
+			wantType:    TypeHTTP,
 			wantPath:    "/api/v2/users",
 			description: "New format with type field",
 		},
@@ -207,7 +207,7 @@ func TestMock_UnmarshalJSON_NewFormat(t *testing.T) {
 					"path": "/ws/events"
 				}
 			}`,
-			wantType:    MockTypeWebSocket,
+			wantType:    TypeWebSocket,
 			wantPath:    "/ws/events",
 			description: "WebSocket mock type",
 		},
@@ -222,7 +222,7 @@ func TestMock_UnmarshalJSON_NewFormat(t *testing.T) {
 					"protoFile": "service.proto"
 				}
 			}`,
-			wantType:    MockTypeGRPC,
+			wantType:    TypeGRPC,
 			wantPath:    ":50051",
 			description: "gRPC mock type",
 		},
@@ -237,7 +237,7 @@ func TestMock_UnmarshalJSON_NewFormat(t *testing.T) {
 					"schema": "type Query { hello: String }"
 				}
 			}`,
-			wantType:    MockTypeGraphQL,
+			wantType:    TypeGraphQL,
 			wantPath:    "/graphql",
 			description: "GraphQL mock type",
 		},
@@ -251,7 +251,7 @@ func TestMock_UnmarshalJSON_NewFormat(t *testing.T) {
 					"path": "/soap/service"
 				}
 			}`,
-			wantType:    MockTypeSOAP,
+			wantType:    TypeSOAP,
 			wantPath:    "/soap/service",
 			description: "SOAP mock type",
 		},
@@ -265,7 +265,7 @@ func TestMock_UnmarshalJSON_NewFormat(t *testing.T) {
 					"port": 1883
 				}
 			}`,
-			wantType:    MockTypeMQTT,
+			wantType:    TypeMQTT,
 			wantPath:    ":1883",
 			description: "MQTT mock type",
 		},
@@ -280,7 +280,7 @@ func TestMock_UnmarshalJSON_NewFormat(t *testing.T) {
 					"clients": [{"clientId": "test-app"}]
 				}
 			}`,
-			wantType:    MockTypeOAuth,
+			wantType:    TypeOAuth,
 			wantPath:    "http://localhost:9999/oauth",
 			description: "OAuth mock type",
 		},
@@ -331,7 +331,7 @@ func TestMock_UnmarshalJSON_Ambiguous_NewFormatWins(t *testing.T) {
 	require.NoError(t, err)
 
 	// New format should win because type field is present
-	assert.Equal(t, MockTypeHTTP, m.Type)
+	assert.Equal(t, TypeHTTP, m.Type)
 	assert.Equal(t, "/new-path", m.GetPath())
 	assert.Equal(t, "POST", m.GetMethod())
 }
@@ -738,7 +738,7 @@ func TestChunkedConfig_Validate_MutualExclusivity(t *testing.T) {
 		{
 			name: "only dataFile - ok",
 			config: ChunkedConfig{
-				DataFile: "/path/to/file",
+				DataFile: "data/test.json",
 			},
 			wantErr: false,
 		},
@@ -830,7 +830,7 @@ func TestChunkedConfig_Validate_ChunkSettings(t *testing.T) {
 
 func TestMock_Validate_RequiresID(t *testing.T) {
 	m := Mock{
-		Type: MockTypeHTTP,
+		Type: TypeHTTP,
 		HTTP: &HTTPSpec{
 			Matcher:  &HTTPMatcher{Path: "/test"},
 			Response: &HTTPResponse{StatusCode: 200},
@@ -855,7 +855,7 @@ func TestMock_Validate_RequiresType(t *testing.T) {
 func TestMock_Validate_HTTPRequiresHTTPConfig(t *testing.T) {
 	m := Mock{
 		ID:   "test-id",
-		Type: MockTypeHTTP,
+		Type: TypeHTTP,
 	}
 
 	err := m.Validate()
@@ -866,7 +866,7 @@ func TestMock_Validate_HTTPRequiresHTTPConfig(t *testing.T) {
 func TestMock_Validate_HTTPRequiresMatcher(t *testing.T) {
 	m := Mock{
 		ID:   "test-id",
-		Type: MockTypeHTTP,
+		Type: TypeHTTP,
 		HTTP: &HTTPSpec{
 			Response: &HTTPResponse{StatusCode: 200},
 		},
@@ -880,7 +880,7 @@ func TestMock_Validate_HTTPRequiresMatcher(t *testing.T) {
 func TestMock_Validate_HTTPRequiresResponse(t *testing.T) {
 	m := Mock{
 		ID:   "test-id",
-		Type: MockTypeHTTP,
+		Type: TypeHTTP,
 		HTTP: &HTTPSpec{
 			Matcher: &HTTPMatcher{Path: "/test"},
 		},
@@ -894,7 +894,7 @@ func TestMock_Validate_HTTPRequiresResponse(t *testing.T) {
 func TestMock_Validate_HTTPOnlyOneResponseType(t *testing.T) {
 	m := Mock{
 		ID:   "test-id",
-		Type: MockTypeHTTP,
+		Type: TypeHTTP,
 		HTTP: &HTTPSpec{
 			Matcher:  &HTTPMatcher{Path: "/test"},
 			Response: &HTTPResponse{StatusCode: 200},
@@ -911,7 +911,7 @@ func TestMock_Validate_ValidHTTPMock(t *testing.T) {
 	enabled := true
 	m := Mock{
 		ID:      "test-id",
-		Type:    MockTypeHTTP,
+		Type:    TypeHTTP,
 		Enabled: &enabled,
 		HTTP: &HTTPSpec{
 			Matcher:  &HTTPMatcher{Method: "GET", Path: "/api/test"},
@@ -926,7 +926,7 @@ func TestMock_Validate_ValidHTTPMock(t *testing.T) {
 func TestMock_Validate_WebSocketRequiresPath(t *testing.T) {
 	m := Mock{
 		ID:        "ws-1",
-		Type:      MockTypeWebSocket,
+		Type:      TypeWebSocket,
 		WebSocket: &WebSocketSpec{},
 	}
 
@@ -938,7 +938,7 @@ func TestMock_Validate_WebSocketRequiresPath(t *testing.T) {
 func TestMock_Validate_WebSocketPathMustStartWithSlash(t *testing.T) {
 	m := Mock{
 		ID:        "ws-1",
-		Type:      MockTypeWebSocket,
+		Type:      TypeWebSocket,
 		WebSocket: &WebSocketSpec{Path: "ws/events"},
 	}
 
@@ -950,7 +950,7 @@ func TestMock_Validate_WebSocketPathMustStartWithSlash(t *testing.T) {
 func TestMock_Validate_ValidWebSocketMock(t *testing.T) {
 	m := Mock{
 		ID:        "ws-1",
-		Type:      MockTypeWebSocket,
+		Type:      TypeWebSocket,
 		WebSocket: &WebSocketSpec{Path: "/ws/events"},
 	}
 
@@ -961,7 +961,7 @@ func TestMock_Validate_ValidWebSocketMock(t *testing.T) {
 func TestMock_Validate_UnknownType(t *testing.T) {
 	m := Mock{
 		ID:   "test-id",
-		Type: MockType("unknown"),
+		Type: Type("unknown"),
 	}
 
 	err := m.Validate()
@@ -977,7 +977,7 @@ func TestMock_JSON_RoundTrip_HTTP(t *testing.T) {
 	httpEnabled := true
 	original := Mock{
 		ID:          "http-1",
-		Type:        MockTypeHTTP,
+		Type:        TypeHTTP,
 		Name:        "Test HTTP Mock",
 		Description: "A test mock",
 		Enabled:     &httpEnabled,
@@ -1046,7 +1046,7 @@ func TestMock_JSON_RoundTrip_WebSocket(t *testing.T) {
 	wsEnabled := true
 	original := Mock{
 		ID:      "ws-1",
-		Type:    MockTypeWebSocket,
+		Type:    TypeWebSocket,
 		Name:    "Test WebSocket Mock",
 		Enabled: &wsEnabled,
 		WebSocket: &WebSocketSpec{
@@ -1091,7 +1091,7 @@ func TestMock_JSON_RoundTrip_SSE(t *testing.T) {
 	sseEnabled := true
 	original := Mock{
 		ID:      "sse-1",
-		Type:    MockTypeHTTP,
+		Type:    TypeHTTP,
 		Name:    "Test SSE Mock",
 		Enabled: &sseEnabled,
 		HTTP: &HTTPSpec{
@@ -1305,42 +1305,42 @@ func TestMock_GetSpec(t *testing.T) {
 	}{
 		{
 			name:     "HTTP",
-			mock:     Mock{Type: MockTypeHTTP, HTTP: &HTTPSpec{}},
+			mock:     Mock{Type: TypeHTTP, HTTP: &HTTPSpec{}},
 			specType: "*mock.HTTPSpec",
 		},
 		{
 			name:     "WebSocket",
-			mock:     Mock{Type: MockTypeWebSocket, WebSocket: &WebSocketSpec{}},
+			mock:     Mock{Type: TypeWebSocket, WebSocket: &WebSocketSpec{}},
 			specType: "*mock.WebSocketSpec",
 		},
 		{
 			name:     "GraphQL",
-			mock:     Mock{Type: MockTypeGraphQL, GraphQL: &GraphQLSpec{}},
+			mock:     Mock{Type: TypeGraphQL, GraphQL: &GraphQLSpec{}},
 			specType: "*mock.GraphQLSpec",
 		},
 		{
 			name:     "gRPC",
-			mock:     Mock{Type: MockTypeGRPC, GRPC: &GRPCSpec{}},
+			mock:     Mock{Type: TypeGRPC, GRPC: &GRPCSpec{}},
 			specType: "*mock.GRPCSpec",
 		},
 		{
 			name:     "SOAP",
-			mock:     Mock{Type: MockTypeSOAP, SOAP: &SOAPSpec{}},
+			mock:     Mock{Type: TypeSOAP, SOAP: &SOAPSpec{}},
 			specType: "*mock.SOAPSpec",
 		},
 		{
 			name:     "MQTT",
-			mock:     Mock{Type: MockTypeMQTT, MQTT: &MQTTSpec{}},
+			mock:     Mock{Type: TypeMQTT, MQTT: &MQTTSpec{}},
 			specType: "*mock.MQTTSpec",
 		},
 		{
 			name:     "OAuth",
-			mock:     Mock{Type: MockTypeOAuth, OAuth: &OAuthSpec{}},
+			mock:     Mock{Type: TypeOAuth, OAuth: &OAuthSpec{}},
 			specType: "*mock.OAuthSpec",
 		},
 		{
 			name:    "Unknown type",
-			mock:    Mock{Type: MockType("unknown")},
+			mock:    Mock{Type: Type("unknown")},
 			wantNil: true,
 		},
 	}
@@ -1366,7 +1366,7 @@ func TestMock_GetPath(t *testing.T) {
 		{
 			name: "HTTP with path",
 			mock: Mock{
-				Type: MockTypeHTTP,
+				Type: TypeHTTP,
 				HTTP: &HTTPSpec{Matcher: &HTTPMatcher{Path: "/api/users"}},
 			},
 			wantPath: "/api/users",
@@ -1374,7 +1374,7 @@ func TestMock_GetPath(t *testing.T) {
 		{
 			name: "HTTP with pathPattern",
 			mock: Mock{
-				Type: MockTypeHTTP,
+				Type: TypeHTTP,
 				HTTP: &HTTPSpec{Matcher: &HTTPMatcher{PathPattern: "/api/users/[0-9]+"}},
 			},
 			wantPath: "/api/users/[0-9]+",
@@ -1382,49 +1382,49 @@ func TestMock_GetPath(t *testing.T) {
 		{
 			name: "HTTP path takes precedence over pathPattern",
 			mock: Mock{
-				Type: MockTypeHTTP,
+				Type: TypeHTTP,
 				HTTP: &HTTPSpec{Matcher: &HTTPMatcher{Path: "/exact", PathPattern: "/pattern"}},
 			},
 			wantPath: "/exact",
 		},
 		{
 			name:     "WebSocket",
-			mock:     Mock{Type: MockTypeWebSocket, WebSocket: &WebSocketSpec{Path: "/ws/events"}},
+			mock:     Mock{Type: TypeWebSocket, WebSocket: &WebSocketSpec{Path: "/ws/events"}},
 			wantPath: "/ws/events",
 		},
 		{
 			name:     "GraphQL",
-			mock:     Mock{Type: MockTypeGraphQL, GraphQL: &GraphQLSpec{Path: "/graphql"}},
+			mock:     Mock{Type: TypeGraphQL, GraphQL: &GraphQLSpec{Path: "/graphql"}},
 			wantPath: "/graphql",
 		},
 		{
 			name:     "gRPC",
-			mock:     Mock{Type: MockTypeGRPC, GRPC: &GRPCSpec{Port: 50051}},
+			mock:     Mock{Type: TypeGRPC, GRPC: &GRPCSpec{Port: 50051}},
 			wantPath: ":50051",
 		},
 		{
 			name:     "gRPC zero port",
-			mock:     Mock{Type: MockTypeGRPC, GRPC: &GRPCSpec{Port: 0}},
+			mock:     Mock{Type: TypeGRPC, GRPC: &GRPCSpec{Port: 0}},
 			wantPath: "",
 		},
 		{
 			name:     "SOAP",
-			mock:     Mock{Type: MockTypeSOAP, SOAP: &SOAPSpec{Path: "/soap/service"}},
+			mock:     Mock{Type: TypeSOAP, SOAP: &SOAPSpec{Path: "/soap/service"}},
 			wantPath: "/soap/service",
 		},
 		{
 			name:     "MQTT",
-			mock:     Mock{Type: MockTypeMQTT, MQTT: &MQTTSpec{Port: 1883}},
+			mock:     Mock{Type: TypeMQTT, MQTT: &MQTTSpec{Port: 1883}},
 			wantPath: ":1883",
 		},
 		{
 			name:     "OAuth",
-			mock:     Mock{Type: MockTypeOAuth, OAuth: &OAuthSpec{Issuer: "http://localhost:9999/oauth"}},
+			mock:     Mock{Type: TypeOAuth, OAuth: &OAuthSpec{Issuer: "http://localhost:9999/oauth"}},
 			wantPath: "http://localhost:9999/oauth",
 		},
 		{
 			name:     "nil spec",
-			mock:     Mock{Type: MockTypeHTTP, HTTP: nil},
+			mock:     Mock{Type: TypeHTTP, HTTP: nil},
 			wantPath: "",
 		},
 	}
@@ -1445,7 +1445,7 @@ func TestMock_GetMethod(t *testing.T) {
 		{
 			name: "HTTP with method",
 			mock: Mock{
-				Type: MockTypeHTTP,
+				Type: TypeHTTP,
 				HTTP: &HTTPSpec{Matcher: &HTTPMatcher{Method: "POST"}},
 			},
 			wantMethod: "POST",
@@ -1453,24 +1453,24 @@ func TestMock_GetMethod(t *testing.T) {
 		{
 			name: "HTTP without method",
 			mock: Mock{
-				Type: MockTypeHTTP,
+				Type: TypeHTTP,
 				HTTP: &HTTPSpec{Matcher: &HTTPMatcher{Path: "/test"}},
 			},
 			wantMethod: "",
 		},
 		{
 			name:       "non-HTTP type",
-			mock:       Mock{Type: MockTypeWebSocket},
+			mock:       Mock{Type: TypeWebSocket},
 			wantMethod: "",
 		},
 		{
 			name:       "nil HTTP spec",
-			mock:       Mock{Type: MockTypeHTTP, HTTP: nil},
+			mock:       Mock{Type: TypeHTTP, HTTP: nil},
 			wantMethod: "",
 		},
 		{
 			name:       "nil matcher",
-			mock:       Mock{Type: MockTypeHTTP, HTTP: &HTTPSpec{Matcher: nil}},
+			mock:       Mock{Type: TypeHTTP, HTTP: &HTTPSpec{Matcher: nil}},
 			wantMethod: "",
 		},
 	}

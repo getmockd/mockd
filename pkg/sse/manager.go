@@ -1,6 +1,7 @@
 package sse
 
 import (
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -229,7 +230,7 @@ func formatDuration(d time.Duration) string {
 
 // formatMillis formats milliseconds.
 func formatMillis(ms int64) string {
-	return formatInt64(ms)
+	return strconv.FormatInt(ms, 10)
 }
 
 // formatFloat formats a float with 1 decimal place.
@@ -237,9 +238,9 @@ func formatFloat(f float64) string {
 	whole := int64(f)
 	frac := int64((f - float64(whole)) * 10)
 	if frac == 0 {
-		return formatInt64(whole)
+		return strconv.FormatInt(whole, 10)
 	}
-	return formatInt64(whole) + "." + formatInt64(frac)
+	return strconv.FormatInt(whole, 10) + "." + strconv.FormatInt(frac, 10)
 }
 
 // SSEConnectionManagerOption is a functional option for the connection manager.

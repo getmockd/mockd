@@ -23,7 +23,7 @@ func TestChunkedHandler_MissingConfig(t *testing.T) {
 
 	mockCfg := &config.MockConfiguration{
 		ID:   "test",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Chunked: nil,
 		},
@@ -44,7 +44,7 @@ func TestChunkedHandler_NoFlusher(t *testing.T) {
 
 	mockCfg := &config.MockConfiguration{
 		ID:   "test",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Chunked: &mock.ChunkedConfig{
 				Data: "test data",
@@ -68,7 +68,7 @@ func TestChunkedHandler_BasicChunked(t *testing.T) {
 
 	mockCfg := &config.MockConfiguration{
 		ID:   "test",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Chunked: &mock.ChunkedConfig{
 				Data:       "Hello World!",
@@ -94,7 +94,7 @@ func TestChunkedHandler_DefaultChunkSize(t *testing.T) {
 
 	mockCfg := &config.MockConfiguration{
 		ID:   "test",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Chunked: &mock.ChunkedConfig{
 				Data:      "test",
@@ -118,7 +118,7 @@ func TestChunkedHandler_NDJSON(t *testing.T) {
 
 	mockCfg := &config.MockConfiguration{
 		ID:   "test",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Chunked: &mock.ChunkedConfig{
 				Format: "ndjson",
@@ -164,7 +164,7 @@ func TestChunkedHandler_Headers(t *testing.T) {
 	// Test default Content-Type
 	mockCfg := &config.MockConfiguration{
 		ID:   "test",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Chunked: &mock.ChunkedConfig{
 				Data: "test",
@@ -193,7 +193,7 @@ func TestChunkedHandler_ContextCancellation(t *testing.T) {
 	// Large data that would take multiple chunks
 	mockCfg := &config.MockConfiguration{
 		ID:   "test",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Chunked: &mock.ChunkedConfig{
 				Data:       strings.Repeat("x", 10000),
@@ -221,7 +221,7 @@ func TestChunkedHandler_EmptyData(t *testing.T) {
 
 	mockCfg := &config.MockConfiguration{
 		ID:   "test",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Chunked: &mock.ChunkedConfig{
 				Data: "",

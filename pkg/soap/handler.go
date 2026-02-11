@@ -3,6 +3,7 @@ package soap
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -83,9 +84,14 @@ func NewHandler(config *SOAPConfig) (*Handler, error) {
 // Returns an error if a file is configured but cannot be read.
 func (h *Handler) loadWSDL() error {
 	if h.config.WSDLFile != "" {
-		data, err := os.ReadFile(h.config.WSDLFile)
+		// Prevent path traversal and absolute path attacks
+		cleanPath, safe := util.SafeFilePathAllowAbsolute(h.config.WSDLFile)
+		if !safe {
+			return fmt.Errorf("unsafe path in WSDLFile (traversal detected): %q", h.config.WSDLFile)
+		}
+		data, err := os.ReadFile(cleanPath)
 		if err != nil {
-			return fmt.Errorf("failed to load WSDL file %q: %w", h.config.WSDLFile, err)
+			return fmt.Errorf("failed to load WSDL file %q: %w", cleanPath, err)
 		}
 		h.wsdlData = data
 	} else if h.config.WSDL != "" {
@@ -121,8 +127,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read request body
-	body, err := io.ReadAll(r.Body)
+	// Read request body (bounded to prevent memory exhaustion)
+	const maxSOAPBodySize = 10 << 20 // 10MB
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxSOAPBodySize))
 	if err != nil {
 		h.writeFault(w, &SOAPFault{
 			Code:    "soap:Client",
@@ -165,7 +172,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if opConfig == nil {
 		fault := &SOAPFault{
 			Code:    "soap:Client",
-			Message: fmt.Sprintf("Unknown operation: %s", opName),
+			Message: "Unknown operation: " + opName,
 		}
 		h.writeFaultWithRecording(w, fault, version, startTime, r.URL.Path, opName, soapAction, string(body), requestHeaders, r)
 		return
@@ -225,7 +232,7 @@ func (h *Handler) parseEnvelope(body []byte) (*etree.Document, error) {
 	// Validate it's a SOAP envelope
 	root := doc.Root()
 	if root == nil {
-		return nil, fmt.Errorf("empty document")
+		return nil, errors.New("empty document")
 	}
 
 	if root.Tag != "Envelope" {
@@ -316,13 +323,13 @@ func (h *Handler) extractOperation(doc *etree.Document, soapAction string) (stri
 	}
 
 	if body == nil {
-		return "", fmt.Errorf("SOAP Body not found")
+		return "", errors.New("SOAP Body not found")
 	}
 
 	// Get first child of Body (the operation element)
 	children := body.ChildElements()
 	if len(children) == 0 {
-		return "", fmt.Errorf("no operation element found in Body")
+		return "", errors.New("no operation element found in Body")
 	}
 
 	child := children[0]

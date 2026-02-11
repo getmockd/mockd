@@ -27,7 +27,7 @@
 //	srv.Start()
 //
 //	engineURL := fmt.Sprintf("http://localhost:%d", srv.ManagementPort())
-//	adminAPI := admin.NewAdminAPI(4290, admin.WithLocalEngine(engineURL))
+//	adminAPI := admin.NewAPI(4290, admin.WithLocalEngine(engineURL))
 //	adminAPI.Start()
 //	defer adminAPI.Stop()
 //

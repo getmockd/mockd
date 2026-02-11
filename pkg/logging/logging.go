@@ -82,10 +82,14 @@ func NewWithLevel(level Level) *slog.Logger {
 	})
 }
 
+// nopLogger is a cached no-op logger instance to avoid repeated allocations.
+var nopLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
 // Nop returns a no-op logger that discards all output.
 // Use this when a logger is required but logging is disabled.
+// The returned logger is a shared singleton — safe for concurrent use.
 func Nop() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return nopLogger
 }
 
 // ParseLevel parses a log level string.

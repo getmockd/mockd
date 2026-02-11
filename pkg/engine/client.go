@@ -53,7 +53,7 @@ func NewEngineClient(cfg *EngineClientConfig, manager *WorkspaceManager) *Engine
 	}
 	if cfg.EngineName == "" {
 		hostname, _ := os.Hostname()
-		cfg.EngineName = fmt.Sprintf("engine-%s", hostname)
+		cfg.EngineName = "engine-" + hostname
 	}
 
 	return &EngineClient{
@@ -283,9 +283,10 @@ func (c *EngineClient) syncWorkspaces(ctx context.Context) error {
 
 	// Stop workspaces that are no longer assigned
 	for _, server := range c.manager.ListWorkspaces() {
-		if !currentWorkspaces[server.WorkspaceID] {
-			c.log.Info("stopping workspace (no longer assigned)", "workspace", server.WorkspaceName)
-			_ = c.manager.StopWorkspace(server.WorkspaceID)
+		info := server.StatusInfo()
+		if !currentWorkspaces[info.WorkspaceID] {
+			c.log.Info("stopping workspace (no longer assigned)", "workspace", info.WorkspaceName)
+			_ = c.manager.StopWorkspace(info.WorkspaceID)
 		}
 	}
 

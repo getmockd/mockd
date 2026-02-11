@@ -96,7 +96,7 @@ func LoadContextConfig() (*ContextConfig, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, &ConfigError{
 			Path:    path,
-			Message: fmt.Sprintf("invalid YAML: %s", err.Error()),
+			Message: "invalid YAML: " + err.Error(),
 		}
 	}
 

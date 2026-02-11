@@ -158,13 +158,14 @@ func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.R
 
 	var req ConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
 	// Get recordings to convert
 	var recordings []*recording.Recording
-	if len(req.RecordingIDs) > 0 {
+	switch {
+	case len(req.RecordingIDs) > 0:
 		// Convert specific recordings
 		for _, id := range req.RecordingIDs {
 			rec := pm.store.GetRecording(id)
@@ -172,11 +173,11 @@ func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.R
 				recordings = append(recordings, rec)
 			}
 		}
-	} else if req.SessionID != "" {
+	case req.SessionID != "":
 		// Convert all recordings from session
 		filter := recording.RecordingFilter{SessionID: req.SessionID}
 		recordings, _ = pm.store.ListRecordings(filter)
-	} else {
+	default:
 		// Convert all recordings
 		recordings, _ = pm.store.ListRecordings(recording.RecordingFilter{})
 	}
@@ -225,7 +226,7 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 	var req ExportRequest
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 	}
@@ -233,16 +234,17 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 	// Gather recordings to export
 	var recordings []*recording.Recording
 
-	if req.SessionID != "" {
+	switch {
+	case req.SessionID != "":
 		recordings, _ = pm.store.ListRecordings(recording.RecordingFilter{SessionID: req.SessionID})
-	} else if len(req.RecordingIDs) > 0 {
+	case len(req.RecordingIDs) > 0:
 		for _, id := range req.RecordingIDs {
 			rec := pm.store.GetRecording(id)
 			if rec != nil {
 				recordings = append(recordings, rec)
 			}
 		}
-	} else {
+	default:
 		recordings, _ = pm.store.ListRecordings(recording.RecordingFilter{})
 	}
 
@@ -259,7 +261,8 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 	}
 
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "export_error", "Failed to export recordings: "+err.Error())
+		pm.log.Error("failed to export recordings", "error", err)
+		writeError(w, http.StatusInternalServerError, "export_error", "Failed to export recordings")
 		return
 	}
 
@@ -307,7 +310,7 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 	var req SingleConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 	}
@@ -332,7 +335,8 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 	addToServer := req.AddToServer || r.URL.Query().Get("add") == "true"
 	if addToServer && client != nil {
 		if _, err := client.CreateMock(r.Context(), mock); err != nil {
-			writeError(w, http.StatusInternalServerError, "add_error", "Failed to add mock to engine: "+err.Error())
+			pm.log.Error("failed to add mock to engine", "error", err)
+			writeError(w, http.StatusInternalServerError, "add_error", ErrMsgInternalError)
 			return
 		}
 	}
@@ -402,7 +406,7 @@ func (pm *ProxyManager) handleConvertSession(w http.ResponseWriter, r *http.Requ
 	var req SessionConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 	}

@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -194,7 +196,7 @@ func (e *OTLPExporter) Export(spans []*Span) error {
 	e.mu.Lock()
 	if e.shutdown {
 		e.mu.Unlock()
-		return fmt.Errorf("exporter is shut down")
+		return errors.New("exporter is shut down")
 	}
 	e.mu.Unlock()
 
@@ -371,15 +373,15 @@ func convertSpan(span *Span) otlpSpan {
 			eventAttrs = append(eventAttrs, otlpKeyValue{Key: k, Value: otlpValue{StringValue: v}})
 		}
 		events = append(events, otlpEvent{
-			TimeUnixNano: fmt.Sprintf("%d", e.Timestamp.UnixNano()),
+			TimeUnixNano: strconv.FormatInt(e.Timestamp.UnixNano(), 10),
 			Name:         e.Name,
 			Attributes:   eventAttrs,
 		})
 	}
 
 	// Convert status code
-	statusCode := 0 // UNSET
-	switch span.Status {
+	statusCode := 0      // UNSET
+	switch span.Status { //nolint:exhaustive // unset status maps to default 0
 	case StatusOK:
 		statusCode = 1
 	case StatusError:
@@ -392,8 +394,8 @@ func convertSpan(span *Span) otlpSpan {
 		ParentSpanID:      span.ParentID,
 		Name:              span.Name,
 		Kind:              0, // UNSPECIFIED
-		StartTimeUnixNano: fmt.Sprintf("%d", span.StartTime.UnixNano()),
-		EndTimeUnixNano:   fmt.Sprintf("%d", span.EndTime.UnixNano()),
+		StartTimeUnixNano: strconv.FormatInt(span.StartTime.UnixNano(), 10),
+		EndTimeUnixNano:   strconv.FormatInt(span.EndTime.UnixNano(), 10),
 		Attributes:        attrs,
 		Events:            events,
 		Status: otlpStatus{

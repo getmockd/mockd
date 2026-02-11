@@ -20,7 +20,7 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// Extract host from request
 	host := r.Host
 	if !strings.Contains(host, ":") {
-		host = host + ":443"
+		host += ":443"
 	}
 
 	// If no CA manager, we can't do MITM - just tunnel
@@ -136,7 +136,7 @@ func (p *Proxy) handleHTTPSRequest(clientConn net.Conn, r *http.Request, fullHos
 	// Connect to target server
 	targetHost := fullHost
 	if !strings.Contains(targetHost, ":") {
-		targetHost = targetHost + ":443"
+		targetHost += ":443"
 	}
 
 	//nolint:gosec // G402: proxy intentionally accepts any certificate

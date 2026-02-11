@@ -1,8 +1,10 @@
 package mqtt
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -153,7 +155,7 @@ func NewPerTopicDeviceSimulator(broker *Broker, topic TopicConfig, sequences *Se
 // ValidateDeviceSimulationSettings validates per-topic device simulation settings
 func ValidateDeviceSimulationSettings(settings *DeviceSimulationSettings, topicPattern string) error {
 	if settings == nil {
-		return fmt.Errorf("settings cannot be nil")
+		return errors.New("settings cannot be nil")
 	}
 	if !settings.Enabled {
 		return nil // Not enabled, nothing to validate
@@ -162,13 +164,13 @@ func ValidateDeviceSimulationSettings(settings *DeviceSimulationSettings, topicP
 		return fmt.Errorf("deviceCount must be between 1 and 1000, got %d", settings.DeviceCount)
 	}
 	if settings.DeviceIDPattern == "" {
-		return fmt.Errorf("deviceIdPattern is required")
+		return errors.New("deviceIdPattern is required")
 	}
 	if !strings.Contains(settings.DeviceIDPattern, "{n}") && !strings.Contains(settings.DeviceIDPattern, "{id}") && !strings.Contains(settings.DeviceIDPattern, "{index}") {
-		return fmt.Errorf("deviceIdPattern must contain {n}, {id}, or {index} placeholder")
+		return errors.New("deviceIdPattern must contain {n}, {id}, or {index} placeholder")
 	}
 	if !strings.Contains(topicPattern, "{device_id}") {
-		return fmt.Errorf("topic pattern must contain {device_id} placeholder for device simulation")
+		return errors.New("topic pattern must contain {device_id} placeholder for device simulation")
 	}
 	return nil
 }
@@ -179,7 +181,7 @@ func (p *PerTopicDeviceSimulator) Start() error {
 	defer p.mu.Unlock()
 
 	if p.running {
-		return fmt.Errorf("simulation is already running")
+		return errors.New("simulation is already running")
 	}
 
 	if err := ValidateDeviceSimulationSettings(p.settings, p.topicPattern); err != nil {
@@ -356,9 +358,9 @@ func (p *PerTopicDeviceSimulator) publishForDevice(device *perTopicSimulatedDevi
 func (p *PerTopicDeviceSimulator) generateDeviceID(index int) string {
 	pattern := p.settings.DeviceIDPattern
 	// Support {n}, {id}, and {index} placeholders
-	pattern = strings.ReplaceAll(pattern, "{n}", fmt.Sprintf("%d", index))
-	pattern = strings.ReplaceAll(pattern, "{id}", fmt.Sprintf("%d", index))
-	pattern = strings.ReplaceAll(pattern, "{index}", fmt.Sprintf("%d", index))
+	pattern = strings.ReplaceAll(pattern, "{n}", strconv.Itoa(index))
+	pattern = strings.ReplaceAll(pattern, "{id}", strconv.Itoa(index))
+	pattern = strings.ReplaceAll(pattern, "{index}", strconv.Itoa(index))
 	return pattern
 }
 
@@ -625,22 +627,22 @@ func NewMultiDeviceSimulator(broker *Broker, config *MultiDeviceSimulationConfig
 // ValidateMultiDeviceConfig validates the multi-device simulation configuration
 func ValidateMultiDeviceConfig(config *MultiDeviceSimulationConfig) error {
 	if config == nil {
-		return fmt.Errorf("config cannot be nil")
+		return errors.New("config cannot be nil")
 	}
 	if config.DeviceCount < 1 || config.DeviceCount > 1000 {
 		return fmt.Errorf("deviceCount must be between 1 and 1000, got %d", config.DeviceCount)
 	}
 	if config.DeviceIDPattern == "" {
-		return fmt.Errorf("deviceIdPattern is required")
+		return errors.New("deviceIdPattern is required")
 	}
 	if !strings.Contains(config.DeviceIDPattern, "{n}") && !strings.Contains(config.DeviceIDPattern, "{id}") && !strings.Contains(config.DeviceIDPattern, "{index}") {
-		return fmt.Errorf("deviceIdPattern must contain {n}, {id}, or {index} placeholder")
+		return errors.New("deviceIdPattern must contain {n}, {id}, or {index} placeholder")
 	}
 	if config.TopicPattern == "" {
-		return fmt.Errorf("topicPattern is required")
+		return errors.New("topicPattern is required")
 	}
 	if !strings.Contains(config.TopicPattern, "{device_id}") {
-		return fmt.Errorf("topicPattern must contain {device_id} placeholder")
+		return errors.New("topicPattern must contain {device_id} placeholder")
 	}
 	if config.IntervalMs < 100 {
 		return fmt.Errorf("intervalMs must be at least 100ms, got %d", config.IntervalMs)
@@ -657,7 +659,7 @@ func (m *MultiDeviceSimulator) Start() error {
 	defer m.mu.Unlock()
 
 	if m.running {
-		return fmt.Errorf("simulation is already running")
+		return errors.New("simulation is already running")
 	}
 
 	// Create devices
@@ -830,9 +832,9 @@ func (m *MultiDeviceSimulator) publishForDevice(device *simulatedDevice, qos byt
 // generateDeviceID generates a device ID from the pattern
 func (m *MultiDeviceSimulator) generateDeviceID(index int) string {
 	pattern := m.config.DeviceIDPattern
-	pattern = strings.ReplaceAll(pattern, "{n}", fmt.Sprintf("%d", index))
-	pattern = strings.ReplaceAll(pattern, "{id}", fmt.Sprintf("%d", index))
-	pattern = strings.ReplaceAll(pattern, "{index}", fmt.Sprintf("%d", index))
+	pattern = strings.ReplaceAll(pattern, "{n}", strconv.Itoa(index))
+	pattern = strings.ReplaceAll(pattern, "{id}", strconv.Itoa(index))
+	pattern = strings.ReplaceAll(pattern, "{index}", strconv.Itoa(index))
 	return pattern
 }
 

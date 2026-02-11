@@ -2,6 +2,7 @@ package audit
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -63,7 +64,7 @@ func (l *FileLogger) Log(entry AuditEntry) error {
 	defer l.mu.Unlock()
 
 	if l.file == nil {
-		return fmt.Errorf("audit: logger is closed")
+		return errors.New("audit: logger is closed")
 	}
 
 	// Set the sequence number atomically

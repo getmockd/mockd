@@ -675,7 +675,7 @@ func TestMQTT_US9_AutoStartFromMock(t *testing.T) {
 	// Import MQTT mock configuration
 	mqttMockCfg := &config.MockConfiguration{
 		ID:      "test-mqtt-mock",
-		Type:    mock.MockTypeMQTT,
+		Type:    mock.TypeMQTT,
 		Name:    "Test MQTT",
 		Enabled: boolPtr(true),
 		MQTT: &mock.MQTTSpec{

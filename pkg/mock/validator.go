@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/getmockd/mockd/pkg/util"
 	"github.com/ohler55/ojg/jp"
 )
 
@@ -40,19 +41,19 @@ func (m *Mock) Validate() error {
 
 	// Validate based on type
 	switch m.Type {
-	case MockTypeHTTP:
+	case TypeHTTP:
 		return m.validateHTTP()
-	case MockTypeWebSocket:
+	case TypeWebSocket:
 		return m.validateWebSocket()
-	case MockTypeGraphQL:
+	case TypeGraphQL:
 		return m.validateGraphQL()
-	case MockTypeGRPC:
+	case TypeGRPC:
 		return m.validateGRPC()
-	case MockTypeSOAP:
+	case TypeSOAP:
 		return m.validateSOAP()
-	case MockTypeMQTT:
+	case TypeMQTT:
 		return m.validateMQTT()
-	case MockTypeOAuth:
+	case TypeOAuth:
 		return m.validateOAuth()
 	case "":
 		// Legacy format - check if HTTP spec is present
@@ -165,7 +166,7 @@ func (m *HTTPMatcher) Validate() error {
 		if !validHTTPMethods[method] {
 			return &ValidationError{
 				Field:   "matcher.method",
-				Message: fmt.Sprintf("invalid HTTP method: %s", m.Method),
+				Message: "invalid HTTP method: " + m.Method,
 			}
 		}
 	}
@@ -188,7 +189,7 @@ func (m *HTTPMatcher) Validate() error {
 		if _, err := regexp.Compile(m.PathPattern); err != nil {
 			return &ValidationError{
 				Field:   "matcher.pathPattern",
-				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+				Message: "invalid regex pattern: " + err.Error(),
 			}
 		}
 	}
@@ -198,7 +199,7 @@ func (m *HTTPMatcher) Validate() error {
 		if _, err := regexp.Compile(m.BodyPattern); err != nil {
 			return &ValidationError{
 				Field:   "matcher.bodyPattern",
-				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+				Message: "invalid regex pattern: " + err.Error(),
 			}
 		}
 	}
@@ -208,7 +209,7 @@ func (m *HTTPMatcher) Validate() error {
 		if !headerNameRegex.MatchString(name) {
 			return &ValidationError{
 				Field:   "matcher.headers",
-				Message: fmt.Sprintf("invalid header name: %s", name),
+				Message: "invalid header name: " + name,
 			}
 		}
 	}
@@ -256,7 +257,7 @@ func (m *MTLSMatch) Validate() error {
 		if _, err := regexp.Compile(m.CNPattern); err != nil {
 			return &ValidationError{
 				Field:   "matcher.mtls.cnPattern",
-				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+				Message: "invalid regex pattern: " + err.Error(),
 			}
 		}
 	}
@@ -316,6 +317,16 @@ func (r *HTTPResponse) Validate() error {
 		}
 	}
 
+	// Validate bodyFile path safety (reject traversal and absolute paths)
+	if r.BodyFile != "" {
+		if _, safe := util.SafeFilePath(r.BodyFile); !safe {
+			return &ValidationError{
+				Field:   "response.bodyFile",
+				Message: "path must be relative and cannot contain '..'",
+			}
+		}
+	}
+
 	// DelayMs must be >= 0 and <= 30000
 	if r.DelayMs < 0 {
 		return &ValidationError{Field: "response.delayMs", Message: "delayMs must be >= 0"}
@@ -329,7 +340,7 @@ func (r *HTTPResponse) Validate() error {
 		if !headerNameRegex.MatchString(name) {
 			return &ValidationError{
 				Field:   "response.headers",
-				Message: fmt.Sprintf("invalid header name: %s", name),
+				Message: "invalid header name: " + name,
 			}
 		}
 	}
@@ -426,6 +437,16 @@ func (c *ChunkedConfig) Validate() error {
 		return &ValidationError{Field: "chunked", Message: "data, dataFile, and ndjsonItems are mutually exclusive"}
 	}
 
+	// Validate dataFile path safety (reject traversal and absolute paths)
+	if c.DataFile != "" {
+		if _, safe := util.SafeFilePath(c.DataFile); !safe {
+			return &ValidationError{
+				Field:   "chunked.dataFile",
+				Message: "path must be relative and cannot contain '..'",
+			}
+		}
+	}
+
 	// Validate chunk size
 	if c.ChunkSize < 0 {
 		return &ValidationError{Field: "chunked.chunkSize", Message: "must be >= 0"}
@@ -465,6 +486,13 @@ func (m *Mock) validateGraphQL() error {
 		return &ValidationError{Field: "graphql", Message: "cannot specify both schema and schemaFile"}
 	}
 
+	// Validate schemaFile path against traversal
+	if hasSchemaFile {
+		if _, safe := util.SafeFilePathAllowAbsolute(m.GraphQL.SchemaFile); !safe {
+			return &ValidationError{Field: "graphql.schemaFile", Message: "path cannot contain '..'"}
+		}
+	}
+
 	return nil
 }
 
@@ -488,6 +516,29 @@ func (m *Mock) validateGRPC() error {
 
 	if hasProtoFile && hasProtoFiles {
 		return &ValidationError{Field: "grpc", Message: "cannot specify both protoFile and protoFiles"}
+	}
+
+	// Validate proto file paths against traversal
+	if m.GRPC.ProtoFile != "" {
+		if _, safe := util.SafeFilePathAllowAbsolute(m.GRPC.ProtoFile); !safe {
+			return &ValidationError{Field: "grpc.protoFile", Message: "path cannot contain '..'"}
+		}
+	}
+	for i, pf := range m.GRPC.ProtoFiles {
+		if _, safe := util.SafeFilePathAllowAbsolute(pf); !safe {
+			return &ValidationError{
+				Field:   fmt.Sprintf("grpc.protoFiles[%d]", i),
+				Message: "path cannot contain '..'",
+			}
+		}
+	}
+	for i, ip := range m.GRPC.ImportPaths {
+		if _, safe := util.SafeFilePathAllowAbsolute(ip); !safe {
+			return &ValidationError{
+				Field:   fmt.Sprintf("grpc.importPaths[%d]", i),
+				Message: "path cannot contain '..'",
+			}
+		}
 	}
 
 	return nil
@@ -515,11 +566,18 @@ func (m *Mock) validateSOAP() error {
 		return &ValidationError{Field: "soap", Message: "cannot specify both wsdl and wsdlFile"}
 	}
 
+	// Validate wsdlFile path against traversal
+	if hasWSDLFile {
+		if _, safe := util.SafeFilePathAllowAbsolute(m.SOAP.WSDLFile); !safe {
+			return &ValidationError{Field: "soap.wsdlFile", Message: "path cannot contain '..'"}
+		}
+	}
+
 	// Validate operations if present
 	for name, op := range m.SOAP.Operations {
 		if op.Response == "" && op.Fault == nil {
 			return &ValidationError{
-				Field:   fmt.Sprintf("soap.operations.%s", name),
+				Field:   "soap.operations." + name,
 				Message: "operation must have either response or fault",
 			}
 		}
@@ -543,8 +601,14 @@ func (m *Mock) validateMQTT() error {
 		if m.MQTT.TLS.CertFile == "" {
 			return &ValidationError{Field: "mqtt.tls.certFile", Message: "certFile is required when TLS is enabled"}
 		}
+		if _, ok := util.SafeFilePathAllowAbsolute(m.MQTT.TLS.CertFile); !ok {
+			return &ValidationError{Field: "mqtt.tls.certFile", Message: "path cannot contain '..'"}
+		}
 		if m.MQTT.TLS.KeyFile == "" {
 			return &ValidationError{Field: "mqtt.tls.keyFile", Message: "keyFile is required when TLS is enabled"}
+		}
+		if _, ok := util.SafeFilePathAllowAbsolute(m.MQTT.TLS.KeyFile); !ok {
+			return &ValidationError{Field: "mqtt.tls.keyFile", Message: "path cannot contain '..'"}
 		}
 	}
 

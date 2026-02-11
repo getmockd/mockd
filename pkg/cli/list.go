@@ -1,13 +1,13 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
@@ -79,7 +79,7 @@ Examples:
 
 	// Filter by type if specified
 	if *mockType != "" {
-		filterType := mock.MockType(strings.ToLower(*mockType))
+		filterType := mock.Type(strings.ToLower(*mockType))
 		filtered := make([]*mock.Mock, 0)
 		for _, m := range mocks {
 			if m.Type == filterType {
@@ -108,7 +108,7 @@ func outputMocksJSON(mocks []*mock.Mock) error {
 		Status  int    `json:"status,omitempty"`
 		Enabled bool   `json:"enabled"`
 	}
-	output := make([]mockSummary, 0, len(mocks))
+	summaries := make([]mockSummary, 0, len(mocks))
 	for _, m := range mocks {
 		summary := mockSummary{
 			ID:      m.ID,
@@ -121,11 +121,9 @@ func outputMocksJSON(mocks []*mock.Mock) error {
 		summary.Path = path
 		summary.Method = method
 		summary.Status = status
-		output = append(output, summary)
+		summaries = append(summaries, summary)
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(output)
+	return output.JSON(summaries)
 }
 
 // outputMocksTable outputs mocks in table format.
@@ -135,7 +133,7 @@ func outputMocksTable(mocks []*mock.Mock) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := output.Table()
 	_, _ = fmt.Fprintln(w, "ID\tTYPE\tPATH\tMETHOD\tSTATUS\tENABLED")
 
 	for _, m := range mocks {
@@ -153,7 +151,7 @@ func outputMocksTable(mocks []*mock.Mock) error {
 		// Format status - show "-" for non-HTTP
 		statusStr := "-"
 		if status > 0 {
-			statusStr = fmt.Sprintf("%d", status)
+			statusStr = strconv.Itoa(status)
 		}
 
 		// Format type
@@ -171,8 +169,8 @@ func outputMocksTable(mocks []*mock.Mock) error {
 
 // extractMockDetails extracts path, method, and status from a mock based on its type.
 func extractMockDetails(m *mock.Mock) (path, method string, status int) {
-	switch m.Type {
-	case mock.MockTypeHTTP, "":
+	switch m.Type { //nolint:exhaustive // OAuth mocks don't have path/method/status details
+	case mock.TypeHTTP, "":
 		if m.HTTP != nil {
 			if m.HTTP.Matcher != nil {
 				path = m.HTTP.Matcher.Path
@@ -185,29 +183,29 @@ func extractMockDetails(m *mock.Mock) (path, method string, status int) {
 				status = m.HTTP.Response.StatusCode
 			}
 		}
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		if m.WebSocket != nil {
 			path = m.WebSocket.Path
 			method = "WS"
 		}
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if m.GraphQL != nil {
 			path = m.GraphQL.Path
 			method = "GQL"
 		}
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if m.GRPC != nil {
 			if m.GRPC.Port > 0 {
 				path = fmt.Sprintf(":%d", m.GRPC.Port)
 			}
 			method = "gRPC"
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		if m.MQTT != nil {
 			path = fmt.Sprintf(":%d", m.MQTT.Port)
 			method = "MQTT"
 		}
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if m.SOAP != nil {
 			path = m.SOAP.Path
 			method = "SOAP"

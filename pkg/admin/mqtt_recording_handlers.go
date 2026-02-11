@@ -3,10 +3,12 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
 
+	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/mqtt"
 	"github.com/getmockd/mockd/pkg/recording"
 )
@@ -14,6 +16,7 @@ import (
 // MQTTRecordingManager manages MQTT recording operations for the Admin API.
 type MQTTRecordingManager struct {
 	mu      sync.RWMutex
+	log     *slog.Logger
 	store   *recording.MQTTStore
 	brokers map[string]*mqtt.Broker // broker ID -> broker
 }
@@ -21,8 +24,20 @@ type MQTTRecordingManager struct {
 // NewMQTTRecordingManager creates a new MQTT recording manager.
 func NewMQTTRecordingManager() *MQTTRecordingManager {
 	return &MQTTRecordingManager{
+		log:     logging.Nop(),
 		store:   recording.NewMQTTStore(1000),
 		brokers: make(map[string]*mqtt.Broker),
+	}
+}
+
+// SetLogger sets the logger under the manager's own lock.
+func (m *MQTTRecordingManager) SetLogger(log *slog.Logger) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if log != nil {
+		m.log = log
+	} else {
+		m.log = logging.Nop()
 	}
 }
 
@@ -442,7 +457,7 @@ func (m *MQTTRecordingManager) handleGetMQTTStatusInternal(w http.ResponseWriter
 
 // handleListMQTTBrokers handles GET /mqtt.
 // Queries MQTT mocks from the engine (over HTTP) to build broker list.
-func (a *AdminAPI) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
 	// First check local recording manager for directly registered brokers.
 	a.mqttRecordingManager.mu.RLock()
 	localBrokers := len(a.mqttRecordingManager.brokers)
@@ -454,12 +469,13 @@ func (a *AdminAPI) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request)
 	}
 
 	// No local brokers — query engine for MQTT mocks over HTTP.
-	if a.localEngine == nil {
+	engine := a.localEngine.Load()
+	if engine == nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": []interface{}{}, "count": 0})
 		return
 	}
 
-	mocks, err := a.localEngine.ListMocks(r.Context())
+	mocks, err := engine.ListMocks(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": []interface{}{}, "count": 0})
 		return
@@ -481,7 +497,7 @@ func (a *AdminAPI) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request)
 
 // handleGetMQTTStatus handles GET /mqtt/status.
 // Queries MQTT mocks from the engine (over HTTP) to build aggregate status.
-func (a *AdminAPI) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
 	// First check local recording manager for directly registered brokers.
 	a.mqttRecordingManager.mu.RLock()
 	localBrokers := len(a.mqttRecordingManager.brokers)
@@ -493,12 +509,13 @@ func (a *AdminAPI) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// No local brokers — query engine for MQTT mocks over HTTP.
-	if a.localEngine == nil {
+	engine2 := a.localEngine.Load()
+	if engine2 == nil {
 		writeJSON(w, http.StatusOK, MQTTGlobalStatusResponse{Brokers: []MQTTBrokerStatusResponse{}})
 		return
 	}
 
-	mocks, err := a.localEngine.ListMocks(r.Context())
+	mocks, err := engine2.ListMocks(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusOK, MQTTGlobalStatusResponse{Brokers: []MQTTBrokerStatusResponse{}})
 		return
@@ -553,7 +570,7 @@ func (m *MQTTRecordingManager) handleConvertMQTTRecording(w http.ResponseWriter,
 	var req MQTTConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 	}
@@ -589,21 +606,22 @@ func (m *MQTTRecordingManager) handleConvertMQTTRecordings(w http.ResponseWriter
 	// Parse request
 	var req MQTTConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
 	// Get recordings to convert
 	var recordings []*recording.MQTTRecording
-	if len(req.RecordingIDs) > 0 {
+	switch {
+	case len(req.RecordingIDs) > 0:
 		for _, id := range req.RecordingIDs {
 			if rec := m.store.Get(id); rec != nil {
 				recordings = append(recordings, rec)
 			}
 		}
-	} else if req.TopicPattern != "" {
+	case req.TopicPattern != "":
 		recordings = m.store.ListByTopic(req.TopicPattern)
-	} else {
+	default:
 		recordings, _ = m.store.List(recording.MQTTRecordingFilter{})
 	}
 
@@ -641,7 +659,8 @@ func (m *MQTTRecordingManager) handleExportMQTTRecordings(w http.ResponseWriter,
 
 	data, err := m.store.Export()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "export_error", "Failed to export recordings: "+err.Error())
+		m.log.Error("failed to export MQTT recordings", "error", err)
+		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 		return
 	}
 

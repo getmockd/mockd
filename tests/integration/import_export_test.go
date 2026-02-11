@@ -656,7 +656,7 @@ func TestExportToMockdFormat(t *testing.T) {
 				ID:      "mock-export-1",
 				Name:    "Get Users",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 5,
 					Matcher: &mock.HTTPMatcher{
@@ -680,7 +680,7 @@ func TestExportToMockdFormat(t *testing.T) {
 				ID:      "mock-export-2",
 				Name:    "Create User",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
 						Method: "POST",
@@ -730,7 +730,7 @@ func TestExportToOpenAPIFormat(t *testing.T) {
 				ID:      "oapi-mock-1",
 				Name:    "List Items",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
 						Method: "GET",
@@ -749,7 +749,7 @@ func TestExportToOpenAPIFormat(t *testing.T) {
 				ID:      "oapi-mock-2",
 				Name:    "Get Item Details",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
 						Method: "GET",
@@ -795,7 +795,7 @@ func TestRoundTripMockdFormat(t *testing.T) {
 				ID:      "rt-mock-1",
 				Name:    "Health Check",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Priority: 10,
 					Matcher: &mock.HTTPMatcher{
@@ -820,7 +820,7 @@ func TestRoundTripMockdFormat(t *testing.T) {
 				ID:      "rt-mock-2",
 				Name:    "Error Response",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
 						Method: "GET",
@@ -872,7 +872,7 @@ func TestRoundTripOpenAPIFormat(t *testing.T) {
 				ID:      "oapi-rt-1",
 				Name:    "Get Resources",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
 						Method: "GET",
@@ -891,7 +891,7 @@ func TestRoundTripOpenAPIFormat(t *testing.T) {
 				ID:      "oapi-rt-2",
 				Name:    "Create Resource",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
 						Method: "POST",
@@ -964,7 +964,7 @@ func TestRoundTripWithServerIntegration(t *testing.T) {
 			ID:      "int-mock-1",
 			Name:    "Integration Mock 1",
 			Enabled: boolPtr(true),
-			Type:    mock.MockTypeHTTP,
+			Type:    mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
 				Matcher: &mock.HTTPMatcher{
 					Method: "GET",

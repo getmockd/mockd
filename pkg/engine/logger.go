@@ -163,7 +163,7 @@ func (l *InMemoryRequestLogger) List(filter *RequestLogFilter) []*requestlog.Ent
 }
 
 // matchesFilter checks if an entry matches all filter criteria.
-func matchesFilter(entry *requestlog.Entry, filter *RequestLogFilter) bool {
+func matchesFilter(entry *requestlog.Entry, filter *RequestLogFilter) bool { //nolint:gocyclo // multi-field filter matching
 	// Protocol filter
 	if filter.Protocol != "" && entry.Protocol != filter.Protocol {
 		return false

@@ -14,14 +14,14 @@ import (
 // TestVerifyMock_NoEngine tests that handlers properly return errors when no engine is connected.
 func TestVerifyMock_NoEngine(t *testing.T) {
 	// Create admin API without engine client
-	adminAPI := NewAdminAPI(0)
+	adminAPI := NewAPI(0)
 
 	t.Run("handleGetMockVerification returns no_engine error", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/mocks/test-id/verify", nil)
 		req.SetPathValue("id", "test-id")
 		w := httptest.NewRecorder()
 
-		adminAPI.handleGetMockVerification(w, req)
+		adminAPI.requireEngine(adminAPI.handleGetMockVerification)(w, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 
@@ -37,7 +37,7 @@ func TestVerifyMock_NoEngine(t *testing.T) {
 		req.SetPathValue("id", "test-id")
 		w := httptest.NewRecorder()
 
-		adminAPI.handleVerifyMock(w, req)
+		adminAPI.requireEngine(adminAPI.handleVerifyMock)(w, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 
@@ -52,7 +52,7 @@ func TestVerifyMock_NoEngine(t *testing.T) {
 		req.SetPathValue("id", "test-id")
 		w := httptest.NewRecorder()
 
-		adminAPI.handleListMockInvocations(w, req)
+		adminAPI.requireEngine(adminAPI.handleListMockInvocations)(w, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 
@@ -67,7 +67,7 @@ func TestVerifyMock_NoEngine(t *testing.T) {
 		req.SetPathValue("id", "test-id")
 		w := httptest.NewRecorder()
 
-		adminAPI.handleResetMockVerification(w, req)
+		adminAPI.requireEngine(adminAPI.handleResetMockVerification)(w, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 
@@ -81,7 +81,7 @@ func TestVerifyMock_NoEngine(t *testing.T) {
 		req := httptest.NewRequest("DELETE", "/verify", nil)
 		w := httptest.NewRecorder()
 
-		adminAPI.handleResetAllVerification(w, req)
+		adminAPI.requireEngine(adminAPI.handleResetAllVerification)(w, req)
 
 		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 
@@ -94,7 +94,7 @@ func TestVerifyMock_NoEngine(t *testing.T) {
 
 // TestEvaluateVerification tests the verification logic without needing an engine.
 func TestEvaluateVerification(t *testing.T) {
-	adminAPI := NewAdminAPI(0)
+	adminAPI := NewAPI(0)
 
 	t.Run("atLeast passes when count meets minimum", func(t *testing.T) {
 		minVal := 3

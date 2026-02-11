@@ -3,7 +3,9 @@ package admin
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,7 +30,7 @@ type MocksListResponse struct {
 }
 
 // getMockStore returns the mock store to use.
-func (a *AdminAPI) getMockStore() store.MockStore {
+func (a *API) getMockStore() store.MockStore {
 	if a.dataStore == nil {
 		return nil
 	}
@@ -52,7 +54,7 @@ func applyMockFilter(mocks []*mock.Mock, filter *MockFilter) []*mock.Mock {
 	if filter.Type != "" {
 		filtered := make([]*mock.Mock, 0, len(mocks))
 		for _, m := range mocks {
-			if m.Type == mock.MockType(filter.Type) {
+			if m.Type == mock.Type(filter.Type) {
 				filtered = append(filtered, m)
 			}
 		}
@@ -96,12 +98,12 @@ func applyMockFilter(mocks []*mock.Mock, filter *MockFilter) []*mock.Mock {
 // getMockPort extracts the port from a mock if it uses a dedicated port (MQTT, gRPC).
 // Returns 0 if the mock type doesn't use a dedicated port.
 func getMockPort(m *mock.Mock) int {
-	switch m.Type {
-	case mock.MockTypeMQTT:
+	switch m.Type { //nolint:exhaustive // only MQTT and gRPC use dedicated ports
+	case mock.TypeMQTT:
 		if m.MQTT != nil {
 			return m.MQTT.Port
 		}
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if m.GRPC != nil {
 			return m.GRPC.Port
 		}
@@ -114,7 +116,7 @@ type PortConflict struct {
 	Port         int
 	ConflictID   string
 	ConflictName string
-	ConflictType mock.MockType
+	ConflictType mock.Type
 }
 
 // PortCheckResult represents the result of checking port availability.
@@ -157,14 +159,14 @@ func isPortError(errMsg string) bool {
 // - Same port + same protocol + same workspace = MERGE (services/topics added to existing)
 // - Same port + different protocol = CONFLICT (can't mix protocols on same port)
 // - Same port + different workspace = CONFLICT (workspaces can't share ports)
-func (a *AdminAPI) checkPortConflict(ctx context.Context, m *mock.Mock, excludeID string) *PortConflict {
+func (a *API) checkPortConflict(ctx context.Context, m *mock.Mock, excludeID string) *PortConflict {
 	result := a.checkPortAvailability(ctx, m, excludeID)
 	return result.Conflict
 }
 
 // checkPortAvailability checks port availability and returns merge opportunities.
 // This is the richer version of checkPortConflict that also identifies merge targets.
-func (a *AdminAPI) checkPortAvailability(ctx context.Context, m *mock.Mock, excludeID string) *PortCheckResult {
+func (a *API) checkPortAvailability(ctx context.Context, m *mock.Mock, excludeID string) *PortCheckResult {
 	port := getMockPort(m)
 	if port == 0 {
 		return &PortCheckResult{} // Mock doesn't use a dedicated port
@@ -174,14 +176,14 @@ func (a *AdminAPI) checkPortAvailability(ctx context.Context, m *mock.Mock, excl
 	var allMocks []*mock.Mock
 	var err error
 
-	if a.localEngine != nil {
-		allMocks, err = a.localEngine.ListMocks(ctx)
+	if engine := a.localEngine.Load(); engine != nil {
+		allMocks, err = engine.ListMocks(ctx)
 	} else if a.dataStore != nil {
 		allMocks, err = a.dataStore.Mocks().List(ctx, nil)
 	}
 
 	if err != nil {
-		a.log.Warn("failed to list mocks for port conflict check", "error", err)
+		a.logger().Warn("failed to list mocks for port conflict check", "error", err)
 		return &PortCheckResult{} // Don't block on error, let runtime catch it
 	}
 
@@ -268,7 +270,7 @@ type MergeResult struct {
 // Returns the merge result or an error if there's a service/method conflict.
 func mergeGRPCMock(target *mock.Mock, source *mock.Mock) (*MergeResult, error) {
 	if target.GRPC == nil || source.GRPC == nil {
-		return nil, fmt.Errorf("both mocks must have gRPC configuration")
+		return nil, errors.New("both mocks must have gRPC configuration")
 	}
 
 	result := &MergeResult{
@@ -367,7 +369,7 @@ func mergeGRPCMock(target *mock.Mock, source *mock.Mock) (*MergeResult, error) {
 // Returns the merge result or an error if there's a topic conflict.
 func mergeMQTTMock(target *mock.Mock, source *mock.Mock) (*MergeResult, error) {
 	if target.MQTT == nil || source.MQTT == nil {
-		return nil, fmt.Errorf("both mocks must have MQTT configuration")
+		return nil, errors.New("both mocks must have MQTT configuration")
 	}
 
 	result := &MergeResult{
@@ -410,7 +412,7 @@ type WorkspacePortConflict struct {
 // checkWorkspaceEnginePortConflicts checks if assigning a workspace to an engine would create
 // port conflicts with mocks in other workspaces already on that engine.
 // Returns a list of conflicts (empty if none).
-func (a *AdminAPI) checkWorkspaceEnginePortConflicts(ctx context.Context, engineID, workspaceID string) []WorkspacePortConflict {
+func (a *API) checkWorkspaceEnginePortConflicts(ctx context.Context, engineID, workspaceID string) []WorkspacePortConflict {
 	var conflicts []WorkspacePortConflict
 
 	// Get the engine to find other workspaces
@@ -424,7 +426,7 @@ func (a *AdminAPI) checkWorkspaceEnginePortConflicts(ctx context.Context, engine
 	if a.dataStore != nil {
 		allMocks, err = a.dataStore.Mocks().List(ctx, &store.MockFilter{WorkspaceID: workspaceID})
 		if err != nil {
-			a.log.Warn("failed to list mocks for workspace port conflict check", "error", err)
+			a.logger().Warn("failed to list mocks for workspace port conflict check", "error", err)
 			return conflicts
 		}
 	}
@@ -496,13 +498,13 @@ func applyMockPatch(m *mock.Mock, patch map[string]interface{}) {
 
 // handleListUnifiedMocks returns all mocks with optional filtering.
 // GET /mocks?type=http&parentId=folder123&enabled=true&search=user
-func (a *AdminAPI) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 	// Query from engine if available (engine is the runtime data plane)
 	// Fall back to dataStore for persistence-only scenarios
-	if a.localEngine != nil {
-		mocks, err := a.localEngine.ListMocks(r.Context())
+	if engine := a.localEngine.Load(); engine != nil {
+		mocks, err := engine.ListMocks(r.Context())
 		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "engine_unavailable", "Failed to list mocks: "+err.Error())
+			writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.logger(), "list mocks"))
 			return
 		}
 
@@ -541,7 +543,7 @@ func (a *AdminAPI) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request
 
 	// Filter by type
 	if t := query.Get("type"); t != "" {
-		filter.Type = mock.MockType(t)
+		filter.Type = mock.Type(t)
 	}
 
 	// Filter by parent folder
@@ -571,7 +573,8 @@ func (a *AdminAPI) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request
 
 	mocks, err := mockStore.List(r.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "list_error", err.Error())
+		a.logger().Error("failed to list mocks from store", "error", err)
+		writeError(w, http.StatusInternalServerError, "list_error", ErrMsgInternalError)
 		return
 	}
 
@@ -584,7 +587,7 @@ func (a *AdminAPI) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request
 
 // handleGetUnifiedMock returns a single mock by ID.
 // GET /mocks/{id}
-func (a *AdminAPI) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "missing mock id")
@@ -592,8 +595,8 @@ func (a *AdminAPI) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Query from engine if available (engine is the runtime data plane)
-	if a.localEngine != nil {
-		m, err := a.localEngine.GetMock(r.Context(), id)
+	if engine := a.localEngine.Load(); engine != nil {
+		m, err := engine.GetMock(r.Context(), id)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
@@ -611,11 +614,12 @@ func (a *AdminAPI) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) 
 
 	m, err := mockStore.Get(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "get_error", err.Error())
+		a.logger().Error("failed to get mock from store", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "get_error", ErrMsgInternalError)
 		return
 	}
 
@@ -624,7 +628,7 @@ func (a *AdminAPI) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) 
 
 // handleCreateUnifiedMock creates a new mock.
 // POST /mocks
-func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	mockStore := a.getMockStore()
 	if mockStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Unified mocks API requires persistent storage - coming soon")
@@ -633,7 +637,7 @@ func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 	var m mock.Mock
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -654,9 +658,9 @@ func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if a.localEngine != nil {
+	if engine := a.localEngine.Load(); engine != nil {
 		// Check engine for duplicate ID (engine is the runtime truth)
-		if existing, err := a.localEngine.GetMock(r.Context(), m.ID); err == nil && existing != nil {
+		if existing, err := engine.GetMock(r.Context(), m.ID); err == nil && existing != nil {
 			writeError(w, http.StatusConflict, "duplicate_id", "Mock with this ID already exists")
 			return
 		}
@@ -711,30 +715,31 @@ func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 	// No conflict, no merge - create new mock
 	if err := mockStore.Create(r.Context(), &m); err != nil {
-		if err == store.ErrAlreadyExists {
+		if errors.Is(err, store.ErrAlreadyExists) {
 			writeError(w, http.StatusConflict, "duplicate_id", "Mock with this ID already exists")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "create_error", err.Error())
+		a.logger().Error("failed to create mock in store", "id", m.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, "create_error", ErrMsgInternalError)
 		return
 	}
 
 	// Notify the engine so it can serve the mock (Admin = control plane, Engine = data plane)
-	if a.localEngine != nil {
+	if engine := a.localEngine.Load(); engine != nil {
 		// config.MockConfiguration is an alias for mock.Mock, so pass directly
-		if _, err := a.localEngine.CreateMock(r.Context(), &m); err != nil {
+		if _, err := engine.CreateMock(r.Context(), &m); err != nil {
 			// Rollback the store operation - mock can't actually run
 			if deleteErr := mockStore.Delete(r.Context(), m.ID); deleteErr != nil {
-				a.log.Warn("failed to rollback mock after engine error", "id", m.ID, "error", deleteErr)
+				a.logger().Warn("failed to rollback mock after engine error", "id", m.ID, "error", deleteErr)
 			}
 
+			a.logger().Error("failed to activate mock in engine", "id", m.ID, "error", err)
 			errMsg := err.Error()
 			if isPortError(errMsg) {
 				writeError(w, http.StatusConflict, "port_unavailable",
-					fmt.Sprintf("Failed to start mock: %s. The port may be in use by another process.", errMsg))
+					"Failed to start mock: the port may be in use by another process")
 			} else {
-				writeError(w, http.StatusInternalServerError, "engine_error",
-					fmt.Sprintf("Failed to activate mock: %s", errMsg))
+				writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
 			}
 			return
 		}
@@ -752,18 +757,18 @@ func (a *AdminAPI) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 // handleMergeMock handles merging a new mock's services/topics into an existing mock.
 // This is called when creating a gRPC/MQTT mock on a port that already has a mock.
-func (a *AdminAPI) handleMergeMock(w http.ResponseWriter, r *http.Request, newMock *mock.Mock, target *mock.Mock, mockStore store.MockStore) {
+func (a *API) handleMergeMock(w http.ResponseWriter, r *http.Request, newMock *mock.Mock, target *mock.Mock, mockStore store.MockStore) {
 	var mergeResult *MergeResult
 	var err error
 
 	switch newMock.Type {
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		mergeResult, err = mergeGRPCMock(target, newMock)
 		if err != nil {
 			writeError(w, http.StatusConflict, "service_conflict", err.Error())
 			return
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		mergeResult, err = mergeMQTTMock(target, newMock)
 		if err != nil {
 			writeError(w, http.StatusConflict, "topic_conflict", err.Error())
@@ -780,15 +785,15 @@ func (a *AdminAPI) handleMergeMock(w http.ResponseWriter, r *http.Request, newMo
 	// Update the target mock in the store
 	target.UpdatedAt = time.Now()
 	if err := mockStore.Update(r.Context(), target); err != nil {
-		writeError(w, http.StatusInternalServerError, "update_error",
-			fmt.Sprintf("Failed to merge into existing mock: %s", err.Error()))
+		a.logger().Error("failed to merge mock into store", "targetId", target.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, "update_error", ErrMsgInternalError)
 		return
 	}
 
 	// Notify engine to reload the mock with new services/topics
-	if a.localEngine != nil {
-		if _, err := a.localEngine.UpdateMock(r.Context(), target.ID, target); err != nil {
-			a.log.Warn("failed to notify engine of merged mock", "id", target.ID, "error", err)
+	if engine := a.localEngine.Load(); engine != nil {
+		if _, err := engine.UpdateMock(r.Context(), target.ID, target); err != nil {
+			a.logger().Warn("failed to notify engine of merged mock", "id", target.ID, "error", err)
 			// Don't fail - the mock is updated in store, engine will pick it up on next load
 		}
 	}
@@ -796,7 +801,7 @@ func (a *AdminAPI) handleMergeMock(w http.ResponseWriter, r *http.Request, newMo
 	// Build response
 	port := getMockPort(target)
 	var message string
-	if newMock.Type == mock.MockTypeGRPC {
+	if newMock.Type == mock.TypeGRPC {
 		message = fmt.Sprintf("Merged into existing gRPC server on port %d", port)
 	} else {
 		message = fmt.Sprintf("Merged into existing MQTT broker on port %d", port)
@@ -824,7 +829,7 @@ func (a *AdminAPI) handleMergeMock(w http.ResponseWriter, r *http.Request, newMo
 
 // handleUpdateUnifiedMock updates an existing mock (full replacement).
 // PUT /mocks/{id}
-func (a *AdminAPI) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "missing mock id")
@@ -833,7 +838,7 @@ func (a *AdminAPI) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 	var m mock.Mock
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -850,11 +855,12 @@ func (a *AdminAPI) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Reques
 	// Get existing mock to preserve createdAt and workspaceID
 	existing, err := mockStore.Get(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "get_error", err.Error())
+		a.logger().Error("failed to get mock for update", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "get_error", ErrMsgInternalError)
 		return
 	}
 
@@ -891,26 +897,27 @@ func (a *AdminAPI) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 	// Persist to store (source of truth)
 	if err := mockStore.Update(r.Context(), &m); err != nil {
-		writeError(w, http.StatusInternalServerError, "update_error", err.Error())
+		a.logger().Error("failed to update mock in store", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "update_error", ErrMsgInternalError)
 		return
 	}
 
 	// Notify engine so it can update the running mock
-	if a.localEngine != nil {
-		if _, err := a.localEngine.UpdateMock(r.Context(), id, &m); err != nil {
+	if engine := a.localEngine.Load(); engine != nil {
+		if _, err := engine.UpdateMock(r.Context(), id, &m); err != nil {
+			a.logger().Error("failed to update mock in engine", "id", m.ID, "error", err)
 			errMsg := err.Error()
 			// Check if this is a port-related error
 			if isPortError(errMsg) {
 				// Rollback the store operation - restore the existing mock
 				if rollbackErr := mockStore.Update(r.Context(), existing); rollbackErr != nil {
-					a.log.Warn("failed to rollback mock update after engine error", "id", m.ID, "error", rollbackErr)
+					a.logger().Warn("failed to rollback mock update after engine error", "id", m.ID, "error", rollbackErr)
 				}
 				writeError(w, http.StatusConflict, "port_unavailable",
-					fmt.Sprintf("Failed to update mock: %s. The port may be in use by another process.", errMsg))
+					"Failed to update mock: the port may be in use by another process")
 				return
 			}
-			// For other errors, log but don't fail
-			a.log.Warn("failed to notify engine of mock update", "id", m.ID, "error", err)
+			// For other errors, log but don't fail (already logged above)
 		}
 	}
 
@@ -919,7 +926,7 @@ func (a *AdminAPI) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 // handlePatchUnifiedMock partially updates a mock.
 // PATCH /mocks/{id}
-func (a *AdminAPI) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
+func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "missing mock id")
@@ -929,7 +936,7 @@ func (a *AdminAPI) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request
 	// Decode patch into a map first to see which fields are being updated
 	var patch map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -942,11 +949,12 @@ func (a *AdminAPI) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request
 	// Get existing mock from store
 	existing, err := mockStore.Get(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "get_error", err.Error())
+		a.logger().Error("failed to get mock for patch", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "get_error", ErrMsgInternalError)
 		return
 	}
 
@@ -955,14 +963,15 @@ func (a *AdminAPI) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request
 
 	// Persist to store (source of truth)
 	if err := mockStore.Update(r.Context(), existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "update_error", err.Error())
+		a.logger().Error("failed to update mock in store (patch)", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "update_error", ErrMsgInternalError)
 		return
 	}
 
 	// Notify engine so it can update the running mock
-	if a.localEngine != nil {
-		if _, err := a.localEngine.UpdateMock(r.Context(), id, existing); err != nil {
-			a.log.Warn("failed to notify engine of mock patch", "id", existing.ID, "error", err)
+	if engine := a.localEngine.Load(); engine != nil {
+		if _, err := engine.UpdateMock(r.Context(), id, existing); err != nil {
+			a.logger().Warn("failed to notify engine of mock patch", "id", existing.ID, "error", err)
 		}
 	}
 
@@ -971,7 +980,7 @@ func (a *AdminAPI) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request
 
 // handleDeleteUnifiedMock deletes a mock by ID.
 // DELETE /mocks/{id}
-func (a *AdminAPI) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "missing mock id")
@@ -986,18 +995,19 @@ func (a *AdminAPI) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 	// Delete from store (source of truth)
 	if err := mockStore.Delete(r.Context(), id); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "delete_error", err.Error())
+		a.logger().Error("failed to delete mock from store", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "delete_error", ErrMsgInternalError)
 		return
 	}
 
 	// Notify engine so it can stop serving the mock
-	if a.localEngine != nil {
-		if err := a.localEngine.DeleteMock(r.Context(), id); err != nil {
-			a.log.Warn("failed to notify engine of mock deletion", "id", id, "error", err)
+	if engine := a.localEngine.Load(); engine != nil {
+		if err := engine.DeleteMock(r.Context(), id); err != nil {
+			a.logger().Warn("failed to notify engine of mock deletion", "id", id, "error", err)
 		}
 	}
 
@@ -1006,14 +1016,14 @@ func (a *AdminAPI) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 // handleDeleteAllUnifiedMocks deletes all mocks, optionally filtered by type.
 // DELETE /mocks?type=http
-func (a *AdminAPI) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 	mockStore := a.getMockStore()
 	if mockStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Unified mocks API requires persistent storage - coming soon")
 		return
 	}
 
-	mockType := mock.MockType(r.URL.Query().Get("type"))
+	mockType := mock.Type(r.URL.Query().Get("type"))
 
 	var err error
 	if mockType != "" {
@@ -1023,7 +1033,8 @@ func (a *AdminAPI) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Re
 	}
 
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "delete_error", err.Error())
+		a.logger().Error("failed to delete mocks from store", "type", mockType, "error", err)
+		writeError(w, http.StatusInternalServerError, "delete_error", ErrMsgInternalError)
 		return
 	}
 
@@ -1032,7 +1043,7 @@ func (a *AdminAPI) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Re
 
 // handleToggleUnifiedMock toggles the enabled state of a mock.
 // POST /mocks/{id}/toggle
-func (a *AdminAPI) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "missing mock id")
@@ -1040,9 +1051,9 @@ func (a *AdminAPI) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Reques
 	}
 
 	// If engine is available, toggle there (engine is the runtime data plane)
-	if a.localEngine != nil {
+	if engine := a.localEngine.Load(); engine != nil {
 		// Get current state to determine new state
-		existing, err := a.localEngine.GetMock(r.Context(), id)
+		existing, err := engine.GetMock(r.Context(), id)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
@@ -1050,9 +1061,10 @@ func (a *AdminAPI) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 		currentEnabled := existing.Enabled == nil || *existing.Enabled
 		newEnabled := !currentEnabled
-		updated, err := a.localEngine.ToggleMock(r.Context(), id, newEnabled)
+		updated, err := engine.ToggleMock(r.Context(), id, newEnabled)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "toggle_error", err.Error())
+			a.logger().Error("failed to toggle mock in engine", "id", id, "error", err)
+			writeError(w, http.StatusInternalServerError, "toggle_error", ErrMsgInternalError)
 			return
 		}
 		writeJSON(w, http.StatusOK, updated)
@@ -1068,11 +1080,12 @@ func (a *AdminAPI) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 	m, err := mockStore.Get(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "mock not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "get_error", err.Error())
+		a.logger().Error("failed to get mock for toggle", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "get_error", ErrMsgInternalError)
 		return
 	}
 
@@ -1082,7 +1095,8 @@ func (a *AdminAPI) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Reques
 	m.UpdatedAt = time.Now()
 
 	if err := mockStore.Update(r.Context(), m); err != nil {
-		writeError(w, http.StatusInternalServerError, "update_error", err.Error())
+		a.logger().Error("failed to update mock toggle in store", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "update_error", ErrMsgInternalError)
 		return
 	}
 
@@ -1091,14 +1105,14 @@ func (a *AdminAPI) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Reques
 
 // BulkPortConflict represents a port conflict found during bulk operations.
 type BulkPortConflict struct {
-	MockIndex    int           `json:"mockIndex"`
-	MockID       string        `json:"mockId"`
-	MockName     string        `json:"mockName"`
-	Port         int           `json:"port"`
-	ConflictWith string        `json:"conflictWith"` // "existing" or mock ID from the batch
-	ConflictID   string        `json:"conflictId,omitempty"`
-	ConflictName string        `json:"conflictName,omitempty"`
-	ConflictType mock.MockType `json:"conflictType,omitempty"`
+	MockIndex    int       `json:"mockIndex"`
+	MockID       string    `json:"mockId"`
+	MockName     string    `json:"mockName"`
+	Port         int       `json:"port"`
+	ConflictWith string    `json:"conflictWith"` // "existing" or mock ID from the batch
+	ConflictID   string    `json:"conflictId,omitempty"`
+	ConflictName string    `json:"conflictName,omitempty"`
+	ConflictType mock.Type `json:"conflictType,omitempty"`
 }
 
 // checkBulkPortConflicts validates port conflicts for a batch of mocks.
@@ -1107,7 +1121,7 @@ type BulkPortConflict struct {
 //
 // Simple rule: one port = one mock. No port sharing allowed, even for same protocol.
 // If you want multiple topics on one MQTT broker, define them all in one mock config.
-func (a *AdminAPI) checkBulkPortConflicts(ctx context.Context, mocks []*mock.Mock) []BulkPortConflict {
+func (a *API) checkBulkPortConflicts(ctx context.Context, mocks []*mock.Mock) []BulkPortConflict {
 	var conflicts []BulkPortConflict
 
 	// Track ports used within the batch (grouped by workspace and port)
@@ -1183,16 +1197,19 @@ func (a *AdminAPI) checkBulkPortConflicts(ctx context.Context, mocks []*mock.Moc
 
 // handleBulkCreateUnifiedMocks creates multiple mocks in a single request.
 // POST /mocks/bulk
-func (a *AdminAPI) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 	mockStore := a.getMockStore()
 	if mockStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Unified mocks API requires persistent storage - coming soon")
 		return
 	}
 
+	// Override the default body limit — bulk imports can be large.
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10MB
+
 	var mocks []*mock.Mock
 	if err := json.NewDecoder(r.Body).Decode(&mocks); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_body", "invalid request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_body", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -1237,8 +1254,8 @@ func (a *AdminAPI) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.R
 			if m.ID != "" {
 				_ = mockStore.Delete(r.Context(), m.ID) // Ignore not-found errors
 				// Also remove from engine so it re-creates cleanly
-				if a.localEngine != nil {
-					_ = a.localEngine.DeleteMock(r.Context(), m.ID)
+				if engine := a.localEngine.Load(); engine != nil {
+					_ = engine.DeleteMock(r.Context(), m.ID)
 				}
 			}
 		}
@@ -1255,27 +1272,27 @@ func (a *AdminAPI) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.R
 	}
 
 	if err := mockStore.BulkCreate(r.Context(), mocks); err != nil {
-		if err == store.ErrAlreadyExists {
+		if errors.Is(err, store.ErrAlreadyExists) {
 			writeError(w, http.StatusConflict, "already_exists", "one or more mocks already exist")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "bulk_create_error", err.Error())
+		a.logger().Error("failed to bulk create mocks in store", "error", err)
+		writeError(w, http.StatusInternalServerError, "bulk_create_error", ErrMsgInternalError)
 		return
 	}
 
 	// Notify the engine for each mock (Admin = control plane, Engine = data plane)
 	// Track any engine errors for reporting
 	var engineErrors []string
-	if a.localEngine != nil {
+	if engine := a.localEngine.Load(); engine != nil {
 		for _, m := range mocks {
-			if _, err := a.localEngine.CreateMock(r.Context(), m); err != nil {
-				errMsg := err.Error()
-				if isPortError(errMsg) {
+			if _, err := engine.CreateMock(r.Context(), m); err != nil {
+				a.logger().Warn("failed to notify engine of bulk mock create", "id", m.ID, "error", err)
+				if isPortError(err.Error()) {
 					// Port error from engine - this shouldn't happen if our validation is correct
 					// but handle it gracefully
-					engineErrors = append(engineErrors, fmt.Sprintf("%s: %s", m.ID, errMsg))
+					engineErrors = append(engineErrors, m.ID+": port may be in use by another process")
 				}
-				a.log.Warn("failed to notify engine of bulk mock create", "id", m.ID, "error", err)
 			}
 		}
 	}
@@ -1292,7 +1309,7 @@ func (a *AdminAPI) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.R
 }
 
 // generateMockID generates a unique ID for a mock based on its type.
-func generateMockID(t mock.MockType) string {
+func generateMockID(t mock.Type) string {
 	// Use type-prefixed IDs for easier identification
 	prefix := string(t)
 	if prefix == "" {
@@ -1308,5 +1325,5 @@ func generateShortID() string {
 		// Fallback to timestamp-based ID
 		return fmt.Sprintf("%x", time.Now().UnixNano())
 	}
-	return fmt.Sprintf("%x", b)
+	return hex.EncodeToString(b)
 }

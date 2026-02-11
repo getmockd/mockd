@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,16 +16,18 @@ import (
 	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/store"
+	"github.com/getmockd/mockd/pkg/workspace"
 )
 
-// WorkspaceServerStatus represents the status of a workspace server.
-type WorkspaceServerStatus string
+// WorkspaceServerStatus is an alias for the shared workspace.ServerStatus type.
+// Kept for backward compatibility with existing consumers within pkg/engine.
+type WorkspaceServerStatus = workspace.ServerStatus
 
 const (
-	WorkspaceServerStatusStopped  WorkspaceServerStatus = "stopped"
-	WorkspaceServerStatusRunning  WorkspaceServerStatus = "running"
-	WorkspaceServerStatusStarting WorkspaceServerStatus = "starting"
-	WorkspaceServerStatusError    WorkspaceServerStatus = "error"
+	WorkspaceServerStatusStopped  = workspace.ServerStatusStopped
+	WorkspaceServerStatusRunning  = workspace.ServerStatusRunning
+	WorkspaceServerStatusStarting = workspace.ServerStatusStarting
+	WorkspaceServerStatusError    = workspace.ServerStatusError
 )
 
 // WorkspaceServer represents an isolated HTTP server for a single workspace.
@@ -69,23 +72,15 @@ type WorkspaceManager struct {
 	maxLogEntries       int
 }
 
-// WorkspaceMockFetcher is a function that fetches mocks for a specific workspace.
-type WorkspaceMockFetcher func(ctx context.Context, workspaceID string) ([]*config.MockConfiguration, error)
+// WorkspaceMockFetcher is an alias for the shared workspace.MockFetcher type.
+type WorkspaceMockFetcher = workspace.MockFetcher
 
-// WorkspaceManagerConfig holds configuration for the workspace manager.
-type WorkspaceManagerConfig struct {
-	DefaultReadTimeout  time.Duration
-	DefaultWriteTimeout time.Duration
-	MaxLogEntries       int
-}
+// WorkspaceManagerConfig is an alias for the shared workspace.ManagerConfig type.
+type WorkspaceManagerConfig = workspace.ManagerConfig
 
 // DefaultWorkspaceManagerConfig returns sensible defaults.
 func DefaultWorkspaceManagerConfig() *WorkspaceManagerConfig {
-	return &WorkspaceManagerConfig{
-		DefaultReadTimeout:  30 * time.Second,
-		DefaultWriteTimeout: 30 * time.Second,
-		MaxLogEntries:       1000,
-	}
+	return workspace.DefaultManagerConfig()
 }
 
 // NewWorkspaceManager creates a new workspace manager.
@@ -209,18 +204,22 @@ func (m *WorkspaceManager) RemoveWorkspace(workspaceID string) error {
 }
 
 // GetWorkspace returns the workspace server for the given ID.
-func (m *WorkspaceManager) GetWorkspace(workspaceID string) *WorkspaceServer {
+func (m *WorkspaceManager) GetWorkspace(workspaceID string) workspace.Server {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.workspaces[workspaceID]
+	server, ok := m.workspaces[workspaceID]
+	if !ok {
+		return nil
+	}
+	return server
 }
 
 // ListWorkspaces returns all workspace servers.
-func (m *WorkspaceManager) ListWorkspaces() []*WorkspaceServer {
+func (m *WorkspaceManager) ListWorkspaces() []workspace.Server {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	servers := make([]*WorkspaceServer, 0, len(m.workspaces))
+	servers := make([]workspace.Server, 0, len(m.workspaces))
 	for _, server := range m.workspaces {
 		servers = append(servers, server)
 	}
@@ -271,19 +270,8 @@ func (m *WorkspaceManager) GetWorkspaceStatus(workspaceID string) *WorkspaceStat
 	return server.StatusInfo()
 }
 
-// WorkspaceStatusInfo contains status information for a workspace server.
-type WorkspaceStatusInfo struct {
-	WorkspaceID   string                `json:"workspaceId"`
-	WorkspaceName string                `json:"workspaceName"`
-	HTTPPort      int                   `json:"httpPort"`
-	GRPCPort      int                   `json:"grpcPort,omitempty"`
-	MQTTPort      int                   `json:"mqttPort,omitempty"`
-	Status        WorkspaceServerStatus `json:"status"`
-	StatusMessage string                `json:"statusMessage,omitempty"`
-	MockCount     int                   `json:"mockCount"`
-	RequestCount  int                   `json:"requestCount"`
-	Uptime        int                   `json:"uptime"` // seconds
-}
+// WorkspaceStatusInfo is an alias for the shared workspace.StatusInfo type.
+type WorkspaceStatusInfo = workspace.StatusInfo
 
 // --- WorkspaceServer methods ---
 
@@ -360,7 +348,7 @@ func (s *WorkspaceServer) Start() error {
 	defer s.mu.Unlock()
 
 	if s.status == WorkspaceServerStatusRunning {
-		return fmt.Errorf("server is already running")
+		return errors.New("server is already running")
 	}
 
 	s.status = WorkspaceServerStatusStarting
@@ -375,7 +363,7 @@ func (s *WorkspaceServer) Start() error {
 
 	// Start in background
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.mu.Lock()
 			s.status = WorkspaceServerStatusError
 			s.statusMsg = err.Error()
@@ -484,7 +472,7 @@ func (s *WorkspaceServer) AddMock(cfg *config.MockConfiguration) error {
 	defer s.mu.Unlock()
 
 	if s.store == nil {
-		return fmt.Errorf("workspace server not initialized")
+		return errors.New("workspace server not initialized")
 	}
 
 	// Ensure mock has workspace ID set
@@ -517,7 +505,7 @@ func (s *WorkspaceServer) DeleteMock(id string) error {
 	defer s.mu.Unlock()
 
 	if s.store == nil {
-		return fmt.Errorf("workspace server not initialized")
+		return errors.New("workspace server not initialized")
 	}
 
 	if !s.store.Delete(id) {
@@ -534,7 +522,7 @@ func (s *WorkspaceServer) ListMocks() []*config.MockConfiguration {
 	if s.store == nil {
 		return nil
 	}
-	return s.store.ListByType(mock.MockTypeHTTP)
+	return s.store.ListByType(mock.TypeHTTP)
 }
 
 // GetMock retrieves a mock by ID.

@@ -7,8 +7,8 @@ import (
 )
 
 func TestTokenExpiration(t *testing.T) {
-	// Create an AdminAPI with very short expiration for testing
-	api := NewAdminAPI(0,
+	// Create an API with very short expiration for testing
+	api := NewAPI(0,
 		WithRegistrationTokenExpiration(100*time.Millisecond),
 		WithEngineTokenExpiration(100*time.Millisecond),
 	)
@@ -78,8 +78,8 @@ func TestTokenExpiration(t *testing.T) {
 }
 
 func TestTokenCleanup(t *testing.T) {
-	// Create AdminAPI with short expiration
-	api := NewAdminAPI(0,
+	// Create API with short expiration
+	api := NewAPI(0,
 		WithRegistrationTokenExpiration(50*time.Millisecond),
 		WithEngineTokenExpiration(50*time.Millisecond),
 	)
@@ -143,7 +143,7 @@ func TestTokenCleanupGoroutine(t *testing.T) {
 	// This test verifies the cleanup goroutine starts and stops properly
 	ctx, cancel := context.WithCancel(context.Background())
 
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	api.ctx = ctx
 	api.cancel = cancel
 
@@ -186,7 +186,7 @@ func TestTokenCleanupGoroutine(t *testing.T) {
 }
 
 func TestListRegistrationTokensExcludesExpired(t *testing.T) {
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithRegistrationTokenExpiration(50*time.Millisecond),
 	)
 	defer api.Stop()
@@ -240,7 +240,7 @@ func TestStoredTokenIsExpired(t *testing.T) {
 }
 
 func TestDefaultExpirationValues(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	if api.registrationTokenExpiration != RegistrationTokenExpiration {
@@ -258,7 +258,7 @@ func TestCustomExpirationValues(t *testing.T) {
 	customRegExp := 30 * time.Minute
 	customEngExp := 12 * time.Hour
 
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithRegistrationTokenExpiration(customRegExp),
 		WithEngineTokenExpiration(customEngExp),
 	)
@@ -277,7 +277,7 @@ func TestCustomExpirationValues(t *testing.T) {
 
 func TestInvalidExpirationValuesIgnored(t *testing.T) {
 	// Zero or negative values should be ignored
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithRegistrationTokenExpiration(0),
 		WithEngineTokenExpiration(-1*time.Hour),
 	)

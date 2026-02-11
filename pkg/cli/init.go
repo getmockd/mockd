@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -153,7 +154,8 @@ Examples:
 	var rawYAML []byte // Used for protocol templates that are raw YAML files
 	var err error
 
-	if *template != "" {
+	switch {
+	case *template != "":
 		// Check protocol templates first (raw YAML files from pkg/cli/templates)
 		if templates.Exists(*template) {
 			rawYAML, err = templates.Get(*template)
@@ -162,7 +164,7 @@ Examples:
 			}
 			// Protocol templates are always YAML, override format
 			if outputFormat == "json" {
-				return fmt.Errorf("protocol templates are YAML-only; use --format yaml or omit --format")
+				return errors.New("protocol templates are YAML-only; use --format yaml or omit --format")
 			}
 		} else {
 			// Try built-in Go struct templates (minimal, full, api)
@@ -171,10 +173,10 @@ Examples:
 				return err
 			}
 		}
-	} else if *defaults {
+	case *defaults:
 		// Generate minimal config without prompts
 		cfg = generateMinimalProjectConfig(defaultInitConfig())
-	} else {
+	default:
 		// Interactive wizard (default, or explicit -i/--interactive)
 		_ = *interactive // explicit flag accepted but wizard is the default anyway
 		_, _ = fmt.Fprintln(stdout, "Creating new mockd configuration...")
@@ -190,16 +192,17 @@ Examples:
 
 	// Generate output
 	var data []byte
-	if rawYAML != nil {
+	switch {
+	case rawYAML != nil:
 		// Protocol template — already formatted YAML with comments
 		data = rawYAML
-	} else if outputFormat == "json" {
+	case outputFormat == "json":
 		data, err = json.MarshalIndent(cfg, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to generate JSON: %w", err)
 		}
 		data = append(data, '\n')
-	} else {
+	default:
 		data, err = generateProjectConfigYAML(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to generate YAML: %w", err)

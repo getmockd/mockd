@@ -1,16 +1,19 @@
 package matching
 
 import (
-	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
 
 // regexCache caches compiled regex patterns for performance.
 // Patterns are validated at config load time, so cache misses
-// are rare in steady-state operation.
+// are rare in steady-state operation. The cache is bounded to
+// maxRegexCacheSize entries to prevent unbounded memory growth.
+const maxRegexCacheSize = 1024
+
 var (
 	regexCache   = make(map[string]*regexp.Regexp)
 	regexCacheMu sync.RWMutex
@@ -38,6 +41,11 @@ func getCompiledRegex(pattern string) *regexp.Regexp {
 	if existing, ok := regexCache[pattern]; ok {
 		regexCacheMu.Unlock()
 		return existing
+	}
+	// Evict all entries if cache is full (simple reset strategy — patterns are
+	// re-compiled on demand, so this is a performance cost, not a correctness issue)
+	if len(regexCache) >= maxRegexCacheSize {
+		regexCache = make(map[string]*regexp.Regexp)
 	}
 	regexCache[pattern] = re
 	regexCacheMu.Unlock()
@@ -231,9 +239,9 @@ func MatchPathVariable(pattern, path string) map[string]string {
 			if i == len(patternParts)-1 {
 				// Join remaining path parts
 				remaining := strings.Join(pathParts[i:], "/")
-				result[fmt.Sprintf("%d", wildcardIndex)] = remaining
+				result[strconv.Itoa(wildcardIndex)] = remaining
 			} else {
-				result[fmt.Sprintf("%d", wildcardIndex)] = pathParts[i]
+				result[strconv.Itoa(wildcardIndex)] = pathParts[i]
 			}
 			wildcardIndex++
 			continue

@@ -242,7 +242,7 @@ func TestMockConfiguration_Validate_WithPatterns(t *testing.T) {
 			mockCfg: &MockConfiguration{
 				ID:      "test-1",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
 						PathPattern: `^/api/users/\d+$`,
@@ -260,7 +260,7 @@ func TestMockConfiguration_Validate_WithPatterns(t *testing.T) {
 			mockCfg: &MockConfiguration{
 				ID:      "test-2",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
 						Path:        "/api/users",
@@ -279,7 +279,7 @@ func TestMockConfiguration_Validate_WithPatterns(t *testing.T) {
 			mockCfg: &MockConfiguration{
 				ID:      "test-3",
 				Enabled: boolPtr(true),
-				Type:    mock.MockTypeHTTP,
+				Type:    mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
 						Path:        "/api/users",

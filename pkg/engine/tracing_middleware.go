@@ -94,11 +94,12 @@ func TracingMiddleware(tracer *tracing.Tracer) func(http.Handler) http.Handler {
 			span.SetAttribute("http.status_code", strconv.Itoa(wrapped.statusCode))
 
 			// Set span status based on HTTP status code
-			if wrapped.statusCode >= 400 && wrapped.statusCode < 500 {
+			switch {
+			case wrapped.statusCode >= 400 && wrapped.statusCode < 500:
 				span.SetStatus(tracing.StatusError, fmt.Sprintf("HTTP client error: %d", wrapped.statusCode))
-			} else if wrapped.statusCode >= 500 {
+			case wrapped.statusCode >= 500:
 				span.SetStatus(tracing.StatusError, fmt.Sprintf("HTTP server error: %d", wrapped.statusCode))
-			} else {
+			default:
 				span.SetStatus(tracing.StatusOK, "")
 			}
 		})

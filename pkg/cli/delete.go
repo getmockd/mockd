@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -39,7 +40,7 @@ Examples:
 
 	// Get mock ID from positional args
 	if fs.NArg() < 1 {
-		return fmt.Errorf(`mock ID is required
+		return errors.New(`mock ID is required
 
 Usage: mockd delete <mock-id>
 

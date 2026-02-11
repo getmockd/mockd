@@ -57,7 +57,7 @@
 //	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 //	client.CreateMock(ctx, &config.MockConfiguration{
 //	    ID:   "test-mock",
-//	    Type: mock.MockTypeHTTP,
+//	    Type: mock.TypeHTTP,
 //	    HTTP: &mock.HTTPSpec{
 //	        Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/api/test"},
 //	        Response: &mock.HTTPResponse{StatusCode: 200, Body: "ok"},

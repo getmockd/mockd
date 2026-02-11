@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -232,7 +233,7 @@ Examples:
 	}
 
 	if fs.NArg() < 1 {
-		return fmt.Errorf(`template ID is required
+		return errors.New(`template ID is required
 
 Usage: mockd templates add <template-id>
 
@@ -331,7 +332,7 @@ func fetchURL(url string) ([]byte, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 404 {
-		return nil, fmt.Errorf("not found")
+		return nil, errors.New("not found")
 	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("unexpected status: %s", resp.Status)

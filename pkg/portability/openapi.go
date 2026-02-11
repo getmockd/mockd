@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -327,7 +328,7 @@ func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ 
 	enabled := true
 	return &config.MockConfiguration{
 		ID:        generateImportID(),
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Name:      name,
 		Enabled:   &enabled,
 		CreatedAt: now,
@@ -443,7 +444,7 @@ func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *Swagge
 	enabled2 := true
 	return &config.MockConfiguration{
 		ID:        generateImportID(),
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Name:      name,
 		Enabled:   &enabled2,
 		CreatedAt: now,
@@ -576,9 +577,9 @@ func (e *OpenAPIExporter) mockToOperation(m *config.MockConfiguration) *Operatio
 
 	// Add response
 	if m.HTTP != nil && m.HTTP.Response != nil {
-		statusStr := fmt.Sprintf("%d", m.HTTP.Response.StatusCode)
+		statusStr := strconv.Itoa(m.HTTP.Response.StatusCode)
 		response := Response{
-			Description: fmt.Sprintf("%d response", m.HTTP.Response.StatusCode),
+			Description: statusStr + " response",
 		}
 
 		if m.HTTP.Response.Body != "" {

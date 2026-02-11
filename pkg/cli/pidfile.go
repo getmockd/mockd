@@ -145,7 +145,7 @@ func (p *PIDFile) FormatUptime() string {
 	mins := int(d.Minutes()) % 60
 	if hours >= 24 {
 		days := hours / 24
-		hours = hours % 24
+		hours %= 24
 		return fmt.Sprintf("%dd %dh %dm", days, hours, mins)
 	}
 	return fmt.Sprintf("%dh %dm", hours, mins)

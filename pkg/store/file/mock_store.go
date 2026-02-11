@@ -180,7 +180,7 @@ func (s *mockStore) Delete(ctx context.Context, id string) error {
 }
 
 // DeleteByType deletes all mocks of a specific type.
-func (s *mockStore) DeleteByType(ctx context.Context, mockType mock.MockType) error {
+func (s *mockStore) DeleteByType(ctx context.Context, mockType mock.Type) error {
 	s.fs.mu.Lock()
 	defer s.fs.mu.Unlock()
 
@@ -224,7 +224,7 @@ func (s *mockStore) DeleteAll(ctx context.Context) error {
 }
 
 // Count returns the total number of mocks, optionally filtered by type.
-func (s *mockStore) Count(ctx context.Context, mockType mock.MockType) (int, error) {
+func (s *mockStore) Count(ctx context.Context, mockType mock.Type) (int, error) {
 	s.fs.mu.RLock()
 	defer s.fs.mu.RUnlock()
 

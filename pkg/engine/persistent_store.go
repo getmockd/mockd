@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 
 	"github.com/getmockd/mockd/internal/storage"
 	"github.com/getmockd/mockd/pkg/mock"
@@ -42,7 +43,7 @@ func (p *PersistentMockStore) Get(id string) *mock.Mock {
 func (p *PersistentMockStore) Set(m *mock.Mock) error {
 	// Check if it exists
 	existing, err := p.store.Get(p.ctx, m.ID)
-	if err == store.ErrNotFound || existing == nil {
+	if errors.Is(err, store.ErrNotFound) || existing == nil {
 		return p.store.Create(p.ctx, m)
 	}
 	return p.store.Update(p.ctx, m)
@@ -64,7 +65,7 @@ func (p *PersistentMockStore) List() []*mock.Mock {
 }
 
 // ListByType returns all mocks of a specific type.
-func (p *PersistentMockStore) ListByType(mockType mock.MockType) []*mock.Mock {
+func (p *PersistentMockStore) ListByType(mockType mock.Type) []*mock.Mock {
 	mocks, err := p.store.List(p.ctx, &store.MockFilter{Type: mockType})
 	if err != nil {
 		return nil

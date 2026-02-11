@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -75,7 +78,7 @@ Examples:
   mockd status --pid-file /tmp/mockd.pid
 
   # Check status on custom ports
-  mockd status --port 8080 --admin-port 8090
+  mockd status --port 3000 --admin-port 3001
 `)
 	}
 
@@ -295,7 +298,7 @@ func formatDuration(d time.Duration) string {
 	mins := int(d.Minutes()) % 60
 	if hours >= 24 {
 		days := hours / 24
-		hours = hours % 24
+		hours %= 24
 		return fmt.Sprintf("%dd %dh %dm", days, hours, mins)
 	}
 	return fmt.Sprintf("%dh %dm", hours, mins)
@@ -304,16 +307,14 @@ func formatDuration(d time.Duration) string {
 // printNotRunning prints the "not running" status.
 func printNotRunning(jsonOutput bool) error {
 	if jsonOutput {
-		output := StatusOutput{
+		result := StatusOutput{
 			Running: false,
 			Components: StatusComponents{
 				Admin:  StatusComponentInfo{Status: "stopped"},
 				Engine: StatusComponentInfo{Status: "stopped"},
 			},
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(result)
 	}
 
 	fmt.Println("mockd is not running")
@@ -402,10 +403,8 @@ func fetchLiveStats(adminURL string) (*StatusStats, *HealthInfo) {
 }
 
 // printJSONStatus prints status in JSON format.
-func printJSONStatus(output StatusOutput) error {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(output)
+func printJSONStatus(status StatusOutput) error {
+	return output.JSON(status)
 }
 
 // printHumanStatus prints status in human-readable format.
@@ -495,17 +494,18 @@ func isTerminal() bool {
 // formatNumber formats an integer with thousands separators.
 func formatNumber(n int) string {
 	if n < 1000 {
-		return fmt.Sprintf("%d", n)
+		return strconv.Itoa(n)
 	}
 
 	// Simple implementation for common cases
-	str := fmt.Sprintf("%d", n)
-	result := ""
+	str := strconv.Itoa(n)
+	var b strings.Builder
+	b.Grow(len(str) + len(str)/3)
 	for i, c := range str {
 		if i > 0 && (len(str)-i)%3 == 0 {
-			result += ","
+			b.WriteByte(',')
 		}
-		result += string(c)
+		b.WriteRune(c)
 	}
-	return result
+	return b.String()
 }

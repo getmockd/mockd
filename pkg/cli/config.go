@@ -1,11 +1,11 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -54,9 +54,7 @@ Examples:
 	}
 
 	if *jsonOutput {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(cfg)
+		return output.JSON(cfg)
 	}
 
 	// Human-readable output with source annotations

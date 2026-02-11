@@ -132,7 +132,7 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 	m := &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
 		Name:      mapping.Name,
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -156,13 +156,14 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 	}
 
 	// URL path - prefer urlPath over url over urlPattern
-	if req.URLPath != "" {
+	switch {
+	case req.URLPath != "":
 		m.HTTP.Matcher.Path = req.URLPath
-	} else if req.URL != "" {
+	case req.URL != "":
 		m.HTTP.Matcher.Path = req.URL
-	} else if req.URLPattern != "" {
+	case req.URLPattern != "":
 		m.HTTP.Matcher.PathPattern = req.URLPattern
-	} else if req.URLPathPattern != "" {
+	case req.URLPathPattern != "":
 		m.HTTP.Matcher.PathPattern = req.URLPathPattern
 	}
 
@@ -195,11 +196,12 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 	// Body patterns
 	if len(req.BodyPatterns) > 0 {
 		bp := req.BodyPatterns[0]
-		if bp.EqualTo != "" {
+		switch {
+		case bp.EqualTo != "":
 			m.HTTP.Matcher.BodyEquals = bp.EqualTo
-		} else if bp.Contains != "" {
+		case bp.Contains != "":
 			m.HTTP.Matcher.BodyContains = bp.Contains
-		} else if bp.Matches != "" {
+		case bp.Matches != "":
 			m.HTTP.Matcher.BodyPattern = bp.Matches
 		}
 	}

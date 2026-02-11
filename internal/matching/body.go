@@ -55,9 +55,9 @@ func MatchBodyPattern(pattern string, body []byte) int {
 		return 0
 	}
 
-	// Compile the regex pattern
-	re, err := regexp.Compile(pattern)
-	if err != nil {
+	// Use cached compiled regex for performance
+	re := getCompiledRegex(pattern)
+	if re == nil {
 		// Invalid regex pattern - gracefully return no match
 		return 0
 	}

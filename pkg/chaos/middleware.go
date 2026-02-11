@@ -139,7 +139,7 @@ func (h *ChaosHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	faults := h.injector.ShouldInject(r)
 	for _, fault := range faults {
-		switch fault.Type {
+		switch fault.Type { //nolint:exhaustive // only latency and error faults handled in middleware
 		case FaultLatency:
 			_ = h.injector.InjectLatencyFromConfig(r.Context(), fault.Config)
 		case FaultError:

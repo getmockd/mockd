@@ -14,9 +14,9 @@ import (
 	"sort"
 	"strings"
 	"syscall"
-	"text/tabwriter"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/requestlog"
 )
@@ -250,7 +250,7 @@ func displayLogs(logFiles []string, numLines int, jsonOutput bool) error {
 	for _, file := range logFiles {
 		lines, err := readLastLines(file, numLines)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not read %s: %v\n", file, err)
+			output.Warn("could not read %s: %v", file, err)
 			continue
 		}
 
@@ -281,17 +281,15 @@ func displayLogs(logFiles []string, numLines int, jsonOutput bool) error {
 			File      string `json:"file"`
 			Message   string `json:"message"`
 		}
-		output := make([]jsonLine, 0, len(allLines))
+		lines := make([]jsonLine, 0, len(allLines))
 		for _, l := range allLines {
-			output = append(output, jsonLine{
+			lines = append(lines, jsonLine{
 				Timestamp: l.timestamp.Format(time.RFC3339),
 				File:      l.file,
 				Message:   l.line,
 			})
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(lines)
 	}
 
 	// Print lines
@@ -541,9 +539,7 @@ func runRequestLogs(opts runRequestLogsOptions) error {
 
 	// JSON output
 	if opts.jsonOutput {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(requests)
+		return output.JSON(requests)
 	}
 
 	// No logs message
@@ -562,7 +558,7 @@ func runRequestLogs(opts runRequestLogsOptions) error {
 }
 
 func printTableLogs(requests []*requestlog.Entry) error {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := output.Table()
 	_, _ = fmt.Fprintln(w, "TIMESTAMP\tPROTOCOL\tMETHOD\tPATH\tMATCHED\tDURATION")
 
 	for _, req := range requests {
@@ -665,11 +661,12 @@ func streamRequestLogs(adminURL string, jsonOutput, verbose bool) error {
 			}
 
 			// Output based on format
-			if jsonOutput {
+			switch {
+			case jsonOutput:
 				fmt.Println(data)
-			} else if verbose {
+			case verbose:
 				printVerboseEntry(&entry)
-			} else {
+			default:
 				printTableEntry(&entry)
 			}
 		}

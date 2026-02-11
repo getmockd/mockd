@@ -1,12 +1,13 @@
 package cli
 
 import (
-	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -61,7 +62,7 @@ func reorderArgs(args []string, knownFlags []string) []string {
 }
 
 // RunGet handles the get command.
-func RunGet(args []string) error {
+func RunGet(args []string) error { //nolint:gocyclo // CLI command handler with many subcommands
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 
 	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
@@ -97,7 +98,7 @@ Examples:
 
 	// Get mock ID from positional args
 	if fs.NArg() < 1 {
-		return fmt.Errorf(`mock ID is required
+		return errors.New(`mock ID is required
 
 Usage: mockd get <mock-id>
 
@@ -117,9 +118,7 @@ Run 'mockd get --help' for more options`)
 
 	// Output result
 	if *jsonOutput {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(mock)
+		return output.JSON(mock)
 	}
 
 	// Human-readable output

@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -106,7 +107,7 @@ func NewClient(cfg *ClientConfig) *Client {
 // Connect establishes a QUIC connection to the relay and authenticates.
 func (c *Client) Connect(ctx context.Context) error {
 	if c.connected.Load() {
-		return fmt.Errorf("already connected")
+		return errors.New("already connected")
 	}
 
 	c.logger.Info("connecting to relay", "addr", c.relayAddr)
@@ -229,7 +230,7 @@ func (c *Client) Connect(ctx context.Context) error {
 // Run starts accepting incoming requests. Blocks until disconnected.
 func (c *Client) Run(ctx context.Context) error {
 	if !c.connected.Load() {
-		return fmt.Errorf("not connected")
+		return errors.New("not connected")
 	}
 
 	// Accept incoming streams from relay
@@ -786,7 +787,7 @@ func (c *Client) readControlStream() {
 			c.logger.Debug("received ping")
 		case protocol.ControlTypeDisconnect:
 			c.logger.Info("relay requested disconnect")
-			c.handleDisconnect(fmt.Errorf("relay disconnect"))
+			c.handleDisconnect(errors.New("relay disconnect"))
 			return
 		default:
 			c.logger.Debug("unhandled control message", "type", msg.Type)

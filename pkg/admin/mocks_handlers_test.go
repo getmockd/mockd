@@ -23,7 +23,7 @@ func TestGetMockPort(t *testing.T) {
 			name: "MQTT mock returns port",
 			mock: &mock.Mock{
 				ID:   "mqtt-1",
-				Type: mock.MockTypeMQTT,
+				Type: mock.TypeMQTT,
 				MQTT: &mock.MQTTSpec{
 					Port: 1883,
 				},
@@ -34,7 +34,7 @@ func TestGetMockPort(t *testing.T) {
 			name: "gRPC mock returns port",
 			mock: &mock.Mock{
 				ID:   "grpc-1",
-				Type: mock.MockTypeGRPC,
+				Type: mock.TypeGRPC,
 				GRPC: &mock.GRPCSpec{
 					Port: 50051,
 				},
@@ -45,7 +45,7 @@ func TestGetMockPort(t *testing.T) {
 			name: "HTTP mock returns 0 (no dedicated port)",
 			mock: &mock.Mock{
 				ID:   "http-1",
-				Type: mock.MockTypeHTTP,
+				Type: mock.TypeHTTP,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{
 						Path: "/api/test",
@@ -58,7 +58,7 @@ func TestGetMockPort(t *testing.T) {
 			name: "WebSocket mock returns 0",
 			mock: &mock.Mock{
 				ID:   "ws-1",
-				Type: mock.MockTypeWebSocket,
+				Type: mock.TypeWebSocket,
 			},
 			expected: 0,
 		},
@@ -66,7 +66,7 @@ func TestGetMockPort(t *testing.T) {
 			name: "GraphQL mock returns 0",
 			mock: &mock.Mock{
 				ID:   "graphql-1",
-				Type: mock.MockTypeGraphQL,
+				Type: mock.TypeGraphQL,
 			},
 			expected: 0,
 		},
@@ -74,7 +74,7 @@ func TestGetMockPort(t *testing.T) {
 			name: "SOAP mock returns 0",
 			mock: &mock.Mock{
 				ID:   "soap-1",
-				Type: mock.MockTypeSOAP,
+				Type: mock.TypeSOAP,
 			},
 			expected: 0,
 		},
@@ -82,7 +82,7 @@ func TestGetMockPort(t *testing.T) {
 			name: "MQTT mock with nil spec returns 0",
 			mock: &mock.Mock{
 				ID:   "mqtt-nil",
-				Type: mock.MockTypeMQTT,
+				Type: mock.TypeMQTT,
 				MQTT: nil,
 			},
 			expected: 0,
@@ -91,7 +91,7 @@ func TestGetMockPort(t *testing.T) {
 			name: "gRPC mock with nil spec returns 0",
 			mock: &mock.Mock{
 				ID:   "grpc-nil",
-				Type: mock.MockTypeGRPC,
+				Type: mock.TypeGRPC,
 				GRPC: nil,
 			},
 			expected: 0,
@@ -100,7 +100,7 @@ func TestGetMockPort(t *testing.T) {
 			name: "MQTT mock with port 0 returns 0",
 			mock: &mock.Mock{
 				ID:   "mqtt-zero",
-				Type: mock.MockTypeMQTT,
+				Type: mock.TypeMQTT,
 				MQTT: &mock.MQTTSpec{
 					Port: 0,
 				},
@@ -120,10 +120,10 @@ func TestGetMockPort(t *testing.T) {
 func TestApplyMockFilter(t *testing.T) {
 	// Create test mocks
 	mocks := []*mock.Mock{
-		{ID: "mqtt-1", Type: mock.MockTypeMQTT, Enabled: boolPtr(true), WorkspaceID: "ws-1", ParentID: "folder-1"},
-		{ID: "mqtt-2", Type: mock.MockTypeMQTT, Enabled: boolPtr(false), WorkspaceID: "ws-1", ParentID: ""},
-		{ID: "grpc-1", Type: mock.MockTypeGRPC, Enabled: boolPtr(true), WorkspaceID: "ws-1", ParentID: ""},
-		{ID: "http-1", Type: mock.MockTypeHTTP, Enabled: boolPtr(true), WorkspaceID: "ws-2", ParentID: "folder-1"},
+		{ID: "mqtt-1", Type: mock.TypeMQTT, Enabled: boolPtr(true), WorkspaceID: "ws-1", ParentID: "folder-1"},
+		{ID: "mqtt-2", Type: mock.TypeMQTT, Enabled: boolPtr(false), WorkspaceID: "ws-1", ParentID: ""},
+		{ID: "grpc-1", Type: mock.TypeGRPC, Enabled: boolPtr(true), WorkspaceID: "ws-1", ParentID: ""},
+		{ID: "http-1", Type: mock.TypeHTTP, Enabled: boolPtr(true), WorkspaceID: "ws-2", ParentID: "folder-1"},
 	}
 
 	t.Run("filter by type", func(t *testing.T) {
@@ -131,7 +131,7 @@ func TestApplyMockFilter(t *testing.T) {
 		result := applyMockFilter(mocks, filter)
 		assert.Len(t, result, 2)
 		for _, m := range result {
-			assert.Equal(t, mock.MockTypeMQTT, m.Type)
+			assert.Equal(t, mock.TypeMQTT, m.Type)
 		}
 	})
 
@@ -263,7 +263,7 @@ func TestApplyMockPatch(t *testing.T) {
 	t.Run("does not patch mqtt config - use PUT for port changes", func(t *testing.T) {
 		m := &mock.Mock{
 			ID:   "mqtt-1",
-			Type: mock.MockTypeMQTT,
+			Type: mock.TypeMQTT,
 			MQTT: &mock.MQTTSpec{Port: 1883},
 		}
 		// Try to patch mqtt config - should be ignored
@@ -280,7 +280,7 @@ func TestApplyMockPatch(t *testing.T) {
 	t.Run("does not patch grpc config - use PUT for port changes", func(t *testing.T) {
 		m := &mock.Mock{
 			ID:   "grpc-1",
-			Type: mock.MockTypeGRPC,
+			Type: mock.TypeGRPC,
 			GRPC: &mock.GRPCSpec{Port: 50051},
 		}
 		// Try to patch grpc config - should be ignored
@@ -301,35 +301,35 @@ func TestPortConflict(t *testing.T) {
 			Port:         1883,
 			ConflictID:   "mqtt-123",
 			ConflictName: "IoT Broker",
-			ConflictType: mock.MockTypeMQTT,
+			ConflictType: mock.TypeMQTT,
 		}
 
 		assert.Equal(t, 1883, conflict.Port)
 		assert.Equal(t, "mqtt-123", conflict.ConflictID)
 		assert.Equal(t, "IoT Broker", conflict.ConflictName)
-		assert.Equal(t, mock.MockTypeMQTT, conflict.ConflictType)
+		assert.Equal(t, mock.TypeMQTT, conflict.ConflictType)
 	})
 }
 
 func TestGenerateMockID(t *testing.T) {
 	t.Run("generates ID with type prefix", func(t *testing.T) {
-		httpID := generateMockID(mock.MockTypeHTTP)
+		httpID := generateMockID(mock.TypeHTTP)
 		assert.True(t, len(httpID) > 4)
 		assert.Contains(t, httpID, "http_")
 
-		mqttID := generateMockID(mock.MockTypeMQTT)
+		mqttID := generateMockID(mock.TypeMQTT)
 		assert.Contains(t, mqttID, "mqtt_")
 
-		grpcID := generateMockID(mock.MockTypeGRPC)
+		grpcID := generateMockID(mock.TypeGRPC)
 		assert.Contains(t, grpcID, "grpc_")
 
-		wsID := generateMockID(mock.MockTypeWebSocket)
+		wsID := generateMockID(mock.TypeWebSocket)
 		assert.Contains(t, wsID, "websocket_")
 
-		graphqlID := generateMockID(mock.MockTypeGraphQL)
+		graphqlID := generateMockID(mock.TypeGraphQL)
 		assert.Contains(t, graphqlID, "graphql_")
 
-		soapID := generateMockID(mock.MockTypeSOAP)
+		soapID := generateMockID(mock.TypeSOAP)
 		assert.Contains(t, soapID, "soap_")
 	})
 
@@ -341,7 +341,7 @@ func TestGenerateMockID(t *testing.T) {
 	t.Run("generates unique IDs", func(t *testing.T) {
 		ids := make(map[string]bool)
 		for i := 0; i < 100; i++ {
-			id := generateMockID(mock.MockTypeHTTP)
+			id := generateMockID(mock.TypeHTTP)
 			assert.False(t, ids[id], "Duplicate ID generated: %s", id)
 			ids[id] = true
 		}
@@ -437,8 +437,8 @@ func TestIsPortError(t *testing.T) {
 
 // TestCheckPortConflict_NoPort tests that mocks without dedicated ports return nil conflict
 func TestCheckPortConflict_NoPort(t *testing.T) {
-	// Create AdminAPI without engine or store - should return nil for any mock
-	api := &AdminAPI{}
+	// Create API without engine or store - should return nil for any mock
+	api := &API{}
 
 	tests := []struct {
 		name string
@@ -448,7 +448,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			name: "HTTP mock has no dedicated port",
 			mock: &mock.Mock{
 				ID:          "http-1",
-				Type:        mock.MockTypeHTTP,
+				Type:        mock.TypeHTTP,
 				WorkspaceID: "local",
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{Path: "/api"},
@@ -459,7 +459,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			name: "WebSocket mock has no dedicated port",
 			mock: &mock.Mock{
 				ID:          "ws-1",
-				Type:        mock.MockTypeWebSocket,
+				Type:        mock.TypeWebSocket,
 				WorkspaceID: "local",
 			},
 		},
@@ -467,7 +467,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			name: "GraphQL mock has no dedicated port",
 			mock: &mock.Mock{
 				ID:          "graphql-1",
-				Type:        mock.MockTypeGraphQL,
+				Type:        mock.TypeGraphQL,
 				WorkspaceID: "local",
 			},
 		},
@@ -475,7 +475,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			name: "SOAP mock has no dedicated port",
 			mock: &mock.Mock{
 				ID:          "soap-1",
-				Type:        mock.MockTypeSOAP,
+				Type:        mock.TypeSOAP,
 				WorkspaceID: "local",
 			},
 		},
@@ -483,7 +483,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			name: "MQTT mock with nil spec",
 			mock: &mock.Mock{
 				ID:          "mqtt-nil",
-				Type:        mock.MockTypeMQTT,
+				Type:        mock.TypeMQTT,
 				WorkspaceID: "local",
 				MQTT:        nil,
 			},
@@ -492,7 +492,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			name: "gRPC mock with nil spec",
 			mock: &mock.Mock{
 				ID:          "grpc-nil",
-				Type:        mock.MockTypeGRPC,
+				Type:        mock.TypeGRPC,
 				WorkspaceID: "local",
 				GRPC:        nil,
 			},
@@ -501,7 +501,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			name: "MQTT mock with port 0",
 			mock: &mock.Mock{
 				ID:          "mqtt-zero",
-				Type:        mock.MockTypeMQTT,
+				Type:        mock.TypeMQTT,
 				WorkspaceID: "local",
 				MQTT:        &mock.MQTTSpec{Port: 0},
 			},
@@ -518,12 +518,12 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 
 // TestCheckPortConflict_NoBackend tests that checkPortConflict returns nil when no backend is available
 func TestCheckPortConflict_NoBackend(t *testing.T) {
-	// Create AdminAPI without engine or store
-	api := &AdminAPI{}
+	// Create API without engine or store
+	api := &API{}
 
 	mqttMock := &mock.Mock{
 		ID:          "mqtt-1",
-		Type:        mock.MockTypeMQTT,
+		Type:        mock.TypeMQTT,
 		WorkspaceID: "local",
 		MQTT:        &mock.MQTTSpec{Port: 1883},
 	}
@@ -540,13 +540,13 @@ func TestCheckPortConflict_ExcludeID(t *testing.T) {
 	existingMocks := []*mock.Mock{
 		{
 			ID:          "mqtt-1",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		},
 		{
 			ID:          "mqtt-2",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 1884},
 		},
@@ -557,7 +557,7 @@ func TestCheckPortConflict_ExcludeID(t *testing.T) {
 		// Simulate the check logic
 		newMock := &mock.Mock{
 			ID:          "mqtt-1",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 1883}, // Same port
 		}
@@ -594,7 +594,7 @@ func TestCheckPortConflict_ExcludeID(t *testing.T) {
 	t.Run("finds conflict when changing to used port", func(t *testing.T) {
 		newMock := &mock.Mock{
 			ID:          "mqtt-2",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 1883}, // Port used by mqtt-1
 		}
@@ -634,13 +634,13 @@ func TestCheckPortConflict_WorkspaceIsolation(t *testing.T) {
 	existingMocks := []*mock.Mock{
 		{
 			ID:          "mqtt-ws1",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "workspace-1",
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		},
 		{
 			ID:          "mqtt-ws2",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "workspace-2",
 			MQTT:        &mock.MQTTSpec{Port: 1883}, // Same port, different workspace
 		},
@@ -650,7 +650,7 @@ func TestCheckPortConflict_WorkspaceIsolation(t *testing.T) {
 		// New mock in workspace-3 using port 1883
 		newMock := &mock.Mock{
 			ID:          "mqtt-ws3",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "workspace-3",
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		}
@@ -676,7 +676,7 @@ func TestCheckPortConflict_WorkspaceIsolation(t *testing.T) {
 		// New mock in workspace-1 using port 1883
 		newMock := &mock.Mock{
 			ID:          "mqtt-new",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "workspace-1",
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		}
@@ -705,7 +705,7 @@ func TestCheckPortConflict_MQTTSharing(t *testing.T) {
 	existingMocks := []*mock.Mock{
 		{
 			ID:          "mqtt-1",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		},
@@ -715,7 +715,7 @@ func TestCheckPortConflict_MQTTSharing(t *testing.T) {
 		// New MQTT mock using the same port should NOT conflict
 		newMQTT := &mock.Mock{
 			ID:          "mqtt-2",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		}
@@ -731,7 +731,7 @@ func TestCheckPortConflict_MQTTSharing(t *testing.T) {
 			existingPort := getMockPort(existing)
 			if existingPort == port {
 				// MQTT mocks can share the same port since they share a single broker
-				if newMQTT.Type == mock.MockTypeMQTT && existing.Type == mock.MockTypeMQTT {
+				if newMQTT.Type == mock.TypeMQTT && existing.Type == mock.TypeMQTT {
 					continue
 				}
 				conflict = &PortConflict{
@@ -749,7 +749,7 @@ func TestCheckPortConflict_MQTTSharing(t *testing.T) {
 		// gRPC mock trying to use same port should conflict
 		grpcMock := &mock.Mock{
 			ID:          "grpc-1",
-			Type:        mock.MockTypeGRPC,
+			Type:        mock.TypeGRPC,
 			WorkspaceID: "local",
 			GRPC:        &mock.GRPCSpec{Port: 1883},
 		}
@@ -762,7 +762,7 @@ func TestCheckPortConflict_MQTTSharing(t *testing.T) {
 			existingPort := getMockPort(existing)
 			if existingPort == port {
 				// MQTT mocks can share, but gRPC cannot share with MQTT
-				if grpcMock.Type == mock.MockTypeMQTT && existing.Type == mock.MockTypeMQTT {
+				if grpcMock.Type == mock.TypeMQTT && existing.Type == mock.TypeMQTT {
 					continue
 				}
 				conflict = &PortConflict{
@@ -783,7 +783,7 @@ func TestCheckPortConflict_CrossProtocol(t *testing.T) {
 	existingMocks := []*mock.Mock{
 		{
 			ID:          "mqtt-1",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 5000},
 		},
@@ -792,7 +792,7 @@ func TestCheckPortConflict_CrossProtocol(t *testing.T) {
 	t.Run("gRPC conflicts with MQTT on same port", func(t *testing.T) {
 		grpcMock := &mock.Mock{
 			ID:          "grpc-1",
-			Type:        mock.MockTypeGRPC,
+			Type:        mock.TypeGRPC,
 			WorkspaceID: "local",
 			GRPC:        &mock.GRPCSpec{Port: 5000},
 		}
@@ -815,7 +815,7 @@ func TestCheckPortConflict_CrossProtocol(t *testing.T) {
 		}
 		assert.NotNil(t, conflict)
 		assert.Equal(t, "mqtt-1", conflict.ConflictID)
-		assert.Equal(t, mock.MockTypeMQTT, conflict.ConflictType)
+		assert.Equal(t, mock.TypeMQTT, conflict.ConflictType)
 	})
 }
 
@@ -827,7 +827,7 @@ func TestMergeGRPCMock(t *testing.T) {
 	t.Run("merges new service into existing mock", func(t *testing.T) {
 		existing := &mock.Mock{
 			ID:          "grpc-1",
-			Type:        mock.MockTypeGRPC,
+			Type:        mock.TypeGRPC,
 			WorkspaceID: "local",
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
@@ -843,7 +843,7 @@ func TestMergeGRPCMock(t *testing.T) {
 
 		newMock := &mock.Mock{
 			ID:          "grpc-2",
-			Type:        mock.MockTypeGRPC,
+			Type:        mock.TypeGRPC,
 			WorkspaceID: "local",
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
@@ -871,7 +871,7 @@ func TestMergeGRPCMock(t *testing.T) {
 	t.Run("adds new method to existing service", func(t *testing.T) {
 		existing := &mock.Mock{
 			ID:          "grpc-1",
-			Type:        mock.MockTypeGRPC,
+			Type:        mock.TypeGRPC,
 			WorkspaceID: "local",
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
@@ -887,7 +887,7 @@ func TestMergeGRPCMock(t *testing.T) {
 
 		newMock := &mock.Mock{
 			ID:          "grpc-2",
-			Type:        mock.MockTypeGRPC,
+			Type:        mock.TypeGRPC,
 			WorkspaceID: "local",
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
@@ -912,7 +912,7 @@ func TestMergeGRPCMock(t *testing.T) {
 	t.Run("fails when method already exists", func(t *testing.T) {
 		existing := &mock.Mock{
 			ID:          "grpc-1",
-			Type:        mock.MockTypeGRPC,
+			Type:        mock.TypeGRPC,
 			WorkspaceID: "local",
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
@@ -928,7 +928,7 @@ func TestMergeGRPCMock(t *testing.T) {
 
 		newMock := &mock.Mock{
 			ID:          "grpc-2",
-			Type:        mock.MockTypeGRPC,
+			Type:        mock.TypeGRPC,
 			WorkspaceID: "local",
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
@@ -956,7 +956,7 @@ func TestMergeMQTTMock(t *testing.T) {
 	t.Run("merges new topic into existing mock", func(t *testing.T) {
 		existing := &mock.Mock{
 			ID:          "mqtt-1",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT: &mock.MQTTSpec{
 				Port: 1883,
@@ -968,7 +968,7 @@ func TestMergeMQTTMock(t *testing.T) {
 
 		newMock := &mock.Mock{
 			ID:          "mqtt-2",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT: &mock.MQTTSpec{
 				Port: 1883,
@@ -990,7 +990,7 @@ func TestMergeMQTTMock(t *testing.T) {
 	t.Run("fails when topic already exists", func(t *testing.T) {
 		existing := &mock.Mock{
 			ID:          "mqtt-1",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT: &mock.MQTTSpec{
 				Port: 1883,
@@ -1002,7 +1002,7 @@ func TestMergeMQTTMock(t *testing.T) {
 
 		newMock := &mock.Mock{
 			ID:          "mqtt-2",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT: &mock.MQTTSpec{
 				Port: 1883,

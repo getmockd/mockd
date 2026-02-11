@@ -3,6 +3,8 @@ package recording
 
 import (
 	"time"
+
+	"github.com/getmockd/mockd/internal/id"
 )
 
 // StreamRecording is the unified container for all stream recording types.
@@ -94,7 +96,7 @@ type RecordingStats struct {
 func NewStreamRecording(protocol Protocol, metadata RecordingMetadata) *StreamRecording {
 	now := time.Now()
 	return &StreamRecording{
-		ID:         NewULID(),
+		ID:         id.ULID(),
 		Version:    FormatVersion,
 		Protocol:   protocol,
 		Name:       generateRecordingName(protocol, metadata.Path, now),
@@ -150,12 +152,12 @@ func (r *StreamRecording) SoftDelete() {
 
 // updateStats recalculates statistics based on frames/events.
 func (r *StreamRecording) updateStats() {
-	switch r.Protocol {
+	switch r.Protocol { //nolint:exhaustive // only stream protocols have stats to update
 	case ProtocolWebSocket:
 		if r.WebSocket != nil {
 			r.Stats.FrameCount = len(r.WebSocket.Frames)
 			for _, f := range r.WebSocket.Frames {
-				switch f.MessageType {
+				switch f.MessageType { //nolint:exhaustive // close frames don't need stat tracking
 				case MessageTypeText:
 					r.Stats.TextFrames++
 				case MessageTypeBinary:
@@ -257,7 +259,7 @@ func (r *StreamRecording) ToSummary() RecordingSummary {
 
 // Validate checks if the recording is valid.
 func (r *StreamRecording) Validate() error {
-	if !IsValidULID(r.ID) {
+	if !id.IsValidULID(r.ID) {
 		return ErrInvalidULID
 	}
 	if !r.Protocol.IsValid() {

@@ -52,7 +52,7 @@ func TestBasicMockCreationAndResponse(t *testing.T) {
 	testMock := &config.MockConfiguration{
 		Name:    "Get Users",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -115,7 +115,7 @@ func TestUpdateMockAndVerifyNewResponse(t *testing.T) {
 		ID:      "test-mock-1",
 		Name:    "Initial Mock",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -141,7 +141,7 @@ func TestUpdateMockAndVerifyNewResponse(t *testing.T) {
 	// Update mock
 	updatedMock := &config.MockConfiguration{
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -194,7 +194,7 @@ func TestDeleteMockReturns404(t *testing.T) {
 		ID:      "delete-test-mock",
 		Name:    "Delete Test",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -254,7 +254,7 @@ func TestServerRestartInMemoryPersistence(t *testing.T) {
 	restartMock := &config.MockConfiguration{
 		ID:      "restart-test-mock",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -323,7 +323,7 @@ func TestMultipleMocksWithPriority(t *testing.T) {
 	lowPriority := &config.MockConfiguration{
 		ID:      "low-priority",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 1,
 			Matcher: &mock.HTTPMatcher{
@@ -341,7 +341,7 @@ func TestMultipleMocksWithPriority(t *testing.T) {
 	highPriority := &config.MockConfiguration{
 		ID:      "high-priority",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: 10,
 			Matcher: &mock.HTTPMatcher{
@@ -397,7 +397,7 @@ func TestWildcardPathMatching(t *testing.T) {
 	wildcardMock := &config.MockConfiguration{
 		ID:      "wildcard-mock",
 		Enabled: boolPtr(true),
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",

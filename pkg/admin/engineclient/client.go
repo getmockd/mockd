@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
@@ -181,10 +182,10 @@ func (c *Client) ListRequests(ctx context.Context, filter *RequestFilter) (*Requ
 	if filter != nil {
 		q := url.Values{}
 		if filter.Limit > 0 {
-			q.Set("limit", fmt.Sprintf("%d", filter.Limit))
+			q.Set("limit", strconv.Itoa(filter.Limit))
 		}
 		if filter.Offset > 0 {
-			q.Set("offset", fmt.Sprintf("%d", filter.Offset))
+			q.Set("offset", strconv.Itoa(filter.Offset))
 		}
 		if filter.Protocol != "" {
 			q.Set("protocol", filter.Protocol)

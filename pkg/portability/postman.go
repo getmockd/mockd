@@ -183,7 +183,7 @@ func (i *PostmanImporter) requestToMock(item PostmanItem, variables map[string]s
 	m := &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
 		Name:      item.Name,
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -257,12 +257,7 @@ func (i *PostmanImporter) extractPath(postmanURL PostmanURL, variables map[strin
 		parts := make([]string, len(postmanURL.Path))
 		for idx, part := range postmanURL.Path {
 			substituted := i.substituteVariables(part, variables)
-			// Convert :param to mockd format
-			if strings.HasPrefix(substituted, ":") {
-				parts[idx] = substituted
-			} else {
-				parts[idx] = substituted
-			}
+			parts[idx] = substituted
 		}
 		return "/" + strings.Join(parts, "/")
 	}

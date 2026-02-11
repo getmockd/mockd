@@ -1,15 +1,17 @@
 package cli
 
 import (
-	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -108,7 +110,7 @@ Examples:
 
 	if fs.NArg() < 2 {
 		fs.Usage()
-		return fmt.Errorf("topic and message are required")
+		return errors.New("topic and message are required")
 	}
 
 	topic := fs.Arg(0)
@@ -140,7 +142,7 @@ Examples:
 	if *password != "" {
 		pubArgs = append(pubArgs, "-P", *password)
 	}
-	pubArgs = append(pubArgs, "-q", fmt.Sprintf("%d", *qos))
+	pubArgs = append(pubArgs, "-q", strconv.Itoa(*qos))
 	if *retain {
 		pubArgs = append(pubArgs, "-r")
 	}
@@ -218,7 +220,7 @@ Examples:
 
 	if fs.NArg() < 1 {
 		fs.Usage()
-		return fmt.Errorf("topic is required")
+		return errors.New("topic is required")
 	}
 
 	topic := fs.Arg(0)
@@ -239,9 +241,9 @@ Examples:
 	if *password != "" {
 		subArgs = append(subArgs, "-P", *password)
 	}
-	subArgs = append(subArgs, "-q", fmt.Sprintf("%d", *qos))
+	subArgs = append(subArgs, "-q", strconv.Itoa(*qos))
 	if *count > 0 {
-		subArgs = append(subArgs, "-C", fmt.Sprintf("%d", *count))
+		subArgs = append(subArgs, "-C", strconv.Itoa(*count))
 	}
 	subArgs = append(subArgs, "-v", "-t", topic)
 
@@ -344,7 +346,7 @@ func printMQTTPublishInstructions(broker, topic, message, username, password str
 
 	fmt.Println("  " + cmd)
 
-	return fmt.Errorf("mosquitto_pub not found")
+	return errors.New("mosquitto_pub not found")
 }
 
 // printMQTTSubscribeInstructions prints instructions when mosquitto_sub is not available.
@@ -379,7 +381,7 @@ func printMQTTSubscribeInstructions(broker, topic, username, password string, qo
 
 	fmt.Println("  " + cmd)
 
-	return fmt.Errorf("mosquitto_sub not found")
+	return errors.New("mosquitto_sub not found")
 }
 
 // runMQTTStatus shows the current MQTT broker status.
@@ -416,9 +418,7 @@ Examples:
 	}
 
 	if *jsonOutput {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(status)
+		return output.JSON(status)
 	}
 
 	// Pretty print status

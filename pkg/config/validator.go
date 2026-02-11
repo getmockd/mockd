@@ -42,12 +42,12 @@ func validateFilePath(path, fieldName string) error {
 		if os.IsNotExist(err) {
 			return &ValidationError{
 				Field:   fieldName,
-				Message: fmt.Sprintf("file does not exist: %s", path),
+				Message: "file does not exist: " + path,
 			}
 		}
 		return &ValidationError{
 			Field:   fieldName,
-			Message: fmt.Sprintf("cannot access file: %s", err.Error()),
+			Message: "cannot access file: " + err.Error(),
 		}
 	}
 
@@ -55,7 +55,7 @@ func validateFilePath(path, fieldName string) error {
 	if info.IsDir() {
 		return &ValidationError{
 			Field:   fieldName,
-			Message: fmt.Sprintf("path is a directory, not a file: %s", path),
+			Message: "path is a directory, not a file: " + path,
 		}
 	}
 
@@ -80,19 +80,19 @@ func validateParentDirExists(path, fieldName string) error {
 		if os.IsNotExist(err) {
 			return &ValidationError{
 				Field:   fieldName,
-				Message: fmt.Sprintf("parent directory does not exist: %s", parentDir),
+				Message: "parent directory does not exist: " + parentDir,
 			}
 		}
 		return &ValidationError{
 			Field:   fieldName,
-			Message: fmt.Sprintf("cannot access parent directory: %s", err.Error()),
+			Message: "cannot access parent directory: " + err.Error(),
 		}
 	}
 
 	if !info.IsDir() {
 		return &ValidationError{
 			Field:   fieldName,
-			Message: fmt.Sprintf("parent path is not a directory: %s", parentDir),
+			Message: "parent path is not a directory: " + parentDir,
 		}
 	}
 
@@ -209,7 +209,7 @@ func ValidateAuditConfig(a *audit.AuditConfig) error {
 }
 
 // Validate checks if the ServerConfiguration is valid.
-func (s *ServerConfiguration) Validate() error {
+func (s *ServerConfiguration) Validate() error { //nolint:gocyclo // comprehensive server configuration validation
 	// At least one of HTTPPort or HTTPSPort must be > 0
 	if s.HTTPPort <= 0 && s.HTTPSPort <= 0 {
 		return &ValidationError{
@@ -375,7 +375,7 @@ func (c *MockCollection) Validate() error {
 		if ids[mock.ID] {
 			return &ValidationError{
 				Field:   fmt.Sprintf("mocks[%d].id", i),
-				Message: fmt.Sprintf("duplicate mock ID: %s", mock.ID),
+				Message: "duplicate mock ID: " + mock.ID,
 			}
 		}
 		ids[mock.ID] = true

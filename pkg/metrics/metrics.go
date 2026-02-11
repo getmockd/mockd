@@ -113,6 +113,8 @@ func (c *Counter) Type() MetricType { return MetricTypeCounter }
 // WithLabels returns a CounterVec for the given label values.
 // The number of values must match the number of label names.
 // Returns an error if the label count doesn't match.
+//
+//nolint:dupl // structural similarity with Gauge.WithLabels is intentional
 func (c *Counter) WithLabels(values ...string) (*CounterVec, error) {
 	if len(values) != len(c.labelNames) {
 		return nil, fmt.Errorf("%w: counter %s expected %d labels, got %d", ErrLabelCountMismatch, c.name, len(c.labelNames), len(values))
@@ -235,6 +237,8 @@ func (g *Gauge) Type() MetricType { return MetricTypeGauge }
 
 // WithLabels returns a GaugeVec for the given label values.
 // Returns an error if the label count doesn't match.
+//
+//nolint:dupl // structural similarity with Counter.WithLabels is intentional
 func (g *Gauge) WithLabels(values ...string) (*GaugeVec, error) {
 	if len(values) != len(g.labelNames) {
 		return nil, fmt.Errorf("%w: gauge %s expected %d labels, got %d", ErrLabelCountMismatch, g.name, len(g.labelNames), len(values))

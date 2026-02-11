@@ -381,7 +381,7 @@ func TestConvertStreamRecording(t *testing.T) {
 func createTestWSRecording() *StreamRecording {
 	startTime := time.Now().Add(-5 * time.Second)
 	recording := &StreamRecording{
-		ID:        NewULID(),
+		ID:        id.ULID(),
 		Version:   FormatVersion,
 		Protocol:  ProtocolWebSocket,
 		Name:      "Test WebSocket Recording",
@@ -442,7 +442,7 @@ func createTestWSRecording() *StreamRecording {
 func createTestWSRecordingWithDuplicates() *StreamRecording {
 	startTime := time.Now().Add(-5 * time.Second)
 	recording := &StreamRecording{
-		ID:        NewULID(),
+		ID:        id.ULID(),
 		Version:   FormatVersion,
 		Protocol:  ProtocolWebSocket,
 		Name:      "Test WebSocket Recording with Duplicates",
@@ -493,7 +493,7 @@ func createTestWSRecordingWithDuplicates() *StreamRecording {
 func createTestSSERecording() *StreamRecording {
 	startTime := time.Now().Add(-5 * time.Second)
 	recording := &StreamRecording{
-		ID:        NewULID(),
+		ID:        id.ULID(),
 		Version:   FormatVersion,
 		Protocol:  ProtocolSSE,
 		Name:      "Test SSE Recording",
@@ -541,7 +541,7 @@ func createTestSSERecording() *StreamRecording {
 func createTestSSERecordingWithJSON() *StreamRecording {
 	startTime := time.Now().Add(-5 * time.Second)
 	recording := &StreamRecording{
-		ID:        NewULID(),
+		ID:        id.ULID(),
 		Version:   FormatVersion,
 		Protocol:  ProtocolSSE,
 		Name:      "Test SSE Recording with JSON",
@@ -1170,7 +1170,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		{
 			ID:        "1",
 			Enabled:   &enabled,
-			Type:      mock.MockTypeHTTP,
+			Type:      mock.TypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
 			HTTP: &mock.HTTPSpec{
@@ -1181,7 +1181,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		{
 			ID:        "2",
 			Enabled:   &enabled,
-			Type:      mock.MockTypeHTTP,
+			Type:      mock.TypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
 			HTTP: &mock.HTTPSpec{
@@ -1192,7 +1192,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		{
 			ID:        "3",
 			Enabled:   &enabled,
-			Type:      mock.MockTypeHTTP,
+			Type:      mock.TypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
 			HTTP: &mock.HTTPSpec{
@@ -1203,7 +1203,7 @@ func createTestMocksForDedup() []*config.MockConfiguration {
 		{
 			ID:        "4",
 			Enabled:   &enabled,
-			Type:      mock.MockTypeHTTP,
+			Type:      mock.TypeHTTP,
 			CreatedAt: now,
 			UpdatedAt: now,
 			HTTP: &mock.HTTPSpec{

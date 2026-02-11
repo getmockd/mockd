@@ -1,54 +1,41 @@
 package admin
 
 import (
-	"encoding/json"
 	"net/http"
+
+	"github.com/getmockd/mockd/pkg/admin/engineclient"
 )
 
 // handleStateOverview returns information about all stateful resources.
-func (a *AdminAPI) handleStateOverview(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleStateOverview(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	overview, err := a.localEngine.GetStateOverview(ctx)
+	overview, err := engine.GetStateOverview(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get state overview"))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(overview)
+	writeJSON(w, http.StatusOK, overview)
 }
 
 // handleStateReset resets stateful resources to their seed data.
-func (a *AdminAPI) handleStateReset(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleStateReset(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
-
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
 
 	// Get optional resource filter from query param
 	resourceName := r.URL.Query().Get("resource")
 
-	if err := a.localEngine.ResetState(ctx, resourceName); err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+	if err := engine.ResetState(ctx, resourceName); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "reset state"))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "reset"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "reset"})
 }
 
 // handleResetStateResource resets a specific stateful resource to its seed data.
-func (a *AdminAPI) handleResetStateResource(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleResetStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 	if name == "" {
@@ -56,96 +43,60 @@ func (a *AdminAPI) handleResetStateResource(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
+	if err := engine.ResetState(ctx, name); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "reset state resource"))
 		return
 	}
 
-	if err := a.localEngine.ResetState(ctx, name); err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "reset", "resource": name})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "reset", "resource": name})
 }
 
 // handleListStateResources returns a list of all registered stateful resources.
-func (a *AdminAPI) handleListStateResources(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListStateResources(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	overview, err := a.localEngine.GetStateOverview(ctx)
+	overview, err := engine.GetStateOverview(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list state resources"))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(overview.Resources)
+	writeJSON(w, http.StatusOK, overview.Resources)
 }
 
 // handleGetStateResource returns details about a specific stateful resource.
-func (a *AdminAPI) handleGetStateResource(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
-
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
 
 	name := r.PathValue("name")
 	if name == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resource name required"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "resource name required"})
 		return
 	}
 
-	resource, err := a.localEngine.GetStateResource(ctx, name)
+	resource, err := engine.GetStateResource(ctx, name)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "resource": name})
+		writeError(w, http.StatusNotFound, "not_found", "Resource not found")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resource)
+	writeJSON(w, http.StatusOK, resource)
 }
 
 // handleClearStateResource clears all items from a specific resource (does not restore seed data).
-func (a *AdminAPI) handleClearStateResource(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
-
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
 
 	name := r.PathValue("name")
 	if name == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "resource name required"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "resource name required"})
 		return
 	}
 
-	if err := a.localEngine.ClearStateResource(ctx, name); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "resource": name})
+	if err := engine.ClearStateResource(ctx, name); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "Resource not found")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"cleared": true})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"cleared": true})
 }

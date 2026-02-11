@@ -8,44 +8,32 @@ import (
 )
 
 // handleGetChaos returns the current chaos configuration.
-func (a *AdminAPI) handleGetChaos(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetChaos(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-
-	chaosConfig, err := a.localEngine.GetChaos(ctx)
+	chaosConfig, err := engine.GetChaos(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "engine_error", err.Error())
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get chaos config"))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(chaosConfig)
+	writeJSON(w, http.StatusOK, chaosConfig)
 }
 
 // handleSetChaos updates the chaos configuration.
-func (a *AdminAPI) handleSetChaos(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleSetChaos(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
-
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
 
 	var config engineclient.ChaosConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
-		http.Error(w, `{"error":"invalid JSON: `+err.Error()+`"}`, http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
-	if err := a.localEngine.SetChaos(ctx, &config); err != nil {
-		http.Error(w, `{"error":"failed to set chaos config: `+err.Error()+`"}`, http.StatusInternalServerError)
+	if err := engine.SetChaos(ctx, &config); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "set chaos config"))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"status":"ok"}`))
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

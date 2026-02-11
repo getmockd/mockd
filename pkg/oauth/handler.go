@@ -2,11 +2,13 @@ package oauth
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -98,9 +100,9 @@ func (h *Handler) verifyCodeChallenge(challenge, method, verifier string) bool {
 	case "S256":
 		hash := sha256.Sum256([]byte(verifier))
 		computed := base64.RawURLEncoding.EncodeToString(hash[:])
-		return computed == challenge
+		return subtle.ConstantTimeCompare([]byte(computed), []byte(challenge)) == 1
 	case "plain", "":
-		return verifier == challenge
+		return subtle.ConstantTimeCompare([]byte(verifier), []byte(challenge)) == 1
 	default:
 		return false
 	}
@@ -245,7 +247,7 @@ func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		fragment := url.Values{}
 		fragment.Set("access_token", accessToken)
 		fragment.Set("token_type", "Bearer")
-		fragment.Set("expires_in", fmt.Sprintf("%d", int(h.provider.tokenExpiry.Seconds())))
+		fragment.Set("expires_in", strconv.Itoa(int(h.provider.tokenExpiry.Seconds())))
 		if state != "" {
 			fragment.Set("state", state)
 		}

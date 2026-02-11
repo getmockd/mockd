@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -79,6 +80,8 @@ type EngineController interface {
 }
 
 // NewServer creates a new Engine Control API server.
+// The server binds to 127.0.0.1 by default to prevent remote access,
+// since this is an internal API with no authentication.
 func NewServer(engine EngineController, port int) *Server {
 	s := &Server{
 		engine: engine,
@@ -90,7 +93,7 @@ func NewServer(engine EngineController, port int) *Server {
 	s.registerRoutes(mux)
 
 	s.httpServer = &http.Server{
-		Addr:         fmt.Sprintf(":%d", port),
+		Addr:         fmt.Sprintf("127.0.0.1:%d", port),
 		Handler:      s.withMiddleware(mux),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -110,7 +113,7 @@ func (s *Server) SetLogger(log *slog.Logger) {
 func (s *Server) Start() error {
 	s.log.Info("starting engine control API", "port", s.port)
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.log.Error("control API server error", "error", err)
 		}
 	}()
@@ -187,9 +190,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /export", s.handleExportMocks)
 }
 
+// withMiddleware wraps the handler with any necessary middleware.
+// Note: Content-Type is now set per-response by httputil.WriteJSON,
+// so this middleware only serves as an extension point.
 func (s *Server) withMiddleware(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		handler.ServeHTTP(w, r)
-	})
+	return handler
 }

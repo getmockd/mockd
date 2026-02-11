@@ -4,6 +4,7 @@ package engine
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -19,6 +20,7 @@ import (
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/mqtt"
 	"github.com/getmockd/mockd/pkg/protocol"
+	"github.com/getmockd/mockd/pkg/ratelimit"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
 	"github.com/getmockd/mockd/pkg/store"
@@ -87,7 +89,7 @@ type Server struct {
 	tracer *tracing.Tracer
 
 	// Rate limiter for the mock engine (optional)
-	rateLimiter *EngineRateLimiter
+	rateLimiter *ratelimit.PerIPLimiter
 }
 
 // ServerOption is a functional option for configuring a Server.
@@ -250,7 +252,7 @@ func (s *Server) Start() error {
 	defer s.mu.Unlock()
 
 	if s.running {
-		return fmt.Errorf("server is already running")
+		return errors.New("server is already running")
 	}
 
 	// Initialize middleware chain (handles validation, chaos, audit, and tracing)
@@ -276,8 +278,13 @@ func (s *Server) Start() error {
 
 	// Apply rate limiting middleware if enabled
 	if s.cfg.RateLimit != nil && s.cfg.RateLimit.Enabled {
-		s.rateLimiter = NewEngineRateLimiter(s.cfg.RateLimit)
-		s.httpHandler = NewRateLimitMiddleware(s.httpHandler, s.rateLimiter)
+		s.rateLimiter = ratelimit.NewPerIPLimiter(ratelimit.PerIPConfig{
+			Rate:           s.cfg.RateLimit.RequestsPerSecond,
+			Burst:          s.cfg.RateLimit.BurstSize,
+			MaxBuckets:     s.cfg.RateLimit.MaxBuckets,
+			TrustedProxies: s.cfg.RateLimit.TrustedProxies,
+		})
+		s.httpHandler = ratelimit.Middleware(s.rateLimiter)(s.httpHandler)
 		s.log.Info("rate limiting enabled", "rps", s.cfg.RateLimit.RequestsPerSecond, "burst", s.cfg.RateLimit.BurstSize)
 	}
 
@@ -306,7 +313,7 @@ func (s *Server) Start() error {
 
 		s.log.Info("starting HTTP server", "port", s.cfg.HTTPPort)
 		go func() {
-			if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				s.log.Error("HTTP server error", "error", err)
 			}
 		}()
@@ -329,7 +336,7 @@ func (s *Server) Start() error {
 		}
 
 		go func() {
-			if err := s.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			if err := s.httpsServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				s.log.Error("HTTPS server error", "error", err)
 			}
 		}()
@@ -442,7 +449,7 @@ func (s *Server) listMocks() []*config.MockConfiguration {
 // listHTTPMocks returns only HTTP mock configurations.
 // This is an internal method - external callers should use the HTTP API.
 func (s *Server) listHTTPMocks() []*config.MockConfiguration {
-	return s.mockManager.ListByType(mock.MockTypeHTTP)
+	return s.mockManager.ListByType(mock.TypeHTTP)
 }
 
 // IsRunning returns whether the server is running.
@@ -736,7 +743,7 @@ func (s *Server) SetChaosInjector(injector *chaos.Injector) error {
 	defer s.mu.Unlock()
 
 	if s.middlewareChain == nil {
-		return fmt.Errorf("middleware chain not initialized")
+		return errors.New("middleware chain not initialized")
 	}
 	s.middlewareChain.SetChaosInjector(injector)
 	return nil

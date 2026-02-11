@@ -373,7 +373,7 @@ func ValidateTemplate(template string) (bool, []string) {
 		if len(match) >= 2 {
 			varName := strings.TrimSpace(match[1])
 			if !isValidVariable(varName) {
-				errors = append(errors, fmt.Sprintf("unknown variable: %s", varName))
+				errors = append(errors, "unknown variable: "+varName)
 			}
 		}
 	}

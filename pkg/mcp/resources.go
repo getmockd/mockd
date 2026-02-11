@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/cli"
@@ -59,7 +60,7 @@ func (p *ResourceProvider) List() []ResourceDefinition {
 			uri := "mock://stateful/" + name
 			description := "Stateful resource: " + name
 			if info != nil {
-				description = "CRUD operations on " + name + " (" + formatInt(info.ItemCount) + " items)"
+				description = "CRUD operations on " + name + " (" + strconv.Itoa(info.ItemCount) + " items)"
 			}
 
 			resources = append(resources, ResourceDefinition{
@@ -301,34 +302,6 @@ func (p *ResourceProvider) readConfigResource() ([]ResourceContent, *JSONRPCErro
 	}, nil
 }
 
-// formatInt formats an int as a string without fmt.
-func formatInt(n int) string {
-	if n == 0 {
-		return "0"
-	}
-
-	negative := n < 0
-	if negative {
-		n = -n
-	}
-
-	var digits [20]byte
-	i := len(digits)
-
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
-	}
-
-	if negative {
-		i--
-		digits[i] = '-'
-	}
-
-	return string(digits[i:])
-}
-
 // readContextResource reads the context resource (available contexts from config).
 func (p *ResourceProvider) readContextResource() ([]ResourceContent, *JSONRPCError) {
 	ctxConfig, _ := cliconfig.LoadContextConfig()
@@ -371,7 +344,7 @@ func (p *ResourceProvider) readContextResource() ([]ResourceContent, *JSONRPCErr
 // Works for all protocol types, not just HTTP.
 func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 	switch m.Type {
-	case mock.MockTypeHTTP:
+	case mock.TypeHTTP:
 		if m.HTTP == nil || m.HTTP.Matcher == nil {
 			return "", "", ""
 		}
@@ -385,7 +358,7 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 		if desc == "" {
 			desc = "Mock endpoint for " + m.HTTP.Matcher.Path
 		}
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		if m.WebSocket == nil {
 			return "", "", ""
 		}
@@ -395,7 +368,7 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 		if desc == "" {
 			desc = "WebSocket endpoint " + m.WebSocket.Path
 		}
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if m.GraphQL == nil {
 			return "", "", ""
 		}
@@ -405,17 +378,17 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 		if desc == "" {
 			desc = "GraphQL endpoint " + m.GraphQL.Path
 		}
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if m.GRPC == nil {
 			return "", "", ""
 		}
 		uri = "mock://grpc/" + m.ID
-		name = "gRPC :" + formatInt(m.GRPC.Port)
+		name = "gRPC :" + strconv.Itoa(m.GRPC.Port)
 		desc = m.Name
 		if desc == "" {
-			desc = "gRPC mock on port " + formatInt(m.GRPC.Port)
+			desc = "gRPC mock on port " + strconv.Itoa(m.GRPC.Port)
 		}
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if m.SOAP == nil {
 			return "", "", ""
 		}
@@ -425,17 +398,17 @@ func mockResourceInfo(m *mock.Mock) (uri, name, desc string) {
 		if desc == "" {
 			desc = "SOAP endpoint " + m.SOAP.Path
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		if m.MQTT == nil {
 			return "", "", ""
 		}
 		uri = "mock://mqtt/" + m.ID
-		name = "MQTT :" + formatInt(m.MQTT.Port)
+		name = "MQTT :" + strconv.Itoa(m.MQTT.Port)
 		desc = m.Name
 		if desc == "" {
-			desc = "MQTT broker on port " + formatInt(m.MQTT.Port)
+			desc = "MQTT broker on port " + strconv.Itoa(m.MQTT.Port)
 		}
-	case mock.MockTypeOAuth:
+	case mock.TypeOAuth:
 		if m.OAuth == nil {
 			return "", "", ""
 		}

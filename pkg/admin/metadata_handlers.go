@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/portability"
 )
 
@@ -112,7 +113,7 @@ var templateCategories = map[string]string{
 }
 
 // handleListFormats handles GET /formats.
-func (a *AdminAPI) handleListFormats(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListFormats(w http.ResponseWriter, r *http.Request) {
 	formats := make([]SupportedFormat, 0, len(portability.AllFormats()))
 
 	for _, f := range portability.AllFormats() {
@@ -128,7 +129,7 @@ func (a *AdminAPI) handleListFormats(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListTemplates handles GET /templates.
-func (a *AdminAPI) handleListTemplates(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 	portTemplates := portability.ListTemplates()
 	templates := make([]MockTemplate, 0, len(portTemplates))
 
@@ -163,7 +164,7 @@ func (a *AdminAPI) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGenerateFromTemplate handles POST /templates/{name}.
-func (a *AdminAPI) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	name := r.PathValue("name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "missing_name", "Template name is required")
@@ -184,17 +185,13 @@ func (a *AdminAPI) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Req
 
 	collection, err := template.Generate(req.Parameters)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "generation_error", err.Error())
+		writeError(w, http.StatusBadRequest, "generation_error", sanitizeError(err, a.logger(), "generate template"))
 		return
 	}
 
 	// Import the generated mocks into the engine via HTTP client
-	if a.localEngine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine configured for template import")
-		return
-	}
-	if err := a.localEngine.ImportConfig(r.Context(), collection, false); err != nil {
-		writeError(w, http.StatusInternalServerError, "import_error", err.Error())
+	if err := engine.ImportConfig(r.Context(), collection, false); err != nil {
+		writeError(w, http.StatusInternalServerError, "import_error", sanitizeError(err, a.logger(), "import template mocks"))
 		return
 	}
 

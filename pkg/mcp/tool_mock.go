@@ -60,7 +60,7 @@ func handleListMocks(args map[string]interface{}, session *MCPSession, server *S
 // mockSummaryLine returns a human-readable one-line summary for a mock.
 func mockSummaryLine(m *config.MockConfiguration) string {
 	switch m.Type {
-	case mock.MockTypeHTTP:
+	case mock.TypeHTTP:
 		if m.HTTP != nil && m.HTTP.Matcher != nil {
 			method := m.HTTP.Matcher.Method
 			if method == "" {
@@ -68,15 +68,15 @@ func mockSummaryLine(m *config.MockConfiguration) string {
 			}
 			return method + " " + m.HTTP.Matcher.Path
 		}
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		if m.WebSocket != nil {
 			return "ws://" + m.WebSocket.Path
 		}
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if m.GraphQL != nil {
 			return "graphql " + m.GraphQL.Path
 		}
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if m.GRPC != nil {
 			services := make([]string, 0)
 			for svc := range m.GRPC.Services {
@@ -84,11 +84,11 @@ func mockSummaryLine(m *config.MockConfiguration) string {
 			}
 			return fmt.Sprintf("grpc :%d (%s)", m.GRPC.Port, strings.Join(services, ", "))
 		}
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if m.SOAP != nil {
 			return "soap " + m.SOAP.Path
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		if m.MQTT != nil {
 			topics := make([]string, 0)
 			for _, t := range m.MQTT.Topics {
@@ -96,7 +96,7 @@ func mockSummaryLine(m *config.MockConfiguration) string {
 			}
 			return fmt.Sprintf("mqtt :%d (%s)", m.MQTT.Port, strings.Join(topics, ", "))
 		}
-	case mock.MockTypeOAuth:
+	case mock.TypeOAuth:
 		if m.OAuth != nil {
 			return "oauth " + m.OAuth.Issuer
 		}
@@ -162,7 +162,7 @@ func handleCreateMock(args map[string]interface{}, session *MCPSession, server *
 	}
 
 	// Ensure required fields are set.
-	mockCfg.Type = mock.MockType(mockType)
+	mockCfg.Type = mock.Type(mockType)
 	if name != "" {
 		mockCfg.Name = name
 	}

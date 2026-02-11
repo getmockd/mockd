@@ -20,7 +20,7 @@ import (
 )
 
 // setupStreamRecordingAPITest creates a server with stream recording support for testing.
-func setupStreamRecordingAPITest(t *testing.T) (*admin.AdminAPI, *recording.FileStore, int, func()) {
+func setupStreamRecordingAPITest(t *testing.T) (*admin.API, *recording.FileStore, int, func()) {
 	adminPort := getFreePort()
 
 	// Create temp directory for recordings
@@ -46,7 +46,7 @@ func setupStreamRecordingAPITest(t *testing.T) (*admin.AdminAPI, *recording.File
 
 	srv := engine.NewServer(cfg)
 	adminDataDir := t.TempDir() // Use temp dir for admin API test isolation
-	adminAPI := admin.NewAdminAPI(adminPort,
+	adminAPI := admin.NewAPI(adminPort,
 		admin.WithLocalEngine(fmt.Sprintf("http://localhost:%d", srv.ManagementPort())),
 		admin.WithAPIKeyDisabled(),
 		admin.WithDataDir(adminDataDir),

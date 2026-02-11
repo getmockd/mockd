@@ -5,15 +5,16 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -172,7 +173,7 @@ Examples:
 
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("workspace ID required")
+		return errors.New("workspace ID required")
 	}
 
 	workspaceID := fs.Arg(0)
@@ -184,7 +185,7 @@ Examples:
 
 	ctx := cfg.GetCurrentContext()
 	if ctx == nil {
-		return fmt.Errorf("no current context set; run 'mockd context add <name>' first")
+		return errors.New("no current context set; run 'mockd context add <name>' first")
 	}
 
 	// Determine admin URL
@@ -266,7 +267,7 @@ Examples:
 	currentWorkspace := cliconfig.GetWorkspaceFromContext()
 
 	if *jsonOutput {
-		output := struct {
+		result := struct {
 			CurrentWorkspace string          `json:"currentWorkspace"`
 			Workspaces       []*WorkspaceDTO `json:"workspaces"`
 			Count            int             `json:"count"`
@@ -275,9 +276,7 @@ Examples:
 			Workspaces:       workspaces,
 			Count:            len(workspaces),
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(output)
+		return output.JSON(result)
 	}
 
 	if len(workspaces) == 0 {
@@ -285,7 +284,7 @@ Examples:
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := output.Table()
 	_, _ = fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tDESCRIPTION")
 
 	for _, ws := range workspaces {
@@ -354,7 +353,7 @@ Examples:
 
 	if *name == "" {
 		fs.Usage()
-		return fmt.Errorf("workspace name required (--name)")
+		return errors.New("workspace name required (--name)")
 	}
 
 	targetURL := cliconfig.ResolveAdminURL(*adminURL)
@@ -389,9 +388,7 @@ Examples:
 	}
 
 	if *jsonOutput {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(ws)
+		return output.JSON(ws)
 	}
 
 	fmt.Printf("Created workspace %q (ID: %s)\n", ws.Name, ws.ID)
@@ -434,7 +431,7 @@ Examples:
 
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("workspace ID required")
+		return errors.New("workspace ID required")
 	}
 
 	workspaceID := fs.Arg(0)
@@ -524,7 +521,7 @@ Examples:
 
 	ctx := cfg.GetCurrentContext()
 	if ctx == nil {
-		return fmt.Errorf("no current context set")
+		return errors.New("no current context set")
 	}
 
 	if ctx.Workspace == "" {
@@ -661,7 +658,7 @@ func (c *WorkspaceClient) GetWorkspace(id string) (*WorkspaceDTO, error) {
 		return nil, &APIError{
 			StatusCode: resp.StatusCode,
 			ErrorCode:  "not_found",
-			Message:    fmt.Sprintf("workspace not found: %s", id),
+			Message:    "workspace not found: " + id,
 		}
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -742,7 +739,7 @@ func (c *WorkspaceClient) DeleteWorkspace(id string) error {
 		return &APIError{
 			StatusCode: resp.StatusCode,
 			ErrorCode:  "not_found",
-			Message:    fmt.Sprintf("workspace not found: %s", id),
+			Message:    "workspace not found: " + id,
 		}
 	}
 	if resp.StatusCode != http.StatusNoContent {

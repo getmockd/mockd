@@ -3,6 +3,7 @@ package graphql
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -433,7 +434,7 @@ func (h *SubscriptionHandler) parseSubscriptionQuery(query string, inputVars map
 	// Matches patterns like: subscription { fieldName } or subscription Name { fieldName }
 	matches := subscriptionFieldPattern.FindStringSubmatch(query)
 	if len(matches) < 2 {
-		return "", nil, fmt.Errorf("could not parse subscription query")
+		return "", nil, errors.New("could not parse subscription query")
 	}
 
 	fieldName := matches[1]

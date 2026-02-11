@@ -1,11 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"runtime"
+
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 )
 
 // BuildInfo contains build-time information
@@ -60,9 +61,7 @@ Examples:
 	}
 
 	if *jsonOutput {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(out)
+		return output.JSON(out)
 	}
 
 	// Format: mockd v0.1.0 (abc1234, 2025-01-06)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/httputil"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -43,9 +44,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
+	limitedBody(w, r)
 	var req DeployRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON in request body")
 		return
 	}
 
@@ -101,9 +103,10 @@ func (s *Server) handleDeleteMock(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateMock(w http.ResponseWriter, r *http.Request) {
+	limitedBody(w, r)
 	var cfg config.MockConfiguration
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON in request body")
 		return
 	}
 
@@ -127,6 +130,7 @@ func (s *Server) handleCreateMock(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateMock(w http.ResponseWriter, r *http.Request) {
+	limitedBody(w, r)
 	id := r.PathValue("id")
 
 	// Check if mock exists
@@ -138,7 +142,7 @@ func (s *Server) handleUpdateMock(w http.ResponseWriter, r *http.Request) {
 
 	var cfg config.MockConfiguration
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON in request body")
 		return
 	}
 
@@ -158,6 +162,7 @@ func (s *Server) handleUpdateMock(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleToggleMock(w http.ResponseWriter, r *http.Request) {
+	limitedBody(w, r)
 	id := r.PathValue("id")
 
 	// Check if mock exists
@@ -169,7 +174,7 @@ func (s *Server) handleToggleMock(w http.ResponseWriter, r *http.Request) {
 
 	var req ToggleMockRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON in request body")
 		return
 	}
 
@@ -296,7 +301,7 @@ func (s *Server) handleClearRequests(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleClearRequestsByMockID(w http.ResponseWriter, r *http.Request) {
 	mockID := r.PathValue("id")
 	if mockID == "" {
-		http.Error(w, `{"error":"mock ID is required"}`, http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "missing_id", "mock ID is required")
 		return
 	}
 	count := s.engine.ClearRequestLogsByMockID(mockID)
@@ -323,9 +328,10 @@ func (s *Server) handleGetChaos(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetChaos(w http.ResponseWriter, r *http.Request) {
+	limitedBody(w, r)
 	var cfg ChaosConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON in request body")
 		return
 	}
 	if err := s.engine.SetChaosConfig(&cfg); err != nil {
@@ -364,16 +370,17 @@ func (s *Server) handleGetState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleResetState(w http.ResponseWriter, r *http.Request) {
+	limitedBody(w, r)
 	var req ResetStateRequest
 	// Allow empty body to reset all resources, but reject malformed JSON
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON in request body")
 		return
 	}
 
 	resp, err := s.engine.ResetState(req.Resource)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		writeError(w, http.StatusNotFound, "not_found", "resource not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -383,7 +390,7 @@ func (s *Server) handleGetStateResource(w http.ResponseWriter, r *http.Request) 
 	name := r.PathValue("name")
 	resource, err := s.engine.GetStateResource(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		writeError(w, http.StatusNotFound, "not_found", "resource not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, resource)
@@ -393,7 +400,7 @@ func (s *Server) handleClearStateResource(w http.ResponseWriter, r *http.Request
 	name := r.PathValue("name")
 	count, err := s.engine.ClearStateResource(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		writeError(w, http.StatusNotFound, "not_found", "resource not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -446,7 +453,7 @@ func (s *Server) handleGetSSEConnection(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := s.engine.CloseSSEConnection(id); err != nil {
-		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		writeError(w, http.StatusNotFound, "not_found", "SSE connection not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
@@ -487,7 +494,7 @@ func (s *Server) handleGetWebSocketConnection(w http.ResponseWriter, r *http.Req
 func (s *Server) handleCloseWebSocketConnection(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := s.engine.CloseWebSocketConnection(id); err != nil {
-		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		writeError(w, http.StatusNotFound, "not_found", "WebSocket connection not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
@@ -534,9 +541,10 @@ func (s *Server) handleExportMocks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
+	limitedBody(w, r)
 	var req ImportConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON in request body")
 		return
 	}
 
@@ -585,14 +593,24 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 
 // Helpers
 
+// maxRequestBodySize is the maximum allowed request body size (10 MB).
+// This prevents denial-of-service via oversized payloads on the control API.
+const maxRequestBodySize = 10 * 1024 * 1024
+
+// limitedBody wraps r.Body with http.MaxBytesReader to enforce body size limits.
+// Must be called before reading r.Body in any handler that accepts a request body.
+func limitedBody(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+}
+
+// writeJSON writes a JSON response using the shared httputil package.
+// This ensures Content-Type is always set correctly.
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	httputil.WriteJSON(w, status, v)
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(ErrorResponse{
+	httputil.WriteJSON(w, status, ErrorResponse{
 		Error:   code,
 		Message: message,
 	})

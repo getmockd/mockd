@@ -1,8 +1,10 @@
 package mcp
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -26,17 +28,17 @@ const (
 
 // SSEWriter handles writing Server-Sent Events.
 type SSEWriter struct {
-	w        http.ResponseWriter
-	flusher  http.Flusher
-	eventID  atomic.Int64
-	closed   bool
+	w       http.ResponseWriter
+	flusher http.Flusher
+	eventID atomic.Int64
+	closed  bool
 }
 
 // NewSSEWriter creates a new SSE writer.
 func NewSSEWriter(w http.ResponseWriter) (*SSEWriter, error) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return nil, fmt.Errorf("response writer does not support flushing")
+		return nil, errors.New("response writer does not support flushing")
 	}
 
 	return &SSEWriter{
@@ -56,7 +58,7 @@ func (s *SSEWriter) WriteHeaders() {
 // WriteEvent writes an SSE event.
 func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 	if s.closed {
-		return fmt.Errorf("writer is closed")
+		return errors.New("writer is closed")
 	}
 
 	var sb strings.Builder
@@ -70,7 +72,7 @@ func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 		// Auto-generate ID
 		id := s.eventID.Add(1)
 		sb.WriteString("id: ")
-		sb.WriteString(formatInt64(id))
+		sb.WriteString(strconv.FormatInt(id, 10))
 		sb.WriteByte('\n')
 	}
 
@@ -84,7 +86,7 @@ func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 	// Retry hint
 	if event.Retry > 0 {
 		sb.WriteString("retry: ")
-		sb.WriteString(formatInt64(int64(event.Retry)))
+		sb.WriteString(strconv.FormatInt(int64(event.Retry), 10))
 		sb.WriteByte('\n')
 	}
 
@@ -111,7 +113,7 @@ func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 // WriteComment writes an SSE comment (keepalive).
 func (s *SSEWriter) WriteComment(comment string) error {
 	if s.closed {
-		return fmt.Errorf("writer is closed")
+		return errors.New("writer is closed")
 	}
 
 	_, err := fmt.Fprintf(s.w, ": %s\n\n", comment)
@@ -131,34 +133,6 @@ func (s *SSEWriter) WriteKeepalive() error {
 // Close marks the writer as closed.
 func (s *SSEWriter) Close() {
 	s.closed = true
-}
-
-// formatInt64 formats an int64 as string without using fmt.
-func formatInt64(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-
-	negative := n < 0
-	if negative {
-		n = -n
-	}
-
-	var digits [20]byte
-	i := len(digits)
-
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
-	}
-
-	if negative {
-		i--
-		digits[i] = '-'
-	}
-
-	return string(digits[i:])
 }
 
 // TransportConfig holds transport-specific configuration.

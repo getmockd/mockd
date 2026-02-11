@@ -497,7 +497,8 @@ func (m *ConnectionManager) ListConnectionInfos(endpointFilter, groupFilter stri
 
 	var conns []*Connection
 
-	if endpointFilter != "" {
+	switch {
+	case endpointFilter != "":
 		if eps, ok := m.byEndpoint[endpointFilter]; ok {
 			for id := range eps {
 				if conn := m.connections[id]; conn != nil {
@@ -505,7 +506,7 @@ func (m *ConnectionManager) ListConnectionInfos(endpointFilter, groupFilter stri
 				}
 			}
 		}
-	} else if groupFilter != "" {
+	case groupFilter != "":
 		if grp, ok := m.byGroup[groupFilter]; ok {
 			for id := range grp {
 				if conn := m.connections[id]; conn != nil {
@@ -513,7 +514,7 @@ func (m *ConnectionManager) ListConnectionInfos(endpointFilter, groupFilter stri
 				}
 			}
 		}
-	} else {
+	default:
 		for _, conn := range m.connections {
 			conns = append(conns, conn)
 		}
@@ -592,6 +593,8 @@ func (m *ConnectionManager) LogDisconnect(conn *Connection, closeCode CloseCode,
 }
 
 // LogMessageReceived logs an inbound WebSocket message.
+//
+//nolint:dupl // structural similarity with LogMessageSent is intentional
 func (m *ConnectionManager) LogMessageReceived(conn *Connection, msgType MessageType, data []byte, remoteAddr string) {
 	// Record message metric
 	if metrics.RequestsTotal != nil {
@@ -628,6 +631,8 @@ func (m *ConnectionManager) LogMessageReceived(conn *Connection, msgType Message
 }
 
 // LogMessageSent logs an outbound WebSocket message.
+//
+//nolint:dupl // structural similarity with LogMessageReceived is intentional
 func (m *ConnectionManager) LogMessageSent(conn *Connection, msgType MessageType, data []byte, remoteAddr string) {
 	// Record message metric
 	if metrics.RequestsTotal != nil {

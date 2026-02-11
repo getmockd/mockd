@@ -15,7 +15,7 @@ func newHTTPMock(id string, enabled bool, matcher *mock.HTTPMatcher, response *m
 	return &config.MockConfiguration{
 		ID:      id,
 		Enabled: &enabled,
-		Type:    mock.MockTypeHTTP,
+		Type:    mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Priority: priority,
 			Matcher:  matcher,

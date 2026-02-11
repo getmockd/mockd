@@ -3,6 +3,7 @@ package mqtt
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -109,7 +110,7 @@ func (b *Broker) isMockResponseActive(topic string) bool {
 // NewBroker creates a new MQTT broker
 func NewBroker(config *MQTTConfig) (*Broker, error) {
 	if config == nil {
-		return nil, fmt.Errorf("config cannot be nil")
+		return nil, errors.New("config cannot be nil")
 	}
 
 	if config.Port <= 0 {
@@ -160,7 +161,7 @@ func (b *Broker) Start(ctx context.Context) error {
 	defer b.mu.Unlock()
 
 	if b.running {
-		return fmt.Errorf("broker is already running")
+		return errors.New("broker is already running")
 	}
 
 	// Check for cancellation before proceeding
@@ -290,7 +291,7 @@ func (b *Broker) Publish(topic string, payload []byte, qos byte, retain bool) er
 	b.mu.RUnlock()
 
 	if !running {
-		return fmt.Errorf("broker is not running")
+		return errors.New("broker is not running")
 	}
 
 	return b.server.Publish(topic, payload, retain, qos)
@@ -330,7 +331,12 @@ func (b *Broker) notifySubscribers(topic string, payload []byte) {
 func (b *Broker) GetClients() []string {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	return b.getClientsLocked()
+}
 
+// getClientsLocked returns connected client IDs.
+// The caller must hold b.mu (read or write).
+func (b *Broker) getClientsLocked() []string {
 	if b.server == nil {
 		return nil
 	}
@@ -436,7 +442,7 @@ func (b *Broker) GetStats() BrokerStats {
 
 	stats := BrokerStats{
 		Running:     b.running,
-		ClientCount: len(b.GetClients()),
+		ClientCount: len(b.getClientsLocked()),
 		TopicCount:  len(b.config.Topics),
 		Port:        b.config.Port,
 		TLSEnabled:  b.config.TLS != nil && b.config.TLS.Enabled,

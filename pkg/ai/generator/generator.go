@@ -3,6 +3,7 @@ package generator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -29,7 +30,7 @@ func New(provider ai.Provider) *Generator {
 // EnhanceOpenAPISchema generates a realistic value for an OpenAPI schema.
 func (g *Generator) EnhanceOpenAPISchema(ctx context.Context, schema *openapi3.Schema, fieldName string) (interface{}, error) {
 	if schema == nil {
-		return nil, fmt.Errorf("schema cannot be nil")
+		return nil, errors.New("schema cannot be nil")
 	}
 
 	// If there's an example, use it
@@ -299,7 +300,7 @@ func (g *Generator) parseMockResponse(response string) ([]*config.MockConfigurat
 		enabled := true
 		mocks[i] = &config.MockConfiguration{
 			ID:        fmt.Sprintf("ai-generated-%d", i+1),
-			Type:      mock.MockTypeHTTP,
+			Type:      mock.TypeHTTP,
 			Name:      ep.Name,
 			Enabled:   &enabled,
 			CreatedAt: now,
@@ -344,10 +345,10 @@ func (g *Generator) EnhanceMock(ctx context.Context, m *config.MockConfiguration
 	}
 	ctxStr := fmt.Sprintf("API endpoint: %s %s", method, path)
 	if m.Name != "" {
-		ctxStr += fmt.Sprintf(", Name: %s", m.Name)
+		ctxStr += ", Name: " + m.Name
 	}
 	if m.Description != "" {
-		ctxStr += fmt.Sprintf(", Description: %s", m.Description)
+		ctxStr += ", Description: " + m.Description
 	}
 
 	resp, err := g.provider.Generate(ctx, &ai.GenerateRequest{

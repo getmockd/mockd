@@ -314,7 +314,7 @@ func (m *TunnelManager) reconnectAfterGoaway(payload protocol.GoawayPayload) {
 		m.mu.Unlock()
 
 		// Exponential backoff
-		delay = delay * 2
+		delay *= 2
 		if delay > maxDelay {
 			delay = maxDelay
 		}

@@ -65,7 +65,7 @@ func (d *DirectoryLoader) Load() (*LoadResult, error) {
 	result := &LoadResult{
 		Collection: &MockCollection{
 			Version: "1.0",
-			Name:    fmt.Sprintf("Loaded from %s", d.Path),
+			Name:    "Loaded from " + d.Path,
 			Mocks:   make([]*MockConfiguration, 0),
 		},
 	}

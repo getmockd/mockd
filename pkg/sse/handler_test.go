@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -50,7 +51,7 @@ func TestSSEHandler_FlusherDetection(t *testing.T) {
 	mockCfg := &config.MockConfiguration{
 		ID:   "test-sse",
 		Name: "Test SSE",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			SSE: &mock.SSEConfig{
 				Events: []mock.SSEEventDef{
@@ -249,9 +250,9 @@ func TestFormatInt64(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		result := formatInt64(tc.n)
+		result := strconv.FormatInt(tc.n, 10)
 		if result != tc.expected {
-			t.Errorf("formatInt64(%d) = %q, expected %q", tc.n, result, tc.expected)
+			t.Errorf("strconv.FormatInt(%d, 10) = %q, expected %q", tc.n, result, tc.expected)
 		}
 	}
 }

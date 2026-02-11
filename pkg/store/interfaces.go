@@ -85,7 +85,7 @@ type EntityMeta = config.EntityMeta
 // MockFilter provides filtering criteria for mock list operations.
 type MockFilter struct {
 	WorkspaceID string        // Filter by workspace ("" = no filter)
-	Type        mock.MockType // Filter by mock type ("" = all types)
+	Type        mock.Type // Filter by mock type ("" = all types)
 	ParentID    *string       // Filter by parent folder (nil = no filter, "" = root level)
 	Enabled     *bool         // Filter by enabled state (nil = no filter)
 	Search      string        // Search in name/path
@@ -109,13 +109,13 @@ type MockStore interface {
 	Delete(ctx context.Context, id string) error
 
 	// DeleteByType deletes all mocks of a specific type.
-	DeleteByType(ctx context.Context, mockType mock.MockType) error
+	DeleteByType(ctx context.Context, mockType mock.Type) error
 
 	// DeleteAll deletes all mocks.
 	DeleteAll(ctx context.Context) error
 
 	// Count returns the total number of mocks, optionally filtered by type.
-	Count(ctx context.Context, mockType mock.MockType) (int, error)
+	Count(ctx context.Context, mockType mock.Type) (int, error)
 
 	// BulkCreate creates multiple mocks in a single operation.
 	BulkCreate(ctx context.Context, mocks []*mock.Mock) error

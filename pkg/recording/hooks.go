@@ -2,6 +2,7 @@
 package recording
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 )
@@ -59,7 +60,7 @@ type FileStoreWebSocketHook struct {
 // NewFileStoreWebSocketHook creates a new WebSocket recording hook backed by FileStore.
 func NewFileStoreWebSocketHook(store *FileStore, metadata RecordingMetadata) (*FileStoreWebSocketHook, error) {
 	if store == nil {
-		return nil, fmt.Errorf("store cannot be nil")
+		return nil, errors.New("store cannot be nil")
 	}
 
 	// Start a new recording session
@@ -197,7 +198,7 @@ type FileStoreSSEHook struct {
 // NewFileStoreSSEHook creates a new SSE recording hook backed by FileStore.
 func NewFileStoreSSEHook(store *FileStore, metadata RecordingMetadata) (*FileStoreSSEHook, error) {
 	if store == nil {
-		return nil, fmt.Errorf("store cannot be nil")
+		return nil, errors.New("store cannot be nil")
 	}
 
 	// Start a new recording session

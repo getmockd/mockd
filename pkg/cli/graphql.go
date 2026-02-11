@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -76,7 +77,7 @@ Examples:
 
 	if fs.NArg() < 1 {
 		fs.Usage()
-		return fmt.Errorf("schema file is required")
+		return errors.New("schema file is required")
 	}
 
 	schemaFile := fs.Arg(0)
@@ -171,7 +172,7 @@ Examples:
 
 	if fs.NArg() < 2 {
 		fs.Usage()
-		return fmt.Errorf("endpoint and query are required")
+		return errors.New("endpoint and query are required")
 	}
 
 	endpoint := fs.Arg(0)

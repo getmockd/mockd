@@ -3,10 +3,12 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
 
+	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/soap"
 )
@@ -14,6 +16,7 @@ import (
 // SOAPRecordingManager manages SOAP recording operations for the Admin API.
 type SOAPRecordingManager struct {
 	mu       sync.RWMutex
+	log      *slog.Logger
 	store    *recording.SOAPStore
 	handlers map[string]*soap.Handler // handler ID -> handler
 }
@@ -21,8 +24,20 @@ type SOAPRecordingManager struct {
 // NewSOAPRecordingManager creates a new SOAP recording manager.
 func NewSOAPRecordingManager() *SOAPRecordingManager {
 	return &SOAPRecordingManager{
+		log:      logging.Nop(),
 		store:    recording.NewSOAPStore(1000),
 		handlers: make(map[string]*soap.Handler),
+	}
+}
+
+// SetLogger sets the logger under the manager's own lock.
+func (m *SOAPRecordingManager) SetLogger(log *slog.Logger) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if log != nil {
+		m.log = log
+	} else {
+		m.log = logging.Nop()
 	}
 }
 
@@ -428,7 +443,7 @@ func (m *SOAPRecordingManager) handleConvertSOAPRecording(w http.ResponseWriter,
 	var req SOAPConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 			return
 		}
 	}
@@ -463,23 +478,24 @@ func (m *SOAPRecordingManager) handleConvertSOAPRecordings(w http.ResponseWriter
 	// Parse request
 	var req SOAPConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
 	// Get recordings to convert
 	var recordings []*recording.SOAPRecording
-	if len(req.RecordingIDs) > 0 {
+	switch {
+	case len(req.RecordingIDs) > 0:
 		for _, id := range req.RecordingIDs {
 			if rec := m.store.Get(id); rec != nil {
 				recordings = append(recordings, rec)
 			}
 		}
-	} else if req.Endpoint != "" {
+	case req.Endpoint != "":
 		recordings = m.store.ListByEndpoint(req.Endpoint)
-	} else if req.Operation != "" {
+	case req.Operation != "":
 		recordings = m.store.ListByOperation(req.Operation)
-	} else {
+	default:
 		recordings, _ = m.store.List(recording.SOAPRecordingFilter{})
 	}
 
@@ -516,7 +532,8 @@ func (m *SOAPRecordingManager) handleExportSOAPRecordings(w http.ResponseWriter,
 
 	data, err := m.store.Export()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "export_error", "Failed to export recordings: "+err.Error())
+		m.log.Error("failed to export SOAP recordings", "error", err)
+		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
 		return
 	}
 

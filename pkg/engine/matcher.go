@@ -32,7 +32,8 @@ func SelectBestMatchWithCaptures(mocks []*mock.Mock, r *http.Request) *MatchResu
 	var body []byte
 	if r.Body != nil {
 		var err error
-		body, err = io.ReadAll(r.Body)
+		const maxMatchBodySize = 10 << 20 // 10MB defense-in-depth
+		body, err = io.ReadAll(io.LimitReader(r.Body, maxMatchBodySize))
 		if err != nil {
 			// If we can't read the body, continue with empty body for matching
 			// The body matchers simply won't match
@@ -50,7 +51,7 @@ func SelectBestMatchWithCaptures(mocks []*mock.Mock, r *http.Request) *MatchResu
 		}
 
 		// Only HTTP mocks can be matched against HTTP requests
-		if m.Type != mock.MockTypeHTTP || m.HTTP == nil || m.HTTP.Matcher == nil {
+		if m.Type != mock.TypeHTTP || m.HTTP == nil || m.HTTP.Matcher == nil {
 			continue
 		}
 

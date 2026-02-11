@@ -1,12 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/config"
 	"gopkg.in/yaml.v3"
 )
@@ -108,16 +108,12 @@ func printServiceConfig(cfg *config.ProjectConfig, serviceName, configPath strin
 
 // printConfigAsJSON outputs the config as JSON.
 func printConfigAsJSON(cfg *config.ProjectConfig) error {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(cfg)
+	return output.JSON(cfg)
 }
 
 // printAsJSON outputs any value as JSON.
 func printAsJSON(v interface{}) error {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
+	return output.JSON(v)
 }
 
 // printConfigAsYAML outputs the config as YAML with a header comment.

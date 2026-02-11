@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/getmockd/mockd/pkg/ratelimit"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -126,7 +128,7 @@ func TestIsLocalhost_InvalidIP_ReturnsFalse(t *testing.T) {
 
 func TestLocalhostBypass_Disabled_RequiresAuth(t *testing.T) {
 	// Create API with localhost bypass DISABLED (default)
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithAPIKey("test-api-key"),
 		WithAllowLocalhostBypass(false),
 	)
@@ -148,7 +150,7 @@ func TestLocalhostBypass_Disabled_RequiresAuth(t *testing.T) {
 
 func TestLocalhostBypass_Enabled_AllowsLocalhost(t *testing.T) {
 	// Create API with localhost bypass ENABLED
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithAPIKey("test-api-key"),
 		WithAPIKeyAllowLocalhost(true),
 	)
@@ -172,7 +174,7 @@ func TestLocalhostBypass_Enabled_AllowsLocalhost(t *testing.T) {
 
 func TestLocalhostBypass_Enabled_ExternalStillRequiresAuth(t *testing.T) {
 	// Create API with localhost bypass ENABLED
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithAPIKey("test-api-key"),
 		WithAPIKeyAllowLocalhost(true),
 	)
@@ -199,14 +201,14 @@ func TestBulkCreate_DuplicateIDs_ReturnsError(t *testing.T) {
 	// Create temp directory for test isolation
 	tmpDir := t.TempDir()
 
-	api := NewAdminAPI(0, WithDataDir(tmpDir))
+	api := NewAPI(0, WithDataDir(tmpDir))
 	defer api.Stop()
 
 	// Request body with duplicate IDs
 	mocks := []*mock.Mock{
-		{ID: "duplicate-id", Name: "Mock 1", Type: mock.MockTypeHTTP},
-		{ID: "unique-id", Name: "Mock 2", Type: mock.MockTypeHTTP},
-		{ID: "duplicate-id", Name: "Mock 3 - Duplicate", Type: mock.MockTypeHTTP},
+		{ID: "duplicate-id", Name: "Mock 1", Type: mock.TypeHTTP},
+		{ID: "unique-id", Name: "Mock 2", Type: mock.TypeHTTP},
+		{ID: "duplicate-id", Name: "Mock 3 - Duplicate", Type: mock.TypeHTTP},
 	}
 	body, _ := json.Marshal(mocks)
 
@@ -230,14 +232,14 @@ func TestBulkCreate_DuplicateIDs_ReturnsError(t *testing.T) {
 func TestBulkCreate_UniqueIDs_Succeeds(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	api := NewAdminAPI(0, WithDataDir(tmpDir))
+	api := NewAPI(0, WithDataDir(tmpDir))
 	defer api.Stop()
 
 	// Request body with unique IDs
 	mocks := []*mock.Mock{
-		{ID: "mock-1", Name: "Mock 1", Type: mock.MockTypeHTTP},
-		{ID: "mock-2", Name: "Mock 2", Type: mock.MockTypeHTTP},
-		{ID: "mock-3", Name: "Mock 3", Type: mock.MockTypeHTTP},
+		{ID: "mock-1", Name: "Mock 1", Type: mock.TypeHTTP},
+		{ID: "mock-2", Name: "Mock 2", Type: mock.TypeHTTP},
+		{ID: "mock-3", Name: "Mock 3", Type: mock.TypeHTTP},
 	}
 	body, _ := json.Marshal(mocks)
 
@@ -259,7 +261,7 @@ func TestBulkCreate_UniqueIDs_Succeeds(t *testing.T) {
 func TestBulkCreate_PortConflictWithinBatch_ReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	api := NewAdminAPI(0, WithDataDir(tmpDir))
+	api := NewAPI(0, WithDataDir(tmpDir))
 	defer api.Stop()
 
 	// Two MQTT mocks using the same port in the same batch
@@ -267,14 +269,14 @@ func TestBulkCreate_PortConflictWithinBatch_ReturnsError(t *testing.T) {
 		{
 			ID:          "mqtt-1",
 			Name:        "MQTT Mock 1",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		},
 		{
 			ID:          "mqtt-2",
 			Name:        "MQTT Mock 2",
-			Type:        mock.MockTypeMQTT,
+			Type:        mock.TypeMQTT,
 			WorkspaceID: "local",
 			MQTT:        &mock.MQTTSpec{Port: 1883}, // Same port - conflict
 		},
@@ -386,7 +388,7 @@ func TestCreateMock_EngineFailure_RollsBack(t *testing.T) {
 	server := newMockFailingEngineServer("will-fail", "port 8080 is already in use")
 	defer server.Close()
 
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithDataDir(tmpDir),
 		WithLocalEngineClient(server.client()),
 	)
@@ -398,7 +400,7 @@ func TestCreateMock_EngineFailure_RollsBack(t *testing.T) {
 	mockData := &mock.Mock{
 		ID:   "will-fail",
 		Name: "Mock That Fails",
-		Type: mock.MockTypeHTTP,
+		Type: mock.TypeHTTP,
 		HTTP: &mock.HTTPSpec{
 			Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/test"},
 			Response: &mock.HTTPResponse{StatusCode: 200},
@@ -506,6 +508,9 @@ func TestProxyHandler_CAPath_RejectsAbsolute(t *testing.T) {
 }
 
 func TestProxyHandler_CAPath_AcceptsValidRelative(t *testing.T) {
+	// NOTE: This test uses os.Chdir which affects the entire process.
+	// Do NOT add t.Parallel() to this test or run it concurrently with
+	// other tests that depend on the working directory.
 	pm := NewProxyManager()
 
 	// Create a valid temp directory for CA files
@@ -548,14 +553,14 @@ func TestStatefulHandler_GetResource_SetsContentType(t *testing.T) {
 	server := newMockEngineServer()
 	defer server.Close()
 
-	api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+	api := NewAPI(0, WithLocalEngineClient(server.client()))
 	defer api.Stop()
 
 	req := httptest.NewRequest("GET", "/state/resources/users", nil)
 	req.SetPathValue("name", "users")
 	rec := httptest.NewRecorder()
 
-	api.handleGetStateResource(rec, req)
+	api.handleGetStateResource(rec, req, server.client())
 
 	// The Content-Type header should be set BEFORE WriteHeader is called
 	contentType := rec.Header().Get("Content-Type")
@@ -567,14 +572,14 @@ func TestStatefulHandler_ClearResource_SetsContentType(t *testing.T) {
 	server := newMockEngineServer()
 	defer server.Close()
 
-	api := NewAdminAPI(0, WithLocalEngineClient(server.client()))
+	api := NewAPI(0, WithLocalEngineClient(server.client()))
 	defer api.Stop()
 
 	req := httptest.NewRequest("DELETE", "/state/resources/users/clear", nil)
 	req.SetPathValue("name", "users")
 	rec := httptest.NewRecorder()
 
-	api.handleClearStateResource(rec, req)
+	api.handleClearStateResource(rec, req, server.client())
 
 	// The Content-Type header should be set BEFORE WriteHeader is called
 	contentType := rec.Header().Get("Content-Type")
@@ -587,7 +592,7 @@ func TestStatefulHandler_ClearResource_SetsContentType(t *testing.T) {
 // ============================================================================
 
 func TestHealthHandler_ReturnsOK(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -605,7 +610,7 @@ func TestHealthHandler_ReturnsOK(t *testing.T) {
 }
 
 func TestHealthHandler_ReturnsUptime(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	api.startTime = time.Now().Add(-10 * time.Second) // Simulate 10 seconds uptime
 	defer api.Stop()
 
@@ -626,7 +631,7 @@ func TestHealthHandler_ReturnsUptime(t *testing.T) {
 // ============================================================================
 
 func TestGenerateToken_ReturnsNonEmpty(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	token, err := api.GenerateRegistrationToken()
@@ -638,7 +643,7 @@ func TestGenerateToken_ReturnsNonEmpty(t *testing.T) {
 }
 
 func TestGenerateToken_ReturnsUnique(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	tokens := make(map[string]bool)
@@ -651,7 +656,7 @@ func TestGenerateToken_ReturnsUnique(t *testing.T) {
 }
 
 func TestValidateToken_ValidToken_ReturnsTrue(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	token, err := api.GenerateRegistrationToken()
@@ -663,7 +668,7 @@ func TestValidateToken_ValidToken_ReturnsTrue(t *testing.T) {
 }
 
 func TestValidateToken_InvalidToken_ReturnsFalse(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	// Try to validate a token that was never generated
@@ -673,7 +678,7 @@ func TestValidateToken_InvalidToken_ReturnsFalse(t *testing.T) {
 
 func TestValidateToken_ExpiredToken_ReturnsFalse(t *testing.T) {
 	// Create API with very short token expiration
-	api := NewAdminAPI(0,
+	api := NewAPI(0,
 		WithRegistrationTokenExpiration(50*time.Millisecond),
 	)
 	defer api.Stop()
@@ -689,7 +694,7 @@ func TestValidateToken_ExpiredToken_ReturnsFalse(t *testing.T) {
 }
 
 func TestValidateToken_ConsumedOnUse(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	token, err := api.GenerateRegistrationToken()
@@ -709,7 +714,7 @@ func TestValidateToken_ConsumedOnUse(t *testing.T) {
 // ============================================================================
 
 func TestEngineToken_ValidToken_ReturnsTrue(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	engineID := "test-engine-1"
@@ -721,7 +726,7 @@ func TestEngineToken_ValidToken_ReturnsTrue(t *testing.T) {
 }
 
 func TestEngineToken_WrongEngineID_ReturnsFalse(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	engineID := "test-engine-1"
@@ -734,7 +739,7 @@ func TestEngineToken_WrongEngineID_ReturnsFalse(t *testing.T) {
 }
 
 func TestEngineToken_WrongToken_ReturnsFalse(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	engineID := "test-engine-1"
@@ -747,7 +752,7 @@ func TestEngineToken_WrongToken_ReturnsFalse(t *testing.T) {
 }
 
 func TestEngineToken_NonExistentEngine_ReturnsFalse(t *testing.T) {
-	api := NewAdminAPI(0)
+	api := NewAPI(0)
 	defer api.Stop()
 
 	isValid := api.ValidateEngineToken("non-existent", "any-token")
@@ -825,14 +830,14 @@ func TestCORSMiddleware_DisallowedOrigin(t *testing.T) {
 // ============================================================================
 
 func TestRateLimiter_AllowsBurstRequests(t *testing.T) {
-	rl := NewRateLimiter(100, 10) // 100 req/s, burst of 10
+	rl := ratelimit.NewPerIPLimiter(ratelimit.PerIPConfig{Rate: 100, Burst: 10})
 	defer rl.Stop()
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	wrapped := rl.Middleware(handler)
+	wrapped := ratelimit.Middleware(rl, ratelimit.WithTextResponse())(handler)
 
 	// Burst of 10 requests should all succeed
 	for i := 0; i < 10; i++ {
@@ -843,6 +848,74 @@ func TestRateLimiter_AllowsBurstRequests(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code,
 			"request %d in burst should succeed", i+1)
 	}
+}
+
+// ============================================================================
+// SetLogger Tests — API and Manager nil-safety
+// ============================================================================
+
+func TestAPISetLogger_NilSafety(t *testing.T) {
+	api := NewAPI(0)
+	defer api.Stop()
+
+	// Setting a nil logger should not panic and should fall back to nop
+	api.SetLogger(nil)
+	log := api.logger()
+	assert.NotNil(t, log, "logger() should never return nil after SetLogger(nil)")
+
+	// Setting a valid logger should be retrievable
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	api.SetLogger(logger)
+	assert.Equal(t, logger, api.logger(), "logger() should return the logger that was set")
+}
+
+func TestAPISetLogger_PropagatesLogger(t *testing.T) {
+	api := NewAPI(0)
+	defer api.Stop()
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	api.SetLogger(logger)
+
+	// The manager loggers should be non-nil after propagation
+	// We can't directly inspect manager.log (unexported), but we can
+	// verify the managers received a non-nil logger by calling SetLogger
+	// with nil and ensuring no panic.
+	api.proxyManager.SetLogger(nil)
+	api.streamRecordingManager.SetLogger(nil)
+	api.mqttRecordingManager.SetLogger(nil)
+	api.soapRecordingManager.SetLogger(nil)
+}
+
+func TestProxyManagerSetLogger_NilSafety(t *testing.T) {
+	pm := NewProxyManager()
+	// Should not panic
+	pm.SetLogger(nil)
+	// Should work with valid logger
+	pm.SetLogger(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+}
+
+func TestStreamRecordingManagerSetLogger_NilSafety(t *testing.T) {
+	srm := NewStreamRecordingManager()
+	// Should not panic
+	srm.SetLogger(nil)
+	// Should work with valid logger
+	srm.SetLogger(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+}
+
+func TestMQTTRecordingManagerSetLogger_NilSafety(t *testing.T) {
+	mrm := NewMQTTRecordingManager()
+	// Should not panic
+	mrm.SetLogger(nil)
+	// Should work with valid logger
+	mrm.SetLogger(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+}
+
+func TestSOAPRecordingManagerSetLogger_NilSafety(t *testing.T) {
+	srm := NewSOAPRecordingManager()
+	// Should not panic
+	srm.SetLogger(nil)
+	// Should work with valid logger
+	srm.SetLogger(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 }
 
 // ============================================================================

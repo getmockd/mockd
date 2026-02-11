@@ -2,8 +2,9 @@ package admin
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/proxy"
 	"github.com/getmockd/mockd/pkg/recording"
 )
@@ -18,6 +20,7 @@ import (
 // ProxyManager manages the proxy server lifecycle for the Admin API.
 type ProxyManager struct {
 	mu        sync.RWMutex
+	log       *slog.Logger
 	proxy     *proxy.Proxy
 	store     *recording.Store
 	ca        *proxy.CAManager
@@ -31,7 +34,20 @@ type ProxyManager struct {
 
 // NewProxyManager creates a new ProxyManager.
 func NewProxyManager() *ProxyManager {
-	return &ProxyManager{}
+	return &ProxyManager{
+		log: logging.Nop(),
+	}
+}
+
+// SetLogger sets the logger under the manager's own lock.
+func (pm *ProxyManager) SetLogger(log *slog.Logger) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	if log != nil {
+		pm.log = log
+	} else {
+		pm.log = logging.Nop()
+	}
 }
 
 // ProxyStartRequest represents a request to start the proxy.
@@ -87,7 +103,7 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 
 	var req ProxyStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -138,9 +154,10 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		ca = proxy.NewCAManager(req.CAPath+"/ca.crt", req.CAPath+"/ca.key")
+		ca = proxy.NewCAManager(cleanPath+"/ca.crt", cleanPath+"/ca.key")
 		if err := ca.EnsureCA(); err != nil {
-			writeError(w, http.StatusInternalServerError, "ca_error", "Failed to initialize CA: "+err.Error())
+			pm.log.Error("failed to initialize CA", "error", err)
+			writeError(w, http.StatusInternalServerError, "ca_error", "Failed to initialize CA certificate")
 			return
 		}
 	}
@@ -163,8 +180,7 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create proxy with logger
-	// Use the same output as the default logger
-	logger := log.New(log.Writer(), "[proxy] ", log.LstdFlags)
+	logger := slog.NewLogLogger(pm.log.Handler(), slog.LevelInfo)
 	p := proxy.New(proxy.Options{
 		Mode:      mode,
 		Store:     store,
@@ -177,12 +193,15 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 	addr := fmt.Sprintf(":%d", req.Port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "port_error", "Failed to listen on port: "+err.Error())
+		writeError(w, http.StatusBadRequest, "port_error", fmt.Sprintf("Failed to listen on port %d", req.Port))
 		return
 	}
 
 	server := &http.Server{
-		Handler: p,
+		Handler:      p,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second, // Longer write timeout for proxied responses
+		IdleTimeout:  120 * time.Second,
 	}
 
 	// Store state
@@ -197,8 +216,8 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 
 	// Start server in goroutine
 	go func() {
-		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-			log.Printf("Proxy server error: %v\n", err)
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			pm.log.Error("proxy server error", "error", err)
 		}
 	}()
 
@@ -217,7 +236,8 @@ func (pm *ProxyManager) handleProxyStop(w http.ResponseWriter, r *http.Request) 
 
 	if pm.server != nil {
 		if err := pm.server.Close(); err != nil {
-			writeError(w, http.StatusInternalServerError, "stop_error", "Failed to stop proxy: "+err.Error())
+			pm.log.Error("failed to stop proxy", "error", err)
+			writeError(w, http.StatusInternalServerError, "stop_error", "Failed to stop proxy server")
 			return
 		}
 	}
@@ -246,7 +266,7 @@ func (pm *ProxyManager) handleProxyMode(w http.ResponseWriter, r *http.Request) 
 
 	var req ModeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -294,7 +314,7 @@ func (pm *ProxyManager) handleSetFilters(w http.ResponseWriter, r *http.Request)
 
 	var req FilterConfigUpdate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
 		return
 	}
 
@@ -353,14 +373,30 @@ func (pm *ProxyManager) handleGenerateCA(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ca := proxy.NewCAManager(req.CAPath+"/ca.crt", req.CAPath+"/ca.key")
+	// Validate CA path to prevent path traversal
+	if strings.Contains(req.CAPath, "..") {
+		writeError(w, http.StatusBadRequest, "invalid_path", "CA path cannot contain path traversal sequences")
+		return
+	}
+	if filepath.IsAbs(req.CAPath) {
+		writeError(w, http.StatusBadRequest, "invalid_path", "CA path must be a relative path")
+		return
+	}
+	cleanPath := filepath.Clean(req.CAPath)
+	if strings.HasPrefix(cleanPath, "..") {
+		writeError(w, http.StatusBadRequest, "invalid_path", "CA path cannot escape the working directory")
+		return
+	}
+
+	ca := proxy.NewCAManager(cleanPath+"/ca.crt", cleanPath+"/ca.key")
 	if ca.Exists() {
 		writeError(w, http.StatusConflict, "ca_exists", "CA certificate already exists")
 		return
 	}
 
 	if err := ca.Generate(); err != nil {
-		writeError(w, http.StatusInternalServerError, "generate_error", "Failed to generate CA: "+err.Error())
+		pm.log.Error("failed to generate CA", "error", err)
+		writeError(w, http.StatusInternalServerError, "generate_error", "Failed to generate CA certificate")
 		return
 	}
 
@@ -393,7 +429,8 @@ func (pm *ProxyManager) handleDownloadCA(w http.ResponseWriter, r *http.Request)
 
 	certPEM, err := pm.ca.CACertPEM()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "read_error", "Failed to read CA certificate: "+err.Error())
+		pm.log.Error("failed to read CA certificate", "error", err)
+		writeError(w, http.StatusInternalServerError, "read_error", "Failed to read CA certificate")
 		return
 	}
 

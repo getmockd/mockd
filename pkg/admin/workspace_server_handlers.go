@@ -5,22 +5,22 @@ import (
 	"net/http"
 
 	"github.com/getmockd/mockd/pkg/config"
-	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/store"
+	"github.com/getmockd/mockd/pkg/workspace"
 )
 
 // WorkspaceServerStatusResponse represents the status of a workspace server.
 type WorkspaceServerStatusResponse struct {
-	WorkspaceID   string                       `json:"workspaceId"`
-	WorkspaceName string                       `json:"workspaceName"`
-	HTTPPort      int                          `json:"httpPort"`
-	GRPCPort      int                          `json:"grpcPort,omitempty"`
-	MQTTPort      int                          `json:"mqttPort,omitempty"`
-	Status        engine.WorkspaceServerStatus `json:"status"`
-	StatusMessage string                       `json:"statusMessage,omitempty"`
-	MockCount     int                          `json:"mockCount"`
-	RequestCount  int                          `json:"requestCount"`
-	Uptime        int                          `json:"uptime"`
+	WorkspaceID   string                 `json:"workspaceId"`
+	WorkspaceName string                 `json:"workspaceName"`
+	HTTPPort      int                    `json:"httpPort"`
+	GRPCPort      int                    `json:"grpcPort,omitempty"`
+	MQTTPort      int                    `json:"mqttPort,omitempty"`
+	Status        workspace.ServerStatus `json:"status"`
+	StatusMessage string                 `json:"statusMessage,omitempty"`
+	MockCount     int                    `json:"mockCount"`
+	RequestCount  int                    `json:"requestCount"`
+	Uptime        int                    `json:"uptime"`
 }
 
 // WorkspaceServerListResponse represents a list of workspace servers.
@@ -30,7 +30,7 @@ type WorkspaceServerListResponse struct {
 }
 
 // handleStartWorkspaceServer handles POST /engines/{id}/workspaces/{workspaceId}/start
-func (a *AdminAPI) handleStartWorkspaceServer(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleStartWorkspaceServer(w http.ResponseWriter, r *http.Request) {
 	engineID := r.PathValue("id")
 	workspaceID := r.PathValue("workspaceId")
 
@@ -64,14 +64,18 @@ func (a *AdminAPI) handleStartWorkspaceServer(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Set up mock fetcher if not already configured
-	if a.workspaceManager != nil {
-		a.workspaceManager.SetMockFetcher(a.fetchMocksForWorkspace)
+	if a.workspaceManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "not_configured", "Workspace manager not configured")
+		return
 	}
+
+	// Set up mock fetcher if not already configured
+	a.workspaceManager.SetMockFetcher(a.fetchMocksForWorkspace)
 
 	// Start the workspace server
 	if err := a.workspaceManager.StartWorkspace(r.Context(), ws); err != nil {
-		writeError(w, http.StatusInternalServerError, "start_failed", "Failed to start workspace server: "+err.Error())
+		a.logger().Error("failed to start workspace server", "error", err, "workspaceID", workspaceID, "engineID", engineID)
+		writeError(w, http.StatusInternalServerError, "start_failed", "Failed to start workspace server")
 		return
 	}
 
@@ -100,7 +104,7 @@ func (a *AdminAPI) handleStartWorkspaceServer(w http.ResponseWriter, r *http.Req
 }
 
 // handleStopWorkspaceServer handles POST /engines/{id}/workspaces/{workspaceId}/stop
-func (a *AdminAPI) handleStopWorkspaceServer(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleStopWorkspaceServer(w http.ResponseWriter, r *http.Request) {
 	engineID := r.PathValue("id")
 	workspaceID := r.PathValue("workspaceId")
 
@@ -132,9 +136,15 @@ func (a *AdminAPI) handleStopWorkspaceServer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	if a.workspaceManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "not_configured", "Workspace manager not configured")
+		return
+	}
+
 	// Stop the workspace server
 	if err := a.workspaceManager.StopWorkspace(workspaceID); err != nil {
-		writeError(w, http.StatusInternalServerError, "stop_failed", "Failed to stop workspace server: "+err.Error())
+		a.logger().Error("failed to stop workspace server", "error", err, "workspaceID", workspaceID, "engineID", engineID)
+		writeError(w, http.StatusInternalServerError, "stop_failed", "Failed to stop workspace server")
 		return
 	}
 
@@ -145,7 +155,7 @@ func (a *AdminAPI) handleStopWorkspaceServer(w http.ResponseWriter, r *http.Requ
 }
 
 // handleGetWorkspaceServerStatus handles GET /engines/{id}/workspaces/{workspaceId}/status
-func (a *AdminAPI) handleGetWorkspaceServerStatus(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetWorkspaceServerStatus(w http.ResponseWriter, r *http.Request) {
 	engineID := r.PathValue("id")
 	workspaceID := r.PathValue("workspaceId")
 
@@ -179,6 +189,19 @@ func (a *AdminAPI) handleGetWorkspaceServerStatus(w http.ResponseWriter, r *http
 		return
 	}
 
+	if a.workspaceManager == nil {
+		writeJSON(w, http.StatusOK, &WorkspaceServerStatusResponse{
+			WorkspaceID:   registeredWS.WorkspaceID,
+			WorkspaceName: registeredWS.WorkspaceName,
+			HTTPPort:      registeredWS.HTTPPort,
+			GRPCPort:      registeredWS.GRPCPort,
+			MQTTPort:      registeredWS.MQTTPort,
+			Status:        workspace.ServerStatusStopped,
+			MockCount:     registeredWS.MockCount,
+		})
+		return
+	}
+
 	// Get runtime status from workspace manager
 	status := a.workspaceManager.GetWorkspaceStatus(workspaceID)
 	if status == nil {
@@ -189,7 +212,7 @@ func (a *AdminAPI) handleGetWorkspaceServerStatus(w http.ResponseWriter, r *http
 			HTTPPort:      registeredWS.HTTPPort,
 			GRPCPort:      registeredWS.GRPCPort,
 			MQTTPort:      registeredWS.MQTTPort,
-			Status:        engine.WorkspaceServerStatusStopped,
+			Status:        workspace.ServerStatusStopped,
 			MockCount:     registeredWS.MockCount,
 		})
 		return
@@ -210,7 +233,7 @@ func (a *AdminAPI) handleGetWorkspaceServerStatus(w http.ResponseWriter, r *http
 }
 
 // handleReloadWorkspaceServer handles POST /engines/{id}/workspaces/{workspaceId}/reload
-func (a *AdminAPI) handleReloadWorkspaceServer(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleReloadWorkspaceServer(w http.ResponseWriter, r *http.Request) {
 	engineID := r.PathValue("id")
 	workspaceID := r.PathValue("workspaceId")
 
@@ -242,16 +265,22 @@ func (a *AdminAPI) handleReloadWorkspaceServer(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	if a.workspaceManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "not_configured", "Workspace manager not configured")
+		return
+	}
+
 	// Check if workspace server is running
 	server := a.workspaceManager.GetWorkspace(workspaceID)
-	if server == nil || server.Status() != engine.WorkspaceServerStatusRunning {
+	if server == nil || server.Status() != workspace.ServerStatusRunning {
 		writeError(w, http.StatusBadRequest, "not_running", "Workspace server is not running")
 		return
 	}
 
 	// Reload mocks
 	if err := a.workspaceManager.ReloadWorkspace(r.Context(), workspaceID); err != nil {
-		writeError(w, http.StatusInternalServerError, "reload_failed", "Failed to reload workspace: "+err.Error())
+		a.logger().Error("failed to reload workspace", "error", err, "workspaceID", workspaceID, "engineID", engineID)
+		writeError(w, http.StatusInternalServerError, "reload_failed", "Failed to reload workspace")
 		return
 	}
 
@@ -278,13 +307,14 @@ func (a *AdminAPI) handleReloadWorkspaceServer(w http.ResponseWriter, r *http.Re
 
 // fetchMocksForWorkspace is the mock fetcher function used by the workspace manager.
 // It fetches mocks from the engine via HTTP client filtered by workspace ID.
-func (a *AdminAPI) fetchMocksForWorkspace(ctx context.Context, workspaceID string) ([]*config.MockConfiguration, error) {
+func (a *API) fetchMocksForWorkspace(ctx context.Context, workspaceID string) ([]*config.MockConfiguration, error) {
 	// Get mocks from the engine via HTTP client
-	if a.localEngine == nil {
+	engine := a.localEngine.Load()
+	if engine == nil {
 		return nil, nil
 	}
 
-	allMocks, err := a.localEngine.ListMocks(ctx)
+	allMocks, err := engine.ListMocks(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +331,14 @@ func (a *AdminAPI) fetchMocksForWorkspace(ctx context.Context, workspaceID strin
 }
 
 // ListWorkspaceServers returns all running workspace servers.
-func (a *AdminAPI) ListWorkspaceServers() *WorkspaceServerListResponse {
+func (a *API) ListWorkspaceServers() *WorkspaceServerListResponse {
+	if a.workspaceManager == nil {
+		return &WorkspaceServerListResponse{
+			Servers: []*WorkspaceServerStatusResponse{},
+			Total:   0,
+		}
+	}
+
 	servers := a.workspaceManager.ListWorkspaces()
 
 	response := &WorkspaceServerListResponse{

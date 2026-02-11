@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,7 +11,6 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/graphql"
 	"github.com/getmockd/mockd/pkg/logging"
-	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/store"
 )
 
@@ -198,14 +198,18 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 }
 
 // SaveToFile saves the current mock configurations to a file.
+// All protocol types (HTTP, WebSocket, GraphQL, gRPC, MQTT, SOAP, OAuth)
+// are included in the export.
 func (cl *ConfigLoader) SaveToFile(path string, name string) error {
-	mocks := cl.server.Store().ListByType(mock.MockTypeHTTP)
+	mocks := cl.server.Store().List()
 	return config.SaveMocksToFile(path, mocks, name)
 }
 
 // Export exports the current configuration as a MockCollection.
+// All protocol types (HTTP, WebSocket, GraphQL, gRPC, MQTT, SOAP, OAuth)
+// are included in the export.
 func (cl *ConfigLoader) Export(name string) *config.MockCollection {
-	mocks := cl.server.Store().ListByType(mock.MockTypeHTTP)
+	mocks := cl.server.Store().List()
 	return &config.MockCollection{
 		Version: "1.0",
 		Name:    name,
@@ -216,7 +220,7 @@ func (cl *ConfigLoader) Export(name string) *config.MockCollection {
 // Import imports a MockCollection, optionally replacing existing mocks.
 func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) error {
 	if collection == nil {
-		return fmt.Errorf("collection cannot be nil")
+		return errors.New("collection cannot be nil")
 	}
 
 	if err := collection.Validate(); err != nil {

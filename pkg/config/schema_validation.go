@@ -355,7 +355,7 @@ func ValidatePortConflicts(cfg *ProjectConfig) *SchemaValidationResult {
 				result.AddError(fmt.Sprintf("admins[%d].port", i),
 					fmt.Sprintf("port %d conflicts with %s", admin.Port, existing))
 			} else {
-				usedPorts[key] = fmt.Sprintf("admin/%s", admin.Name)
+				usedPorts[key] = "admin/" + admin.Name
 			}
 		}
 	}

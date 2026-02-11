@@ -2,6 +2,7 @@ package mqtt
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"strings"
 	"time"
 
@@ -37,6 +38,7 @@ func (h *AuthHook) ID() string {
 
 // Provides indicates which hook methods this hook provides
 func (h *AuthHook) Provides(b byte) bool {
+	//nolint:gocritic // argument order is intentional
 	return bytes.Contains([]byte{
 		mqtt.OnConnectAuthenticate,
 		mqtt.OnACLCheck,
@@ -53,7 +55,9 @@ func (h *AuthHook) OnConnectAuthenticate(cl *mqtt.Client, pk packets.Packet) boo
 	password := string(pk.Connect.Password)
 
 	for _, user := range h.config.Users {
-		if user.Username == username && user.Password == password {
+		usernameMatch := subtle.ConstantTimeCompare([]byte(user.Username), []byte(username)) == 1
+		passwordMatch := subtle.ConstantTimeCompare([]byte(user.Password), []byte(password)) == 1
+		if usernameMatch && passwordMatch {
 			return true
 		}
 	}
@@ -162,6 +166,7 @@ func (h *MessageHook) ID() string {
 
 // Provides indicates which hook methods this hook provides
 func (h *MessageHook) Provides(b byte) bool {
+	//nolint:gocritic // argument order is intentional
 	return bytes.Contains([]byte{
 		mqtt.OnPublish,
 		mqtt.OnSubscribed,

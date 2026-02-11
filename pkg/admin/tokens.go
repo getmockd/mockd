@@ -5,6 +5,7 @@ package admin
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -26,6 +27,14 @@ const (
 
 	// TokenCleanupInterval is how often the cleanup goroutine runs.
 	TokenCleanupInterval = 5 * time.Minute
+
+	// MaxRegistrationTokens is the maximum number of active registration tokens.
+	// Prevents unbounded map growth from repeated token generation.
+	MaxRegistrationTokens = 100
+
+	// MaxEngineTokens is the maximum number of active engine tokens.
+	// One per registered engine; cap prevents runaway registration.
+	MaxEngineTokens = 1000
 )
 
 // storedToken represents a token with expiration metadata.
@@ -41,7 +50,8 @@ func (t storedToken) isExpired() bool {
 }
 
 // GenerateRegistrationToken creates a new registration token.
-func (a *AdminAPI) GenerateRegistrationToken() (string, error) {
+// Returns an error if the maximum number of registration tokens has been reached.
+func (a *API) GenerateRegistrationToken() (string, error) {
 	token, err := generateRandomHex(32)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate registration token: %w", err)
@@ -49,6 +59,12 @@ func (a *AdminAPI) GenerateRegistrationToken() (string, error) {
 	now := time.Now()
 	a.tokenMu.Lock()
 	defer a.tokenMu.Unlock()
+
+	// Enforce cap to prevent unbounded map growth.
+	if len(a.registrationTokens) >= MaxRegistrationTokens {
+		return "", fmt.Errorf("maximum number of registration tokens (%d) reached; wait for expiry or cleanup", MaxRegistrationTokens)
+	}
+
 	a.registrationTokens[token] = storedToken{
 		Token:     token,
 		CreatedAt: now,
@@ -57,47 +73,67 @@ func (a *AdminAPI) GenerateRegistrationToken() (string, error) {
 	return token, nil
 }
 
-// ValidateRegistrationToken checks if a registration token is valid.
+// ValidateRegistrationToken checks if a registration token is valid using
+// constant-time comparison to prevent timing side-channel attacks.
 // If valid, it consumes the token (one-time use).
-// Returns false if the token doesn't exist or has expired.
-func (a *AdminAPI) ValidateRegistrationToken(token string) bool {
+// Returns false if the token doesn't match any stored token or has expired.
+func (a *API) ValidateRegistrationToken(token string) bool {
 	a.tokenMu.Lock()
 	defer a.tokenMu.Unlock()
-	stored, exists := a.registrationTokens[token]
-	if !exists {
+
+	tokenBytes := []byte(token)
+	var matchedKey string
+	var matchedToken *storedToken
+
+	// Iterate all tokens with constant-time comparison so that timing
+	// does not reveal whether a token exists. The number of registration
+	// tokens is always very small (single digits).
+	for key, stored := range a.registrationTokens {
+		if subtle.ConstantTimeCompare([]byte(stored.Token), tokenBytes) == 1 {
+			matchedKey = key
+			s := stored // copy
+			matchedToken = &s
+		}
+	}
+
+	if matchedToken == nil {
 		return false
 	}
+
 	// Check expiration
-	if stored.isExpired() {
-		delete(a.registrationTokens, token)
-		a.log.Debug("registration token expired and removed during validation", "token_prefix", token[:8])
+	if matchedToken.isExpired() {
+		delete(a.registrationTokens, matchedKey)
+		if len(token) >= 8 {
+			a.logger().Debug("registration token expired and removed during validation", "token_prefix", token[:8])
+		}
 		return false
 	}
-	delete(a.registrationTokens, token) // One-time use
+	delete(a.registrationTokens, matchedKey) // One-time use
 	return true
 }
 
 // ValidateEngineToken checks if an engine token is valid for the given engine ID.
 // Returns false if the token doesn't exist, doesn't match, or has expired.
-func (a *AdminAPI) ValidateEngineToken(engineID, token string) bool {
+func (a *API) ValidateEngineToken(engineID, token string) bool {
 	a.tokenMu.RLock()
 	defer a.tokenMu.RUnlock()
 	stored, exists := a.engineTokens[engineID]
-	if !exists || stored.Token != token {
+	if !exists || subtle.ConstantTimeCompare([]byte(stored.Token), []byte(token)) != 1 {
 		return false
 	}
 	// Check expiration
 	if stored.isExpired() {
 		// Note: we don't delete here since we only have RLock
 		// The cleanup goroutine will handle removal
-		a.log.Debug("engine token expired during validation", "engine_id", engineID)
+		a.logger().Debug("engine token expired during validation", "engine_id", engineID)
 		return false
 	}
 	return true
 }
 
 // generateEngineToken creates and stores a new token for an engine.
-func (a *AdminAPI) generateEngineToken(engineID string) (string, error) {
+// Returns an error if the maximum number of engine tokens has been reached.
+func (a *API) generateEngineToken(engineID string) (string, error) {
 	token, err := generateRandomHex(32)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate engine token: %w", err)
@@ -105,6 +141,13 @@ func (a *AdminAPI) generateEngineToken(engineID string) (string, error) {
 	now := time.Now()
 	a.tokenMu.Lock()
 	defer a.tokenMu.Unlock()
+
+	// Allow overwriting an existing token for this engine (re-registration).
+	// Only enforce cap for genuinely new entries.
+	if _, exists := a.engineTokens[engineID]; !exists && len(a.engineTokens) >= MaxEngineTokens {
+		return "", fmt.Errorf("maximum number of engine tokens (%d) reached; wait for expiry or cleanup", MaxEngineTokens)
+	}
+
 	a.engineTokens[engineID] = storedToken{
 		Token:     token,
 		CreatedAt: now,
@@ -114,14 +157,14 @@ func (a *AdminAPI) generateEngineToken(engineID string) (string, error) {
 }
 
 // removeEngineToken removes the token for an engine.
-func (a *AdminAPI) removeEngineToken(engineID string) {
+func (a *API) removeEngineToken(engineID string) {
 	a.tokenMu.Lock()
 	defer a.tokenMu.Unlock()
 	delete(a.engineTokens, engineID)
 }
 
 // ListRegistrationTokens returns all active (non-expired) registration tokens.
-func (a *AdminAPI) ListRegistrationTokens() []string {
+func (a *API) ListRegistrationTokens() []string {
 	a.tokenMu.RLock()
 	defer a.tokenMu.RUnlock()
 	tokens := make([]string, 0, len(a.registrationTokens))
@@ -135,13 +178,13 @@ func (a *AdminAPI) ListRegistrationTokens() []string {
 }
 
 // startTokenCleanup runs a background goroutine that periodically removes expired tokens.
-func (a *AdminAPI) startTokenCleanup(ctx context.Context) {
+func (a *API) startTokenCleanup(ctx context.Context) {
 	ticker := time.NewTicker(TokenCleanupInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			a.log.Debug("token cleanup goroutine stopped")
+			a.logger().Debug("token cleanup goroutine stopped")
 			return
 		case <-ticker.C:
 			a.cleanupExpiredTokens()
@@ -150,7 +193,7 @@ func (a *AdminAPI) startTokenCleanup(ctx context.Context) {
 }
 
 // cleanupExpiredTokens removes all expired tokens from both registration and engine token maps.
-func (a *AdminAPI) cleanupExpiredTokens() {
+func (a *API) cleanupExpiredTokens() {
 	a.tokenMu.Lock()
 	defer a.tokenMu.Unlock()
 
@@ -175,7 +218,7 @@ func (a *AdminAPI) cleanupExpiredTokens() {
 	}
 
 	if registrationCleaned > 0 || engineCleaned > 0 {
-		a.log.Debug("cleaned up expired tokens",
+		a.logger().Debug("cleaned up expired tokens",
 			"registration_tokens_removed", registrationCleaned,
 			"engine_tokens_removed", engineCleaned,
 		)
@@ -191,7 +234,7 @@ type TokenStats struct {
 }
 
 // GetTokenStats returns statistics about token storage.
-func (a *AdminAPI) GetTokenStats() TokenStats {
+func (a *API) GetTokenStats() TokenStats {
 	a.tokenMu.RLock()
 	defer a.tokenMu.RUnlock()
 

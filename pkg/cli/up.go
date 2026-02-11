@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
@@ -32,7 +34,7 @@ type upContext struct {
 	cancel     context.CancelFunc
 
 	// Running services (process-level)
-	admins  map[string]*admin.AdminAPI
+	admins  map[string]*admin.API
 	engines map[string]*engine.Server
 	tunnels map[string]*tunnel.TunnelManager // engine name -> tunnel manager
 
@@ -115,7 +117,7 @@ Examples:
 		for _, e := range result.Errors {
 			fmt.Fprintf(os.Stderr, "  - %s\n", e.Error())
 		}
-		return fmt.Errorf("invalid configuration")
+		return errors.New("invalid configuration")
 	}
 
 	// Check port conflicts in config
@@ -125,7 +127,7 @@ Examples:
 		for _, e := range portResult.Errors {
 			fmt.Fprintf(os.Stderr, "  - %s\n", e.Error())
 		}
-		return fmt.Errorf("port conflicts")
+		return errors.New("port conflicts")
 	}
 
 	// Check actual port availability
@@ -142,7 +144,7 @@ Examples:
 		detach:       *detach,
 		ctx:          ctx,
 		cancel:       cancel,
-		admins:       make(map[string]*admin.AdminAPI),
+		admins:       make(map[string]*admin.API),
 		engines:      make(map[string]*engine.Server),
 		tunnels:      make(map[string]*tunnel.TunnelManager),
 		adminClients: make(map[string]AdminClient),
@@ -301,7 +303,7 @@ func (uctx *upContext) run() error {
 	// Write PID file
 	pidPath := defaultUpPIDPath()
 	if err := uctx.writePIDFile(pidPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to write PID file: %v\n", err)
+		output.Warn("failed to write PID file: %v", err)
 	}
 	defer func() { _ = os.Remove(pidPath) }()
 
@@ -418,7 +420,7 @@ func (uctx *upContext) startAll() error {
 		if engineCfg.Tunnel != nil && engineCfg.Tunnel.Enabled {
 			if err := uctx.startTunnel(engineCfg); err != nil {
 				// Tunnel failure is non-fatal -- log and continue
-				fmt.Fprintf(os.Stderr, "Warning: tunnel for engine '%s' failed: %v\n", engineCfg.Name, err)
+				output.Warn("tunnel for engine '%s' failed: %v", engineCfg.Name, err)
 			}
 		}
 	}
@@ -448,7 +450,7 @@ func (uctx *upContext) waitForAdminHealth(client AdminClient, timeout time.Durat
 			// Retry
 		}
 	}
-	return fmt.Errorf("timeout waiting for admin health")
+	return errors.New("timeout waiting for admin health")
 }
 
 // createWorkspaces creates workspaces via HTTP and assigns them to engines.
@@ -558,7 +560,7 @@ func (uctx *upContext) startAdmin(adminCfg config.AdminConfig) error {
 	}
 
 	// Create admin API
-	adminAPI := admin.NewAdminAPI(adminCfg.Port, opts...)
+	adminAPI := admin.NewAPI(adminCfg.Port, opts...)
 	adminAPI.SetLogger(uctx.log.With("component", "admin", "name", adminCfg.Name))
 
 	// Start admin
@@ -837,7 +839,7 @@ func (uctx *upContext) waitForHealth(client *engineclient.Client, timeout time.D
 		}
 	}
 
-	return fmt.Errorf("timeout waiting for engine health")
+	return errors.New("timeout waiting for engine health")
 }
 
 // loadAndApplyMocks loads mocks from the config (including file references and globs),
@@ -896,7 +898,7 @@ func (uctx *upContext) loadAndApplyMocks() error {
 	// For now, send all mocks to the first available admin
 	adminClient := uctx.findFirstAdminClient()
 	if adminClient == nil {
-		return fmt.Errorf("no admin client available to push mocks")
+		return errors.New("no admin client available to push mocks")
 	}
 
 	// Push mocks via HTTP: POST /mocks/bulk
@@ -931,7 +933,7 @@ func (uctx *upContext) loadAndApplyStatefulResources() error {
 
 	adminClient := uctx.findFirstAdminClient()
 	if adminClient == nil {
-		return fmt.Errorf("no admin client available to push stateful resources")
+		return errors.New("no admin client available to push stateful resources")
 	}
 
 	// Build a collection with only stateful resources.

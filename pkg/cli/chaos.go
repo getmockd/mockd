@@ -1,11 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
@@ -101,7 +102,7 @@ Examples:
 
 	// Validate that at least one chaos option is specified
 	if *latency == "" && *errorRate == 0 {
-		return fmt.Errorf("at least --latency or --error-rate must be specified")
+		return errors.New("at least --latency or --error-rate must be specified")
 	}
 
 	// Build chaos config
@@ -225,9 +226,7 @@ Examples:
 	}
 
 	if *jsonOutput {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(config)
+		return output.JSON(config)
 	}
 
 	// Pretty print status

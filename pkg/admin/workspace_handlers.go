@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -34,18 +35,19 @@ type WorkspaceDTO struct {
 
 // getWorkspaceStore returns the workspace store to use.
 // Uses the file-based workspace store.
-func (a *AdminAPI) getWorkspaceStore() store.WorkspaceStore {
+func (a *API) getWorkspaceStore() store.WorkspaceStore {
 	return a.workspaceStore
 }
 
 // handleListWorkspaces returns all workspaces.
 // GET /workspaces
-func (a *AdminAPI) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	wsStore := a.getWorkspaceStore()
 	ctx := r.Context()
 	workspaces, err := wsStore.List(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to list workspaces", "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
@@ -63,7 +65,7 @@ func (a *AdminAPI) handleListWorkspaces(w http.ResponseWriter, r *http.Request) 
 
 // handleGetWorkspace returns a specific workspace.
 // GET /workspaces/{id}
-func (a *AdminAPI) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Workspace ID is required")
@@ -74,11 +76,12 @@ func (a *AdminAPI) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ws, err := wsStore.Get(ctx, id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Workspace not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to get workspace", "error", err, "workspaceID", id)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
@@ -87,7 +90,7 @@ func (a *AdminAPI) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 
 // handleCreateWorkspace creates a new workspace.
 // POST /workspaces
-func (a *AdminAPI) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name        string  `json:"name"`
 		Type        *string `json:"type,omitempty"`
@@ -100,7 +103,7 @@ func (a *AdminAPI) handleCreateWorkspace(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -160,7 +163,8 @@ func (a *AdminAPI) handleCreateWorkspace(w http.ResponseWriter, r *http.Request)
 	// Create workspace directory for local type
 	if wsType == store.WorkspaceTypeLocal {
 		if err := os.MkdirAll(ws.Path, 0700); err != nil {
-			writeError(w, http.StatusInternalServerError, "filesystem_error", fmt.Sprintf("failed to create workspace directory: %v", err))
+			a.logger().Error("failed to create workspace directory", "error", err, "path", ws.Path)
+			writeError(w, http.StatusInternalServerError, "filesystem_error", "Failed to create workspace directory")
 			return
 		}
 	}
@@ -171,11 +175,12 @@ func (a *AdminAPI) handleCreateWorkspace(w http.ResponseWriter, r *http.Request)
 	// Persist workspace
 	ctx := r.Context()
 	if err := wsStore.Create(ctx, ws); err != nil {
-		if err == store.ErrAlreadyExists {
+		if errors.Is(err, store.ErrAlreadyExists) {
 			writeError(w, http.StatusConflict, "already_exists", "Workspace with this ID already exists")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to create workspace", "error", err, "workspaceID", ws.ID)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
@@ -184,7 +189,7 @@ func (a *AdminAPI) handleCreateWorkspace(w http.ResponseWriter, r *http.Request)
 
 // handleUpdateWorkspace updates an existing workspace.
 // PUT /workspaces/{id}
-func (a *AdminAPI) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Workspace ID is required")
@@ -204,11 +209,12 @@ func (a *AdminAPI) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request)
 	// Get existing workspace
 	ws, err := wsStore.Get(ctx, id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Workspace not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to get workspace for update", "error", err, "workspaceID", id)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
@@ -224,7 +230,7 @@ func (a *AdminAPI) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
@@ -269,7 +275,8 @@ func (a *AdminAPI) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request)
 
 	// Update in store
 	if err := wsStore.Update(ctx, ws); err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to update workspace", "error", err, "workspaceID", id)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
@@ -278,7 +285,7 @@ func (a *AdminAPI) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request)
 
 // handleDeleteWorkspace deletes a workspace.
 // DELETE /workspaces/{id}
-func (a *AdminAPI) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing_id", "Workspace ID is required")
@@ -298,17 +305,19 @@ func (a *AdminAPI) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request)
 	// Check if workspace exists
 	_, err := wsStore.Get(ctx, id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Workspace not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to get workspace for delete", "error", err, "workspaceID", id)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
 	// Delete from store
 	if err := wsStore.Delete(ctx, id); err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to delete workspace", "error", err, "workspaceID", id)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 

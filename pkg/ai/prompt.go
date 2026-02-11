@@ -86,10 +86,10 @@ func buildBatchPrompt(reqs []*GenerateRequest) string {
 	for i, req := range reqs {
 		b.WriteString(fmt.Sprintf("%d. Field: %s (type: %s)", i+1, req.FieldName, req.FieldType))
 		if req.Format != "" {
-			b.WriteString(fmt.Sprintf(", format: %s", req.Format))
+			b.WriteString(", format: " + req.Format)
 		}
 		if req.Description != "" {
-			b.WriteString(fmt.Sprintf(", description: %s", req.Description))
+			b.WriteString(", description: " + req.Description)
 		}
 		b.WriteString("\n")
 	}

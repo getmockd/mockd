@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
@@ -17,7 +19,7 @@ import (
 )
 
 // RunStart handles the start command.
-func RunStart(args []string) error {
+func RunStart(args []string) error { //nolint:gocyclo // CLI command handler with many configuration options
 	fs := flag.NewFlagSet("start", flag.ContinueOnError)
 
 	// Use shared server flags
@@ -128,7 +130,7 @@ Examples:
 
 	// Validate --watch requires --load
 	if *watch && *loadDir == "" {
-		return fmt.Errorf("--watch requires --load to be specified")
+		return errors.New("--watch requires --load to be specified")
 	}
 
 	// Check for port conflicts
@@ -167,7 +169,7 @@ Examples:
 		}
 		persistentStore = file.New(storeCfg)
 		if err := persistentStore.Open(context.Background()); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to initialize persistent store: %v\n", err)
+			output.Warn("failed to initialize persistent store: %v", err)
 		} else {
 			server.SetStore(persistentStore)
 			// Ensure store is closed on shutdown
@@ -235,7 +237,7 @@ Examples:
 		// Add loaded mocks to engine via HTTP
 		for _, mock := range result.Collection.Mocks {
 			if _, err := engClient.CreateMock(ctx, mock); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to add mock %s: %v\n", mock.ID, err)
+				output.Warn("failed to add mock %s: %v", mock.ID, err)
 			}
 		}
 
@@ -258,7 +260,7 @@ Examples:
 	if sf.DataDir != "" {
 		adminOpts = append(adminOpts, admin.WithDataDir(sf.DataDir))
 	}
-	adminAPI := admin.NewAdminAPI(sf.AdminPort, adminOpts...)
+	adminAPI := admin.NewAPI(sf.AdminPort, adminOpts...)
 	if err := adminAPI.Start(); err != nil {
 		_ = server.Stop()
 		return fmt.Errorf("failed to start admin API: %w", err)
@@ -269,7 +271,7 @@ Examples:
 		name := *engineName
 		if name == "" {
 			hostname, _ := os.Hostname()
-			name = fmt.Sprintf("engine-%s", hostname)
+			name = "engine-" + hostname
 		}
 
 		// Create workspace manager for serving remote workspaces
@@ -346,7 +348,7 @@ func handleWatchEvents(eventCh <-chan config.WatchEvent, loader *config.Director
 		// Update mocks in engine via HTTP
 		for _, mock := range collection.Mocks {
 			if _, err := engClient.CreateMock(ctx, mock); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to update mock %s: %v\n", mock.ID, err)
+				output.Warn("failed to update mock %s: %v", mock.ID, err)
 			}
 		}
 

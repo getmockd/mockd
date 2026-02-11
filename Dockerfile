@@ -3,7 +3,7 @@
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25.7-alpine AS builder
 
 # Build arguments for version info
 ARG VERSION=dev

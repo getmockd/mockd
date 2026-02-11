@@ -31,7 +31,7 @@ type PortsResponse struct {
 // Returns all ports in use by mockd, grouped by component.
 // Query params:
 //   - verbose=true: include engine ID, name, workspace, PID
-func (a *AdminAPI) handleListPorts(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListPorts(w http.ResponseWriter, r *http.Request) {
 	verbose := r.URL.Query().Get("verbose") == "true"
 	var ports []PortInfo
 
@@ -45,9 +45,10 @@ func (a *AdminAPI) handleListPorts(w http.ResponseWriter, r *http.Request) {
 	ports = append(ports, adminPort)
 
 	// Get engine status for HTTP/HTTPS ports
-	if a.localEngine != nil {
+	engine := a.localEngine.Load()
+	if engine != nil {
 		ctx := r.Context()
-		status, err := a.localEngine.Status(ctx)
+		status, err := engine.Status(ctx)
 
 		// Engine metadata for verbose output
 		var engineID, engineName string
@@ -95,7 +96,7 @@ func (a *AdminAPI) handleListPorts(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Also check protocol handlers list for additional ports
-		handlers, err := a.localEngine.ListHandlers(ctx)
+		handlers, err := engine.ListHandlers(ctx)
 		if err == nil {
 			for _, h := range handlers {
 				if h.Port > 0 {

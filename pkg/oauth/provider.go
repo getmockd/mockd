@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync"
@@ -12,6 +13,16 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// maxAuthCodes is the maximum number of authorization codes stored before
+// oldest entries are evicted. Prevents unbounded memory growth under burst load.
+const maxAuthCodes = 10000
+
+// maxRefreshTokens is the maximum number of refresh tokens stored.
+const maxRefreshTokens = 10000
+
+// maxRevokedTokens is the maximum number of revoked token entries tracked.
+const maxRevokedTokens = 50000
 
 // Provider represents a mock OAuth/OIDC provider
 type Provider struct {
@@ -39,7 +50,7 @@ type Provider struct {
 // NewProvider creates a new OAuth provider
 func NewProvider(config *OAuthConfig) (*Provider, error) {
 	if config == nil {
-		return nil, fmt.Errorf("config cannot be nil")
+		return nil, errors.New("config cannot be nil")
 	}
 
 	// Generate RSA key pair for JWT signing
@@ -197,7 +208,7 @@ func (p *Provider) ValidateToken(tokenString string) (map[string]interface{}, er
 	_, isRevoked := p.revokedTokens[tokenString]
 	p.revokedTokensMu.RUnlock()
 	if isRevoked {
-		return nil, fmt.Errorf("token has been revoked")
+		return nil, errors.New("token has been revoked")
 	}
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -213,22 +224,49 @@ func (p *Provider) ValidateToken(tokenString string) (map[string]interface{}, er
 	}
 
 	if !token.Valid {
-		return nil, fmt.Errorf("token is invalid")
+		return nil, errors.New("token is invalid")
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, fmt.Errorf("invalid claims format")
+		return nil, errors.New("invalid claims format")
 	}
 
 	return claims, nil
 }
 
-// StoreAuthorizationCode stores an authorization code for later exchange
+// StoreAuthorizationCode stores an authorization code for later exchange.
+// If the map exceeds maxAuthCodes, expired entries are evicted first;
+// if still over capacity, the oldest entry by expiry is removed.
 func (p *Provider) StoreAuthorizationCode(code *AuthorizationCode) {
 	p.authCodesMu.Lock()
 	defer p.authCodesMu.Unlock()
+
 	p.authCodes[code.Code] = code
+
+	if len(p.authCodes) > maxAuthCodes {
+		now := time.Now()
+		// First pass: remove expired entries
+		for k, v := range p.authCodes {
+			if now.After(v.ExpiresAt) {
+				delete(p.authCodes, k)
+			}
+		}
+		// If still over cap, remove oldest by expiry
+		for len(p.authCodes) > maxAuthCodes {
+			var oldestKey string
+			var oldestTime time.Time
+			for k, v := range p.authCodes {
+				if oldestKey == "" || v.ExpiresAt.Before(oldestTime) {
+					oldestKey = k
+					oldestTime = v.ExpiresAt
+				}
+			}
+			if oldestKey != "" {
+				delete(p.authCodes, oldestKey)
+			}
+		}
+	}
 }
 
 // ExchangeAuthorizationCode exchanges an authorization code for tokens
@@ -238,7 +276,7 @@ func (p *Provider) ExchangeAuthorizationCode(code, clientID, redirectURI string)
 
 	authCode, ok := p.authCodes[code]
 	if !ok {
-		return nil, fmt.Errorf("invalid authorization code")
+		return nil, errors.New("invalid authorization code")
 	}
 
 	// Delete the code (one-time use)
@@ -246,23 +284,52 @@ func (p *Provider) ExchangeAuthorizationCode(code, clientID, redirectURI string)
 
 	// Validate the code
 	if time.Now().After(authCode.ExpiresAt) {
-		return nil, fmt.Errorf("authorization code has expired")
+		return nil, errors.New("authorization code has expired")
 	}
+
 	if authCode.ClientID != clientID {
-		return nil, fmt.Errorf("client_id mismatch")
+		return nil, errors.New("client_id mismatch")
 	}
+
 	if authCode.RedirectURI != redirectURI {
-		return nil, fmt.Errorf("redirect_uri mismatch")
+		return nil, errors.New("redirect_uri mismatch")
 	}
 
 	return authCode, nil
 }
 
-// StoreRefreshToken stores a refresh token
+// StoreRefreshToken stores a refresh token.
+// If the map exceeds maxRefreshTokens, expired entries are evicted first;
+// if still over capacity, the oldest entry by expiry is removed.
 func (p *Provider) StoreRefreshToken(data *RefreshTokenData) {
 	p.refreshTokensMu.Lock()
 	defer p.refreshTokensMu.Unlock()
+
 	p.refreshTokens[data.Token] = data
+
+	if len(p.refreshTokens) > maxRefreshTokens {
+		now := time.Now()
+		// First pass: remove expired entries
+		for k, v := range p.refreshTokens {
+			if now.After(v.ExpiresAt) {
+				delete(p.refreshTokens, k)
+			}
+		}
+		// If still over cap, remove oldest by expiry
+		for len(p.refreshTokens) > maxRefreshTokens {
+			var oldestKey string
+			var oldestTime time.Time
+			for k, v := range p.refreshTokens {
+				if oldestKey == "" || v.ExpiresAt.Before(oldestTime) {
+					oldestKey = k
+					oldestTime = v.ExpiresAt
+				}
+			}
+			if oldestKey != "" {
+				delete(p.refreshTokens, oldestKey)
+			}
+		}
+	}
 }
 
 // ValidateRefreshToken validates and returns refresh token data
@@ -272,22 +339,23 @@ func (p *Provider) ValidateRefreshToken(token, clientID string) (*RefreshTokenDa
 
 	data, ok := p.refreshTokens[token]
 	if !ok {
-		return nil, fmt.Errorf("invalid refresh token")
+		return nil, errors.New("invalid refresh token")
 	}
 
 	if time.Now().After(data.ExpiresAt) {
 		delete(p.refreshTokens, token)
-		return nil, fmt.Errorf("refresh token has expired")
+		return nil, errors.New("refresh token has expired")
 	}
 
 	if data.ClientID != clientID {
-		return nil, fmt.Errorf("client_id mismatch")
+		return nil, errors.New("client_id mismatch")
 	}
 
 	return data, nil
 }
 
-// RevokeToken marks a token as revoked
+// RevokeToken marks a token as revoked.
+// If the revoked tokens map exceeds maxRevokedTokens, the oldest entries are removed.
 func (p *Provider) RevokeToken(token string) {
 	// Remove from refresh tokens first (if it's a refresh token)
 	// This prevents deadlock by always acquiring locks in the same order
@@ -298,6 +366,30 @@ func (p *Provider) RevokeToken(token string) {
 	// Mark as revoked with timestamp for cleanup
 	p.revokedTokensMu.Lock()
 	p.revokedTokens[token] = time.Now()
+
+	if len(p.revokedTokens) > maxRevokedTokens {
+		// Remove oldest revoked entries first
+		cutoff := time.Now().Add(-24 * time.Hour)
+		for k, v := range p.revokedTokens {
+			if v.Before(cutoff) {
+				delete(p.revokedTokens, k)
+			}
+		}
+		// If still over cap, remove oldest
+		for len(p.revokedTokens) > maxRevokedTokens {
+			var oldestKey string
+			var oldestTime time.Time
+			for k, v := range p.revokedTokens {
+				if oldestKey == "" || v.Before(oldestTime) {
+					oldestKey = k
+					oldestTime = v
+				}
+			}
+			if oldestKey != "" {
+				delete(p.revokedTokens, oldestKey)
+			}
+		}
+	}
 	p.revokedTokensMu.Unlock()
 }
 
@@ -467,7 +559,7 @@ func generateRandomString(length int) (string, error) {
 // parseDuration parses a duration string that supports days (e.g., "7d")
 func parseDuration(s string) (time.Duration, error) {
 	if len(s) == 0 {
-		return 0, fmt.Errorf("empty duration string")
+		return 0, errors.New("empty duration string")
 	}
 
 	// Check for day suffix

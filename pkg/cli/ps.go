@@ -1,12 +1,11 @@
 package cli
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
-	"text/tabwriter"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/config"
 )
 
@@ -67,7 +66,7 @@ Examples:
 }
 
 func printPsJSON(pidInfo *config.PIDFile, running bool) error {
-	output := struct {
+	result := struct {
 		Running   bool                    `json:"running"`
 		PID       int                     `json:"pid"`
 		StartedAt string                  `json:"startedAt"`
@@ -81,9 +80,7 @@ func printPsJSON(pidInfo *config.PIDFile, running bool) error {
 		Services:  pidInfo.Services,
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(output)
+	return output.JSON(result)
 }
 
 func printPsTable(pidInfo *config.PIDFile, running bool) error {
@@ -102,7 +99,7 @@ func printPsTable(pidInfo *config.PIDFile, running bool) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := output.Table()
 	_, _ = fmt.Fprintln(w, "NAME\tTYPE\tPORT\tSTATUS")
 
 	for _, svc := range pidInfo.Services {

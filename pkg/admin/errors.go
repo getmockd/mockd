@@ -78,19 +78,6 @@ func sanitizeEngineError(err error, log *slog.Logger, operation string) string {
 	return ErrMsgEngineUnavailable
 }
 
-// sanitizeValidationError returns a safe error message for validation errors.
-// Unlike other errors, validation errors may include some details about what
-// failed validation, as this information is useful for the client and doesn't
-// expose internal implementation details.
-func sanitizeValidationError(err error, log *slog.Logger) string {
-	if log != nil {
-		log.Warn("validation failed", "error", err)
-	}
-	// For validation errors, we can be slightly more specific
-	// but still avoid exposing internal details
-	return ErrMsgValidationFailed
-}
-
 // sanitizeJSONError returns a safe error message for JSON parsing errors.
 func sanitizeJSONError(err error, log *slog.Logger) string {
 	if log != nil {

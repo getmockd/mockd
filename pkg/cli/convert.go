@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -71,7 +72,7 @@ Examples:
 
 	// Check if proxy is running with recordings
 	if proxyServer.store == nil {
-		return fmt.Errorf("no recordings available (proxy not running)")
+		return errors.New("no recordings available (proxy not running)")
 	}
 
 	// Determine what to convert
@@ -178,7 +179,7 @@ func convertSessionRecordings(sessionID string, flags convertSessionFlags) error
 func convertAllRecordings(flags convertSessionFlags) error {
 	recordings, _ := proxyServer.store.ListRecordings(recording.RecordingFilter{})
 	if len(recordings) == 0 {
-		return fmt.Errorf("no recordings to convert")
+		return errors.New("no recordings to convert")
 	}
 
 	return convertRecordingsWithFlags(recordings, flags)

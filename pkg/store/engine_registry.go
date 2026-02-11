@@ -67,7 +67,7 @@ type TunnelExposure struct {
 	Workspaces []string `json:"workspaces,omitempty"` // Workspace IDs or names
 	Folders    []string `json:"folders,omitempty"`    // Folder IDs (recursive into subfolders)
 	Mocks      []string `json:"mocks,omitempty"`      // Specific mock IDs
-	Types      []string `json:"types,omitempty"`      // MockType filter: "http","grpc","mqtt","websocket","graphql","soap","oauth"
+	Types      []string `json:"types,omitempty"`      // mock.Type filter: "http","grpc","mqtt","websocket","graphql","soap","oauth"
 
 	// Exclude filters (applied after includes)
 	Exclude *TunnelExclude `json:"exclude,omitempty"`

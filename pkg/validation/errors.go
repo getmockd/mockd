@@ -227,7 +227,7 @@ func NewPatternError(field, location, pattern string, received interface{}) *Fie
 		Code:     ErrCodePattern,
 		Message:  fmt.Sprintf("must match pattern '%s'", pattern),
 		Received: received,
-		Expected: fmt.Sprintf("pattern: %s", pattern),
+		Expected: "pattern: " + pattern,
 		Hint:     fmt.Sprintf("Ensure '%s' matches the required format", field),
 	}
 }
@@ -254,9 +254,9 @@ func NewFormatError(field, location, format string, received interface{}) *Field
 		Field:    field,
 		Location: location,
 		Code:     ErrCodeFormat,
-		Message:  fmt.Sprintf("must be a valid %s", format),
+		Message:  "must be a valid " + format,
 		Received: received,
-		Expected: fmt.Sprintf("format: %s", format),
+		Expected: "format: " + format,
 		Hint:     hint,
 	}
 }
@@ -337,9 +337,9 @@ func NewEnumError(field, location string, allowed []interface{}, received interf
 		Field:    field,
 		Location: location,
 		Code:     ErrCodeEnum,
-		Message:  fmt.Sprintf("must be one of: %s", strings.Join(allowedStrs, ", ")),
+		Message:  "must be one of: " + strings.Join(allowedStrs, ", "),
 		Received: received,
-		Expected: fmt.Sprintf("one of: %s", strings.Join(allowedStrs, ", ")),
+		Expected: "one of: " + strings.Join(allowedStrs, ", "),
 		Hint:     fmt.Sprintf("Use an allowed value for '%s'", field),
 	}
 }
@@ -361,7 +361,7 @@ func NewInvalidJSONError(message string) *FieldError {
 		Field:    "",
 		Location: LocationBody,
 		Code:     ErrCodeInvalidJSON,
-		Message:  fmt.Sprintf("invalid JSON: %s", message),
+		Message:  "invalid JSON: " + message,
 		Hint:     "Ensure your request body is valid JSON",
 	}
 }

@@ -3,6 +3,8 @@ package sse
 import (
 	"context"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -128,7 +130,7 @@ func (h *SSEHandler) logEvent(stream *SSEStream, path string, mockID string, eve
 
 // generateLogID generates a unique log entry ID.
 func generateLogID() string {
-	return "sse-log-" + formatInt64(time.Now().UnixNano())
+	return "sse-log-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 }
 
 // formatEventData formats event data as a string for logging.
@@ -151,25 +153,30 @@ func formatMapData(m map[string]interface{}) string {
 	if len(m) == 0 {
 		return "{}"
 	}
-	result := "{"
+	var b strings.Builder
+	b.WriteByte('{')
 	first := true
 	for k, v := range m {
 		if !first {
-			result += ","
+			b.WriteByte(',')
 		}
 		first = false
-		result += "\"" + k + "\":"
+		b.WriteByte('"')
+		b.WriteString(k)
+		b.WriteString("\":")
 		switch val := v.(type) {
 		case string:
-			result += "\"" + val + "\""
+			b.WriteByte('"')
+			b.WriteString(val)
+			b.WriteByte('"')
 		case map[string]interface{}:
-			result += formatMapData(val)
+			b.WriteString(formatMapData(val))
 		default:
-			result += "<value>"
+			b.WriteString("<value>")
 		}
 	}
-	result += "}"
-	return result
+	b.WriteByte('}')
+	return b.String()
 }
 
 // ServeHTTP handles an SSE request for a given mock configuration.
@@ -266,25 +273,7 @@ func (h *SSEHandler) generateStreamID() string {
 
 // formatStreamID formats a stream ID.
 func formatStreamID(id int64) string {
-	return "sse-" + formatInt64(id)
-}
-
-// formatInt64 formats an int64 as a string.
-func formatInt64(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-
-	var digits [20]byte
-	i := len(digits)
-
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
-	}
-
-	return string(digits[i:])
+	return "sse-" + strconv.FormatInt(id, 10)
 }
 
 // configFromMock creates an internal SSEConfig from mock configuration.
@@ -575,7 +564,7 @@ func (h *SSEHandler) generateSequenceEvents(gen *EventGenerator) []SSEEventDef {
 		}
 		events = append(events, SSEEventDef{
 			Data: data,
-			ID:   formatInt64(int64(value)),
+			ID:   strconv.FormatInt(int64(value), 10),
 		})
 	}
 
@@ -588,38 +577,10 @@ func formatSequenceValue(format string, value int) string {
 	result := format
 	for i := 0; i < len(result)-1; i++ {
 		if result[i] == '%' && result[i+1] == 'd' {
-			result = result[:i] + formatInt(value) + result[i+2:]
+			result = result[:i] + strconv.Itoa(value) + result[i+2:]
 		}
 	}
 	return result
-}
-
-// formatInt formats an int as a string.
-func formatInt(n int) string {
-	if n == 0 {
-		return "0"
-	}
-
-	negative := n < 0
-	if negative {
-		n = -n
-	}
-
-	var digits [20]byte
-	i := len(digits)
-
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
-	}
-
-	if negative {
-		i--
-		digits[i] = '-'
-	}
-
-	return string(digits[i:])
 }
 
 // generateRandomEvents generates random events.
@@ -638,7 +599,7 @@ func (h *SSEHandler) generateRandomEvents(gen *EventGenerator) []SSEEventDef {
 		data := h.processRandomSchema(gen.Random.Schema)
 		events = append(events, SSEEventDef{
 			Data: data,
-			ID:   formatInt64(int64(i + 1)),
+			ID:   strconv.FormatInt(int64(i+1), 10),
 		})
 	}
 
@@ -700,7 +661,7 @@ func (h *SSEHandler) generateTemplateEvents(gen *EventGenerator) []SSEEventDef {
 			event := SSEEventDef{
 				Type:    e.Type,
 				Data:    e.Data,
-				ID:      formatInt64(eventID),
+				ID:      strconv.FormatInt(eventID, 10),
 				Retry:   e.Retry,
 				Comment: e.Comment,
 				Delay:   e.Delay,
@@ -747,7 +708,7 @@ func (h *SSEHandler) findResumePosition(stream *SSEStream, events []SSEEventDef)
 func (h *SSEHandler) sendEvent(stream *SSEStream, event *SSEEventDef, eventIndex int64) error {
 	// Assign ID if not set and resume is enabled
 	if event.ID == "" && stream.config.Resume.Enabled {
-		event.ID = formatInt64(eventIndex + 1)
+		event.ID = strconv.FormatInt(eventIndex+1, 10)
 	}
 
 	// Format the event

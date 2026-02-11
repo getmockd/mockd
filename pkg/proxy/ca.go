@@ -7,10 +7,12 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -414,13 +416,15 @@ func (m *CAManager) CertInfo() (*CertInfo, error) {
 	// Create a simple fingerprint (first 20 hex chars of the raw cert)
 	fingerprint := ""
 	if len(m.caCert.Raw) >= 10 {
+		var b strings.Builder
+		b.Grow(10*2 + 9) // 10 hex pairs + 9 colons
 		for i := 0; i < 10; i++ {
-			fingerprint += string("0123456789abcdef"[m.caCert.Raw[i]>>4])
-			fingerprint += string("0123456789abcdef"[m.caCert.Raw[i]&0x0f])
-			if i < 9 {
-				fingerprint += ":"
+			if i > 0 {
+				b.WriteByte(':')
 			}
+			b.WriteString(hex.EncodeToString(m.caCert.Raw[i : i+1]))
 		}
+		fingerprint = b.String()
 	}
 
 	return &CertInfo{

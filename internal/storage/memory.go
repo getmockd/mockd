@@ -78,7 +78,7 @@ func (s *InMemoryMockStore) List() []*mock.Mock {
 }
 
 // ListByType returns all mocks of a specific type.
-func (s *InMemoryMockStore) ListByType(mockType mock.MockType) []*mock.Mock {
+func (s *InMemoryMockStore) ListByType(mockType mock.Type) []*mock.Mock {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

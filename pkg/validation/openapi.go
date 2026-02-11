@@ -3,6 +3,7 @@ package validation
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
+	"github.com/getmockd/mockd/pkg/util"
 )
 
 // OpenAPIValidator validates requests against OpenAPI specs
@@ -41,7 +43,7 @@ type ValidationConfig struct {
 // NewOpenAPIValidator creates a validator from config
 func NewOpenAPIValidator(config *ValidationConfig) (*OpenAPIValidator, error) {
 	if config == nil {
-		return nil, fmt.Errorf("validation config is required")
+		return nil, errors.New("validation config is required")
 	}
 
 	if !config.Enabled {
@@ -54,13 +56,16 @@ func NewOpenAPIValidator(config *ValidationConfig) (*OpenAPIValidator, error) {
 	// Load spec from one of the sources
 	switch {
 	case config.SpecFile != "":
+		if _, ok := util.SafeFilePathAllowAbsolute(config.SpecFile); !ok {
+			return nil, errors.New("specFile path cannot contain '..'")
+		}
 		doc, err = LoadSpec(config.SpecFile)
 	case config.SpecURL != "":
 		doc, err = LoadSpecFromURL(config.SpecURL)
 	case config.Spec != "":
 		doc, err = LoadSpecFromString(config.Spec)
 	default:
-		return nil, fmt.Errorf("no OpenAPI spec source provided (specFile, specUrl, or spec required)")
+		return nil, errors.New("no OpenAPI spec source provided (specFile, specUrl, or spec required)")
 	}
 
 	if err != nil {
@@ -147,7 +152,7 @@ func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *Result {
 		result.AddError(&FieldError{
 			Location: LocationPath,
 			Code:     "no_route",
-			Message:  fmt.Sprintf("no matching route found: %s", err.Error()),
+			Message:  "no matching route found: " + err.Error(),
 		})
 		return result
 	}
@@ -165,12 +170,13 @@ func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *Result {
 
 	// Store body for potential re-read (needed if body validation is performed)
 	if r.Body != nil && r.Body != http.NoBody {
-		bodyBytes, err := io.ReadAll(r.Body)
+		const maxValidationBodySize = 10 << 20 // 10MB defense-in-depth
+		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxValidationBodySize))
 		if err != nil {
 			result.AddError(&FieldError{
 				Location: LocationBody,
 				Code:     "read_error",
-				Message:  fmt.Sprintf("failed to read request body: %s", err.Error()),
+				Message:  "failed to read request body: " + err.Error(),
 			})
 			return result
 		}
@@ -203,7 +209,7 @@ func (v *OpenAPIValidator) ValidateResponse(r *http.Request, status int, headers
 		result.AddError(&FieldError{
 			Location: "response",
 			Code:     "no_route",
-			Message:  fmt.Sprintf("no matching route found: %s", err.Error()),
+			Message:  "no matching route found: " + err.Error(),
 		})
 		return result
 	}
@@ -271,7 +277,8 @@ func (v *OpenAPIValidator) parseValidationErrors(err error, result *Result) {
 		}
 
 		// Determine location based on parameter location
-		if reqErr.Parameter != nil {
+		switch {
+		case reqErr.Parameter != nil:
 			fe.Field = reqErr.Parameter.Name
 			switch reqErr.Parameter.In {
 			case "path":
@@ -285,9 +292,9 @@ func (v *OpenAPIValidator) parseValidationErrors(err error, result *Result) {
 			default:
 				fe.Location = "parameter"
 			}
-		} else if reqErr.RequestBody != nil {
+		case reqErr.RequestBody != nil:
 			fe.Location = LocationBody
-		} else {
+		default:
 			fe.Location = "request"
 		}
 

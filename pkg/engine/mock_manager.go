@@ -2,6 +2,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -50,7 +51,7 @@ func (mm *MockManager) SetLogger(log *slog.Logger) {
 // Add adds a new mock configuration.
 func (mm *MockManager) Add(cfg *config.MockConfiguration) error {
 	if cfg == nil {
-		return fmt.Errorf("mock cannot be nil")
+		return errors.New("mock cannot be nil")
 	}
 
 	// Generate ID if not provided
@@ -106,7 +107,7 @@ func (mm *MockManager) Add(cfg *config.MockConfiguration) error {
 // Update updates an existing mock.
 func (mm *MockManager) Update(id string, cfg *config.MockConfiguration) error {
 	if cfg == nil {
-		return fmt.Errorf("mock cannot be nil")
+		return errors.New("mock cannot be nil")
 	}
 
 	mm.mu.Lock()
@@ -180,33 +181,33 @@ func (mm *MockManager) unregisterHandlerLocked(cfg *config.MockConfiguration) {
 		return
 	}
 
-	switch cfg.Type {
-	case mock.MockTypeGRPC:
+	switch cfg.Type { //nolint:exhaustive // HTTP mocks don't need cleanup on removal
+	case mock.TypeGRPC:
 		if mm.protocolManager != nil {
 			if err := mm.protocolManager.StopGRPCServer(cfg.ID); err != nil {
 				mm.log.Warn("failed to stop gRPC server", "id", cfg.ID, "error", err)
 			}
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		if mm.protocolManager != nil {
 			if err := mm.protocolManager.StopMQTTBroker(cfg.ID); err != nil {
 				mm.log.Warn("failed to stop MQTT broker", "id", cfg.ID, "error", err)
 			}
 		}
 
-	case mock.MockTypeWebSocket:
+	case mock.TypeWebSocket:
 		if mm.handler != nil && cfg.WebSocket != nil {
 			mm.handler.UnregisterWebSocketEndpoint(cfg.WebSocket.Path)
 		}
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if mm.handler != nil && cfg.GraphQL != nil {
 			mm.handler.UnregisterGraphQLHandler(cfg.GraphQL.Path)
 		}
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if mm.handler != nil && cfg.SOAP != nil {
 			mm.handler.UnregisterSOAPHandler(cfg.SOAP.Path)
 		}
-	case mock.MockTypeOAuth:
+	case mock.TypeOAuth:
 		if mm.handler != nil && cfg.OAuth != nil {
 			mm.handler.UnregisterOAuthHandler(cfg.OAuth.Issuer)
 		}
@@ -228,7 +229,7 @@ func (mm *MockManager) List() []*config.MockConfiguration {
 }
 
 // ListByType returns mocks of a specific type.
-func (mm *MockManager) ListByType(t mock.MockType) []*config.MockConfiguration {
+func (mm *MockManager) ListByType(t mock.Type) []*config.MockConfiguration {
 	mm.mu.RLock()
 	defer mm.mu.RUnlock()
 	return mm.store.ListByType(t)
@@ -299,43 +300,43 @@ func (mm *MockManager) registerHandlerLocked(cfg *config.MockConfiguration) erro
 		return nil
 	}
 
-	switch cfg.Type {
-	case mock.MockTypeWebSocket:
+	switch cfg.Type { //nolint:exhaustive // HTTP mocks are handled by the default route matcher
+	case mock.TypeWebSocket:
 		if cfg.WebSocket != nil {
 			if err := mm.registerWebSocketMock(cfg); err != nil {
 				mm.log.Warn("failed to register WebSocket handler", "name", cfg.Name, "error", err)
 				// WebSocket uses shared HTTP port, don't fail the operation
 			}
 		}
-	case mock.MockTypeGraphQL:
+	case mock.TypeGraphQL:
 		if cfg.GraphQL != nil {
 			if err := mm.registerGraphQLMock(cfg); err != nil {
 				mm.log.Warn("failed to register GraphQL handler", "name", cfg.Name, "error", err)
 				// GraphQL uses shared HTTP port, don't fail the operation
 			}
 		}
-	case mock.MockTypeSOAP:
+	case mock.TypeSOAP:
 		if cfg.SOAP != nil {
 			if err := mm.registerSOAPMock(cfg); err != nil {
 				mm.log.Warn("failed to register SOAP handler", "name", cfg.Name, "error", err)
 				// SOAP uses shared HTTP port, don't fail the operation
 			}
 		}
-	case mock.MockTypeMQTT:
+	case mock.TypeMQTT:
 		if cfg.MQTT != nil {
 			if err := mm.registerMQTTMock(cfg); err != nil {
 				// MQTT requires exclusive port binding - propagate the error
 				return fmt.Errorf("failed to start MQTT broker: %w", err)
 			}
 		}
-	case mock.MockTypeGRPC:
+	case mock.TypeGRPC:
 		if cfg.GRPC != nil {
 			if err := mm.registerGRPCMock(cfg); err != nil {
 				// gRPC requires exclusive port binding - propagate the error
 				return fmt.Errorf("failed to start gRPC server: %w", err)
 			}
 		}
-	case mock.MockTypeOAuth:
+	case mock.TypeOAuth:
 		if cfg.OAuth != nil {
 			if err := mm.registerOAuthMock(cfg); err != nil {
 				mm.log.Warn("failed to register OAuth handler", "name", cfg.Name, "error", err)
@@ -350,7 +351,7 @@ func (mm *MockManager) registerHandlerLocked(cfg *config.MockConfiguration) erro
 // registerWebSocketMock registers a WebSocket mock from the unified mock struct.
 func (mm *MockManager) registerWebSocketMock(m *mock.Mock) error {
 	if m.WebSocket == nil {
-		return fmt.Errorf("WebSocket spec is nil")
+		return errors.New("WebSocket spec is nil")
 	}
 
 	// Convert mock.WebSocketSpec to config.WebSocketEndpointConfig
@@ -384,7 +385,7 @@ func (mm *MockManager) registerWebSocketMock(m *mock.Mock) error {
 // registerGraphQLMock registers a GraphQL mock from the unified mock struct.
 func (mm *MockManager) registerGraphQLMock(m *mock.Mock) error {
 	if m.GraphQL == nil {
-		return fmt.Errorf("GraphQL spec is nil")
+		return errors.New("GraphQL spec is nil")
 	}
 
 	gqlSpec := m.GraphQL
@@ -429,12 +430,13 @@ func (mm *MockManager) registerGraphQLMock(m *mock.Mock) error {
 	// Parse schema and create executor
 	var schema *graphql.Schema
 	var err error
-	if cfg.Schema != "" {
+	switch {
+	case cfg.Schema != "":
 		schema, err = graphql.ParseSchema(cfg.Schema)
-	} else if cfg.SchemaFile != "" {
+	case cfg.SchemaFile != "":
 		schema, err = graphql.ParseSchemaFile(cfg.SchemaFile)
-	} else {
-		return fmt.Errorf("GraphQL mock requires schema or schemaFile")
+	default:
+		return errors.New("GraphQL mock requires schema or schemaFile")
 	}
 	if err != nil {
 		return fmt.Errorf("failed to parse GraphQL schema: %w", err)
@@ -454,7 +456,7 @@ func (mm *MockManager) registerGraphQLMock(m *mock.Mock) error {
 // registerSOAPMock registers a SOAP mock from the unified mock struct.
 func (mm *MockManager) registerSOAPMock(m *mock.Mock) error {
 	if m.SOAP == nil {
-		return fmt.Errorf("SOAP spec is nil")
+		return errors.New("SOAP spec is nil")
 	}
 
 	soapSpec := m.SOAP
@@ -510,7 +512,7 @@ func (mm *MockManager) registerSOAPMock(m *mock.Mock) error {
 // registerMQTTMock registers an MQTT mock and starts the broker.
 func (mm *MockManager) registerMQTTMock(m *mock.Mock) error {
 	if m.MQTT == nil {
-		return fmt.Errorf("MQTT spec is nil")
+		return errors.New("MQTT spec is nil")
 	}
 
 	if mm.protocolManager == nil {
@@ -613,7 +615,7 @@ func (mm *MockManager) registerMQTTMock(m *mock.Mock) error {
 // registerGRPCMock registers a gRPC mock and starts the server.
 func (mm *MockManager) registerGRPCMock(m *mock.Mock) error {
 	if m.GRPC == nil {
-		return fmt.Errorf("gRPC spec is nil")
+		return errors.New("gRPC spec is nil")
 	}
 
 	if mm.protocolManager == nil {
@@ -692,7 +694,7 @@ func (mm *MockManager) registerGRPCMock(m *mock.Mock) error {
 // registerOAuthMock registers an OAuth/OIDC mock provider.
 func (mm *MockManager) registerOAuthMock(m *mock.Mock) error {
 	if m.OAuth == nil {
-		return fmt.Errorf("OAuth spec is nil")
+		return errors.New("OAuth spec is nil")
 	}
 
 	if mm.handler == nil {

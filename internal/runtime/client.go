@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -163,7 +164,7 @@ func (c *Client) Register(ctx context.Context) (*RegistrationResponse, error) {
 // Heartbeat sends a heartbeat to the control plane and processes commands.
 func (c *Client) Heartbeat(ctx context.Context) error {
 	if c.runtimeID == "" {
-		return fmt.Errorf("runtime not registered")
+		return errors.New("runtime not registered")
 	}
 
 	endpoint := fmt.Sprintf("%s/api/v1/runtimes/%s/heartbeat", c.config.ControlPlaneURL, c.runtimeID)
@@ -343,7 +344,7 @@ func (c *Client) SetRuntimeID(id string) {
 // PullDeployments fetches all current deployments from the control plane.
 func (c *Client) PullDeployments(ctx context.Context) error {
 	if c.runtimeID == "" {
-		return fmt.Errorf("runtime not registered")
+		return errors.New("runtime not registered")
 	}
 
 	endpoint := fmt.Sprintf("%s/api/v1/runtimes/%s/deployments", c.config.ControlPlaneURL, c.runtimeID)

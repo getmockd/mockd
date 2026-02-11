@@ -93,7 +93,7 @@ func newMock(id, name, method, path string, statusCode int, body string, now tim
 	return &config.MockConfiguration{
 		ID:        id,
 		Name:      name,
-		Type:      mock.MockTypeHTTP,
+		Type:      mock.TypeHTTP,
 		Enabled:   &enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -191,11 +191,11 @@ func generateCRUDTemplate(params map[string]string) (*config.MockCollection, err
 		Version: "1.0",
 		Name:    params["name"],
 		Mocks: []*config.MockConfiguration{
-			newMock("crud-list", fmt.Sprintf("List %s", resource), "GET", basePath, 200, sampleList, now),
-			newMock("crud-get", fmt.Sprintf("Get %s", strings.TrimSuffix(resource, "s")), "GET", basePath+"/:id", 200, sampleItem, now),
-			newMock("crud-create", fmt.Sprintf("Create %s", strings.TrimSuffix(resource, "s")), "POST", basePath, 201, sampleItem, now),
-			newMock("crud-update", fmt.Sprintf("Update %s", strings.TrimSuffix(resource, "s")), "PUT", basePath+"/:id", 200, sampleItem, now),
-			newMock("crud-delete", fmt.Sprintf("Delete %s", strings.TrimSuffix(resource, "s")), "DELETE", basePath+"/:id", 204, "", now),
+			newMock("crud-list", "List "+resource, "GET", basePath, 200, sampleList, now),
+			newMock("crud-get", "Get "+strings.TrimSuffix(resource, "s"), "GET", basePath+"/:id", 200, sampleItem, now),
+			newMock("crud-create", "Create "+strings.TrimSuffix(resource, "s"), "POST", basePath, 201, sampleItem, now),
+			newMock("crud-update", "Update "+strings.TrimSuffix(resource, "s"), "PUT", basePath+"/:id", 200, sampleItem, now),
+			newMock("crud-delete", "Delete "+strings.TrimSuffix(resource, "s"), "DELETE", basePath+"/:id", 204, "", now),
 		},
 	}
 

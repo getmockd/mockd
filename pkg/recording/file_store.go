@@ -216,6 +216,8 @@ func (s *FileStore) AppendSSEEvent(sessionID string, eventType, data, id string,
 }
 
 // CompleteRecording completes a recording session and persists it.
+//
+//nolint:dupl // structural similarity with MarkIncomplete is intentional
 func (s *FileStore) CompleteRecording(sessionID string) (*StreamRecording, error) {
 	s.mu.Lock()
 	session, ok := s.sessions[sessionID]
@@ -277,6 +279,8 @@ func (s *FileStore) CancelRecording(sessionID string) error {
 }
 
 // MarkIncomplete marks a recording as incomplete and saves it.
+//
+//nolint:dupl // structural similarity with CompleteRecording is intentional
 func (s *FileStore) MarkIncomplete(sessionID string) (*StreamRecording, error) {
 	s.mu.Lock()
 	session, ok := s.sessions[sessionID]

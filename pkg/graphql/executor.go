@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -100,7 +101,7 @@ func (e *Executor) parseQuery(query string) (*ast.QueryDocument, error) {
 		if len(parseErr) > 0 {
 			return nil, fmt.Errorf("parse error: %s", parseErr[0].Message)
 		}
-		return nil, fmt.Errorf("parse error")
+		return nil, errors.New("parse error")
 	}
 
 	// Validate the query
@@ -442,6 +443,8 @@ func (e *Executor) buildFieldsIntrospection(doc *ast.QueryDocument, fields ast.F
 }
 
 // buildArgsIntrospection builds argument introspection data.
+//
+//nolint:dupl // structural similarity with buildInputFieldsIntrospection is intentional
 func (e *Executor) buildArgsIntrospection(doc *ast.QueryDocument, args ast.ArgumentDefinitionList, selections ast.SelectionSet) []interface{} {
 	// Initialize as empty slice (not nil) so JSON marshals to [] instead of null
 	result := make([]interface{}, 0, len(args))
@@ -499,7 +502,8 @@ func (e *Executor) buildTypeRefIntrospection(doc *ast.QueryDocument, t *ast.Type
 			alias = f.Name
 		}
 
-		if t.NonNull {
+		switch {
+		case t.NonNull:
 			switch f.Name {
 			case "kind":
 				result[alias] = "NON_NULL"
@@ -510,7 +514,7 @@ func (e *Executor) buildTypeRefIntrospection(doc *ast.QueryDocument, t *ast.Type
 				innerType.NonNull = false
 				result[alias] = e.buildTypeRefIntrospection(doc, &innerType, f.SelectionSet)
 			}
-		} else if t.Elem != nil {
+		case t.Elem != nil:
 			switch f.Name {
 			case "kind":
 				result[alias] = "LIST"
@@ -519,7 +523,7 @@ func (e *Executor) buildTypeRefIntrospection(doc *ast.QueryDocument, t *ast.Type
 			case "ofType":
 				result[alias] = e.buildTypeRefIntrospection(doc, t.Elem, f.SelectionSet)
 			}
-		} else {
+		default:
 			switch f.Name {
 			case "kind":
 				def := e.schema.GetType(t.NamedType)
@@ -540,6 +544,8 @@ func (e *Executor) buildTypeRefIntrospection(doc *ast.QueryDocument, t *ast.Type
 }
 
 // buildInputFieldsIntrospection builds input field introspection data.
+//
+//nolint:dupl // structural similarity with buildArgsIntrospection is intentional
 func (e *Executor) buildInputFieldsIntrospection(doc *ast.QueryDocument, fields ast.FieldList, selections ast.SelectionSet) []interface{} {
 	result := make([]interface{}, 0, len(fields))
 
@@ -626,7 +632,7 @@ func (e *Executor) buildInterfacesIntrospection(doc *ast.QueryDocument, interfac
 func (e *Executor) buildPossibleTypesIntrospection(doc *ast.QueryDocument, def *ast.Definition, selections ast.SelectionSet) []interface{} {
 	var typeNames []string
 
-	switch def.Kind {
+	switch def.Kind { //nolint:exhaustive // only unions and interfaces have possible types
 	case ast.Union:
 		typeNames = def.Types
 	case ast.Interface:

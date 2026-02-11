@@ -9,14 +9,14 @@ import (
 
 // getPreferencesStore returns the preferences store to use.
 // TODO: Implement admin's own persistent store for preferences.
-func (a *AdminAPI) getPreferencesStore() store.PreferencesStore {
+func (a *API) getPreferencesStore() store.PreferencesStore {
 	// TODO: Admin should have its own persistent store for preferences
 	// For now, return nil - preferences feature requires persistent storage
 	return nil
 }
 
 // handleGetPreferences handles GET /preferences.
-func (a *AdminAPI) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	prefsStore := a.getPreferencesStore()
@@ -27,7 +27,8 @@ func (a *AdminAPI) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
 
 	prefs, err := prefsStore.Get(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "get_failed", "Failed to get preferences: "+err.Error())
+		a.logger().Error("failed to get preferences", "error", err)
+		writeError(w, http.StatusInternalServerError, "get_failed", ErrMsgInternalError)
 		return
 	}
 
@@ -35,7 +36,7 @@ func (a *AdminAPI) handleGetPreferences(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleUpdatePreferences handles PUT /preferences.
-func (a *AdminAPI) handleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	prefsStore := a.getPreferencesStore()
@@ -46,12 +47,13 @@ func (a *AdminAPI) handleUpdatePreferences(w http.ResponseWriter, r *http.Reques
 
 	var prefs store.Preferences
 	if err := json.NewDecoder(r.Body).Decode(&prefs); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Failed to parse request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
 		return
 	}
 
 	if err := prefsStore.Set(ctx, &prefs); err != nil {
-		writeError(w, http.StatusInternalServerError, "update_failed", "Failed to update preferences: "+err.Error())
+		a.logger().Error("failed to update preferences", "error", err)
+		writeError(w, http.StatusInternalServerError, "update_failed", ErrMsgInternalError)
 		return
 	}
 

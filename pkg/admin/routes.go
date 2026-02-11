@@ -7,10 +7,10 @@ import (
 )
 
 // registerRoutes sets up all API routes.
-func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
+func (a *API) registerRoutes(mux *http.ServeMux) {
 	// Health check, status, metrics, and ports
 	mux.HandleFunc("GET /health", a.handleHealth)
-	mux.HandleFunc("GET /status", a.handleGetStatus)
+	mux.HandleFunc("GET /status", a.requireEngine(a.handleGetStatus))
 	mux.HandleFunc("GET /ports", a.handleListPorts)
 	mux.Handle("GET /metrics", a.metricsRegistry.Handler())
 
@@ -40,15 +40,15 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /mocks/{id}/toggle", a.handleToggleUnifiedMock)
 
 	// Mock verification
-	mux.HandleFunc("GET /mocks/{id}/verify", a.handleGetMockVerification)
-	mux.HandleFunc("POST /mocks/{id}/verify", a.handleVerifyMock)
-	mux.HandleFunc("GET /mocks/{id}/invocations", a.handleListMockInvocations)
-	mux.HandleFunc("DELETE /mocks/{id}/invocations", a.handleResetMockVerification)
-	mux.HandleFunc("DELETE /verify", a.handleResetAllVerification)
+	mux.HandleFunc("GET /mocks/{id}/verify", a.requireEngine(a.handleGetMockVerification))
+	mux.HandleFunc("POST /mocks/{id}/verify", a.requireEngine(a.handleVerifyMock))
+	mux.HandleFunc("GET /mocks/{id}/invocations", a.requireEngine(a.handleListMockInvocations))
+	mux.HandleFunc("DELETE /mocks/{id}/invocations", a.requireEngine(a.handleResetMockVerification))
+	mux.HandleFunc("DELETE /verify", a.requireEngine(a.handleResetAllVerification))
 
 	// Configuration import/export
-	mux.HandleFunc("GET /config", a.handleExportConfig)
-	mux.HandleFunc("POST /config", a.handleImportConfig)
+	mux.HandleFunc("GET /config", a.requireEngine(a.handleExportConfig))
+	mux.HandleFunc("POST /config", a.requireEngine(a.handleImportConfig))
 
 	// OpenAPI/Insomnia export (for importing mocks into external tools)
 	mux.HandleFunc("GET /openapi.json", a.handleGetOpenAPISpec)
@@ -57,10 +57,10 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /insomnia.yaml", a.handleGetInsomniaExport) // v5 YAML format (recommended)
 
 	// Request logging
-	mux.HandleFunc("GET /requests", a.handleListRequests)
-	mux.HandleFunc("GET /requests/stream", a.handleStreamRequests)
-	mux.HandleFunc("GET /requests/{id}", a.handleGetRequest)
-	mux.HandleFunc("DELETE /requests", a.handleClearRequests)
+	mux.HandleFunc("GET /requests", a.requireEngine(a.handleListRequests))
+	mux.HandleFunc("GET /requests/stream", a.requireEngine(a.handleStreamRequests))
+	mux.HandleFunc("GET /requests/{id}", a.requireEngine(a.handleGetRequest))
+	mux.HandleFunc("DELETE /requests", a.requireEngine(a.handleClearRequests))
 
 	// Proxy management
 	mux.HandleFunc("POST /proxy/start", a.proxyManager.handleProxyStart)
@@ -93,12 +93,12 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /sessions/{id}", a.proxyManager.handleDeleteSession)
 
 	// State management (stateful resources)
-	mux.HandleFunc("GET /state", a.handleStateOverview)
-	mux.HandleFunc("POST /state/reset", a.handleStateReset)
-	mux.HandleFunc("GET /state/resources", a.handleListStateResources)
-	mux.HandleFunc("GET /state/resources/{name}", a.handleGetStateResource)
-	mux.HandleFunc("POST /state/resources/{name}/reset", a.handleResetStateResource)
-	mux.HandleFunc("DELETE /state/resources/{name}", a.handleClearStateResource)
+	mux.HandleFunc("GET /state", a.requireEngine(a.handleStateOverview))
+	mux.HandleFunc("POST /state/reset", a.requireEngine(a.handleStateReset))
+	mux.HandleFunc("GET /state/resources", a.requireEngine(a.handleListStateResources))
+	mux.HandleFunc("GET /state/resources/{name}", a.requireEngine(a.handleGetStateResource))
+	mux.HandleFunc("POST /state/resources/{name}/reset", a.requireEngine(a.handleResetStateResource))
+	mux.HandleFunc("DELETE /state/resources/{name}", a.requireEngine(a.handleClearStateResource))
 
 	// SSE connection management
 	mux.HandleFunc("GET /sse/connections", a.handleListSSEConnections)
@@ -107,8 +107,8 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /sse/stats", a.handleGetSSEStats)
 
 	// Mock-specific SSE endpoints
-	mux.HandleFunc("GET /mocks/{id}/sse/connections", a.handleListMockSSEConnections)
-	mux.HandleFunc("DELETE /mocks/{id}/sse/connections", a.handleCloseMockSSEConnections)
+	mux.HandleFunc("GET /mocks/{id}/sse/connections", a.requireEngine(a.handleListMockSSEConnections))
+	mux.HandleFunc("DELETE /mocks/{id}/sse/connections", a.requireEngine(a.handleCloseMockSSEConnections))
 	mux.HandleFunc("GET /mocks/{id}/sse/buffer", a.handleGetMockSSEBuffer)
 	mux.HandleFunc("DELETE /mocks/{id}/sse/buffer", a.handleClearMockSSEBuffer)
 
@@ -136,8 +136,8 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /replay/{id}/resume", a.streamRecordingManager.handleResumeReplay)
 
 	// Chaos injection management
-	mux.HandleFunc("GET /chaos", a.handleGetChaos)
-	mux.HandleFunc("PUT /chaos", a.handleSetChaos)
+	mux.HandleFunc("GET /chaos", a.requireEngine(a.handleGetChaos))
+	mux.HandleFunc("PUT /chaos", a.requireEngine(a.handleSetChaos))
 
 	// gRPC server management (convenience — proxies to /mocks?type=grpc)
 	mux.HandleFunc("GET /grpc", func(w http.ResponseWriter, r *http.Request) {
@@ -187,7 +187,7 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 	// Metadata endpoints (formats and templates)
 	mux.HandleFunc("GET /formats", a.handleListFormats)
 	mux.HandleFunc("GET /templates", a.handleListTemplates)
-	mux.HandleFunc("POST /templates/{name}", a.handleGenerateFromTemplate)
+	mux.HandleFunc("POST /templates/{name}", a.requireEngine(a.handleGenerateFromTemplate))
 
 	// Engine registry management
 	mux.HandleFunc("GET /engines", a.handleListEngines)
@@ -231,34 +231,27 @@ func (a *AdminAPI) registerRoutes(mux *http.ServeMux) {
 
 	// Protocol handler management
 	mux.HandleFunc("GET /handlers", a.handleListHandlers)
-	mux.HandleFunc("GET /handlers/{id}", a.handleGetHandler)
-	mux.HandleFunc("GET /handlers/{id}/health", a.handleGetHandlerHealth)
-	mux.HandleFunc("GET /handlers/{id}/stats", a.handleGetHandlerStats)
-	mux.HandleFunc("POST /handlers/{id}/start", a.handleStartHandler)
-	mux.HandleFunc("POST /handlers/{id}/stop", a.handleStopHandler)
-	mux.HandleFunc("POST /handlers/{id}/recording/enable", a.handleEnableHandlerRecording)
-	mux.HandleFunc("POST /handlers/{id}/recording/disable", a.handleDisableHandlerRecording)
-	mux.HandleFunc("GET /handlers/{id}/connections", a.handleListHandlerConnections)
-	mux.HandleFunc("DELETE /handlers/{id}/connections/{connId}", a.handleCloseHandlerConnection)
-	mux.HandleFunc("POST /handlers/{id}/broadcast", a.handleBroadcastHandler)
+	mux.HandleFunc("GET /handlers/{id}", a.requireEngine(a.handleGetHandler))
+	mux.HandleFunc("GET /handlers/{id}/health", a.requireEngine(a.handleGetHandlerHealth))
+	mux.HandleFunc("GET /handlers/{id}/stats", a.requireEngine(a.handleGetHandlerStats))
 }
 
 // handleConvertRecordings wraps the convert handler to pass the engine client.
-func (a *AdminAPI) handleConvertRecordings(w http.ResponseWriter, r *http.Request) {
-	a.proxyManager.handleConvertRecordings(w, r, a.localEngine)
+func (a *API) handleConvertRecordings(w http.ResponseWriter, r *http.Request) {
+	a.proxyManager.handleConvertRecordings(w, r, a.localEngine.Load())
 }
 
 // handleConvertSingleRecording wraps the single recording convert handler.
-func (a *AdminAPI) handleConvertSingleRecording(w http.ResponseWriter, r *http.Request) {
-	a.proxyManager.handleConvertSingleRecording(w, r, a.localEngine)
+func (a *API) handleConvertSingleRecording(w http.ResponseWriter, r *http.Request) {
+	a.proxyManager.handleConvertSingleRecording(w, r, a.localEngine.Load())
 }
 
 // handleConvertSession wraps the session convert handler.
-func (a *AdminAPI) handleConvertSession(w http.ResponseWriter, r *http.Request) {
-	a.proxyManager.handleConvertSession(w, r, a.localEngine)
+func (a *API) handleConvertSession(w http.ResponseWriter, r *http.Request) {
+	a.proxyManager.handleConvertSession(w, r, a.localEngine.Load())
 }
 
 // handleConvertStreamRecording wraps the stream recording convert handler.
-func (a *AdminAPI) handleConvertStreamRecording(w http.ResponseWriter, r *http.Request) {
-	a.streamRecordingManager.handleConvertStreamRecording(w, r, a.localEngine)
+func (a *API) handleConvertStreamRecording(w http.ResponseWriter, r *http.Request) {
+	a.streamRecordingManager.handleConvertStreamRecording(w, r, a.localEngine.Load())
 }

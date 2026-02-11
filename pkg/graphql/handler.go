@@ -476,11 +476,12 @@ func Endpoint(config *GraphQLConfig) (*Handler, error) {
 	var err error
 
 	// Parse schema from inline or file
-	if config.Schema != "" {
+	switch {
+	case config.Schema != "":
 		schema, err = ParseSchema(config.Schema)
-	} else if config.SchemaFile != "" {
+	case config.SchemaFile != "":
 		schema, err = ParseSchemaFile(config.SchemaFile)
-	} else {
+	default:
 		return nil, &parseError{message: "either schema or schemaFile must be provided"}
 	}
 

@@ -3,30 +3,41 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
-	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/metrics"
+	"github.com/getmockd/mockd/pkg/ratelimit"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/store/file"
 	"github.com/getmockd/mockd/pkg/tracing"
+	"github.com/getmockd/mockd/pkg/workspace"
 )
 
 // EngineHeartbeatTimeout is the duration after which an engine is marked offline
 // if no heartbeat is received.
 const EngineHeartbeatTimeout = 30 * time.Second
 
-// AdminAPI exposes a REST API for managing mock configurations.
-type AdminAPI struct {
+// DefaultRateLimit is the default requests per second limit for the admin API.
+const DefaultRateLimit float64 = 100
+
+// DefaultBurstSize is the default burst size for the admin API.
+const DefaultBurstSize int = 200
+
+// API exposes a REST API for managing mock configurations.
+type API struct {
 	// localEngine is the HTTP client for communicating with the local engine.
-	localEngine *engineclient.Client
+	// Stored as atomic.Pointer to prevent data races between SetLocalEngine /
+	// handleRegisterEngine (writers) and handler goroutines (readers).
+	localEngine atomic.Pointer[engineclient.Client]
 
 	proxyManager           *ProxyManager
 	streamRecordingManager *StreamRecordingManager
@@ -34,14 +45,14 @@ type AdminAPI struct {
 	soapRecordingManager   *SOAPRecordingManager
 	workspaceStore         *store.WorkspaceFileStore
 	engineRegistry         *store.EngineRegistry
-	workspaceManager       *engine.WorkspaceManager
+	workspaceManager       workspace.Manager
 	dataStore              *file.FileStore // Persistent store for mocks and folders
 	httpServer             *http.Server
 	port                   int
 	startTime              time.Time
 	ctx                    context.Context
 	cancel                 context.CancelFunc
-	log                    *slog.Logger
+	log                    atomic.Pointer[slog.Logger]
 
 	// Token management for engine authentication
 	registrationTokens map[string]storedToken // token -> storedToken
@@ -57,7 +68,7 @@ type AdminAPI struct {
 	apiKeyConfig APIKeyConfig
 
 	// Rate limiter for API protection
-	rateLimiter *RateLimiter
+	rateLimiter *ratelimit.PerIPLimiter
 
 	// CORS configuration
 	corsConfig CORSConfig
@@ -83,30 +94,23 @@ type AdminAPI struct {
 	tunnelMu    sync.RWMutex
 }
 
-// NewAdminAPI creates a new AdminAPI.
-func NewAdminAPI(port int, opts ...Option) *AdminAPI {
-	log := logging.Nop() // Default to no-op, can be set with SetLogger
-
+// NewAPI creates a new API.
+func NewAPI(port int, opts ...Option) *API {
 	// Create context for background goroutines
 	ctx, cancel := context.WithCancel(context.Background())
-
-	// Create workspace manager for multi-workspace serving
-	wsManager := engine.NewWorkspaceManager(nil)
 
 	// Initialize metrics registry
 	metricsRegistry := metrics.Init()
 
-	api := &AdminAPI{
+	api := &API{
 		proxyManager:                NewProxyManager(),
 		streamRecordingManager:      NewStreamRecordingManager(),
 		mqttRecordingManager:        NewMQTTRecordingManager(),
 		soapRecordingManager:        NewSOAPRecordingManager(),
 		engineRegistry:              store.NewEngineRegistry(),
-		workspaceManager:            wsManager,
 		port:                        port,
 		ctx:                         ctx,
 		cancel:                      cancel,
-		log:                         log,
 		registrationTokens:          make(map[string]storedToken),
 		engineTokens:                make(map[string]storedToken),
 		registrationTokenExpiration: RegistrationTokenExpiration,
@@ -114,6 +118,9 @@ func NewAdminAPI(port int, opts ...Option) *AdminAPI {
 		apiKeyConfig:                DefaultAPIKeyConfig(),
 		metricsRegistry:             metricsRegistry,
 	}
+
+	// Store default nop logger (can be replaced with SetLogger before Start)
+	api.log.Store(logging.Nop())
 
 	// Apply options first so dataDir can be set
 	for _, opt := range opts {
@@ -124,7 +131,7 @@ func NewAdminAPI(port int, opts ...Option) *AdminAPI {
 	wsStore := store.NewWorkspaceFileStore(api.dataDir)
 	if err := wsStore.Open(context.Background()); err != nil {
 		// Log but don't fail - workspace features will be limited
-		log.Warn("failed to initialize workspace store", "error", err)
+		api.logger().Warn("failed to initialize workspace store", "error", err)
 	}
 	api.workspaceStore = wsStore
 
@@ -139,13 +146,16 @@ func NewAdminAPI(port int, opts ...Option) *AdminAPI {
 	}
 	if err := dataStore.Open(context.Background()); err != nil {
 		// Log but don't fail - store features will be limited
-		log.Warn("failed to initialize data store", "error", err)
+		api.logger().Warn("failed to initialize data store", "error", err)
 	}
 	api.dataStore = dataStore
 
 	// Initialize rate limiter with defaults if not provided via options
 	if api.rateLimiter == nil {
-		api.rateLimiter = NewRateLimiter(DefaultRateLimit, DefaultBurstSize)
+		api.rateLimiter = ratelimit.NewPerIPLimiter(ratelimit.PerIPConfig{
+			Rate:  DefaultRateLimit,
+			Burst: DefaultBurstSize,
+		})
 	}
 
 	// Initialize CORS config with defaults if not provided via options
@@ -154,20 +164,22 @@ func NewAdminAPI(port int, opts ...Option) *AdminAPI {
 		api.corsConfig = DefaultCORSConfig()
 	}
 
-	// Initialize API key authentication
+	// Initialize API key authentication.
+	// The logFn closure reads the logger dynamically via api.logger() so
+	// that it picks up any logger set later via SetLogger (C3 fix).
 	logFn := func(msg string, args ...any) {
-		log.Info(msg, args...)
+		api.logger().Info(msg, args...)
 	}
 	apiKeyAuth, err := newAPIKeyAuth(api.apiKeyConfig, logFn)
 	if err != nil {
-		log.Error("failed to initialize API key auth", "error", err)
+		api.logger().Error("failed to initialize API key auth", "error", err)
 		// Continue without API key auth - will be insecure but functional
 	}
 	api.apiKeyAuth = apiKeyAuth
 
 	// Initialize stream recording manager with data directory
 	if err := api.streamRecordingManager.Initialize(api.dataDir); err != nil {
-		log.Warn("failed to initialize stream recording manager", "error", err)
+		api.logger().Warn("failed to initialize stream recording manager", "error", err)
 		// Continue without stream recording - feature will be unavailable
 	}
 
@@ -179,68 +191,83 @@ func NewAdminAPI(port int, opts ...Option) *AdminAPI {
 		Handler:      api.withMiddleware(mux),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	return api
 }
 
 // InitializeStreamRecordings initializes the stream recording manager with the given data directory.
-func (a *AdminAPI) InitializeStreamRecordings(dataDir string) error {
+func (a *API) InitializeStreamRecordings(dataDir string) error {
 	return a.streamRecordingManager.Initialize(dataDir)
 }
 
 // StreamRecordingManager returns the stream recording manager.
-func (a *AdminAPI) StreamRecordingManager() *StreamRecordingManager {
+func (a *API) StreamRecordingManager() *StreamRecordingManager {
 	return a.streamRecordingManager
 }
 
 // MQTTRecordingManager returns the MQTT recording manager.
-func (a *AdminAPI) MQTTRecordingManager() *MQTTRecordingManager {
+func (a *API) MQTTRecordingManager() *MQTTRecordingManager {
 	return a.mqttRecordingManager
 }
 
 // SOAPRecordingManager returns the SOAP recording manager.
-func (a *AdminAPI) SOAPRecordingManager() *SOAPRecordingManager {
+func (a *API) SOAPRecordingManager() *SOAPRecordingManager {
 	return a.soapRecordingManager
 }
 
 // EngineRegistry returns the engine registry.
-func (a *AdminAPI) EngineRegistry() *store.EngineRegistry {
+func (a *API) EngineRegistry() *store.EngineRegistry {
 	return a.engineRegistry
 }
 
 // WorkspaceManager returns the workspace manager for multi-workspace serving.
-func (a *AdminAPI) WorkspaceManager() *engine.WorkspaceManager {
+// Returns nil if no workspace manager was configured via WithWorkspaceManager.
+func (a *API) WorkspaceManager() workspace.Manager {
 	return a.workspaceManager
 }
 
 // LocalEngine returns the local engine HTTP client.
 // Returns nil if no local engine is configured.
-func (a *AdminAPI) LocalEngine() *engineclient.Client {
-	return a.localEngine
+// Safe to call from any goroutine.
+func (a *API) LocalEngine() *engineclient.Client {
+	return a.localEngine.Load()
 }
 
-// SetLocalEngine sets the local engine client after the admin has started.
-// This allows connecting an engine that was started after the admin.
-func (a *AdminAPI) SetLocalEngine(client *engineclient.Client) {
-	a.localEngine = client
+// SetLocalEngine atomically sets the local engine client after the admin has
+// started. This allows connecting an engine that was started after the admin.
+// Safe to call concurrently with handler goroutines that read via localEngine.Load().
+func (a *API) SetLocalEngine(client *engineclient.Client) {
+	a.localEngine.Store(client)
 }
 
 // MetricsRegistry returns the metrics registry for Prometheus metrics.
-func (a *AdminAPI) MetricsRegistry() *metrics.Registry {
+func (a *API) MetricsRegistry() *metrics.Registry {
 	return a.metricsRegistry
 }
 
 // HasLocalEngine returns true if a local engine is configured.
-func (a *AdminAPI) HasLocalEngine() bool {
-	return a.localEngine != nil
+// Safe to call from any goroutine.
+func (a *API) HasLocalEngine() bool {
+	return a.localEngine.Load() != nil
 }
 
+// maxRequestBodySize is the default maximum request body size for admin API handlers (2MB).
+// Individual handlers that need larger bodies (e.g., config import, bulk create) override this.
+const maxRequestBodySize = 2 << 20
+
 // withMiddleware wraps the handler with rate limiting, logging, security headers, CORS, API key auth, and tracing middleware.
-// Middleware order (outermost to innermost): Tracing -> Security Headers -> CORS -> API Key Auth -> Rate Limiting -> Handler
-func (a *AdminAPI) withMiddleware(handler http.Handler) http.Handler {
-	// Apply rate limiting first (innermost middleware)
-	rateLimited := a.rateLimiter.Middleware(handler)
+// Middleware order (outermost to innermost): Tracing -> Security Headers -> CORS -> API Key Auth -> Rate Limiting -> Body Limit -> Handler
+func (a *API) withMiddleware(handler http.Handler) http.Handler {
+	// Body size limit (innermost — protects all handlers from oversized request bodies)
+	bodyCapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+		handler.ServeHTTP(w, r)
+	})
+
+	// Apply rate limiting
+	rateLimited := ratelimit.Middleware(a.rateLimiter, ratelimit.WithTextResponse())(bodyCapped)
 
 	// API key authentication wraps rate limiting
 	authenticated := rateLimited
@@ -313,7 +340,7 @@ var skipTracingPaths = map[string]bool{
 }
 
 // tracingMiddleware wraps a handler with distributed tracing support.
-func (a *AdminAPI) tracingMiddleware(next http.Handler) http.Handler {
+func (a *API) tracingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip tracing for health/metrics endpoints to avoid noise
 		if skipTracingPaths[r.URL.Path] {
@@ -353,11 +380,12 @@ func (a *AdminAPI) tracingMiddleware(next http.Handler) http.Handler {
 		span.SetAttribute("http.status_code", strconv.Itoa(wrapped.statusCode))
 
 		// Set span status based on HTTP status code
-		if wrapped.statusCode >= 400 && wrapped.statusCode < 500 {
-			span.SetStatus(tracing.StatusError, fmt.Sprintf("HTTP client error: %d", wrapped.statusCode))
-		} else if wrapped.statusCode >= 500 {
+		switch {
+		case wrapped.statusCode >= 500:
 			span.SetStatus(tracing.StatusError, fmt.Sprintf("HTTP server error: %d", wrapped.statusCode))
-		} else {
+		case wrapped.statusCode >= 400:
+			span.SetStatus(tracing.StatusError, fmt.Sprintf("HTTP client error: %d", wrapped.statusCode))
+		default:
 			span.SetStatus(tracing.StatusOK, "")
 		}
 	})
@@ -394,12 +422,12 @@ func (w *adminStatusCapturingResponseWriter) Unwrap() http.ResponseWriter {
 }
 
 // Tracer returns the tracer, if configured.
-func (a *AdminAPI) Tracer() *tracing.Tracer {
+func (a *API) Tracer() *tracing.Tracer {
 	return a.tracer
 }
 
 // Start starts the admin API server.
-func (a *AdminAPI) Start() error {
+func (a *API) Start() error {
 	a.startTime = time.Now()
 
 	// Start the engine health check background goroutine
@@ -408,26 +436,41 @@ func (a *AdminAPI) Start() error {
 	// Start the token cleanup background goroutine
 	go a.startTokenCleanup(a.ctx)
 
-	a.log.Info("starting admin API", "port", a.port)
+	a.logger().Info("starting admin API", "port", a.port)
 	go func() {
-		if err := a.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			a.log.Error("admin API error", "error", err)
+		if err := a.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			a.logger().Error("admin API error", "error", err)
 		}
 	}()
 	return nil
 }
 
-// SetLogger sets the operational logger for the admin API.
-func (a *AdminAPI) SetLogger(log *slog.Logger) {
-	if log != nil {
-		a.log = log
-	} else {
-		a.log = logging.Nop()
+// logger returns the current logger from the atomic pointer.
+// This is safe to call from any goroutine concurrently with SetLogger.
+func (a *API) logger() *slog.Logger {
+	return a.log.Load()
+}
+
+// SetLogger atomically sets the operational logger for the admin API and
+// propagates it to all manager subsystems via their own lock-protected
+// SetLogger methods. Safe to call concurrently with handler goroutines
+// that read the logger via the logger() accessor.
+func (a *API) SetLogger(log *slog.Logger) {
+	if log == nil {
+		log = logging.Nop()
 	}
+	a.log.Store(log)
+
+	// Fan out to managers via their lock-protected SetLogger methods so
+	// that concurrent handler goroutines never observe a torn pointer write.
+	a.proxyManager.SetLogger(log.With("component", "proxy"))
+	a.streamRecordingManager.SetLogger(log.With("component", "stream-recording"))
+	a.mqttRecordingManager.SetLogger(log.With("component", "mqtt-recording"))
+	a.soapRecordingManager.SetLogger(log.With("component", "soap-recording"))
 }
 
 // Stop gracefully shuts down the admin API server.
-func (a *AdminAPI) Stop() error {
+func (a *API) Stop() error {
 	// Stop background goroutines
 	a.cancel()
 	a.engineRegistry.Stop()
@@ -440,14 +483,14 @@ func (a *AdminAPI) Stop() error {
 	// Stop all workspace servers
 	if a.workspaceManager != nil {
 		if err := a.workspaceManager.StopAll(); err != nil {
-			a.log.Warn("error stopping workspace servers", "error", err)
+			a.logger().Warn("error stopping workspace servers", "error", err)
 		}
 	}
 
 	// Close the data store
 	if a.dataStore != nil {
 		if err := a.dataStore.Close(); err != nil {
-			a.log.Warn("error closing data store", "error", err)
+			a.logger().Warn("error closing data store", "error", err)
 		}
 	}
 
@@ -457,6 +500,6 @@ func (a *AdminAPI) Stop() error {
 }
 
 // Uptime returns the API uptime in seconds.
-func (a *AdminAPI) Uptime() int {
+func (a *API) Uptime() int {
 	return int(time.Since(a.startTime).Seconds())
 }

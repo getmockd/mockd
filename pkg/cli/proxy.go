@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -9,7 +10,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/proxy"
 	"github.com/getmockd/mockd/pkg/recording"
@@ -187,7 +190,10 @@ Examples:
 	}
 
 	server := &http.Server{
-		Handler: p,
+		Handler:      p,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	// Store state
@@ -208,7 +214,7 @@ Examples:
 
 	// Start server in goroutine
 	go func() {
-		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 		}
 	}()
@@ -220,7 +226,7 @@ Examples:
 
 	fmt.Println("\nShutting down proxy...")
 	if err := server.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: server shutdown error: %v\n", err)
+		output.Warn("server shutdown error: %v", err)
 	}
 
 	proxyServer.running = false
@@ -253,7 +259,7 @@ Stop the running proxy server.
 	}
 
 	if !proxyServer.running {
-		return fmt.Errorf("proxy is not running")
+		return errors.New("proxy is not running")
 	}
 
 	if proxyServer.server != nil {
@@ -323,7 +329,7 @@ Examples:
 	}
 
 	if !proxyServer.running {
-		return fmt.Errorf("proxy is not running")
+		return errors.New("proxy is not running")
 	}
 
 	// Get mode
@@ -417,15 +423,16 @@ Examples:
 
 	// Use running proxy's CA if available
 	var ca *proxy.CAManager
-	if proxyServer.ca != nil {
+	switch {
+	case proxyServer.ca != nil:
 		ca = proxyServer.ca
-	} else if *caPath != "" {
+	case *caPath != "":
 		ca = proxy.NewCAManager(*caPath+"/ca.crt", *caPath+"/ca.key")
 		if err := ca.Load(); err != nil {
 			return fmt.Errorf("failed to load CA: %w", err)
 		}
-	} else {
-		return fmt.Errorf("no CA available (start proxy with --ca-path or specify --ca-path)")
+	default:
+		return errors.New("no CA available (start proxy with --ca-path or specify --ca-path)")
 	}
 
 	certPEM, err := ca.CACertPEM()
@@ -469,7 +476,7 @@ Examples:
 	}
 
 	if *caPath == "" {
-		return fmt.Errorf("--ca-path is required")
+		return errors.New("--ca-path is required")
 	}
 
 	ca := proxy.NewCAManager(*caPath+"/ca.crt", *caPath+"/ca.key")

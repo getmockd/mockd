@@ -4,6 +4,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -30,7 +31,7 @@ type UpdateFolderRequest struct {
 }
 
 // getFolderStore returns the folder store to use.
-func (a *AdminAPI) getFolderStore() store.FolderStore {
+func (a *API) getFolderStore() store.FolderStore {
 	if a.dataStore == nil {
 		return nil
 	}
@@ -38,7 +39,7 @@ func (a *AdminAPI) getFolderStore() store.FolderStore {
 }
 
 // handleListFolders returns all folders, optionally filtered by workspace.
-func (a *AdminAPI) handleListFolders(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleListFolders(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Folder management requires persistent storage - coming soon")
@@ -55,14 +56,15 @@ func (a *AdminAPI) handleListFolders(w http.ResponseWriter, r *http.Request) {
 
 	folders, err := folderStore.List(r.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to list folders", "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 	writeJSON(w, http.StatusOK, folders)
 }
 
 // handleGetFolder returns a single folder by ID.
-func (a *AdminAPI) handleGetFolder(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleGetFolder(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Folder management requires persistent storage - coming soon")
@@ -77,11 +79,12 @@ func (a *AdminAPI) handleGetFolder(w http.ResponseWriter, r *http.Request) {
 
 	folder, err := folderStore.Get(r.Context(), id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to get folder", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
@@ -89,7 +92,7 @@ func (a *AdminAPI) handleGetFolder(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCreateFolder creates a new folder.
-func (a *AdminAPI) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Folder management requires persistent storage - coming soon")
@@ -161,14 +164,15 @@ func (a *AdminAPI) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 	folder.WorkspaceID = workspaceID
 
 	if err := folderStore.Create(ctx, folder); err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to create folder", "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 	writeJSON(w, http.StatusCreated, folder)
 }
 
 // handleUpdateFolder updates an existing folder.
-func (a *AdminAPI) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Folder management requires persistent storage - coming soon")
@@ -184,11 +188,12 @@ func (a *AdminAPI) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	existing, err := folderStore.Get(ctx, id)
 	if err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to get folder for update", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
@@ -233,7 +238,8 @@ func (a *AdminAPI) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 	existing.UpdatedAt = time.Now()
 
 	if err := folderStore.Update(ctx, existing); err != nil {
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to update folder", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 	writeJSON(w, http.StatusOK, existing)
@@ -264,7 +270,7 @@ func isDescendant(ctx context.Context, folderStore store.FolderStore, targetID, 
 }
 
 // handleDeleteFolder deletes a folder.
-func (a *AdminAPI) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
+func (a *API) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 	folderStore := a.getFolderStore()
 	if folderStore == nil {
 		writeError(w, http.StatusNotImplemented, "not_implemented", "Folder management requires persistent storage - coming soon")
@@ -279,11 +285,12 @@ func (a *AdminAPI) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if err := folderStore.Delete(ctx, id); err != nil {
-		if err == store.ErrNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "store_error", err.Error())
+		a.logger().Error("failed to delete folder", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 

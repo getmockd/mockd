@@ -11,15 +11,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// newTestAPI creates an API for testing with the localEngine atomic pointer
+// properly initialised. Pass nil for no engine.
+func newTestAPI(engine *engineclient.Client) *API {
+	api := &API{}
+	if engine != nil {
+		api.localEngine.Store(engine)
+	}
+	return api
+}
+
 func TestRequireEngine(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns 503 when no engine connected", func(t *testing.T) {
 		t.Parallel()
 
-		api := &AdminAPI{
-			localEngine: nil, // No engine
-		}
+		api := newTestAPI(nil)
 
 		handlerCalled := false
 		handler := api.requireEngine(func(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
@@ -45,9 +53,7 @@ func TestRequireEngine(t *testing.T) {
 
 		// Create a minimal mock engine client
 		mockEngine := &engineclient.Client{}
-		api := &AdminAPI{
-			localEngine: mockEngine,
-		}
+		api := newTestAPI(mockEngine)
 
 		handlerCalled := false
 		var receivedEngine *engineclient.Client
@@ -74,9 +80,7 @@ func TestRequireEngineOr(t *testing.T) {
 	t.Run("calls fallback when no engine connected", func(t *testing.T) {
 		t.Parallel()
 
-		api := &AdminAPI{
-			localEngine: nil,
-		}
+		api := newTestAPI(nil)
 
 		handlerCalled := false
 		fallbackCalled := false
@@ -105,9 +109,7 @@ func TestRequireEngineOr(t *testing.T) {
 		t.Parallel()
 
 		mockEngine := &engineclient.Client{}
-		api := &AdminAPI{
-			localEngine: mockEngine,
-		}
+		api := newTestAPI(mockEngine)
 
 		handlerCalled := false
 		fallbackCalled := false
@@ -138,13 +140,13 @@ func TestHasEngine(t *testing.T) {
 
 	t.Run("returns false when no engine", func(t *testing.T) {
 		t.Parallel()
-		api := &AdminAPI{localEngine: nil}
+		api := newTestAPI(nil)
 		assert.False(t, api.HasEngine())
 	})
 
 	t.Run("returns true when engine connected", func(t *testing.T) {
 		t.Parallel()
-		api := &AdminAPI{localEngine: &engineclient.Client{}}
+		api := newTestAPI(&engineclient.Client{})
 		assert.True(t, api.HasEngine())
 	})
 }
@@ -155,7 +157,7 @@ func TestWithEngine(t *testing.T) {
 	t.Run("returns nil and writes error when no engine", func(t *testing.T) {
 		t.Parallel()
 
-		api := &AdminAPI{localEngine: nil}
+		api := newTestAPI(nil)
 		rec := httptest.NewRecorder()
 
 		engine := api.withEngine(rec)
@@ -168,7 +170,7 @@ func TestWithEngine(t *testing.T) {
 		t.Parallel()
 
 		mockEngine := &engineclient.Client{}
-		api := &AdminAPI{localEngine: mockEngine}
+		api := newTestAPI(mockEngine)
 		rec := httptest.NewRecorder()
 
 		engine := api.withEngine(rec)

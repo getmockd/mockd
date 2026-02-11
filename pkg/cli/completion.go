@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -41,7 +42,7 @@ Examples:
 	}
 
 	if fs.NArg() < 1 {
-		return fmt.Errorf(`shell type is required
+		return errors.New(`shell type is required
 
 Usage: mockd completion <shell>
 
