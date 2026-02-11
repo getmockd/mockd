@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -201,7 +202,7 @@ Examples:
 
 	recordings, _ := proxyServer.store.ListRecordings(filter)
 	if len(recordings) == 0 {
-		return fmt.Errorf("no recordings to convert")
+		return errors.New("no recordings to convert")
 	}
 
 	opts := recording.ConvertOptions{
@@ -313,7 +314,7 @@ Examples:
 	}
 
 	if *input == "" {
-		return fmt.Errorf("--input is required")
+		return errors.New("--input is required")
 	}
 
 	if proxyServer.store == nil {

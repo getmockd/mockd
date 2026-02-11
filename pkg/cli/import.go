@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -75,7 +76,7 @@ Examples:
 
 	// Get source from positional args
 	if fs.NArg() < 1 {
-		return fmt.Errorf(`source is required
+		return errors.New(`source is required
 
 Usage: mockd import <source>
 
@@ -119,7 +120,7 @@ Supported formats: mockd, openapi, postman, har, wiremock, curl`, *format)
 	} else {
 		importFormat = portability.DetectFormat(data, filename)
 		if importFormat == portability.FormatUnknown {
-			return fmt.Errorf(`unable to detect format from file content
+			return errors.New(`unable to detect format from file content
 
 Suggestions:
   • Specify format explicitly with -f/--format

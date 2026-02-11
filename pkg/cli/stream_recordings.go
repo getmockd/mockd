@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -213,7 +214,7 @@ Examples:
 	}
 
 	if fs.NArg() < 1 {
-		return fmt.Errorf("recording ID is required")
+		return errors.New("recording ID is required")
 	}
 
 	id := fs.Arg(0)
@@ -248,7 +249,7 @@ Examples:
 	}
 
 	// Protocol-specific info
-	switch rec.Protocol {
+	switch rec.Protocol { //nolint:exhaustive // only stream protocols have detailed info
 	case recording.ProtocolWebSocket:
 		if rec.WebSocket != nil {
 			fmt.Printf("\nWebSocket Details:\n")
@@ -297,7 +298,7 @@ Examples:
 	}
 
 	if fs.NArg() < 1 {
-		return fmt.Errorf("recording ID is required")
+		return errors.New("recording ID is required")
 	}
 
 	id := fs.Arg(0)
@@ -358,7 +359,7 @@ Examples:
 	}
 
 	if fs.NArg() < 1 {
-		return fmt.Errorf("recording ID is required")
+		return errors.New("recording ID is required")
 	}
 
 	id := fs.Arg(0)
@@ -418,7 +419,7 @@ Examples:
 	}
 
 	if fs.NArg() < 1 {
-		return fmt.Errorf("recording ID is required")
+		return errors.New("recording ID is required")
 	}
 
 	id := fs.Arg(0)

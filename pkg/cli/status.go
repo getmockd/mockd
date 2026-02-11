@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
@@ -296,7 +298,7 @@ func formatDuration(d time.Duration) string {
 	mins := int(d.Minutes()) % 60
 	if hours >= 24 {
 		days := hours / 24
-		hours = hours % 24
+		hours %= 24
 		return fmt.Sprintf("%dd %dh %dm", days, hours, mins)
 	}
 	return fmt.Sprintf("%dh %dm", hours, mins)
@@ -492,17 +494,18 @@ func isTerminal() bool {
 // formatNumber formats an integer with thousands separators.
 func formatNumber(n int) string {
 	if n < 1000 {
-		return fmt.Sprintf("%d", n)
+		return strconv.Itoa(n)
 	}
 
 	// Simple implementation for common cases
-	str := fmt.Sprintf("%d", n)
-	result := ""
+	str := strconv.Itoa(n)
+	var b strings.Builder
+	b.Grow(len(str) + len(str)/3)
 	for i, c := range str {
 		if i > 0 && (len(str)-i)%3 == 0 {
-			result += ","
+			b.WriteByte(',')
 		}
-		result += string(c)
+		b.WriteRune(c)
 	}
-	return result
+	return b.String()
 }

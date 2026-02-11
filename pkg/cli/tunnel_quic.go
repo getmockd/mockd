@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -58,7 +59,7 @@ func (f *mqttFlag) Set(s string) error {
 	if len(parts) == 2 {
 		pp.Name = parts[1]
 		if pp.Name == "" {
-			return fmt.Errorf("MQTT broker name cannot be empty after ':'")
+			return errors.New("MQTT broker name cannot be empty after ':'")
 		}
 	}
 
@@ -152,7 +153,7 @@ Environment Variables:
 
 	// Default to port 443 if no port specified
 	if !strings.Contains(*relayAddr, ":") {
-		*relayAddr = *relayAddr + ":443"
+		*relayAddr += ":443"
 	}
 
 	// Auto-fetch anonymous JWT if no token provided
@@ -197,7 +198,7 @@ Environment Variables:
 	case *authBasic != "":
 		parts := strings.SplitN(*authBasic, ":", 2)
 		if len(parts) != 2 {
-			return fmt.Errorf("--auth-basic must be in format user:pass")
+			return errors.New("--auth-basic must be in format user:pass")
 		}
 		tunnelAuth = &protocol.TunnelAuth{
 			Type:     "basic",
@@ -355,7 +356,7 @@ func fetchAnonymousToken() (string, error) {
 	}
 
 	if tokenResp.Token == "" {
-		return "", fmt.Errorf("API returned empty token")
+		return "", errors.New("API returned empty token")
 	}
 
 	return tokenResp.Token, nil

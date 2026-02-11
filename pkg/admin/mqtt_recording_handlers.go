@@ -612,15 +612,16 @@ func (m *MQTTRecordingManager) handleConvertMQTTRecordings(w http.ResponseWriter
 
 	// Get recordings to convert
 	var recordings []*recording.MQTTRecording
-	if len(req.RecordingIDs) > 0 {
+	switch {
+	case len(req.RecordingIDs) > 0:
 		for _, id := range req.RecordingIDs {
 			if rec := m.store.Get(id); rec != nil {
 				recordings = append(recordings, rec)
 			}
 		}
-	} else if req.TopicPattern != "" {
+	case req.TopicPattern != "":
 		recordings = m.store.ListByTopic(req.TopicPattern)
-	} else {
+	default:
 		recordings, _ = m.store.List(recording.MQTTRecordingFilter{})
 	}
 

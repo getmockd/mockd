@@ -7,6 +7,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -289,6 +290,7 @@ type HTTPResponse struct {
 }
 
 // StatefulResourceEntry is an alias for StatefulResourceConfig for backward compatibility.
+//
 // Deprecated: Use StatefulResourceConfig directly.
 type StatefulResourceEntry = StatefulResourceConfig
 
@@ -454,7 +456,7 @@ func DiscoverProjectConfig() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no config found. Run 'mockd init' to create one, or specify --config")
+	return "", errors.New("no config found. Run 'mockd init' to create one, or specify --config")
 }
 
 // ExpandEnvVars expands environment variables in the input string.
@@ -714,7 +716,7 @@ func mergeStatefulResource(base, overlay StatefulResourceConfig) StatefulResourc
 // Files are loaded in order, with later files overriding earlier ones.
 func LoadAndMergeProjectConfigs(paths []string) (*ProjectConfig, error) {
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("no config files specified")
+		return nil, errors.New("no config files specified")
 	}
 
 	var configs []*ProjectConfig

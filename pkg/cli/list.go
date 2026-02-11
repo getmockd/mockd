@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
@@ -150,7 +151,7 @@ func outputMocksTable(mocks []*mock.Mock) error {
 		// Format status - show "-" for non-HTTP
 		statusStr := "-"
 		if status > 0 {
-			statusStr = fmt.Sprintf("%d", status)
+			statusStr = strconv.Itoa(status)
 		}
 
 		// Format type
@@ -168,7 +169,7 @@ func outputMocksTable(mocks []*mock.Mock) error {
 
 // extractMockDetails extracts path, method, and status from a mock based on its type.
 func extractMockDetails(m *mock.Mock) (path, method string, status int) {
-	switch m.Type {
+	switch m.Type { //nolint:exhaustive // OAuth mocks don't have path/method/status details
 	case mock.TypeHTTP, "":
 		if m.HTTP != nil {
 			if m.HTTP.Matcher != nil {

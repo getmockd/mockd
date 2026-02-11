@@ -53,7 +53,7 @@ func NewEngineClient(cfg *EngineClientConfig, manager *WorkspaceManager) *Engine
 	}
 	if cfg.EngineName == "" {
 		hostname, _ := os.Hostname()
-		cfg.EngineName = fmt.Sprintf("engine-%s", hostname)
+		cfg.EngineName = "engine-" + hostname
 	}
 
 	return &EngineClient{

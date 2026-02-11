@@ -348,7 +348,7 @@ func (s *WorkspaceServer) Start() error {
 	defer s.mu.Unlock()
 
 	if s.status == WorkspaceServerStatusRunning {
-		return fmt.Errorf("server is already running")
+		return errors.New("server is already running")
 	}
 
 	s.status = WorkspaceServerStatusStarting
@@ -472,7 +472,7 @@ func (s *WorkspaceServer) AddMock(cfg *config.MockConfiguration) error {
 	defer s.mu.Unlock()
 
 	if s.store == nil {
-		return fmt.Errorf("workspace server not initialized")
+		return errors.New("workspace server not initialized")
 	}
 
 	// Ensure mock has workspace ID set
@@ -505,7 +505,7 @@ func (s *WorkspaceServer) DeleteMock(id string) error {
 	defer s.mu.Unlock()
 
 	if s.store == nil {
-		return fmt.Errorf("workspace server not initialized")
+		return errors.New("workspace server not initialized")
 	}
 
 	if !s.store.Delete(id) {

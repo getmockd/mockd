@@ -175,5 +175,5 @@ func getDataDir() string {
 	if err != nil {
 		return ""
 	}
-	return fmt.Sprintf("%s/.mockd/data", home)
+	return home + "/.mockd/data"
 }

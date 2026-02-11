@@ -146,36 +146,36 @@ func run(args []string) error {
 	command := ""
 	var cmdArgs []string
 
-	if len(args) == 0 {
+	switch {
+	case len(args) == 0:
 		// No args at all, run serve
 		command = "serve"
 		cmdArgs = []string{}
-	} else {
+	case args[0] == "" || args[0][0] == '-':
 		first := args[0]
-		if first == "" || first[0] == '-' {
-			// Flag passed directly (e.g., --help, --version, --port), handle global flags or run serve
-			if first == "--help" || first == "-h" {
-				printUsage(reg)
-				return nil
-			}
-			if first == "--version" || first == "-v" {
-				return cli.RunVersion(cli.BuildInfo{
-					Version:   Version,
-					Commit:    Commit,
-					BuildDate: BuildDate,
-				}, nil)
-			}
+		// Flag passed directly (e.g., --help, --version, --port), handle global flags or run serve
+		switch first {
+		case "--help", "-h":
+			printUsage(reg)
+			return nil
+		case "--version", "-v":
+			return cli.RunVersion(cli.BuildInfo{
+				Version:   Version,
+				Commit:    Commit,
+				BuildDate: BuildDate,
+			}, nil)
+		default:
 			// Other flags, run serve with them
 			command = "serve"
 			cmdArgs = args
-		} else if reg.isCommand(first) {
-			command = first
-			cmdArgs = args[1:]
-		} else {
-			// Unknown argument, try serve
-			command = "serve"
-			cmdArgs = args
 		}
+	case reg.isCommand(args[0]):
+		command = args[0]
+		cmdArgs = args[1:]
+	default:
+		// Unknown argument, try serve
+		command = "serve"
+		cmdArgs = args
 	}
 
 	cmd, ok := reg.lookup(command)

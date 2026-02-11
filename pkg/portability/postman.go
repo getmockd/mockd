@@ -257,12 +257,7 @@ func (i *PostmanImporter) extractPath(postmanURL PostmanURL, variables map[strin
 		parts := make([]string, len(postmanURL.Path))
 		for idx, part := range postmanURL.Path {
 			substituted := i.substituteVariables(part, variables)
-			// Convert :param to mockd format
-			if strings.HasPrefix(substituted, ":") {
-				parts[idx] = substituted
-			} else {
-				parts[idx] = substituted
-			}
+			parts[idx] = substituted
 		}
 		return "/" + strings.Join(parts, "/")
 	}

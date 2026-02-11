@@ -103,7 +103,7 @@ func (f *ProxyFilterConfig) Validate() error {
 		if _, err := regexp.Compile(pattern); err != nil {
 			return &mock.ValidationError{
 				Field:   fmt.Sprintf("filters.includePaths[%d]", i),
-				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+				Message: "invalid regex pattern: " + err.Error(),
 			}
 		}
 	}
@@ -112,7 +112,7 @@ func (f *ProxyFilterConfig) Validate() error {
 		if _, err := regexp.Compile(pattern); err != nil {
 			return &mock.ValidationError{
 				Field:   fmt.Sprintf("filters.excludePaths[%d]", i),
-				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+				Message: "invalid regex pattern: " + err.Error(),
 			}
 		}
 	}
@@ -121,7 +121,7 @@ func (f *ProxyFilterConfig) Validate() error {
 		if _, err := regexp.Compile(pattern); err != nil {
 			return &mock.ValidationError{
 				Field:   fmt.Sprintf("filters.includeHosts[%d]", i),
-				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+				Message: "invalid regex pattern: " + err.Error(),
 			}
 		}
 	}
@@ -130,7 +130,7 @@ func (f *ProxyFilterConfig) Validate() error {
 		if _, err := regexp.Compile(pattern); err != nil {
 			return &mock.ValidationError{
 				Field:   fmt.Sprintf("filters.excludeHosts[%d]", i),
-				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+				Message: "invalid regex pattern: " + err.Error(),
 			}
 		}
 	}

@@ -113,7 +113,7 @@ func (s *Server) Start() error {
 	defer s.mu.Unlock()
 
 	if s.running {
-		return fmt.Errorf("MCP server is already running")
+		return errors.New("MCP server is already running")
 	}
 
 	if err := s.config.Validate(); err != nil {

@@ -3,7 +3,7 @@ package portability
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -93,7 +93,7 @@ func (i *OpenAPIAIImporter) enhanceMockFromSpec(ctx context.Context, gen *genera
 	}
 
 	// Find the response schema for the status code
-	statusStr := fmt.Sprintf("%d", mock.HTTP.Response.StatusCode)
+	statusStr := strconv.Itoa(mock.HTTP.Response.StatusCode)
 	responseRef := op.Responses.Status(mock.HTTP.Response.StatusCode)
 	if responseRef == nil {
 		responseRef = op.Responses.Status(0) // Default response

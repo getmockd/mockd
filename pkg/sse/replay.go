@@ -150,7 +150,7 @@ func (r *SSEReplayer) Start() error {
 	r.SetSSEHeaders()
 
 	var err error
-	switch r.config.Mode {
+	switch r.config.Mode { //nolint:exhaustive // synchronized mode not applicable for SSE replay
 	case recording.ReplayModePure:
 		err = r.playPure()
 	case recording.ReplayModeTriggered:

@@ -164,7 +164,8 @@ func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.R
 
 	// Get recordings to convert
 	var recordings []*recording.Recording
-	if len(req.RecordingIDs) > 0 {
+	switch {
+	case len(req.RecordingIDs) > 0:
 		// Convert specific recordings
 		for _, id := range req.RecordingIDs {
 			rec := pm.store.GetRecording(id)
@@ -172,11 +173,11 @@ func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.R
 				recordings = append(recordings, rec)
 			}
 		}
-	} else if req.SessionID != "" {
+	case req.SessionID != "":
 		// Convert all recordings from session
 		filter := recording.RecordingFilter{SessionID: req.SessionID}
 		recordings, _ = pm.store.ListRecordings(filter)
-	} else {
+	default:
 		// Convert all recordings
 		recordings, _ = pm.store.ListRecordings(recording.RecordingFilter{})
 	}
@@ -233,16 +234,17 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 	// Gather recordings to export
 	var recordings []*recording.Recording
 
-	if req.SessionID != "" {
+	switch {
+	case req.SessionID != "":
 		recordings, _ = pm.store.ListRecordings(recording.RecordingFilter{SessionID: req.SessionID})
-	} else if len(req.RecordingIDs) > 0 {
+	case len(req.RecordingIDs) > 0:
 		for _, id := range req.RecordingIDs {
 			rec := pm.store.GetRecording(id)
 			if rec != nil {
 				recordings = append(recordings, rec)
 			}
 		}
-	} else {
+	default:
 		recordings, _ = pm.store.ListRecordings(recording.RecordingFilter{})
 	}
 

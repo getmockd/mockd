@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -245,7 +246,7 @@ Examples:
 	var m *config.MockConfiguration
 	var err error
 
-	switch mockTypeEnum {
+	switch mockTypeEnum { //nolint:exhaustive // OAuth not yet supported in CLI add
 	case mock.TypeHTTP:
 		m, err = buildHTTPMock(*name, *path, *method, *status, *body, *bodyFile, *priority, *delay, headers, matchHeaders, matchQueries,
 			*sse, sseEvents, *sseDelay, *sseTemplate, *sseRepeat, *sseKeepalive)
@@ -282,7 +283,7 @@ func buildHTTPMock(name, path, method string, status int, body, bodyFile string,
 	sse bool, sseEvents flags.StringSlice, sseDelay int, sseTemplate string, sseRepeat, sseKeepalive int) (*config.MockConfiguration, error) {
 
 	if path == "" {
-		return nil, fmt.Errorf(`--path is required for HTTP mocks
+		return nil, errors.New(`--path is required for HTTP mocks
 
 Usage: mockd add --path /api/endpoint [flags]
 
@@ -464,7 +465,7 @@ func buildSSEConfig(events flags.StringSlice, delayMs int, template string, repe
 // buildWebSocketMock creates a WebSocket mock configuration.
 func buildWebSocketMock(name, path, message string, echo bool) (*config.MockConfiguration, error) {
 	if path == "" {
-		return nil, fmt.Errorf(`--path is required for WebSocket mocks
+		return nil, errors.New(`--path is required for WebSocket mocks
 
 Usage: mockd add --type websocket --path /ws/endpoint [flags]
 
@@ -500,7 +501,7 @@ Run 'mockd add --help' for more options`)
 // buildGraphQLMock creates a GraphQL mock configuration.
 func buildGraphQLMock(name, path, operation, opType, response string) (*config.MockConfiguration, error) {
 	if operation == "" {
-		return nil, fmt.Errorf(`--operation is required for GraphQL mocks
+		return nil, errors.New(`--operation is required for GraphQL mocks
 
 Usage: mockd add --type graphql --operation getUser [flags]
 
@@ -582,7 +583,7 @@ func generateMinimalGraphQLSchema(operation, opType, _ string) string {
 func buildGRPCMock(name, service, rpcMethod, response string, port int, protoFiles, protoPaths flags.StringSlice) (*config.MockConfiguration, error) {
 	// Proto file is required for gRPC mocks
 	if len(protoFiles) == 0 {
-		return nil, fmt.Errorf(`--proto is required for gRPC mocks
+		return nil, errors.New(`--proto is required for gRPC mocks
 
 gRPC mocks require a .proto file to define the service schema.
 
@@ -608,7 +609,7 @@ Run 'mockd add --help' for more options`)
 	}
 
 	if service == "" {
-		return nil, fmt.Errorf(`--service is required for gRPC mocks
+		return nil, errors.New(`--service is required for gRPC mocks
 
 Usage: mockd add --type grpc --proto ./service.proto --service myapp.UserService --rpc-method GetUser [flags]
 
@@ -616,7 +617,7 @@ Run 'mockd add --help' for more options`)
 	}
 
 	if rpcMethod == "" {
-		return nil, fmt.Errorf(`--rpc-method is required for gRPC mocks
+		return nil, errors.New(`--rpc-method is required for gRPC mocks
 
 Usage: mockd add --type grpc --proto ./service.proto --service myapp.UserService --rpc-method GetUser [flags]
 
@@ -677,7 +678,7 @@ Run 'mockd add --help' for more options`)
 // buildMQTTMock creates an MQTT mock configuration.
 func buildMQTTMock(name, topic, payload string, qos, port int) (*config.MockConfiguration, error) {
 	if topic == "" {
-		return nil, fmt.Errorf(`--topic is required for MQTT mocks
+		return nil, errors.New(`--topic is required for MQTT mocks
 
 Usage: mockd add --type mqtt --topic sensors/temperature [flags]
 
@@ -720,7 +721,7 @@ Run 'mockd add --help' for more options`)
 // buildSOAPMock creates a SOAP mock configuration.
 func buildSOAPMock(name, path, operation, soapAction, response string) (*config.MockConfiguration, error) {
 	if operation == "" {
-		return nil, fmt.Errorf(`--operation is required for SOAP mocks
+		return nil, errors.New(`--operation is required for SOAP mocks
 
 Usage: mockd add --type soap --operation GetWeather [flags]
 
@@ -757,7 +758,7 @@ Run 'mockd add --help' for more options`)
 }
 
 // outputResult formats and prints the created or merged mock result.
-func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool) error {
+func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool) error { //nolint:gocyclo // CLI output handler for all mock types
 	if jsonOutput {
 		return outputJSONResult(result, mockType)
 	}
@@ -769,7 +770,7 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 		fmt.Printf("Merged into mock: %s\n", created.ID)
 		fmt.Printf("  Type: %s\n", created.Type)
 
-		switch mockType {
+		switch mockType { //nolint:exhaustive // only gRPC and MQTT have merge output
 		case mock.TypeGRPC:
 			if len(result.AddedServices) > 0 {
 				fmt.Printf("  Added:\n")
@@ -804,7 +805,7 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 	fmt.Printf("Created mock: %s\n", created.ID)
 	fmt.Printf("  Type: %s\n", created.Type)
 
-	switch mockType {
+	switch mockType { //nolint:exhaustive // OAuth not yet supported in CLI add output
 	case mock.TypeHTTP:
 		if created.HTTP != nil {
 			if created.HTTP.Matcher != nil {
@@ -864,7 +865,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 
 	// For merge results, include merge-specific information
 	if result.IsMerge() {
-		switch mockType {
+		switch mockType { //nolint:exhaustive // only gRPC and MQTT have merge JSON output
 		case mock.TypeGRPC:
 			return output.JSON(struct {
 				ID            string   `json:"id"`
@@ -897,7 +898,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 	}
 
 	// Standard create output
-	switch mockType {
+	switch mockType { //nolint:exhaustive // OAuth not yet supported in CLI JSON output
 	case mock.TypeHTTP:
 		createdMethod := ""
 		createdPath := ""

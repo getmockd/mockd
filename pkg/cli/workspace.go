@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -172,7 +173,7 @@ Examples:
 
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("workspace ID required")
+		return errors.New("workspace ID required")
 	}
 
 	workspaceID := fs.Arg(0)
@@ -184,7 +185,7 @@ Examples:
 
 	ctx := cfg.GetCurrentContext()
 	if ctx == nil {
-		return fmt.Errorf("no current context set; run 'mockd context add <name>' first")
+		return errors.New("no current context set; run 'mockd context add <name>' first")
 	}
 
 	// Determine admin URL
@@ -352,7 +353,7 @@ Examples:
 
 	if *name == "" {
 		fs.Usage()
-		return fmt.Errorf("workspace name required (--name)")
+		return errors.New("workspace name required (--name)")
 	}
 
 	targetURL := cliconfig.ResolveAdminURL(*adminURL)
@@ -430,7 +431,7 @@ Examples:
 
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("workspace ID required")
+		return errors.New("workspace ID required")
 	}
 
 	workspaceID := fs.Arg(0)
@@ -520,7 +521,7 @@ Examples:
 
 	ctx := cfg.GetCurrentContext()
 	if ctx == nil {
-		return fmt.Errorf("no current context set")
+		return errors.New("no current context set")
 	}
 
 	if ctx.Workspace == "" {
@@ -657,7 +658,7 @@ func (c *WorkspaceClient) GetWorkspace(id string) (*WorkspaceDTO, error) {
 		return nil, &APIError{
 			StatusCode: resp.StatusCode,
 			ErrorCode:  "not_found",
-			Message:    fmt.Sprintf("workspace not found: %s", id),
+			Message:    "workspace not found: " + id,
 		}
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -738,7 +739,7 @@ func (c *WorkspaceClient) DeleteWorkspace(id string) error {
 		return &APIError{
 			StatusCode: resp.StatusCode,
 			ErrorCode:  "not_found",
-			Message:    fmt.Sprintf("workspace not found: %s", id),
+			Message:    "workspace not found: " + id,
 		}
 	}
 	if resp.StatusCode != http.StatusNoContent {

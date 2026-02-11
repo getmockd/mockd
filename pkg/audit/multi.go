@@ -2,6 +2,7 @@ package audit
 
 import (
 	"errors"
+	"strings"
 	"sync"
 )
 
@@ -117,11 +118,13 @@ func (e *MultiError) Error() string {
 		return e.Errors[0].Error()
 	}
 
-	msg := "multiple errors:"
+	var b strings.Builder
+	b.WriteString("multiple errors:")
 	for _, err := range e.Errors {
-		msg += "\n  - " + err.Error()
+		b.WriteString("\n  - ")
+		b.WriteString(err.Error())
 	}
-	return msg
+	return b.String()
 }
 
 // Unwrap returns the underlying errors for use with errors.Is/As.

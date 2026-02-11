@@ -2,6 +2,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -30,7 +31,7 @@ func ParseMockdURI(uri string) (*MockdURI, error) {
 	// Remove scheme
 	path := strings.TrimPrefix(uri, MockdURIScheme)
 	if path == "" {
-		return nil, fmt.Errorf("empty URI path")
+		return nil, errors.New("empty URI path")
 	}
 
 	// Split by @
@@ -43,17 +44,17 @@ func ParseMockdURI(uri string) (*MockdURI, error) {
 	// Split by /
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid URI format: expected mockd://workspace/collection[@version]")
+		return nil, errors.New("invalid URI format: expected mockd://workspace/collection[@version]")
 	}
 
 	workspace := parts[0]
 	collection := parts[1]
 
 	if workspace == "" {
-		return nil, fmt.Errorf("workspace cannot be empty")
+		return nil, errors.New("workspace cannot be empty")
 	}
 	if collection == "" {
-		return nil, fmt.Errorf("collection cannot be empty")
+		return nil, errors.New("collection cannot be empty")
 	}
 
 	// Validate workspace (slug format)
@@ -65,7 +66,7 @@ func ParseMockdURI(uri string) (*MockdURI, error) {
 	collectionParts := strings.Split(collection, "/")
 	for _, part := range collectionParts {
 		if part == "" {
-			return nil, fmt.Errorf("invalid collection path: empty segment")
+			return nil, errors.New("invalid collection path: empty segment")
 		}
 	}
 

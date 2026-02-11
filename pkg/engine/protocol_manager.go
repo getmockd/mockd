@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -392,7 +393,7 @@ func (pm *ProtocolManager) GetGRPCServer(id string) *grpc.Server {
 // Returns the server instance or an error if startup fails.
 func (pm *ProtocolManager) StartGRPCServer(cfg *grpc.GRPCConfig) (*grpc.Server, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("gRPC config cannot be nil")
+		return nil, errors.New("gRPC config cannot be nil")
 	}
 
 	pm.mu.Lock()
@@ -420,7 +421,7 @@ func (pm *ProtocolManager) StartGRPCServer(cfg *grpc.GRPCConfig) (*grpc.Server, 
 	// Parse proto files
 	protoFiles := cfg.GetProtoFiles()
 	if len(protoFiles) == 0 {
-		return nil, fmt.Errorf("no proto files specified")
+		return nil, errors.New("no proto files specified")
 	}
 
 	schema, err := grpc.ParseProtoFiles(protoFiles, cfg.ImportPaths)
@@ -506,7 +507,7 @@ func (pm *ProtocolManager) MQTTPorts() []int {
 // Returns the broker instance or an error if the broker could not be started.
 func (pm *ProtocolManager) StartMQTTBroker(cfg *mqtt.MQTTConfig) (*mqtt.Broker, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("MQTT config cannot be nil")
+		return nil, errors.New("MQTT config cannot be nil")
 	}
 
 	pm.mu.Lock()

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -246,7 +247,7 @@ func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		fragment := url.Values{}
 		fragment.Set("access_token", accessToken)
 		fragment.Set("token_type", "Bearer")
-		fragment.Set("expires_in", fmt.Sprintf("%d", int(h.provider.tokenExpiry.Seconds())))
+		fragment.Set("expires_in", strconv.Itoa(int(h.provider.tokenExpiry.Seconds())))
 		if state != "" {
 			fragment.Set("state", state)
 		}

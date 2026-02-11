@@ -4,6 +4,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -71,7 +72,7 @@ func LoadMocksFromEntry(entry MockEntry, baseDir string) ([]MockEntry, error) {
 	case entry.IsGlob():
 		return loadMocksFromGlob(entry.Files, baseDir)
 	default:
-		return nil, fmt.Errorf("invalid mock entry: no id, file, or files specified")
+		return nil, errors.New("invalid mock entry: no id, file, or files specified")
 	}
 }
 

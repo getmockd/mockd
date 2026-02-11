@@ -148,7 +148,7 @@ func (a *API) handleEnableTunnel(w http.ResponseWriter, r *http.Request) {
 
 	// Build the public URL
 	if cfg.CustomDomain != "" {
-		cfg.PublicURL = fmt.Sprintf("https://%s", cfg.CustomDomain)
+		cfg.PublicURL = "https://" + cfg.CustomDomain
 	} else {
 		cfg.PublicURL = fmt.Sprintf("https://%s.tunnel.mockd.io", cfg.Subdomain)
 	}
@@ -259,7 +259,7 @@ func (a *API) handleUpdateTunnelConfig(w http.ResponseWriter, r *http.Request) {
 	if req.CustomDomain != nil {
 		existing.CustomDomain = *req.CustomDomain
 		if *req.CustomDomain != "" {
-			existing.PublicURL = fmt.Sprintf("https://%s", *req.CustomDomain)
+			existing.PublicURL = "https://" + *req.CustomDomain
 		}
 	}
 	if req.Auth != nil {

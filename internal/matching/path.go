@@ -1,9 +1,9 @@
 package matching
 
 import (
-	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -239,9 +239,9 @@ func MatchPathVariable(pattern, path string) map[string]string {
 			if i == len(patternParts)-1 {
 				// Join remaining path parts
 				remaining := strings.Join(pathParts[i:], "/")
-				result[fmt.Sprintf("%d", wildcardIndex)] = remaining
+				result[strconv.Itoa(wildcardIndex)] = remaining
 			} else {
-				result[fmt.Sprintf("%d", wildcardIndex)] = pathParts[i]
+				result[strconv.Itoa(wildcardIndex)] = pathParts[i]
 			}
 			wildcardIndex++
 			continue

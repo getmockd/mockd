@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -77,7 +78,7 @@ Examples:
 
 	if fs.NArg() < 1 {
 		fs.Usage()
-		return fmt.Errorf("wsdl file is required")
+		return errors.New("wsdl file is required")
 	}
 
 	wsdlFile := fs.Arg(0)
@@ -97,7 +98,7 @@ Examples:
 	// Validate basic WSDL structure
 	root := doc.Root()
 	if root == nil {
-		return fmt.Errorf("wsdl validation failed: empty document")
+		return errors.New("wsdl validation failed: empty document")
 	}
 
 	// Check for definitions element (WSDL 1.1) or description element (WSDL 2.0)
@@ -116,7 +117,7 @@ Examples:
 		}
 	}
 	if !wsdlNS {
-		return fmt.Errorf("wsdl validation failed: missing WSDL namespace declaration")
+		return errors.New("wsdl validation failed: missing WSDL namespace declaration")
 	}
 
 	// Count elements
@@ -250,7 +251,7 @@ Note: This command uses curl under the hood for HTTP requests.
 
 	if fs.NArg() < 2 {
 		fs.Usage()
-		return fmt.Errorf("endpoint and operation are required")
+		return errors.New("endpoint and operation are required")
 	}
 
 	endpoint := fs.Arg(0)

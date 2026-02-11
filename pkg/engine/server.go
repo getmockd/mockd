@@ -252,7 +252,7 @@ func (s *Server) Start() error {
 	defer s.mu.Unlock()
 
 	if s.running {
-		return fmt.Errorf("server is already running")
+		return errors.New("server is already running")
 	}
 
 	// Initialize middleware chain (handles validation, chaos, audit, and tracing)
@@ -743,7 +743,7 @@ func (s *Server) SetChaosInjector(injector *chaos.Injector) error {
 	defer s.mu.Unlock()
 
 	if s.middlewareChain == nil {
-		return fmt.Errorf("middleware chain not initialized")
+		return errors.New("middleware chain not initialized")
 	}
 	s.middlewareChain.SetChaosInjector(injector)
 	return nil

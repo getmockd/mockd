@@ -3,6 +3,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -219,7 +220,7 @@ func (cl *ConfigLoader) Export(name string) *config.MockCollection {
 // Import imports a MockCollection, optionally replacing existing mocks.
 func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) error {
 	if collection == nil {
-		return fmt.Errorf("collection cannot be nil")
+		return errors.New("collection cannot be nil")
 	}
 
 	if err := collection.Validate(); err != nil {

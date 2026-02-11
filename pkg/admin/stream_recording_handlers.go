@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -512,7 +513,7 @@ func (m *StreamRecordingManager) addStreamMockToEngine(ctx context.Context, prot
 // addWebSocketMock adds a WebSocket mock to the engine via HTTP client.
 func (m *StreamRecordingManager) addWebSocketMock(ctx context.Context, result *recording.StreamConvertResult, req ConvertRecordingRequest, client *engineclient.Client) (string, error) {
 	if req.EndpointPath == "" {
-		return "", fmt.Errorf("endpointPath is required for WebSocket mocks")
+		return "", errors.New("endpointPath is required for WebSocket mocks")
 	}
 
 	// Config is already a *mock.WSScenarioConfig from the converter
@@ -565,7 +566,7 @@ func (m *StreamRecordingManager) addSSEMock(ctx context.Context, result *recordi
 	// Create a mock with SSE configuration
 	mockName := req.MockName
 	if mockName == "" {
-		mockName = fmt.Sprintf("SSE recording %s", endpointPath)
+		mockName = "SSE recording " + endpointPath
 	}
 
 	sseEnabled := true

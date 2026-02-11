@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -81,7 +82,7 @@ Examples:
 
 	if fs.NArg() < 1 {
 		fs.Usage()
-		return fmt.Errorf("proto file is required")
+		return errors.New("proto file is required")
 	}
 
 	protoFile := fs.Arg(0)
@@ -115,11 +116,12 @@ Examples:
 
 			// Determine stream type
 			var streamInfo string
-			if method.IsBidirectional() {
+			switch {
+			case method.IsBidirectional():
 				streamInfo = " [bidirectional streaming]"
-			} else if method.IsClientStreaming() {
+			case method.IsClientStreaming():
 				streamInfo = " [client streaming]"
-			} else if method.IsServerStreaming() {
+			case method.IsServerStreaming():
 				streamInfo = " [server streaming]"
 			}
 
@@ -186,7 +188,7 @@ Note: This command uses grpcurl if available, otherwise provides instructions.
 
 	if fs.NArg() < 3 {
 		fs.Usage()
-		return fmt.Errorf("endpoint, service/method, and json-body are required")
+		return errors.New("endpoint, service/method, and json-body are required")
 	}
 
 	endpoint := fs.Arg(0)
@@ -284,22 +286,32 @@ func printGRPCCallInstructions(endpoint, serviceMethod, body, metadata string, p
 	fmt.Println("Or use this command directly:")
 	fmt.Println()
 
-	cmd := "grpcurl"
+	var b strings.Builder
+	b.WriteString("grpcurl")
 	if plaintext {
-		cmd += " -plaintext"
+		b.WriteString(" -plaintext")
 	}
 	if metadata != "" {
 		for _, m := range strings.Split(metadata, ",") {
 			parts := strings.SplitN(m, ":", 2)
 			if len(parts) == 2 {
-				cmd += fmt.Sprintf(" -H '%s: %s'", parts[0], parts[1])
+				b.WriteString(" -H '")
+				b.WriteString(parts[0])
+				b.WriteString(": ")
+				b.WriteString(parts[1])
+				b.WriteByte('\'')
 			}
 		}
 	}
-	cmd += fmt.Sprintf(" -d '%s'", body)
-	cmd += fmt.Sprintf(" %s %s", endpoint, serviceMethod)
+	b.WriteString(" -d '")
+	b.WriteString(body)
+	b.WriteByte('\'')
+	b.WriteByte(' ')
+	b.WriteString(endpoint)
+	b.WriteByte(' ')
+	b.WriteString(serviceMethod)
 
-	fmt.Println("  " + cmd)
+	fmt.Println("  " + b.String())
 
-	return fmt.Errorf("grpcurl not found")
+	return errors.New("grpcurl not found")
 }

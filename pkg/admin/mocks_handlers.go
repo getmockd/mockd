@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -97,7 +98,7 @@ func applyMockFilter(mocks []*mock.Mock, filter *MockFilter) []*mock.Mock {
 // getMockPort extracts the port from a mock if it uses a dedicated port (MQTT, gRPC).
 // Returns 0 if the mock type doesn't use a dedicated port.
 func getMockPort(m *mock.Mock) int {
-	switch m.Type {
+	switch m.Type { //nolint:exhaustive // only MQTT and gRPC use dedicated ports
 	case mock.TypeMQTT:
 		if m.MQTT != nil {
 			return m.MQTT.Port
@@ -269,7 +270,7 @@ type MergeResult struct {
 // Returns the merge result or an error if there's a service/method conflict.
 func mergeGRPCMock(target *mock.Mock, source *mock.Mock) (*MergeResult, error) {
 	if target.GRPC == nil || source.GRPC == nil {
-		return nil, fmt.Errorf("both mocks must have gRPC configuration")
+		return nil, errors.New("both mocks must have gRPC configuration")
 	}
 
 	result := &MergeResult{
@@ -368,7 +369,7 @@ func mergeGRPCMock(target *mock.Mock, source *mock.Mock) (*MergeResult, error) {
 // Returns the merge result or an error if there's a topic conflict.
 func mergeMQTTMock(target *mock.Mock, source *mock.Mock) (*MergeResult, error) {
 	if target.MQTT == nil || source.MQTT == nil {
-		return nil, fmt.Errorf("both mocks must have MQTT configuration")
+		return nil, errors.New("both mocks must have MQTT configuration")
 	}
 
 	result := &MergeResult{
@@ -1290,7 +1291,7 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 				if isPortError(err.Error()) {
 					// Port error from engine - this shouldn't happen if our validation is correct
 					// but handle it gracefully
-					engineErrors = append(engineErrors, fmt.Sprintf("%s: port may be in use by another process", m.ID))
+					engineErrors = append(engineErrors, m.ID+": port may be in use by another process")
 				}
 			}
 		}
@@ -1324,5 +1325,5 @@ func generateShortID() string {
 		// Fallback to timestamp-based ID
 		return fmt.Sprintf("%x", time.Now().UnixNano())
 	}
-	return fmt.Sprintf("%x", b)
+	return hex.EncodeToString(b)
 }

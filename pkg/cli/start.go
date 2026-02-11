@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -18,7 +19,7 @@ import (
 )
 
 // RunStart handles the start command.
-func RunStart(args []string) error {
+func RunStart(args []string) error { //nolint:gocyclo // CLI command handler with many configuration options
 	fs := flag.NewFlagSet("start", flag.ContinueOnError)
 
 	// Use shared server flags
@@ -129,7 +130,7 @@ Examples:
 
 	// Validate --watch requires --load
 	if *watch && *loadDir == "" {
-		return fmt.Errorf("--watch requires --load to be specified")
+		return errors.New("--watch requires --load to be specified")
 	}
 
 	// Check for port conflicts
@@ -270,7 +271,7 @@ Examples:
 		name := *engineName
 		if name == "" {
 			hostname, _ := os.Hostname()
-			name = fmt.Sprintf("engine-%s", hostname)
+			name = "engine-" + hostname
 		}
 
 		// Create workspace manager for serving remote workspaces

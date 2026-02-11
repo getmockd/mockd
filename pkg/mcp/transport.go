@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -37,7 +38,7 @@ type SSEWriter struct {
 func NewSSEWriter(w http.ResponseWriter) (*SSEWriter, error) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return nil, fmt.Errorf("response writer does not support flushing")
+		return nil, errors.New("response writer does not support flushing")
 	}
 
 	return &SSEWriter{
@@ -57,7 +58,7 @@ func (s *SSEWriter) WriteHeaders() {
 // WriteEvent writes an SSE event.
 func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 	if s.closed {
-		return fmt.Errorf("writer is closed")
+		return errors.New("writer is closed")
 	}
 
 	var sb strings.Builder
@@ -112,7 +113,7 @@ func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 // WriteComment writes an SSE comment (keepalive).
 func (s *SSEWriter) WriteComment(comment string) error {
 	if s.closed {
-		return fmt.Errorf("writer is closed")
+		return errors.New("writer is closed")
 	}
 
 	_, err := fmt.Fprintf(s.w, ": %s\n\n", comment)

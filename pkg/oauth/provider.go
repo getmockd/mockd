@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync"
@@ -49,7 +50,7 @@ type Provider struct {
 // NewProvider creates a new OAuth provider
 func NewProvider(config *OAuthConfig) (*Provider, error) {
 	if config == nil {
-		return nil, fmt.Errorf("config cannot be nil")
+		return nil, errors.New("config cannot be nil")
 	}
 
 	// Generate RSA key pair for JWT signing
@@ -207,7 +208,7 @@ func (p *Provider) ValidateToken(tokenString string) (map[string]interface{}, er
 	_, isRevoked := p.revokedTokens[tokenString]
 	p.revokedTokensMu.RUnlock()
 	if isRevoked {
-		return nil, fmt.Errorf("token has been revoked")
+		return nil, errors.New("token has been revoked")
 	}
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -223,12 +224,12 @@ func (p *Provider) ValidateToken(tokenString string) (map[string]interface{}, er
 	}
 
 	if !token.Valid {
-		return nil, fmt.Errorf("token is invalid")
+		return nil, errors.New("token is invalid")
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, fmt.Errorf("invalid claims format")
+		return nil, errors.New("invalid claims format")
 	}
 
 	return claims, nil
@@ -275,7 +276,7 @@ func (p *Provider) ExchangeAuthorizationCode(code, clientID, redirectURI string)
 
 	authCode, ok := p.authCodes[code]
 	if !ok {
-		return nil, fmt.Errorf("invalid authorization code")
+		return nil, errors.New("invalid authorization code")
 	}
 
 	// Delete the code (one-time use)
@@ -283,13 +284,15 @@ func (p *Provider) ExchangeAuthorizationCode(code, clientID, redirectURI string)
 
 	// Validate the code
 	if time.Now().After(authCode.ExpiresAt) {
-		return nil, fmt.Errorf("authorization code has expired")
+		return nil, errors.New("authorization code has expired")
 	}
+
 	if authCode.ClientID != clientID {
-		return nil, fmt.Errorf("client_id mismatch")
+		return nil, errors.New("client_id mismatch")
 	}
+
 	if authCode.RedirectURI != redirectURI {
-		return nil, fmt.Errorf("redirect_uri mismatch")
+		return nil, errors.New("redirect_uri mismatch")
 	}
 
 	return authCode, nil
@@ -336,16 +339,16 @@ func (p *Provider) ValidateRefreshToken(token, clientID string) (*RefreshTokenDa
 
 	data, ok := p.refreshTokens[token]
 	if !ok {
-		return nil, fmt.Errorf("invalid refresh token")
+		return nil, errors.New("invalid refresh token")
 	}
 
 	if time.Now().After(data.ExpiresAt) {
 		delete(p.refreshTokens, token)
-		return nil, fmt.Errorf("refresh token has expired")
+		return nil, errors.New("refresh token has expired")
 	}
 
 	if data.ClientID != clientID {
-		return nil, fmt.Errorf("client_id mismatch")
+		return nil, errors.New("client_id mismatch")
 	}
 
 	return data, nil
@@ -556,7 +559,7 @@ func generateRandomString(length int) (string, error) {
 // parseDuration parses a duration string that supports days (e.g., "7d")
 func parseDuration(s string) (time.Duration, error) {
 	if len(s) == 0 {
-		return 0, fmt.Errorf("empty duration string")
+		return 0, errors.New("empty duration string")
 	}
 
 	// Check for day suffix

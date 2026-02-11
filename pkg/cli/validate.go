@@ -70,7 +70,8 @@ Examples:
 	var err error
 	var configPath string
 
-	if len(configFiles) == 0 {
+	switch {
+	case len(configFiles) == 0:
 		// Discover config
 		configPath, err = config.DiscoverProjectConfig()
 		if err != nil {
@@ -85,14 +86,14 @@ Examples:
 		if *verbose {
 			fmt.Printf("Discovered config: %s\n", configPath)
 		}
-	} else if len(configFiles) == 1 {
+	case len(configFiles) == 1:
 		configPath = configFiles[0]
 		cfg, err = config.LoadProjectConfig(configPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", configPath, err)
 			return err
 		}
-	} else {
+	default:
 		// Multiple configs - load and merge
 		cfg, err = config.LoadAndMergeProjectConfigs(configFiles)
 		if err != nil {
@@ -111,18 +112,21 @@ Examples:
 	portResult := config.ValidatePortConflicts(cfg)
 
 	// Combine results
-	allErrors := append(result.Errors, portResult.Errors...)
+	allErrors := make([]config.SchemaValidationError, 0, len(result.Errors)+len(portResult.Errors))
+	allErrors = append(allErrors, result.Errors...)
+	allErrors = append(allErrors, portResult.Errors...)
 	hasErrors := len(allErrors) > 0
 
 	// Print results
-	if *verbose {
+	switch {
+	case *verbose:
 		printVerboseValidation(cfg, allErrors)
-	} else if hasErrors {
+	case hasErrors:
 		fmt.Println("Validation failed:")
 		for _, e := range allErrors {
 			fmt.Printf("  - %s\n", e.Error())
 		}
-	} else {
+	default:
 		fmt.Println("Configuration is valid.")
 	}
 
@@ -217,11 +221,12 @@ func printConfigSummary(cfg *config.ProjectConfig) {
 		fileRefCount := 0
 		globCount := 0
 		for _, m := range cfg.Mocks {
-			if m.IsInline() {
+			switch {
+			case m.IsInline():
 				inlineCount++
-			} else if m.IsFileRef() {
+			case m.IsFileRef():
 				fileRefCount++
-			} else if m.IsGlob() {
+			case m.IsGlob():
 				globCount++
 			}
 		}

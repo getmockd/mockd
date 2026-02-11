@@ -2,6 +2,7 @@ package template
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -49,14 +50,14 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 	case "uuid.short":
 		return funcUUIDShort()
 	case "timestamp":
-		return fmt.Sprintf("%d", time.Now().Unix())
+		return strconv.FormatInt(time.Now().Unix(), 10)
 	case "random":
 		// Generate a random 8-character hex string
 		b := make([]byte, 4)
 		if _, err := rand.Read(b); err != nil {
 			return ""
 		}
-		return fmt.Sprintf("%x", b)
+		return hex.EncodeToString(b)
 	case "random.float":
 		return funcRandomFloat()
 	}

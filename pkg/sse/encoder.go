@@ -3,6 +3,7 @@ package sse
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -53,7 +54,7 @@ func (e *Encoder) FormatEvent(event *SSEEventDef) (string, error) {
 	// Write retry if present
 	if event.Retry > 0 {
 		sb.WriteString(fieldRetry)
-		sb.WriteString(fmt.Sprintf("%d", event.Retry))
+		sb.WriteString(strconv.Itoa(event.Retry))
 		sb.WriteByte('\n')
 	}
 
@@ -162,7 +163,7 @@ func (e *Encoder) FormatEventFull(eventType, data, id string, retry int) string 
 
 	if retry > 0 {
 		sb.WriteString(fieldRetry)
-		sb.WriteString(fmt.Sprintf("%d", retry))
+		sb.WriteString(strconv.Itoa(retry))
 		sb.WriteByte('\n')
 	}
 

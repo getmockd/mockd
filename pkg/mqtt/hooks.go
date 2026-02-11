@@ -38,6 +38,7 @@ func (h *AuthHook) ID() string {
 
 // Provides indicates which hook methods this hook provides
 func (h *AuthHook) Provides(b byte) bool {
+	//nolint:gocritic // argument order is intentional
 	return bytes.Contains([]byte{
 		mqtt.OnConnectAuthenticate,
 		mqtt.OnACLCheck,
@@ -165,6 +166,7 @@ func (h *MessageHook) ID() string {
 
 // Provides indicates which hook methods this hook provides
 func (h *MessageHook) Provides(b byte) bool {
+	//nolint:gocritic // argument order is intentional
 	return bytes.Contains([]byte{
 		mqtt.OnPublish,
 		mqtt.OnSubscribed,

@@ -3,6 +3,7 @@ package soap
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -171,7 +172,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if opConfig == nil {
 		fault := &SOAPFault{
 			Code:    "soap:Client",
-			Message: fmt.Sprintf("Unknown operation: %s", opName),
+			Message: "Unknown operation: " + opName,
 		}
 		h.writeFaultWithRecording(w, fault, version, startTime, r.URL.Path, opName, soapAction, string(body), requestHeaders, r)
 		return
@@ -231,7 +232,7 @@ func (h *Handler) parseEnvelope(body []byte) (*etree.Document, error) {
 	// Validate it's a SOAP envelope
 	root := doc.Root()
 	if root == nil {
-		return nil, fmt.Errorf("empty document")
+		return nil, errors.New("empty document")
 	}
 
 	if root.Tag != "Envelope" {
@@ -322,13 +323,13 @@ func (h *Handler) extractOperation(doc *etree.Document, soapAction string) (stri
 	}
 
 	if body == nil {
-		return "", fmt.Errorf("SOAP Body not found")
+		return "", errors.New("SOAP Body not found")
 	}
 
 	// Get first child of Body (the operation element)
 	children := body.ChildElements()
 	if len(children) == 0 {
-		return "", fmt.Errorf("no operation element found in Body")
+		return "", errors.New("no operation element found in Body")
 	}
 
 	child := children[0]

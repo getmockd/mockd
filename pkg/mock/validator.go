@@ -166,7 +166,7 @@ func (m *HTTPMatcher) Validate() error {
 		if !validHTTPMethods[method] {
 			return &ValidationError{
 				Field:   "matcher.method",
-				Message: fmt.Sprintf("invalid HTTP method: %s", m.Method),
+				Message: "invalid HTTP method: " + m.Method,
 			}
 		}
 	}
@@ -189,7 +189,7 @@ func (m *HTTPMatcher) Validate() error {
 		if _, err := regexp.Compile(m.PathPattern); err != nil {
 			return &ValidationError{
 				Field:   "matcher.pathPattern",
-				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+				Message: "invalid regex pattern: " + err.Error(),
 			}
 		}
 	}
@@ -199,7 +199,7 @@ func (m *HTTPMatcher) Validate() error {
 		if _, err := regexp.Compile(m.BodyPattern); err != nil {
 			return &ValidationError{
 				Field:   "matcher.bodyPattern",
-				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+				Message: "invalid regex pattern: " + err.Error(),
 			}
 		}
 	}
@@ -209,7 +209,7 @@ func (m *HTTPMatcher) Validate() error {
 		if !headerNameRegex.MatchString(name) {
 			return &ValidationError{
 				Field:   "matcher.headers",
-				Message: fmt.Sprintf("invalid header name: %s", name),
+				Message: "invalid header name: " + name,
 			}
 		}
 	}
@@ -257,7 +257,7 @@ func (m *MTLSMatch) Validate() error {
 		if _, err := regexp.Compile(m.CNPattern); err != nil {
 			return &ValidationError{
 				Field:   "matcher.mtls.cnPattern",
-				Message: fmt.Sprintf("invalid regex pattern: %s", err.Error()),
+				Message: "invalid regex pattern: " + err.Error(),
 			}
 		}
 	}
@@ -340,7 +340,7 @@ func (r *HTTPResponse) Validate() error {
 		if !headerNameRegex.MatchString(name) {
 			return &ValidationError{
 				Field:   "response.headers",
-				Message: fmt.Sprintf("invalid header name: %s", name),
+				Message: "invalid header name: " + name,
 			}
 		}
 	}
@@ -577,7 +577,7 @@ func (m *Mock) validateSOAP() error {
 	for name, op := range m.SOAP.Operations {
 		if op.Response == "" && op.Fault == nil {
 			return &ValidationError{
-				Field:   fmt.Sprintf("soap.operations.%s", name),
+				Field:   "soap.operations." + name,
 				Message: "operation must have either response or fault",
 			}
 		}

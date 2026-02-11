@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -108,7 +109,7 @@ Examples:
 
 	if fs.NArg() < 1 {
 		fs.Usage()
-		return fmt.Errorf("url is required")
+		return errors.New("url is required")
 	}
 
 	url := fs.Arg(0)
@@ -322,7 +323,7 @@ Examples:
 
 	if fs.NArg() < 2 {
 		fs.Usage()
-		return fmt.Errorf("url and message are required")
+		return errors.New("url and message are required")
 	}
 
 	url := fs.Arg(0)
@@ -443,7 +444,7 @@ Examples:
 
 	if fs.NArg() < 1 {
 		fs.Usage()
-		return fmt.Errorf("url is required")
+		return errors.New("url is required")
 	}
 
 	url := fs.Arg(0)

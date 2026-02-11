@@ -484,17 +484,18 @@ func (m *SOAPRecordingManager) handleConvertSOAPRecordings(w http.ResponseWriter
 
 	// Get recordings to convert
 	var recordings []*recording.SOAPRecording
-	if len(req.RecordingIDs) > 0 {
+	switch {
+	case len(req.RecordingIDs) > 0:
 		for _, id := range req.RecordingIDs {
 			if rec := m.store.Get(id); rec != nil {
 				recordings = append(recordings, rec)
 			}
 		}
-	} else if req.Endpoint != "" {
+	case req.Endpoint != "":
 		recordings = m.store.ListByEndpoint(req.Endpoint)
-	} else if req.Operation != "" {
+	case req.Operation != "":
 		recordings = m.store.ListByOperation(req.Operation)
-	} else {
+	default:
 		recordings, _ = m.store.List(recording.SOAPRecordingFilter{})
 	}
 

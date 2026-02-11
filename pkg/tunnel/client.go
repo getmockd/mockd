@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -56,7 +57,7 @@ func NewClient(cfg *Config, handler RequestHandler) (*Client, error) {
 		return nil, err
 	}
 	if handler == nil {
-		return nil, fmt.Errorf("handler is required")
+		return nil, errors.New("handler is required")
 	}
 
 	return &Client{
@@ -70,7 +71,7 @@ func NewClient(cfg *Config, handler RequestHandler) (*Client, error) {
 // Connect establishes a connection to the relay server.
 func (c *Client) Connect(ctx context.Context) error {
 	if c.connected.Load() {
-		return fmt.Errorf("already connected")
+		return errors.New("already connected")
 	}
 
 	// Build headers
@@ -244,7 +245,7 @@ func (c *Client) readPump(ctx context.Context) {
 	defer func() {
 		c.connected.Store(false)
 		if c.cfg.OnDisconnect != nil && c.disconnectCalled.CompareAndSwap(false, true) {
-			c.cfg.OnDisconnect(fmt.Errorf("connection closed"))
+			c.cfg.OnDisconnect(errors.New("connection closed"))
 		}
 
 		// Auto-reconnect if enabled
@@ -370,7 +371,7 @@ func (c *Client) sendMessage(ctx context.Context, msg *TunnelMessage) error {
 	c.mu.RUnlock()
 
 	if conn == nil {
-		return fmt.Errorf("not connected")
+		return errors.New("not connected")
 	}
 
 	data, err := msg.Encode()
@@ -410,7 +411,7 @@ func (c *Client) reconnectLoop(ctx context.Context) {
 
 		if err := c.Connect(ctx); err != nil {
 			// Exponential backoff
-			delay = delay * 2
+			delay *= 2
 			if delay > c.cfg.MaxReconnectDelay {
 				delay = c.cfg.MaxReconnectDelay
 			}

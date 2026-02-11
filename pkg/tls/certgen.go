@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -174,7 +175,7 @@ func EncodeKeyToPEM(key *ecdsa.PrivateKey) ([]byte, error) {
 func DecodeCertFromPEM(certPEM []byte) (*x509.Certificate, error) {
 	block, _ := pem.Decode(certPEM)
 	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block")
+		return nil, errors.New("failed to decode PEM block")
 	}
 	if block.Type != "CERTIFICATE" {
 		return nil, fmt.Errorf("unexpected PEM block type: %s", block.Type)
@@ -192,7 +193,7 @@ func DecodeCertFromPEM(certPEM []byte) (*x509.Certificate, error) {
 func DecodeKeyFromPEM(keyPEM []byte) (*ecdsa.PrivateKey, error) {
 	block, _ := pem.Decode(keyPEM)
 	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block")
+		return nil, errors.New("failed to decode PEM block")
 	}
 	if block.Type != "EC PRIVATE KEY" {
 		return nil, fmt.Errorf("unexpected PEM block type: %s", block.Type)

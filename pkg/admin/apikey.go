@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -163,7 +164,7 @@ func (a *apiKeyAuth) loadKeyFromFile(path string) (string, error) {
 	}
 	key := strings.TrimSpace(string(data))
 	if key == "" {
-		return "", fmt.Errorf("empty key file")
+		return "", errors.New("empty key file")
 	}
 	return key, nil
 }

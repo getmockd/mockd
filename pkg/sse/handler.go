@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -152,25 +153,30 @@ func formatMapData(m map[string]interface{}) string {
 	if len(m) == 0 {
 		return "{}"
 	}
-	result := "{"
+	var b strings.Builder
+	b.WriteByte('{')
 	first := true
 	for k, v := range m {
 		if !first {
-			result += ","
+			b.WriteByte(',')
 		}
 		first = false
-		result += "\"" + k + "\":"
+		b.WriteByte('"')
+		b.WriteString(k)
+		b.WriteString("\":")
 		switch val := v.(type) {
 		case string:
-			result += "\"" + val + "\""
+			b.WriteByte('"')
+			b.WriteString(val)
+			b.WriteByte('"')
 		case map[string]interface{}:
-			result += formatMapData(val)
+			b.WriteString(formatMapData(val))
 		default:
-			result += "<value>"
+			b.WriteString("<value>")
 		}
 	}
-	result += "}"
-	return result
+	b.WriteByte('}')
+	return b.String()
 }
 
 // ServeHTTP handles an SSE request for a given mock configuration.

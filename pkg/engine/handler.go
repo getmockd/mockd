@@ -107,7 +107,7 @@ func (h *Handler) HasMatch(r *http.Request) bool {
 // ServeHTTP implements the http.Handler interface.
 // Note: CORS is handled by the CORSMiddleware wrapper, not directly in this handler.
 // This ensures CORS configuration is respected rather than using hardcoded wildcards.
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:gocyclo // request routing logic
 	startTime := time.Now()
 
 	// Check for health/ready endpoints with /__mockd/ prefix first (always takes priority)

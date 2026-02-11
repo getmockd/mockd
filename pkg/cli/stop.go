@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -81,7 +82,7 @@ Note: Stopping individual components (admin/engine) is not yet supported.
 	if !info.IsRunning() {
 		// Stale PID file - clean it up
 		_ = RemovePIDFile(pidPath)
-		return fmt.Errorf("mockd is not running (stale PID file removed)")
+		return errors.New("mockd is not running (stale PID file removed)")
 	}
 
 	// Find the process
@@ -132,7 +133,7 @@ Note: Stopping individual components (admin/engine) is not yet supported.
 	fmt.Println("timeout")
 	fmt.Printf("\nProcess did not stop within %d seconds.\n", *timeout)
 	fmt.Println("Try: mockd stop --force")
-	return fmt.Errorf("timeout waiting for process to stop")
+	return errors.New("timeout waiting for process to stop")
 }
 
 // processIsRunning is defined in stop_unix.go and stop_windows.go

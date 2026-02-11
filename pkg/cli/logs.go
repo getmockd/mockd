@@ -661,11 +661,12 @@ func streamRequestLogs(adminURL string, jsonOutput, verbose bool) error {
 			}
 
 			// Output based on format
-			if jsonOutput {
+			switch {
+			case jsonOutput:
 				fmt.Println(data)
-			} else if verbose {
+			case verbose:
 				printVerboseEntry(&entry)
-			} else {
+			default:
 				printTableEntry(&entry)
 			}
 		}

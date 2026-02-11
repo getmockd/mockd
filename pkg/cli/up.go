@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -116,7 +117,7 @@ Examples:
 		for _, e := range result.Errors {
 			fmt.Fprintf(os.Stderr, "  - %s\n", e.Error())
 		}
-		return fmt.Errorf("invalid configuration")
+		return errors.New("invalid configuration")
 	}
 
 	// Check port conflicts in config
@@ -126,7 +127,7 @@ Examples:
 		for _, e := range portResult.Errors {
 			fmt.Fprintf(os.Stderr, "  - %s\n", e.Error())
 		}
-		return fmt.Errorf("port conflicts")
+		return errors.New("port conflicts")
 	}
 
 	// Check actual port availability
@@ -449,7 +450,7 @@ func (uctx *upContext) waitForAdminHealth(client AdminClient, timeout time.Durat
 			// Retry
 		}
 	}
-	return fmt.Errorf("timeout waiting for admin health")
+	return errors.New("timeout waiting for admin health")
 }
 
 // createWorkspaces creates workspaces via HTTP and assigns them to engines.
@@ -838,7 +839,7 @@ func (uctx *upContext) waitForHealth(client *engineclient.Client, timeout time.D
 		}
 	}
 
-	return fmt.Errorf("timeout waiting for engine health")
+	return errors.New("timeout waiting for engine health")
 }
 
 // loadAndApplyMocks loads mocks from the config (including file references and globs),
@@ -897,7 +898,7 @@ func (uctx *upContext) loadAndApplyMocks() error {
 	// For now, send all mocks to the first available admin
 	adminClient := uctx.findFirstAdminClient()
 	if adminClient == nil {
-		return fmt.Errorf("no admin client available to push mocks")
+		return errors.New("no admin client available to push mocks")
 	}
 
 	// Push mocks via HTTP: POST /mocks/bulk
@@ -932,7 +933,7 @@ func (uctx *upContext) loadAndApplyStatefulResources() error {
 
 	adminClient := uctx.findFirstAdminClient()
 	if adminClient == nil {
-		return fmt.Errorf("no admin client available to push stateful resources")
+		return errors.New("no admin client available to push stateful resources")
 	}
 
 	// Build a collection with only stateful resources.

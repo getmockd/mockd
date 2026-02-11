@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -101,7 +102,7 @@ Examples:
 
 	// Validate that at least one chaos option is specified
 	if *latency == "" && *errorRate == 0 {
-		return fmt.Errorf("at least --latency or --error-rate must be specified")
+		return errors.New("at least --latency or --error-rate must be specified")
 	}
 
 	// Build chaos config

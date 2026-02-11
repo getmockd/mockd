@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -123,7 +124,7 @@ Environment Variables:
 
 	// Validate token
 	if *token == "" {
-		return fmt.Errorf("authentication token required (use --token or set MOCKD_TOKEN)")
+		return errors.New("authentication token required (use --token or set MOCKD_TOKEN)")
 	}
 
 	// Check for port conflicts
@@ -175,17 +176,18 @@ Environment Variables:
 		WithCustomDomain(*domain)
 
 	// Configure request authentication if specified
-	if *authToken != "" {
+	switch {
+	case *authToken != "":
 		tunnelCfg.WithTokenAuth(*authToken)
 		fmt.Println("Request authentication: token required")
-	} else if *authBasic != "" {
+	case *authBasic != "":
 		parts := strings.SplitN(*authBasic, ":", 2)
 		if len(parts) != 2 {
-			return fmt.Errorf("invalid --auth-basic format, expected user:pass")
+			return errors.New("invalid --auth-basic format, expected user:pass")
 		}
 		tunnelCfg.WithBasicAuth(parts[0], parts[1])
 		fmt.Println("Request authentication: Basic Auth required")
-	} else if *allowIPs != "" {
+	case *allowIPs != "":
 		ips := strings.Split(*allowIPs, ",")
 		for i := range ips {
 			ips[i] = strings.TrimSpace(ips[i])
@@ -384,15 +386,16 @@ Examples:
 	}
 
 	// Build auth config
-	if *authToken != "" {
+	switch {
+	case *authToken != "":
 		reqBody["auth"] = map[string]any{"type": "token", "token": *authToken}
-	} else if *authBasic != "" {
+	case *authBasic != "":
 		parts := strings.SplitN(*authBasic, ":", 2)
 		if len(parts) != 2 {
-			return fmt.Errorf("invalid --auth-basic format, expected user:pass")
+			return errors.New("invalid --auth-basic format, expected user:pass")
 		}
 		reqBody["auth"] = map[string]any{"type": "basic", "username": parts[0], "password": parts[1]}
-	} else if *allowIPs != "" {
+	case *allowIPs != "":
 		reqBody["auth"] = map[string]any{"type": "ip", "allowedIPs": splitCSV(*allowIPs)}
 	}
 
@@ -860,7 +863,7 @@ func resolveEngineID(client *adminClient, engineID string) (string, error) {
 
 	switch totalEngines {
 	case 0:
-		return "", fmt.Errorf("no engines registered. Start an engine first: mockd up")
+		return "", errors.New("no engines registered. Start an engine first: mockd up")
 	case 1:
 		if len(result.Engines) > 0 {
 			return result.Engines[0].ID, nil

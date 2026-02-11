@@ -3,6 +3,7 @@ package portability
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -177,7 +178,7 @@ type NativeV1WebSocket struct {
 // NativeV1ToMockCollection converts NativeV1 to a MockCollection.
 func NativeV1ToMockCollection(native *NativeV1) (*config.MockCollection, error) {
 	if native == nil {
-		return nil, fmt.Errorf("native config cannot be nil")
+		return nil, errors.New("native config cannot be nil")
 	}
 
 	collection := &config.MockCollection{
@@ -354,7 +355,7 @@ func convertEndpointToMock(ep *NativeV1Endpoint, defaultDelay int, now time.Time
 // MockCollectionToNativeV1 converts a MockCollection to NativeV1 format.
 func MockCollectionToNativeV1(collection *config.MockCollection) (*NativeV1, error) {
 	if collection == nil {
-		return nil, fmt.Errorf("collection cannot be nil")
+		return nil, errors.New("collection cannot be nil")
 	}
 
 	native := &NativeV1{

@@ -2,6 +2,7 @@ package chaos
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -29,7 +30,7 @@ type compiledRule struct {
 // NewInjector creates a chaos injector from configuration
 func NewInjector(config *ChaosConfig) (*Injector, error) {
 	if config == nil {
-		return nil, fmt.Errorf("chaos config is required")
+		return nil, errors.New("chaos config is required")
 	}
 
 	i := &Injector{
@@ -365,7 +366,7 @@ func (i *Injector) GetConfig() *ChaosConfig {
 // UpdateConfig updates the chaos configuration
 func (i *Injector) UpdateConfig(config *ChaosConfig) error {
 	if config == nil {
-		return fmt.Errorf("chaos config is required")
+		return errors.New("chaos config is required")
 	}
 
 	// Compile new rules

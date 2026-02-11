@@ -152,12 +152,12 @@ func (r *StreamRecording) SoftDelete() {
 
 // updateStats recalculates statistics based on frames/events.
 func (r *StreamRecording) updateStats() {
-	switch r.Protocol {
+	switch r.Protocol { //nolint:exhaustive // only stream protocols have stats to update
 	case ProtocolWebSocket:
 		if r.WebSocket != nil {
 			r.Stats.FrameCount = len(r.WebSocket.Frames)
 			for _, f := range r.WebSocket.Frames {
-				switch f.MessageType {
+				switch f.MessageType { //nolint:exhaustive // close frames don't need stat tracking
 				case MessageTypeText:
 					r.Stats.TextFrames++
 				case MessageTypeBinary:

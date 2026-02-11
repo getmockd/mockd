@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"net/url"
@@ -180,7 +181,7 @@ Examples:
 
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("context name required")
+		return errors.New("context name required")
 	}
 
 	name := fs.Arg(0)
@@ -265,20 +266,20 @@ Examples:
 
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("context name required")
+		return errors.New("context name required")
 	}
 
 	name := fs.Arg(0)
 
 	// Validate name
 	if name == "" {
-		return fmt.Errorf("context name cannot be empty")
+		return errors.New("context name cannot be empty")
 	}
 	if len(name) > 64 {
-		return fmt.Errorf("context name cannot exceed 64 characters")
+		return errors.New("context name cannot exceed 64 characters")
 	}
 	if strings.ContainsAny(name, " \t\n/\\") {
-		return fmt.Errorf("context name cannot contain whitespace or path separators")
+		return errors.New("context name cannot contain whitespace or path separators")
 	}
 
 	// If admin URL not provided, prompt interactively
@@ -292,7 +293,7 @@ Examples:
 		}
 		*adminURL = strings.TrimSpace(input)
 		if *adminURL == "" {
-			return fmt.Errorf("admin URL is required")
+			return errors.New("admin URL is required")
 		}
 	}
 
@@ -302,14 +303,14 @@ Examples:
 		return fmt.Errorf("invalid admin URL: %w", err)
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return fmt.Errorf("invalid admin URL: must start with http:// or https://")
+		return errors.New("invalid admin URL: must start with http:// or https://")
 	}
 	if parsedURL.Host == "" {
-		return fmt.Errorf("invalid admin URL: missing host")
+		return errors.New("invalid admin URL: missing host")
 	}
 	// Reject URLs with embedded credentials (user:pass@host)
 	if parsedURL.User != nil {
-		return fmt.Errorf("invalid admin URL: embedded credentials (user:pass@host) are not allowed; use --token for authentication")
+		return errors.New("invalid admin URL: embedded credentials (user:pass@host) are not allowed; use --token for authentication")
 	}
 
 	cfg, err := cliconfig.LoadContextConfig()
@@ -470,7 +471,7 @@ Examples:
 
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("context name required")
+		return errors.New("context name required")
 	}
 
 	name := fs.Arg(0)

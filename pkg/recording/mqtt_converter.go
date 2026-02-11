@@ -81,31 +81,29 @@ func ToMQTTConfig(recordings []*MQTTRecording, opts MQTTConvertOptions) *mqtt.MQ
 			if topicCfg != nil {
 				topics = append(topics, *topicCfg)
 			}
-		} else {
+		} else if len(recs) > 0 {
 			// Use all recordings - combine messages into single topic config
-			if len(recs) > 0 {
-				cfg := &mqtt.TopicConfig{
-					Topic:    topic,
-					Messages: make([]mqtt.MessageConfig, 0, len(recs)),
-				}
-
-				// Use QoS and Retain from first recording
-				if opts.IncludeQoS {
-					cfg.QoS = recs[0].QoS
-				}
-				if opts.IncludeRetain {
-					cfg.Retain = recs[0].Retain
-				}
-
-				// Add all messages
-				for _, rec := range recs {
-					cfg.Messages = append(cfg.Messages, mqtt.MessageConfig{
-						Payload: rec.PayloadString(),
-					})
-				}
-
-				topics = append(topics, *cfg)
+			cfg := &mqtt.TopicConfig{
+				Topic:    topic,
+				Messages: make([]mqtt.MessageConfig, 0, len(recs)),
 			}
+
+			// Use QoS and Retain from first recording
+			if opts.IncludeQoS {
+				cfg.QoS = recs[0].QoS
+			}
+			if opts.IncludeRetain {
+				cfg.Retain = recs[0].Retain
+			}
+
+			// Add all messages
+			for _, rec := range recs {
+				cfg.Messages = append(cfg.Messages, mqtt.MessageConfig{
+					Payload: rec.PayloadString(),
+				})
+			}
+
+			topics = append(topics, *cfg)
 		}
 	}
 

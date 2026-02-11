@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 )
@@ -178,7 +179,7 @@ func (a *API) evaluateVerification(req VerifyRequest, actualCount int) VerifyRes
 	}
 
 	if !response.Passed && len(failures) > 0 {
-		response.Message = fmt.Sprintf("Verification failed: %s", joinStrings(failures, "; "))
+		response.Message = "Verification failed: " + joinStrings(failures, "; ")
 	} else if response.Passed {
 		response.Message = fmt.Sprintf("Mock was called %d time(s), matching expectations", actualCount)
 	}
@@ -341,9 +342,11 @@ func joinStrings(strs []string, sep string) string {
 	if len(strs) == 1 {
 		return strs[0]
 	}
-	result := strs[0]
+	var b strings.Builder
+	b.WriteString(strs[0])
 	for i := 1; i < len(strs); i++ {
-		result += sep + strs[i]
+		b.WriteString(sep)
+		b.WriteString(strs[i])
 	}
-	return result
+	return b.String()
 }

@@ -358,6 +358,8 @@ func (a *v1AlphaStreamAdapter) RecvMsg(m interface{}) error {
 }
 
 // v1AlphaToV1Request converts a v1alpha request to v1.
+//
+//nolint:dupl // structural similarity with v1ToV1AlphaRequest is intentional
 func v1AlphaToV1Request(v1alpha *v1alphareflectionpb.ServerReflectionRequest) *v1reflectionpb.ServerReflectionRequest {
 	v1req := &v1reflectionpb.ServerReflectionRequest{
 		Host: v1alpha.Host,
@@ -424,6 +426,8 @@ func v1ToV1AlphaResponse(v1resp *v1reflectionpb.ServerReflectionResponse) *v1alp
 }
 
 // v1ToV1AlphaRequest converts a v1 request to v1alpha (for OriginalRequest field).
+//
+//nolint:dupl // structural similarity with v1AlphaToV1Request is intentional
 func v1ToV1AlphaRequest(v1req *v1reflectionpb.ServerReflectionRequest) *v1alphareflectionpb.ServerReflectionRequest {
 	v1alpha := &v1alphareflectionpb.ServerReflectionRequest{
 		Host: v1req.Host,

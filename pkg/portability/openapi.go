@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -576,9 +577,9 @@ func (e *OpenAPIExporter) mockToOperation(m *config.MockConfiguration) *Operatio
 
 	// Add response
 	if m.HTTP != nil && m.HTTP.Response != nil {
-		statusStr := fmt.Sprintf("%d", m.HTTP.Response.StatusCode)
+		statusStr := strconv.Itoa(m.HTTP.Response.StatusCode)
 		response := Response{
-			Description: fmt.Sprintf("%d response", m.HTTP.Response.StatusCode),
+			Description: statusStr + " response",
 		}
 
 		if m.HTTP.Response.Body != "" {

@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,7 +13,7 @@ import (
 // SaveCertToFiles saves a certificate and private key to PEM files.
 func SaveCertToFiles(cert *GeneratedCertificate, certPath, keyPath string) error {
 	if cert == nil {
-		return fmt.Errorf("certificate cannot be nil")
+		return errors.New("certificate cannot be nil")
 	}
 
 	// Ensure directories exist
@@ -148,12 +149,12 @@ func VerifyKeyPair(cert *x509.Certificate, key *ecdsa.PrivateKey) error {
 	// Get public key from certificate
 	certPubKey, ok := cert.PublicKey.(*ecdsa.PublicKey)
 	if !ok {
-		return fmt.Errorf("certificate public key is not ECDSA")
+		return errors.New("certificate public key is not ECDSA")
 	}
 
 	// Compare public keys
 	if certPubKey.X.Cmp(key.X) != 0 || certPubKey.Y.Cmp(key.Y) != 0 {
-		return fmt.Errorf("private key does not match certificate public key")
+		return errors.New("private key does not match certificate public key")
 	}
 
 	return nil

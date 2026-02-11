@@ -259,7 +259,7 @@ Stop the running proxy server.
 	}
 
 	if !proxyServer.running {
-		return fmt.Errorf("proxy is not running")
+		return errors.New("proxy is not running")
 	}
 
 	if proxyServer.server != nil {
@@ -329,7 +329,7 @@ Examples:
 	}
 
 	if !proxyServer.running {
-		return fmt.Errorf("proxy is not running")
+		return errors.New("proxy is not running")
 	}
 
 	// Get mode
@@ -423,15 +423,16 @@ Examples:
 
 	// Use running proxy's CA if available
 	var ca *proxy.CAManager
-	if proxyServer.ca != nil {
+	switch {
+	case proxyServer.ca != nil:
 		ca = proxyServer.ca
-	} else if *caPath != "" {
+	case *caPath != "":
 		ca = proxy.NewCAManager(*caPath+"/ca.crt", *caPath+"/ca.key")
 		if err := ca.Load(); err != nil {
 			return fmt.Errorf("failed to load CA: %w", err)
 		}
-	} else {
-		return fmt.Errorf("no CA available (start proxy with --ca-path or specify --ca-path)")
+	default:
+		return errors.New("no CA available (start proxy with --ca-path or specify --ca-path)")
 	}
 
 	certPEM, err := ca.CACertPEM()
@@ -475,7 +476,7 @@ Examples:
 	}
 
 	if *caPath == "" {
-		return fmt.Errorf("--ca-path is required")
+		return errors.New("--ca-path is required")
 	}
 
 	ca := proxy.NewCAManager(*caPath+"/ca.crt", *caPath+"/ca.key")

@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -146,7 +147,7 @@ func (a *API) getAllMocksForExport(ctx context.Context) ([]*config.MockConfigura
 	if a.dataStore != nil {
 		return a.dataStore.Mocks().List(ctx, nil)
 	}
-	return nil, fmt.Errorf("no mock source available")
+	return nil, errors.New("no mock source available")
 }
 
 // Insomnia v4 export types
@@ -573,7 +574,7 @@ func buildInsomniaV5Export(mocks []*config.MockConfiguration, statefulResources 
 	soapMocks := make([]*config.MockConfiguration, 0)
 
 	for _, m := range mocks {
-		switch m.Type {
+		switch m.Type { //nolint:exhaustive // only exportable mock types need handling
 		case mock.TypeHTTP:
 			httpMocks = append(httpMocks, m)
 		case mock.TypeGRPC:
@@ -746,11 +747,12 @@ func writeHTTPRequestV5(sb *strings.Builder, m *config.MockConfiguration, now in
 	if method == "POST" || method == "PUT" || method == "PATCH" {
 		// Try to use the body matcher as a sample, otherwise use a generic JSON body
 		sampleBody := `{"example": "data"}`
-		if m.HTTP.Matcher.BodyEquals != "" {
+		switch {
+		case m.HTTP.Matcher.BodyEquals != "":
 			sampleBody = m.HTTP.Matcher.BodyEquals
-		} else if m.HTTP.Matcher.BodyContains != "" {
+		case m.HTTP.Matcher.BodyContains != "":
 			sampleBody = m.HTTP.Matcher.BodyContains
-		} else if m.HTTP.Matcher.BodyJSONPath != nil {
+		case m.HTTP.Matcher.BodyJSONPath != nil:
 			if bodyBytes, err := json.Marshal(m.HTTP.Matcher.BodyJSONPath); err == nil {
 				sampleBody = string(bodyBytes)
 			}
@@ -868,7 +870,7 @@ func buildWSDescription(m *config.MockConfiguration) string {
 			}
 			switch matcher.Match.Type {
 			case "exact":
-				parts = append(parts, fmt.Sprintf("  %s", matcher.Match.Value))
+				parts = append(parts, "  "+matcher.Match.Value)
 			case "json":
 				// Build a sample JSON payload
 				if matcher.Match.Path != "" && matcher.Match.Value != "" {
@@ -926,7 +928,7 @@ func writeGraphQLRequestV5(sb *strings.Builder, m *config.MockConfiguration, now
 			if strings.HasPrefix(fieldPath, "Query.") {
 				fieldName := strings.TrimPrefix(fieldPath, "Query.")
 				sampleQuery = fmt.Sprintf("{ %s }", fieldName)
-				description = fmt.Sprintf("Try: %s", fieldName)
+				description = "Try: " + fieldName
 				break
 			}
 		}

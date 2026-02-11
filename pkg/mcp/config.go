@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -66,7 +67,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Path == "" {
-		return fmt.Errorf("path cannot be empty")
+		return errors.New("path cannot be empty")
 	}
 
 	if c.Path[0] != '/' {
@@ -78,7 +79,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.SessionTimeout < time.Second {
-		return fmt.Errorf("sessionTimeout must be at least 1 second")
+		return errors.New("sessionTimeout must be at least 1 second")
 	}
 
 	return nil

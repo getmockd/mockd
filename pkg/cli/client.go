@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/cliconfig"
@@ -179,12 +180,14 @@ func WithAPIKey(key string) ClientOption {
 // LoadAPIKeyFromFile loads the API key from the default file location.
 // Returns the key and nil error if successful, empty string and nil if file doesn't exist,
 // or empty string and error if there was a read error.
+//
 // Deprecated: Use cliconfig.LoadAPIKeyFromFile() instead.
 func LoadAPIKeyFromFile() (string, error) {
 	return cliconfig.LoadAPIKeyFromFile()
 }
 
 // GetAPIKeyFilePath returns the default path for the API key file.
+//
 // Deprecated: Use cliconfig.GetAPIKeyFilePath() instead.
 func GetAPIKeyFilePath() string {
 	return cliconfig.GetAPIKeyFilePath()
@@ -277,7 +280,7 @@ func (c *adminClient) GetMock(id string) (*config.MockConfiguration, error) {
 		return nil, &APIError{
 			StatusCode: resp.StatusCode,
 			ErrorCode:  "not_found",
-			Message:    fmt.Sprintf("mock not found: %s", id),
+			Message:    "mock not found: " + id,
 		}
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -374,7 +377,7 @@ func (c *adminClient) UpdateMock(id string, mock *config.MockConfiguration) (*co
 		return nil, &APIError{
 			StatusCode: resp.StatusCode,
 			ErrorCode:  "not_found",
-			Message:    fmt.Sprintf("mock not found: %s", id),
+			Message:    "mock not found: " + id,
 		}
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -400,7 +403,7 @@ func (c *adminClient) DeleteMock(id string) error {
 		return &APIError{
 			StatusCode: resp.StatusCode,
 			ErrorCode:  "not_found",
-			Message:    fmt.Sprintf("mock not found: %s", id),
+			Message:    "mock not found: " + id,
 		}
 	}
 	if resp.StatusCode != http.StatusNoContent {
@@ -494,10 +497,10 @@ func (c *adminClient) GetLogs(filter *LogFilter) (*LogResult, error) {
 			params.Set("matched", filter.MatchedID)
 		}
 		if filter.Limit > 0 {
-			params.Set("limit", fmt.Sprintf("%d", filter.Limit))
+			params.Set("limit", strconv.Itoa(filter.Limit))
 		}
 		if filter.Offset > 0 {
-			params.Set("offset", fmt.Sprintf("%d", filter.Offset))
+			params.Set("offset", strconv.Itoa(filter.Offset))
 		}
 	}
 

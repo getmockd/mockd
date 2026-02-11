@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -85,7 +86,7 @@ Examples:
 
 	// Validate input
 	if *input == "" && *prompt == "" {
-		return fmt.Errorf(`either --input or --prompt is required
+		return errors.New(`either --input or --prompt is required
 
 Usage: mockd generate --ai --input openapi.yaml
        mockd generate --ai --prompt "API description"
@@ -351,7 +352,7 @@ Examples:
 	}
 
 	if !*aiFlag {
-		return fmt.Errorf(`--ai flag is required
+		return errors.New(`--ai flag is required
 
 Usage: mockd enhance --ai
 

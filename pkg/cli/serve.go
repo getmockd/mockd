@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -184,7 +186,7 @@ func RunServe(args []string) error {
 		lokiHandler := logging.NewLokiHandler(flags.lokiEndpoint,
 			logging.WithLokiLabels(map[string]string{
 				"service": "mockd",
-				"port":    fmt.Sprintf("%d", flags.port),
+				"port":    strconv.Itoa(flags.port),
 			}),
 			logging.WithLokiLevel(logging.ParseLevel(flags.logLevel)),
 		)
@@ -466,22 +468,22 @@ Examples:
 // validateServeFlags validates flag combinations for different operating modes.
 func validateServeFlags(f *serveFlags) error {
 	if f.register && f.pull != "" {
-		return fmt.Errorf("cannot use --register and --pull together")
+		return errors.New("cannot use --register and --pull together")
 	}
 
 	if f.register {
 		if f.name == "" {
-			return fmt.Errorf("--name is required when using --register")
+			return errors.New("--name is required when using --register")
 		}
 		if f.token == "" {
-			return fmt.Errorf("--token is required when using --register (or set MOCKD_RUNTIME_TOKEN)")
+			return errors.New("--token is required when using --register (or set MOCKD_RUNTIME_TOKEN)")
 		}
 	}
 
 	if f.pull != "" && f.token == "" {
 		f.token = os.Getenv("MOCKD_TOKEN")
 		if f.token == "" {
-			return fmt.Errorf("--token is required when using --pull (or set MOCKD_TOKEN)")
+			return errors.New("--token is required when using --pull (or set MOCKD_TOKEN)")
 		}
 	}
 
@@ -677,15 +679,16 @@ func configureProtocolHandlers(sctx *serveContext) error {
 func handleOperatingMode(sctx *serveContext) error {
 	f := sctx.flags
 
-	if f.register {
+	switch {
+	case f.register:
 		return handleRuntimeMode(sctx)
-	} else if f.pull != "" {
+	case f.pull != "":
 		return handlePullMode(sctx)
-	} else if f.configFile != "" {
+	case f.configFile != "":
 		return handleLocalMode(sctx)
+	default:
+		return nil
 	}
-
-	return nil
 }
 
 // handleRuntimeMode registers with control plane and sets up heartbeat.
@@ -1048,7 +1051,7 @@ func daemonize(_ []string, pidFilePath string, httpPort, adminPort int) error {
 	}
 
 	if !pidInfo.IsRunning() {
-		return fmt.Errorf("daemon process exited immediately")
+		return errors.New("daemon process exited immediately")
 	}
 
 	// Print success message
@@ -1097,11 +1100,12 @@ func initializeTracer(endpoint string, samplerRatio float64) *tracing.Tracer {
 	exporter := tracing.NewOTLPExporter(endpoint)
 
 	var sampler tracing.Sampler
-	if samplerRatio >= 1.0 {
+	switch {
+	case samplerRatio >= 1.0:
 		sampler = tracing.AlwaysSample{}
-	} else if samplerRatio <= 0 {
+	case samplerRatio <= 0:
 		sampler = tracing.NeverSample{}
-	} else {
+	default:
 		sampler = tracing.NewRatioSampler(samplerRatio)
 	}
 

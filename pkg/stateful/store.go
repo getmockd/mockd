@@ -1,6 +1,7 @@
 package stateful
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -23,19 +24,19 @@ func NewStateStore() *StateStore {
 // Register adds a new stateful resource to the store.
 func (s *StateStore) Register(config *ResourceConfig) error {
 	if config == nil {
-		return fmt.Errorf("config cannot be nil")
+		return errors.New("config cannot be nil")
 	}
 
 	if config.Name == "" {
-		return fmt.Errorf("resource name cannot be empty")
+		return errors.New("resource name cannot be empty")
 	}
 
 	if config.BasePath == "" {
-		return fmt.Errorf("resource basePath cannot be empty")
+		return errors.New("resource basePath cannot be empty")
 	}
 
 	if !strings.HasPrefix(config.BasePath, "/") {
-		return fmt.Errorf("resource basePath must start with /")
+		return errors.New("resource basePath must start with /")
 	}
 
 	s.mu.Lock()

@@ -153,7 +153,7 @@ func (c *ReplayController) StartReplay(config ReplayConfig) (*ReplaySession, err
 
 // countFrames returns the total number of frames in a recording.
 func (c *ReplayController) countFrames(recording *StreamRecording) int {
-	switch recording.Protocol {
+	switch recording.Protocol { //nolint:exhaustive // only stream protocols have frames
 	case ProtocolWebSocket:
 		if recording.WebSocket != nil {
 			return len(recording.WebSocket.Frames)
@@ -577,7 +577,7 @@ func (s *ReplaySession) ReceiveMessage(data []byte) {
 func (s *ReplaySession) getServerFrames() []interface{} {
 	var frames []interface{}
 
-	switch s.recording.Protocol {
+	switch s.recording.Protocol { //nolint:exhaustive // only stream protocols have frames
 	case ProtocolWebSocket:
 		if s.recording.WebSocket != nil {
 			for i := range s.recording.WebSocket.Frames {
@@ -602,7 +602,7 @@ func (s *ReplaySession) getServerFrames() []interface{} {
 func (s *ReplaySession) getAllFrames() []interface{} {
 	var frames []interface{}
 
-	switch s.recording.Protocol {
+	switch s.recording.Protocol { //nolint:exhaustive // only stream protocols have frames
 	case ProtocolWebSocket:
 		if s.recording.WebSocket != nil {
 			for i := range s.recording.WebSocket.Frames {

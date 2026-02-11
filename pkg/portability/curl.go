@@ -2,6 +2,7 @@ package portability
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -56,7 +57,7 @@ type curlParsed struct {
 }
 
 // parseCURL parses a cURL command string.
-func (i *CURLImporter) parseCURL(cmd string) (*curlParsed, error) {
+func (i *CURLImporter) parseCURL(cmd string) (*curlParsed, error) { //nolint:gocyclo // cURL command parser with many flags
 	result := &curlParsed{
 		method:  "GET",
 		headers: make(map[string]string),
@@ -163,7 +164,7 @@ func (i *CURLImporter) parseCURL(cmd string) (*curlParsed, error) {
 	}
 
 	if result.url == "" {
-		return nil, fmt.Errorf("no URL found in cURL command")
+		return nil, errors.New("no URL found in cURL command")
 	}
 
 	// Handle basic auth
