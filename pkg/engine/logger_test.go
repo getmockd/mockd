@@ -77,15 +77,15 @@ func TestInMemoryRequestLogger_ListWithFilter(t *testing.T) {
 	logger.Log(&requestlog.Entry{Method: "GET", Path: "/api/orders"})
 
 	// Filter by method
-	entries := logger.List(&RequestLogFilter{Method: "GET"})
+	entries := logger.List(&requestlog.Filter{Method: "GET"})
 	assert.Len(t, entries, 2)
 
 	// Filter by path prefix
-	entries = logger.List(&RequestLogFilter{Path: "/api/users"})
+	entries = logger.List(&requestlog.Filter{Path: "/api/users"})
 	assert.Len(t, entries, 2)
 
 	// Combined filter
-	entries = logger.List(&RequestLogFilter{Method: "GET", Path: "/api/users"})
+	entries = logger.List(&requestlog.Filter{Method: "GET", Path: "/api/users"})
 	assert.Len(t, entries, 1)
 }
 
@@ -96,7 +96,7 @@ func TestInMemoryRequestLogger_ListWithLimit(t *testing.T) {
 		logger.Log(&requestlog.Entry{Method: "GET", Path: "/api/test"})
 	}
 
-	entries := logger.List(&RequestLogFilter{Limit: 3})
+	entries := logger.List(&requestlog.Filter{Limit: 3})
 	assert.Len(t, entries, 3)
 }
 
@@ -107,7 +107,7 @@ func TestInMemoryRequestLogger_ListWithOffset(t *testing.T) {
 		logger.Log(&requestlog.Entry{Method: "GET", Path: "/api/test"})
 	}
 
-	entries := logger.List(&RequestLogFilter{Offset: 3})
+	entries := logger.List(&requestlog.Filter{Offset: 3})
 	assert.Len(t, entries, 7)
 }
 
@@ -152,7 +152,7 @@ func TestInMemoryRequestLogger_FilterByMatchedID(t *testing.T) {
 	logger.Log(&requestlog.Entry{Method: "GET", MatchedMockID: "mock-2"})
 	logger.Log(&requestlog.Entry{Method: "GET", MatchedMockID: ""}) // no match
 
-	entries := logger.List(&RequestLogFilter{MatchedID: "mock-1"})
+	entries := logger.List(&requestlog.Filter{MatchedID: "mock-1"})
 	assert.Len(t, entries, 1)
 }
 
@@ -163,7 +163,7 @@ func TestInMemoryRequestLogger_FilterByStatusCode(t *testing.T) {
 	logger.Log(&requestlog.Entry{Method: "GET", ResponseStatus: 404})
 	logger.Log(&requestlog.Entry{Method: "GET", ResponseStatus: 200})
 
-	entries := logger.List(&RequestLogFilter{StatusCode: 200})
+	entries := logger.List(&requestlog.Filter{StatusCode: 200})
 	assert.Len(t, entries, 2)
 }
 
@@ -230,11 +230,11 @@ func TestInMemoryRequestLogger_ClearByMockID(t *testing.T) {
 	assert.Equal(t, 2, logger.Count())
 
 	// Verify mock-1 entries are gone
-	entries := logger.List(&RequestLogFilter{MatchedID: "mock-1"})
+	entries := logger.List(&requestlog.Filter{MatchedID: "mock-1"})
 	assert.Len(t, entries, 0)
 
 	// Verify mock-2 entries remain
-	entries = logger.List(&RequestLogFilter{MatchedID: "mock-2"})
+	entries = logger.List(&requestlog.Filter{MatchedID: "mock-2"})
 	assert.Len(t, entries, 1)
 }
 
@@ -287,7 +287,7 @@ func TestInMemoryRequestLogger_SubscribeMultiple(t *testing.T) {
 	logger.Log(entry)
 
 	// Both should receive the entry
-	for _, sub := range []LogSubscriber{sub1, sub2} {
+	for _, sub := range []requestlog.Subscriber{sub1, sub2} {
 		select {
 		case received := <-sub:
 			assert.Equal(t, entry.Path, received.Path)

@@ -109,12 +109,12 @@ func (m *mockEngine) ClearMocks() {
 	m.mocks = make(map[string]*config.MockConfiguration)
 }
 
-func (m *mockEngine) GetRequestLogs(filter *RequestLogFilter) []*requestlog.Entry {
+func (m *mockEngine) GetRequestLogs(filter *requestlog.Filter) []*requestlog.Entry {
 	result := make([]*requestlog.Entry, 0, len(m.requestLogs))
 	for _, entry := range m.requestLogs {
 		if filter != nil {
 			// Filter by mock ID (matched filter)
-			if filter.MockID != "" && entry.MatchedMockID != filter.MockID {
+			if filter.MatchedID != "" && entry.MatchedMockID != filter.MatchedID {
 				continue
 			}
 			// Filter by method

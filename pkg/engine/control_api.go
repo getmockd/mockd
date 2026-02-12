@@ -70,21 +70,8 @@ func (a *ControlAPIAdapter) ClearMocks() {
 }
 
 // GetRequestLogs implements api.EngineController.
-// Converts the api filter type to the engine filter type.
-func (a *ControlAPIAdapter) GetRequestLogs(filter *api.RequestLogFilter) []*requestlog.Entry {
-	if filter == nil {
-		return a.server.GetRequestLogs(nil)
-	}
-	// Convert api filter to engine filter
-	engineFilter := &RequestLogFilter{
-		Limit:     filter.Limit,
-		Offset:    filter.Offset,
-		Method:    filter.Method,
-		Path:      filter.Path,
-		MatchedID: filter.MockID,
-		Protocol:  filter.Protocol,
-	}
-	return a.server.GetRequestLogs(engineFilter)
+func (a *ControlAPIAdapter) GetRequestLogs(filter *requestlog.Filter) []*requestlog.Entry {
+	return a.server.GetRequestLogs(filter)
 }
 
 // GetRequestLog implements api.EngineController.

@@ -8,50 +8,25 @@ import (
 )
 
 // RequestLogger defines the interface for logging incoming requests.
+// It embeds requestlog.Store so that any implementation can be used as
+// both a protocol-handler sink (Logger) and an admin query target (Store).
+//
+// Implementations that also support subscriptions and per-mock operations
+// should additionally implement requestlog.SubscribableStore and
+// requestlog.ExtendedStore.
 type RequestLogger interface {
-	// Log records a request log entry
-	Log(entry *requestlog.Entry)
-	// Get retrieves a log entry by ID
-	Get(id string) *requestlog.Entry
-	// List returns all log entries, optionally filtered
-	List(filter *RequestLogFilter) []*requestlog.Entry
-	// Clear removes all log entries
-	Clear()
-	// Count returns the number of log entries
-	Count() int
+	requestlog.Store
 }
 
-// RequestLogFilter defines criteria for filtering request logs.
-type RequestLogFilter struct {
-	Protocol   string // Filter by protocol (http, grpc, websocket, sse, mqtt, soap, graphql)
-	Method     string // Filter by HTTP method (or gRPC method, etc.)
-	Path       string // Filter by path prefix (or topic pattern for MQTT)
-	MatchedID  string // Filter by matched mock ID
-	StatusCode int    // Filter by response status code
-	HasError   *bool  // Filter by error presence
-	Limit      int    // Maximum number of entries to return
-	Offset     int    // Number of entries to skip
-
-	// Protocol-specific filters
-	GRPCService     string // Filter gRPC by service name
-	MQTTTopic       string // Filter MQTT by topic (supports wildcards)
-	MQTTClientID    string // Filter MQTT by client ID
-	SOAPOperation   string // Filter SOAP by operation name
-	GraphQLOpType   string // Filter GraphQL by operation type (query, mutation, subscription)
-	WSConnectionID  string // Filter WebSocket by connection ID
-	SSEConnectionID string // Filter SSE by connection ID
-}
-
-// LogSubscriber is a channel that receives new log entries.
-type LogSubscriber chan *requestlog.Entry
-
-// InMemoryRequestLogger implements RequestLogger with an in-memory circular buffer.
+// InMemoryRequestLogger implements RequestLogger (and by extension
+// requestlog.Store, requestlog.SubscribableStore, requestlog.ExtendedStore)
+// with an in-memory circular buffer.
 type InMemoryRequestLogger struct {
 	entries     []*requestlog.Entry
 	maxEntries  int
 	mu          sync.RWMutex
 	nextID      int64
-	subscribers map[LogSubscriber]struct{}
+	subscribers map[requestlog.Subscriber]struct{}
 	subMu       sync.RWMutex
 }
 
@@ -63,7 +38,7 @@ func NewInMemoryRequestLogger(maxEntries int) *InMemoryRequestLogger {
 	return &InMemoryRequestLogger{
 		entries:     make([]*requestlog.Entry, 0, maxEntries),
 		maxEntries:  maxEntries,
-		subscribers: make(map[LogSubscriber]struct{}),
+		subscribers: make(map[requestlog.Subscriber]struct{}),
 	}
 }
 
@@ -125,7 +100,7 @@ func (l *InMemoryRequestLogger) Get(id string) *requestlog.Entry {
 }
 
 // List returns all log entries, optionally filtered.
-func (l *InMemoryRequestLogger) List(filter *RequestLogFilter) []*requestlog.Entry {
+func (l *InMemoryRequestLogger) List(filter *requestlog.Filter) []*requestlog.Entry {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
@@ -163,7 +138,7 @@ func (l *InMemoryRequestLogger) List(filter *RequestLogFilter) []*requestlog.Ent
 }
 
 // matchesFilter checks if an entry matches all filter criteria.
-func matchesFilter(entry *requestlog.Entry, filter *RequestLogFilter) bool { //nolint:gocyclo // multi-field filter matching
+func matchesFilter(entry *requestlog.Entry, filter *requestlog.Filter) bool { //nolint:gocyclo // multi-field filter matching
 	// Protocol filter
 	if filter.Protocol != "" && entry.Protocol != filter.Protocol {
 		return false
@@ -348,8 +323,8 @@ func generateShortID(n int64) string {
 
 // Subscribe registers a subscriber to receive new log entries.
 // Returns a channel that will receive entries and an unsubscribe function.
-func (l *InMemoryRequestLogger) Subscribe() (LogSubscriber, func()) {
-	ch := make(LogSubscriber, 100) // Buffer to prevent blocking
+func (l *InMemoryRequestLogger) Subscribe() (requestlog.Subscriber, func()) {
+	ch := make(requestlog.Subscriber, 100) // Buffer to prevent blocking
 
 	l.subMu.Lock()
 	l.subscribers[ch] = struct{}{}

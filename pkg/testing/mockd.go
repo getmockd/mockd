@@ -13,6 +13,7 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/getmockd/mockd/pkg/requestlog"
 )
 
 // MockServer is a test helper for running mockd in tests.
@@ -273,7 +274,7 @@ func (m *MockServer) countCalls(method, path string) int {
 		return 0
 	}
 
-	logs := m.server.GetRequestLogs(&engine.RequestLogFilter{
+	logs := m.server.GetRequestLogs(&requestlog.Filter{
 		Method: method,
 	})
 

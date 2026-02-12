@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/requestlog"
 )
 
 // --- General Responses ---
@@ -131,21 +132,33 @@ type DeployResponse struct {
 // --- Request Logs ---
 
 // RequestLogEntry represents a logged request.
+// All fields from requestlog.Entry are preserved end-to-end so that protocol-
+// specific metadata (gRPC service, MQTT topic, GraphQL operation, etc.) is
+// visible to consumers of the Admin API and Engine Control API.
 type RequestLogEntry struct {
-	ID            string            `json:"id"`
-	Timestamp     time.Time         `json:"timestamp"`
-	Protocol      string            `json:"protocol"`
-	Method        string            `json:"method,omitempty"`
-	Path          string            `json:"path"`
-	QueryString   string            `json:"queryString,omitempty"`
-	Headers       map[string]string `json:"headers,omitempty"`
-	Body          string            `json:"body,omitempty"`
-	BodySize      int               `json:"bodySize,omitempty"`
-	RemoteAddr    string            `json:"remoteAddr,omitempty"`
-	MatchedMockID string            `json:"matchedMockId,omitempty"`
-	StatusCode    int               `json:"statusCode,omitempty"`
-	DurationMs    int               `json:"durationMs"`
-	Error         string            `json:"error,omitempty"`
+	ID            string              `json:"id"`
+	Timestamp     time.Time           `json:"timestamp"`
+	Protocol      string              `json:"protocol"`
+	Method        string              `json:"method,omitempty"`
+	Path          string              `json:"path"`
+	QueryString   string              `json:"queryString,omitempty"`
+	Headers       map[string][]string `json:"headers,omitempty"`
+	Body          string              `json:"body,omitempty"`
+	BodySize      int                 `json:"bodySize,omitempty"`
+	RemoteAddr    string              `json:"remoteAddr,omitempty"`
+	MatchedMockID string              `json:"matchedMockId,omitempty"`
+	StatusCode    int                 `json:"statusCode,omitempty"`
+	ResponseBody  string              `json:"responseBody,omitempty"`
+	DurationMs    int                 `json:"durationMs"`
+	Error         string              `json:"error,omitempty"`
+
+	// Protocol-specific metadata (only one populated based on Protocol).
+	GRPC      *requestlog.GRPCMeta      `json:"grpc,omitempty"`
+	WebSocket *requestlog.WebSocketMeta `json:"websocket,omitempty"`
+	SSE       *requestlog.SSEMeta       `json:"sse,omitempty"`
+	MQTT      *requestlog.MQTTMeta      `json:"mqtt,omitempty"`
+	SOAP      *requestlog.SOAPMeta      `json:"soap,omitempty"`
+	GraphQL   *requestlog.GraphQLMeta   `json:"graphql,omitempty"`
 }
 
 // RequestListResponse lists request logs.
@@ -155,15 +168,9 @@ type RequestListResponse struct {
 	Total    int                `json:"total"`
 }
 
-// RequestLogFilter is used to filter request logs.
-type RequestLogFilter struct {
-	Limit    int    `json:"limit,omitempty"`
-	Offset   int    `json:"offset,omitempty"`
-	Method   string `json:"method,omitempty"`
-	Path     string `json:"path,omitempty"`
-	MockID   string `json:"mockId,omitempty"`
-	Protocol string `json:"protocol,omitempty"`
-}
+// RequestLogFilter is deprecated — use requestlog.Filter directly.
+// Kept temporarily for backwards compatibility with external consumers.
+type RequestLogFilter = requestlog.Filter
 
 // --- Import / Export ---
 

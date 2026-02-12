@@ -13,6 +13,7 @@ import (
 	types "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/httputil"
+	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/store"
 	"gopkg.in/yaml.v3"
 )
@@ -291,7 +292,7 @@ func (a *API) handleListRequests(w http.ResponseWriter, r *http.Request, engine 
 	ctx := r.Context()
 
 	// Build filter from query parameters
-	clientFilter := &engineclient.RequestFilter{}
+	clientFilter := &requestlog.Filter{}
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		var limit int
 		if _, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil {
@@ -314,7 +315,29 @@ func (a *API) handleListRequests(w http.ResponseWriter, r *http.Request, engine 
 		clientFilter.Path = path
 	}
 	if matched := r.URL.Query().Get("matched"); matched != "" {
-		clientFilter.MockID = matched
+		clientFilter.MatchedID = matched
+	}
+	// Protocol-specific filters
+	if v := r.URL.Query().Get("grpcService"); v != "" {
+		clientFilter.GRPCService = v
+	}
+	if v := r.URL.Query().Get("mqttTopic"); v != "" {
+		clientFilter.MQTTTopic = v
+	}
+	if v := r.URL.Query().Get("mqttClientId"); v != "" {
+		clientFilter.MQTTClientID = v
+	}
+	if v := r.URL.Query().Get("soapOperation"); v != "" {
+		clientFilter.SOAPOperation = v
+	}
+	if v := r.URL.Query().Get("graphqlOpType"); v != "" {
+		clientFilter.GraphQLOpType = v
+	}
+	if v := r.URL.Query().Get("wsConnectionId"); v != "" {
+		clientFilter.WSConnectionID = v
+	}
+	if v := r.URL.Query().Get("sseConnectionId"); v != "" {
+		clientFilter.SSEConnectionID = v
 	}
 
 	result, err := engine.ListRequests(ctx, clientFilter)
@@ -391,7 +414,7 @@ func (a *API) handleStreamRequests(w http.ResponseWriter, r *http.Request, engin
 			return
 		case <-ticker.C:
 			// Get latest requests from engine
-			filter := &engineclient.RequestFilter{Limit: 10}
+			filter := &requestlog.Filter{Limit: 10}
 			result, err := engine.ListRequests(ctx, filter)
 			if err != nil {
 				continue

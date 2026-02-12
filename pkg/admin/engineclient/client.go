@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/requestlog"
 )
 
 // Client is an HTTP client for communicating with an Engine.
@@ -177,7 +178,7 @@ func (c *Client) DeleteMock(ctx context.Context, id string) error {
 }
 
 // ListRequests returns request logs from the engine.
-func (c *Client) ListRequests(ctx context.Context, filter *RequestFilter) (*RequestListResponse, error) {
+func (c *Client) ListRequests(ctx context.Context, filter *requestlog.Filter) (*RequestListResponse, error) {
 	path := "/requests"
 	if filter != nil {
 		q := url.Values{}
@@ -196,8 +197,40 @@ func (c *Client) ListRequests(ctx context.Context, filter *RequestFilter) (*Requ
 		if filter.Path != "" {
 			q.Set("path", filter.Path)
 		}
-		if filter.MockID != "" {
-			q.Set("matched", filter.MockID)
+		if filter.MatchedID != "" {
+			q.Set("matched", filter.MatchedID)
+		}
+		if filter.StatusCode != 0 {
+			q.Set("status", strconv.Itoa(filter.StatusCode))
+		}
+		if filter.HasError != nil {
+			if *filter.HasError {
+				q.Set("hasError", "true")
+			} else {
+				q.Set("hasError", "false")
+			}
+		}
+		// Protocol-specific filters
+		if filter.GRPCService != "" {
+			q.Set("grpcService", filter.GRPCService)
+		}
+		if filter.MQTTTopic != "" {
+			q.Set("mqttTopic", filter.MQTTTopic)
+		}
+		if filter.MQTTClientID != "" {
+			q.Set("mqttClientId", filter.MQTTClientID)
+		}
+		if filter.SOAPOperation != "" {
+			q.Set("soapOperation", filter.SOAPOperation)
+		}
+		if filter.GraphQLOpType != "" {
+			q.Set("graphqlOpType", filter.GraphQLOpType)
+		}
+		if filter.WSConnectionID != "" {
+			q.Set("wsConnectionId", filter.WSConnectionID)
+		}
+		if filter.SSEConnectionID != "" {
+			q.Set("sseConnectionId", filter.SSEConnectionID)
 		}
 		if len(q) > 0 {
 			path += "?" + q.Encode()

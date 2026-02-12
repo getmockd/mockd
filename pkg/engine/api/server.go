@@ -38,7 +38,7 @@ type EngineController interface {
 	ClearMocks()
 
 	// Request logs
-	GetRequestLogs(filter *RequestLogFilter) []*requestlog.Entry
+	GetRequestLogs(filter *requestlog.Filter) []*requestlog.Entry
 	GetRequestLog(id string) *requestlog.Entry
 	RequestLogCount() int
 	ClearRequestLogs()

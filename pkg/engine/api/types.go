@@ -8,15 +8,16 @@ import (
 // These exist so that the EngineController interface and handlers can use
 // short names without a package qualifier within this package.
 type (
-	ProtocolStatus                  = types.ProtocolStatus
-	StatusResponse                  = types.StatusResponse
-	HealthResponse                  = types.HealthResponse
-	ErrorResponse                   = types.ErrorResponse
-	MockListResponse                = types.MockListResponse
-	DeployRequest                   = types.DeployRequest
-	DeployResponse                  = types.DeployResponse
-	RequestLogEntry                 = types.RequestLogEntry
-	RequestListResponse             = types.RequestListResponse
+	ProtocolStatus      = types.ProtocolStatus
+	StatusResponse      = types.StatusResponse
+	HealthResponse      = types.HealthResponse
+	ErrorResponse       = types.ErrorResponse
+	MockListResponse    = types.MockListResponse
+	DeployRequest       = types.DeployRequest
+	DeployResponse      = types.DeployResponse
+	RequestLogEntry     = types.RequestLogEntry
+	RequestListResponse = types.RequestListResponse
+	// RequestLogFilter is kept for backward compatibility; use requestlog.Filter directly.
 	RequestLogFilter                = types.RequestLogFilter
 	ToggleMockRequest               = types.ToggleRequest
 	ImportConfigRequest             = types.ImportConfigRequest

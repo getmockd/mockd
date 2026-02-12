@@ -10,6 +10,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/httputil"
+	"github.com/getmockd/mockd/pkg/requestlog"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +196,7 @@ func (s *Server) handleToggleMock(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListRequests(w http.ResponseWriter, r *http.Request) {
 	// Parse query params for filtering
-	filter := &RequestLogFilter{
+	filter := &requestlog.Filter{
 		Limit: 100, // default
 	}
 
@@ -230,25 +231,52 @@ func (s *Server) handleListRequests(w http.ResponseWriter, r *http.Request) {
 
 	// Parse matched mock ID filter
 	if matched := r.URL.Query().Get("matched"); matched != "" {
-		filter.MockID = matched
+		filter.MatchedID = matched
+	}
+
+	// Parse protocol-specific filters
+	if v := r.URL.Query().Get("grpcService"); v != "" {
+		filter.GRPCService = v
+	}
+	if v := r.URL.Query().Get("mqttTopic"); v != "" {
+		filter.MQTTTopic = v
+	}
+	if v := r.URL.Query().Get("mqttClientId"); v != "" {
+		filter.MQTTClientID = v
+	}
+	if v := r.URL.Query().Get("soapOperation"); v != "" {
+		filter.SOAPOperation = v
+	}
+	if v := r.URL.Query().Get("graphqlOpType"); v != "" {
+		filter.GraphQLOpType = v
+	}
+	if v := r.URL.Query().Get("wsConnectionId"); v != "" {
+		filter.WSConnectionID = v
+	}
+	if v := r.URL.Query().Get("sseConnectionId"); v != "" {
+		filter.SSEConnectionID = v
+	}
+
+	// Parse hasError filter
+	if v := r.URL.Query().Get("hasError"); v != "" {
+		hasError := v == "true"
+		filter.HasError = &hasError
+	}
+
+	// Parse status code filter
+	if v := r.URL.Query().Get("status"); v != "" {
+		if code, err := strconv.Atoi(v); err == nil {
+			filter.StatusCode = code
+		}
 	}
 
 	entries := s.engine.GetRequestLogs(filter)
 	total := s.engine.RequestLogCount()
 
-	// Convert to response type
+	// Convert to response type — preserve all fields including protocol metadata
 	requests := make([]*RequestLogEntry, len(entries))
 	for i, e := range entries {
-		requests[i] = &RequestLogEntry{
-			ID:            e.ID,
-			Timestamp:     e.Timestamp,
-			Protocol:      e.Protocol,
-			Method:        e.Method,
-			Path:          e.Path,
-			MatchedMockID: e.MatchedMockID,
-			StatusCode:    e.ResponseStatus,
-			DurationMs:    e.DurationMs,
-		}
+		requests[i] = entryToAPI(e)
 	}
 
 	writeJSON(w, http.StatusOK, RequestListResponse{
@@ -265,28 +293,35 @@ func (s *Server) handleGetRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "request not found")
 		return
 	}
-	// Convert headers from multi-value to single-value for API response
-	headers := make(map[string]string, len(entry.Headers))
-	for k, v := range entry.Headers {
-		if len(v) > 0 {
-			headers[k] = v[0]
-		}
+	writeJSON(w, http.StatusOK, entryToAPI(entry))
+}
+
+// entryToAPI converts a requestlog.Entry to the API response type, preserving
+// all fields including protocol-specific metadata end-to-end.
+func entryToAPI(e *requestlog.Entry) *RequestLogEntry {
+	return &RequestLogEntry{
+		ID:            e.ID,
+		Timestamp:     e.Timestamp,
+		Protocol:      e.Protocol,
+		Method:        e.Method,
+		Path:          e.Path,
+		QueryString:   e.QueryString,
+		Headers:       e.Headers,
+		Body:          e.Body,
+		BodySize:      e.BodySize,
+		RemoteAddr:    e.RemoteAddr,
+		MatchedMockID: e.MatchedMockID,
+		StatusCode:    e.ResponseStatus,
+		ResponseBody:  e.ResponseBody,
+		DurationMs:    e.DurationMs,
+		Error:         e.Error,
+		GRPC:          e.GRPC,
+		WebSocket:     e.WebSocket,
+		SSE:           e.SSE,
+		MQTT:          e.MQTT,
+		SOAP:          e.SOAP,
+		GraphQL:       e.GraphQL,
 	}
-	// Convert to API response type for consistent JSON field names
-	// Include body and headers for single request detail view
-	apiEntry := &RequestLogEntry{
-		ID:            entry.ID,
-		Timestamp:     entry.Timestamp,
-		Protocol:      entry.Protocol,
-		Method:        entry.Method,
-		Path:          entry.Path,
-		Headers:       headers,
-		Body:          entry.Body,
-		MatchedMockID: entry.MatchedMockID,
-		StatusCode:    entry.ResponseStatus,
-		DurationMs:    entry.DurationMs,
-	}
-	writeJSON(w, http.StatusOK, apiEntry)
 }
 
 func (s *Server) handleClearRequests(w http.ResponseWriter, r *http.Request) {

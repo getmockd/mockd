@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/requestlog"
 )
 
 // --- Helpers ---
@@ -282,13 +283,13 @@ func TestListRequests_WithFilter(t *testing.T) {
 	defer ts.Close()
 	c := New(ts.URL)
 
-	_, err := c.ListRequests(context.Background(), &RequestFilter{
-		Limit:    10,
-		Offset:   5,
-		Protocol: "http",
-		Method:   "GET",
-		Path:     "/api/test",
-		MockID:   "mock-1",
+	_, err := c.ListRequests(context.Background(), &requestlog.Filter{
+		Limit:     10,
+		Offset:    5,
+		Protocol:  "http",
+		Method:    "GET",
+		Path:      "/api/test",
+		MatchedID: "mock-1",
 	})
 	if err != nil {
 		t.Fatalf("ListRequests() error = %v", err)

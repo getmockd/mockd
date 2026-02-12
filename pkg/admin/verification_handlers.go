@@ -248,9 +248,14 @@ func (a *API) handleListMockInvocations(w http.ResponseWriter, r *http.Request, 
 			Body:      req.Body,
 		}
 
-		// Convert headers
+		// Flatten multi-value headers to single-value for MockInvocation
 		if len(req.Headers) > 0 {
-			inv.Headers = req.Headers
+			inv.Headers = make(map[string]string, len(req.Headers))
+			for k, v := range req.Headers {
+				if len(v) > 0 {
+					inv.Headers[k] = v[0]
+				}
+			}
 		}
 
 		invocations = append(invocations, inv)

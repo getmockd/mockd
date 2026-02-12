@@ -20,11 +20,12 @@ var (
 // These exist for backward compatibility so existing code using engineclient.X
 // types continues to compile.
 type (
-	DeployRequest       = types.DeployRequest
-	DeployResponse      = types.DeployResponse
-	StatusResponse      = types.StatusResponse
-	ProtocolStatus      = types.ProtocolStatus
-	MockListResponse    = types.MockListResponse
+	DeployRequest    = types.DeployRequest
+	DeployResponse   = types.DeployResponse
+	StatusResponse   = types.StatusResponse
+	ProtocolStatus   = types.ProtocolStatus
+	MockListResponse = types.MockListResponse
+	// RequestFilter is kept for backward compatibility; use requestlog.Filter directly.
 	RequestFilter       = types.RequestLogFilter
 	RequestLogEntry     = types.RequestLogEntry
 	RequestListResponse = types.RequestListResponse

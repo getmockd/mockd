@@ -513,7 +513,7 @@ func (s *Server) ImportConfig(collection *config.MockCollection, replace bool) e
 }
 
 // GetRequestLogs returns request logs, optionally filtered.
-func (s *Server) GetRequestLogs(filter *RequestLogFilter) []*requestlog.Entry {
+func (s *Server) GetRequestLogs(filter *requestlog.Filter) []*requestlog.Entry {
 	if s.requestLogger == nil {
 		return nil
 	}
