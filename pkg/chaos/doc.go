@@ -60,14 +60,6 @@
 //	chaosHandler := chaos.NewMiddleware(handler, injector)
 //	http.Handle("/", chaosHandler)
 //
-// # Conditional Chaos
-//
-// Apply chaos based on request conditions:
-//
-//	// Only apply chaos when a specific header is present
-//	condition := chaos.HeaderBasedCondition("X-Test-Chaos", "true")
-//	handler := chaos.NewConditionalMiddleware(myHandler, injector, condition)
-//
 // # Statistics
 //
 // Track chaos injection statistics:

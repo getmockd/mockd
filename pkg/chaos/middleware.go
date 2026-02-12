@@ -120,37 +120,6 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.handler.ServeHTTP(responseWriter, r)
 }
 
-// ChaosHandler is a standalone handler for chaos-only endpoints
-type ChaosHandler struct {
-	injector *Injector
-}
-
-// NewChaosHandler creates a handler that only applies chaos
-func NewChaosHandler(injector *Injector) *ChaosHandler {
-	return &ChaosHandler{injector: injector}
-}
-
-// ServeHTTP applies chaos and returns a success response
-func (h *ChaosHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h.injector == nil || !h.injector.IsEnabled() {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	faults := h.injector.ShouldInject(r)
-	for _, fault := range faults {
-		switch fault.Type { //nolint:exhaustive // only latency and error faults handled in middleware
-		case FaultLatency:
-			_ = h.injector.InjectLatencyFromConfig(r.Context(), fault.Config)
-		case FaultError:
-			h.injector.InjectErrorFromConfig(w, fault.Config)
-			return
-		}
-	}
-
-	w.WriteHeader(http.StatusOK)
-}
-
 // ContextKey is a type for context keys
 type ContextKey string
 
@@ -178,48 +147,4 @@ func GetChaosContext(ctx context.Context) *ChaosContext {
 		}
 	}
 	return nil
-}
-
-// ConditionalMiddleware applies chaos based on a condition function
-type ConditionalMiddleware struct {
-	handler   http.Handler
-	injector  *Injector
-	condition func(*http.Request) bool
-}
-
-// NewConditionalMiddleware creates middleware that conditionally applies chaos
-func NewConditionalMiddleware(handler http.Handler, injector *Injector, condition func(*http.Request) bool) *ConditionalMiddleware {
-	return &ConditionalMiddleware{
-		handler:   handler,
-		injector:  injector,
-		condition: condition,
-	}
-}
-
-// ServeHTTP applies chaos only if the condition is met
-func (m *ConditionalMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if m.condition != nil && !m.condition(r) {
-		m.handler.ServeHTTP(w, r)
-		return
-	}
-
-	middleware := NewMiddleware(m.handler, m.injector)
-	middleware.ServeHTTP(w, r)
-}
-
-// HeaderBasedCondition returns a condition that checks for a specific header
-func HeaderBasedCondition(header, value string) func(*http.Request) bool {
-	return func(r *http.Request) bool {
-		return r.Header.Get(header) == value
-	}
-}
-
-// ChaosEnabledHeader is the header to enable chaos for a specific request
-const ChaosEnabledHeader = "X-Chaos-Enabled"
-
-// HeaderEnabledCondition returns a condition that checks for the chaos header
-func HeaderEnabledCondition() func(*http.Request) bool {
-	return func(r *http.Request) bool {
-		return r.Header.Get(ChaosEnabledHeader) == "true"
-	}
 }

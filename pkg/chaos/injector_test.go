@@ -675,58 +675,6 @@ func TestTruncatingWriter(t *testing.T) {
 	}
 }
 
-func TestConditionalMiddleware(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	})
-
-	config := &ChaosConfig{
-		Enabled: true,
-		Rules: []ChaosRule{
-			{
-				PathPattern: ".*",
-				Faults: []FaultConfig{
-					{
-						Type:        FaultError,
-						Probability: 1.0,
-						Config: map[string]interface{}{
-							"defaultCode": 500,
-						},
-					},
-				},
-				Probability: 1.0,
-			},
-		},
-	}
-	inj, _ := NewInjector(config)
-
-	// Condition: only apply chaos if header is present
-	condition := HeaderBasedCondition("X-Enable-Chaos", "true")
-	middleware := NewConditionalMiddleware(handler, inj, condition)
-
-	t.Run("without condition header", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		w := httptest.NewRecorder()
-		middleware.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("Without header, status = %d, want %d", w.Code, http.StatusOK)
-		}
-	})
-
-	t.Run("with condition header", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/test", nil)
-		req.Header.Set("X-Enable-Chaos", "true")
-		w := httptest.NewRecorder()
-		middleware.ServeHTTP(w, req)
-
-		if w.Code != http.StatusInternalServerError {
-			t.Errorf("With header, status = %d, want %d", w.Code, http.StatusInternalServerError)
-		}
-	})
-}
-
 func TestDelayedWriter(t *testing.T) {
 	w := httptest.NewRecorder()
 	dw := NewDelayedWriter(w, 50*time.Millisecond)
