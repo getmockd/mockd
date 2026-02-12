@@ -7,9 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/beevik/etree"
+	"github.com/getmockd/mockd/pkg/requestlog"
 )
 
 // mustNewHandler creates a new handler and fails the test if it errors.
@@ -884,4 +887,521 @@ func TestEscapeXML(t *testing.T) {
 			}
 		})
 	}
+}
+
+// =============================================================================
+// Session 13: SOAP Recording Integration Tests
+// =============================================================================
+
+// mockSOAPStore is a test double for SOAPRecordingStore.
+type mockSOAPStore struct {
+	mu         sync.Mutex
+	recordings []SOAPRecordingData
+	addErr     error // inject errors
+}
+
+func (s *mockSOAPStore) Add(data SOAPRecordingData) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.addErr != nil {
+		return s.addErr
+	}
+	s.recordings = append(s.recordings, data)
+	return nil
+}
+
+func (s *mockSOAPStore) getRecordings() []SOAPRecordingData {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make([]SOAPRecordingData, len(s.recordings))
+	copy(result, s.recordings)
+	return result
+}
+
+// mockRequestLogger is a test double for requestlog.Logger.
+type mockRequestLogger struct {
+	mu      sync.Mutex
+	entries []*requestlog.Entry
+}
+
+func (l *mockRequestLogger) Log(entry *requestlog.Entry) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = append(l.entries, entry)
+}
+
+func (l *mockRequestLogger) getEntries() []*requestlog.Entry {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	result := make([]*requestlog.Entry, len(l.entries))
+	copy(result, l.entries)
+	return result
+}
+
+// --- Recording enable/disable tests ---
+
+func TestHandler_RecordingToggle(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-rec",
+		Path: "/soap",
+		Operations: map[string]OperationConfig{
+			"Ping": {Response: "<PingResponse>pong</PingResponse>"},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+
+	// Initially disabled
+	if handler.IsRecordingEnabled() {
+		t.Error("Recording should be disabled by default")
+	}
+
+	// Enable
+	handler.EnableRecording()
+	if !handler.IsRecordingEnabled() {
+		t.Error("Recording should be enabled after EnableRecording()")
+	}
+
+	// Disable
+	handler.DisableRecording()
+	if handler.IsRecordingEnabled() {
+		t.Error("Recording should be disabled after DisableRecording()")
+	}
+}
+
+func TestHandler_SetRecordingStore(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-store",
+		Path: "/soap",
+		Operations: map[string]OperationConfig{
+			"Ping": {Response: "<PingResponse>pong</PingResponse>"},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+
+	// Initially nil
+	if handler.GetRecordingStore() != nil {
+		t.Error("Recording store should be nil by default")
+	}
+
+	// Set store
+	store := &mockSOAPStore{}
+	handler.SetRecordingStore(store)
+	if handler.GetRecordingStore() == nil {
+		t.Error("Recording store should be set after SetRecordingStore()")
+	}
+}
+
+func TestHandler_SetRequestLogger(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-logger",
+		Path: "/soap",
+		Operations: map[string]OperationConfig{
+			"Ping": {Response: "<PingResponse>pong</PingResponse>"},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+
+	// Initially nil
+	if handler.GetRequestLogger() != nil {
+		t.Error("Request logger should be nil by default")
+	}
+
+	// Set logger
+	logger := &mockRequestLogger{}
+	handler.SetRequestLogger(logger)
+	if handler.GetRequestLogger() == nil {
+		t.Error("Request logger should be set after SetRequestLogger()")
+	}
+}
+
+// --- Recording with actual SOAP requests ---
+
+func TestHandler_RecordingCapturesRequest(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-capture",
+		Path: "/soap/service",
+		Operations: map[string]OperationConfig{
+			"GetUser": {
+				Response: "<GetUserResponse><name>Alice</name></GetUserResponse>",
+			},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+
+	store := &mockSOAPStore{}
+	handler.SetRecordingStore(store)
+	handler.EnableRecording()
+
+	// Send a valid SOAP 1.1 request
+	soapBody := `<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetUser><id>123</id></GetUser>
+  </soap:Body>
+</soap:Envelope>`
+
+	req := httptest.NewRequest("POST", "/soap/service", strings.NewReader(soapBody))
+	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+	req.Header.Set("SOAPAction", "GetUser")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Recording is async (goroutine) — wait briefly
+	time.Sleep(50 * time.Millisecond)
+
+	recordings := store.getRecordings()
+	if len(recordings) != 1 {
+		t.Fatalf("Expected 1 recording, got %d", len(recordings))
+	}
+
+	rec := recordings[0]
+	if rec.Operation != "GetUser" {
+		t.Errorf("Expected operation 'GetUser', got %q", rec.Operation)
+	}
+	if rec.SOAPVersion != "1.1" {
+		t.Errorf("Expected SOAP version '1.1', got %q", rec.SOAPVersion)
+	}
+	if rec.ResponseStatus != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", rec.ResponseStatus)
+	}
+	if rec.HasFault {
+		t.Error("Expected HasFault=false for successful response")
+	}
+	if rec.RequestBody == "" {
+		t.Error("Expected non-empty RequestBody")
+	}
+	if rec.ResponseBody == "" {
+		t.Error("Expected non-empty ResponseBody")
+	}
+	if !strings.Contains(rec.ResponseBody, "Alice") {
+		t.Errorf("Expected response body to contain 'Alice', got %q", rec.ResponseBody)
+	}
+}
+
+func TestHandler_RecordingDisabledNoCapture(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-disabled",
+		Path: "/soap/service",
+		Operations: map[string]OperationConfig{
+			"GetUser": {
+				Response: "<GetUserResponse><name>Bob</name></GetUserResponse>",
+			},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+
+	store := &mockSOAPStore{}
+	handler.SetRecordingStore(store)
+	// Recording NOT enabled
+
+	soapBody := `<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetUser><id>1</id></GetUser>
+  </soap:Body>
+</soap:Envelope>`
+
+	req := httptest.NewRequest("POST", "/soap/service", strings.NewReader(soapBody))
+	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+	req.Header.Set("SOAPAction", "GetUser")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	recordings := store.getRecordings()
+	if len(recordings) != 0 {
+		t.Errorf("Expected 0 recordings when disabled, got %d", len(recordings))
+	}
+}
+
+func TestHandler_RecordingNoStoreNoCapture(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-nostore",
+		Path: "/soap/service",
+		Operations: map[string]OperationConfig{
+			"GetUser": {
+				Response: "<GetUserResponse><name>Carol</name></GetUserResponse>",
+			},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+
+	// Recording enabled but NO store set
+	handler.EnableRecording()
+
+	soapBody := `<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetUser><id>1</id></GetUser>
+  </soap:Body>
+</soap:Envelope>`
+
+	req := httptest.NewRequest("POST", "/soap/service", strings.NewReader(soapBody))
+	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+	req.Header.Set("SOAPAction", "GetUser")
+	w := httptest.NewRecorder()
+
+	// Should not panic even without a store
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+}
+
+func TestHandler_RecordingCapturesFault(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-fault-rec",
+		Path: "/soap/service",
+		Operations: map[string]OperationConfig{
+			"GetUser": {
+				Response: "<GetUserResponse/>",
+				Fault: &SOAPFault{
+					Code:    "Server",
+					Message: "Internal failure",
+				},
+			},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+
+	store := &mockSOAPStore{}
+	handler.SetRecordingStore(store)
+	handler.EnableRecording()
+
+	soapBody := `<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetUser><id>1</id></GetUser>
+  </soap:Body>
+</soap:Envelope>`
+
+	req := httptest.NewRequest("POST", "/soap/service", strings.NewReader(soapBody))
+	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+	req.Header.Set("SOAPAction", "GetUser")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	time.Sleep(50 * time.Millisecond)
+	recordings := store.getRecordings()
+	if len(recordings) != 1 {
+		t.Fatalf("Expected 1 recording, got %d", len(recordings))
+	}
+
+	rec := recordings[0]
+	if !rec.HasFault {
+		t.Error("Expected HasFault=true for fault response")
+	}
+	if rec.FaultCode == "" {
+		t.Error("Expected non-empty FaultCode")
+	}
+	if rec.ResponseStatus != http.StatusInternalServerError {
+		t.Errorf("Expected status 500 for fault, got %d", rec.ResponseStatus)
+	}
+}
+
+func TestHandler_RequestLoggerCapturesRequest(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-logger-cap",
+		Path: "/soap/service",
+		Operations: map[string]OperationConfig{
+			"GetUser": {
+				Response: "<GetUserResponse><name>Dave</name></GetUserResponse>",
+			},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+
+	logger := &mockRequestLogger{}
+	handler.SetRequestLogger(logger)
+
+	soapBody := `<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetUser><id>1</id></GetUser>
+  </soap:Body>
+</soap:Envelope>`
+
+	req := httptest.NewRequest("POST", "/soap/service", strings.NewReader(soapBody))
+	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+	req.Header.Set("SOAPAction", "GetUser")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Request logging is synchronous — should be available immediately
+	entries := logger.getEntries()
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 log entry, got %d", len(entries))
+	}
+
+	entry := entries[0]
+	if entry.Protocol != "soap" {
+		t.Errorf("Expected protocol 'soap', got %q", entry.Protocol)
+	}
+	if entry.Method != "POST" {
+		t.Errorf("Expected method 'POST', got %q", entry.Method)
+	}
+	if entry.SOAP == nil {
+		t.Fatal("Expected SOAP metadata to be populated")
+	}
+	if entry.SOAP.Operation != "GetUser" {
+		t.Errorf("Expected SOAP operation 'GetUser', got %q", entry.SOAP.Operation)
+	}
+	if entry.SOAP.SOAPVersion != "1.1" {
+		t.Errorf("Expected SOAP version '1.1', got %q", entry.SOAP.SOAPVersion)
+	}
+	if entry.SOAP.IsFault {
+		t.Error("Expected IsFault=false for successful response")
+	}
+	if entry.ResponseStatus != http.StatusOK {
+		t.Errorf("Expected response status 200, got %d", entry.ResponseStatus)
+	}
+}
+
+func TestHandler_RequestLoggerNilNoCapture(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-logger-nil",
+		Path: "/soap/service",
+		Operations: map[string]OperationConfig{
+			"GetUser": {
+				Response: "<GetUserResponse><name>Eve</name></GetUserResponse>",
+			},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+	// No logger set — should not panic
+
+	soapBody := `<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetUser><id>1</id></GetUser>
+  </soap:Body>
+</soap:Envelope>`
+
+	req := httptest.NewRequest("POST", "/soap/service", strings.NewReader(soapBody))
+	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+	req.Header.Set("SOAPAction", "GetUser")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", w.Code)
+	}
+}
+
+func TestHandler_RecordingAndLoggingTogether(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-both",
+		Path: "/soap/service",
+		Operations: map[string]OperationConfig{
+			"GetUser": {
+				Response: "<GetUserResponse><name>Frank</name></GetUserResponse>",
+			},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+
+	store := &mockSOAPStore{}
+	logger := &mockRequestLogger{}
+	handler.SetRecordingStore(store)
+	handler.SetRequestLogger(logger)
+	handler.EnableRecording()
+
+	soapBody := `<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetUser><id>42</id></GetUser>
+  </soap:Body>
+</soap:Envelope>`
+
+	req := httptest.NewRequest("POST", "/soap/service", strings.NewReader(soapBody))
+	req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+	req.Header.Set("SOAPAction", "GetUser")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Both recording and logging should have captured
+	recordings := store.getRecordings()
+	if len(recordings) != 1 {
+		t.Fatalf("Expected 1 recording, got %d", len(recordings))
+	}
+	entries := logger.getEntries()
+	if len(entries) != 1 {
+		t.Fatalf("Expected 1 log entry, got %d", len(entries))
+	}
+
+	// Both should agree on the operation
+	if recordings[0].Operation != entries[0].SOAP.Operation {
+		t.Errorf("Recording operation %q != log entry operation %q",
+			recordings[0].Operation, entries[0].SOAP.Operation)
+	}
+}
+
+func TestHandler_RecordingThreadSafety(t *testing.T) {
+	config := &SOAPConfig{
+		ID:   "test-threadsafe",
+		Path: "/soap/service",
+		Operations: map[string]OperationConfig{
+			"Ping": {Response: "<PingResponse>pong</PingResponse>"},
+		},
+		Enabled: true,
+	}
+	handler := mustNewHandler(t, config)
+
+	store := &mockSOAPStore{}
+	handler.SetRecordingStore(store)
+
+	// Toggle recording on/off from multiple goroutines while serving requests
+	var wg sync.WaitGroup
+	const numGoroutines = 20
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			if idx%2 == 0 {
+				handler.EnableRecording()
+			} else {
+				handler.DisableRecording()
+			}
+			_ = handler.IsRecordingEnabled()
+		}(i)
+	}
+
+	wg.Wait()
+	// No data races or panics = pass
 }

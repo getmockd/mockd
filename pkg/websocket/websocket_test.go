@@ -1335,3 +1335,353 @@ func TestEndpoint_SkipOriginVerify_ExplicitTrue(t *testing.T) {
 		t.Error("SkipOriginVerify should be true when explicitly set")
 	}
 }
+
+// =============================================================================
+// Session 13: WebSocket Recording Pipeline Tests
+// =============================================================================
+
+// mockWSHook is a test double for recording.WebSocketRecordingHook.
+type mockWSHook struct {
+	mu          sync.Mutex
+	id          string
+	frames      []recording.WebSocketFrame
+	connected   bool
+	subprotocol string
+	closeCode   int
+	closeReason string
+	closed      bool
+	completed   bool
+	onFrameErr  error // inject errors
+}
+
+func newMockWSHook(id string) *mockWSHook {
+	return &mockWSHook{id: id}
+}
+
+func (h *mockWSHook) ID() string { return h.id }
+
+func (h *mockWSHook) OnConnect(subprotocol string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.connected = true
+	h.subprotocol = subprotocol
+}
+
+func (h *mockWSHook) OnFrame(frame any) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.onFrameErr != nil {
+		return h.onFrameErr
+	}
+	wsFrame, ok := frame.(recording.WebSocketFrame)
+	if !ok {
+		if p, ok := frame.(*recording.WebSocketFrame); ok {
+			wsFrame = *p
+		} else {
+			return errors.New("unexpected frame type")
+		}
+	}
+	h.frames = append(h.frames, wsFrame)
+	return nil
+}
+
+func (h *mockWSHook) OnClose(code int, reason string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.closed = true
+	h.closeCode = code
+	h.closeReason = reason
+}
+
+func (h *mockWSHook) OnComplete() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.completed = true
+	return nil
+}
+
+func (h *mockWSHook) OnError(err error) {}
+
+// --- ConnectionRecorder tests ---
+
+func TestConnectionRecorder_RecordSend(t *testing.T) {
+	hook := newMockWSHook("test-rec-send")
+	conn := createTestConnectionWithoutWS("rec-conn-1")
+	recorder := NewConnectionRecorder(conn, hook)
+
+	// Record a text message
+	err := recorder.RecordSend(MessageText, []byte("hello server"))
+	if err != nil {
+		t.Fatalf("RecordSend failed: %v", err)
+	}
+
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+
+	if len(hook.frames) != 1 {
+		t.Fatalf("Expected 1 frame, got %d", len(hook.frames))
+	}
+
+	frame := hook.frames[0]
+	if frame.Sequence != 1 {
+		t.Errorf("Expected seq 1, got %d", frame.Sequence)
+	}
+	if frame.Direction != recording.DirectionServerToClient {
+		t.Errorf("Expected s2c direction, got %s", frame.Direction)
+	}
+	if frame.MessageType != recording.MessageTypeText {
+		t.Errorf("Expected text type, got %s", frame.MessageType)
+	}
+	if frame.Data != "hello server" {
+		t.Errorf("Expected data 'hello server', got %q", frame.Data)
+	}
+	if frame.DataEncoding != recording.DataEncodingUTF8 {
+		t.Errorf("Expected utf8 encoding, got %s", frame.DataEncoding)
+	}
+}
+
+func TestConnectionRecorder_RecordReceive(t *testing.T) {
+	hook := newMockWSHook("test-rec-recv")
+	conn := createTestConnectionWithoutWS("rec-conn-2")
+	recorder := NewConnectionRecorder(conn, hook)
+
+	err := recorder.RecordReceive(MessageText, []byte("hello client"))
+	if err != nil {
+		t.Fatalf("RecordReceive failed: %v", err)
+	}
+
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+
+	if len(hook.frames) != 1 {
+		t.Fatalf("Expected 1 frame, got %d", len(hook.frames))
+	}
+
+	frame := hook.frames[0]
+	if frame.Direction != recording.DirectionClientToServer {
+		t.Errorf("Expected c2s direction, got %s", frame.Direction)
+	}
+}
+
+func TestConnectionRecorder_BinaryMessage(t *testing.T) {
+	hook := newMockWSHook("test-rec-binary")
+	conn := createTestConnectionWithoutWS("rec-conn-3")
+	recorder := NewConnectionRecorder(conn, hook)
+
+	binaryData := []byte{0x00, 0xFF, 0xAB, 0xCD}
+	err := recorder.RecordSend(MessageBinary, binaryData)
+	if err != nil {
+		t.Fatalf("RecordSend binary failed: %v", err)
+	}
+
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+
+	frame := hook.frames[0]
+	if frame.MessageType != recording.MessageTypeBinary {
+		t.Errorf("Expected binary type, got %s", frame.MessageType)
+	}
+	if frame.DataEncoding != recording.DataEncodingBase64 {
+		t.Errorf("Expected base64 encoding, got %s", frame.DataEncoding)
+	}
+	if frame.DataSize != 4 {
+		t.Errorf("Expected data size 4, got %d", frame.DataSize)
+	}
+}
+
+func TestConnectionRecorder_SequenceIncrement(t *testing.T) {
+	hook := newMockWSHook("test-rec-seq")
+	conn := createTestConnectionWithoutWS("rec-conn-4")
+	recorder := NewConnectionRecorder(conn, hook)
+
+	// Record 3 messages — send, receive, send
+	_ = recorder.RecordSend(MessageText, []byte("msg1"))
+	_ = recorder.RecordReceive(MessageText, []byte("msg2"))
+	_ = recorder.RecordSend(MessageText, []byte("msg3"))
+
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+
+	if len(hook.frames) != 3 {
+		t.Fatalf("Expected 3 frames, got %d", len(hook.frames))
+	}
+
+	for i, expected := range []int64{1, 2, 3} {
+		if hook.frames[i].Sequence != expected {
+			t.Errorf("Frame %d: expected seq %d, got %d", i, expected, hook.frames[i].Sequence)
+		}
+	}
+
+	// Verify directions alternate correctly
+	if hook.frames[0].Direction != recording.DirectionServerToClient {
+		t.Error("Frame 0 should be s2c")
+	}
+	if hook.frames[1].Direction != recording.DirectionClientToServer {
+		t.Error("Frame 1 should be c2s")
+	}
+	if hook.frames[2].Direction != recording.DirectionServerToClient {
+		t.Error("Frame 2 should be s2c")
+	}
+}
+
+func TestConnectionRecorder_RecordClose(t *testing.T) {
+	hook := newMockWSHook("test-rec-close")
+	conn := createTestConnectionWithoutWS("rec-conn-5")
+	recorder := NewConnectionRecorder(conn, hook)
+
+	err := recorder.RecordClose(1000, "normal closure")
+	if err != nil {
+		t.Fatalf("RecordClose failed: %v", err)
+	}
+
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+
+	if !hook.closed {
+		t.Error("Expected hook.OnClose to be called")
+	}
+	if hook.closeCode != 1000 {
+		t.Errorf("Expected close code 1000, got %d", hook.closeCode)
+	}
+	if hook.closeReason != "normal closure" {
+		t.Errorf("Expected close reason 'normal closure', got %q", hook.closeReason)
+	}
+}
+
+func TestConnectionRecorder_Complete(t *testing.T) {
+	hook := newMockWSHook("test-rec-complete")
+	conn := createTestConnectionWithoutWS("rec-conn-6")
+	recorder := NewConnectionRecorder(conn, hook)
+
+	// Record some data then complete
+	_ = recorder.RecordSend(MessageText, []byte("hello"))
+	err := recorder.Complete()
+	if err != nil {
+		t.Fatalf("Complete failed: %v", err)
+	}
+
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+
+	if !hook.completed {
+		t.Error("Expected hook.OnComplete to be called")
+	}
+	if len(hook.frames) != 1 {
+		t.Errorf("Expected 1 frame before completion, got %d", len(hook.frames))
+	}
+}
+
+func TestConnectionRecorder_FullLifecycle(t *testing.T) {
+	// Simulates a full WebSocket recording: connect, exchange messages, close, complete
+	hook := newMockWSHook("test-lifecycle")
+	conn := createTestConnectionWithoutWS("rec-conn-7")
+	recorder := NewConnectionRecorder(conn, hook)
+
+	// Simulate connect (OnConnect is called separately, not via recorder)
+	hook.OnConnect("graphql-ws")
+
+	// Client sends
+	_ = recorder.RecordReceive(MessageText, []byte(`{"type":"connection_init"}`))
+	// Server responds
+	_ = recorder.RecordSend(MessageText, []byte(`{"type":"connection_ack"}`))
+	// Client sends subscription
+	_ = recorder.RecordReceive(MessageText, []byte(`{"type":"subscribe","id":"1","payload":{"query":"{ users }"}}`))
+	// Server sends data
+	_ = recorder.RecordSend(MessageText, []byte(`{"type":"next","id":"1","payload":{"data":{"users":["Alice"]}}}`))
+	// Close and complete
+	_ = recorder.RecordClose(1000, "normal")
+	_ = recorder.Complete()
+
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+
+	if !hook.connected {
+		t.Error("OnConnect should have been called")
+	}
+	if hook.subprotocol != "graphql-ws" {
+		t.Errorf("Expected subprotocol 'graphql-ws', got %q", hook.subprotocol)
+	}
+	if len(hook.frames) != 4 {
+		t.Fatalf("Expected 4 frames, got %d", len(hook.frames))
+	}
+	if !hook.closed {
+		t.Error("OnClose should have been called")
+	}
+	if !hook.completed {
+		t.Error("OnComplete should have been called")
+	}
+
+	// Verify frame order: c2s, s2c, c2s, s2c
+	expectedDirs := []recording.Direction{
+		recording.DirectionClientToServer,
+		recording.DirectionServerToClient,
+		recording.DirectionClientToServer,
+		recording.DirectionServerToClient,
+	}
+	for i, dir := range expectedDirs {
+		if hook.frames[i].Direction != dir {
+			t.Errorf("Frame %d: expected direction %s, got %s", i, dir, hook.frames[i].Direction)
+		}
+	}
+}
+
+func TestConnectionRecorder_OnFrameError(t *testing.T) {
+	hook := newMockWSHook("test-rec-err")
+	hook.onFrameErr = errors.New("storage full")
+	conn := createTestConnectionWithoutWS("rec-conn-8")
+	recorder := NewConnectionRecorder(conn, hook)
+
+	err := recorder.RecordSend(MessageText, []byte("hello"))
+	if err == nil {
+		t.Fatal("Expected error from RecordSend when hook returns error")
+	}
+	if err.Error() != "storage full" {
+		t.Errorf("Expected 'storage full' error, got: %v", err)
+	}
+}
+
+func TestConnectionRecorder_RelativeTimingIncreases(t *testing.T) {
+	hook := newMockWSHook("test-rec-timing")
+	conn := createTestConnectionWithoutWS("rec-conn-9")
+	recorder := NewConnectionRecorder(conn, hook)
+
+	_ = recorder.RecordSend(MessageText, []byte("first"))
+	time.Sleep(10 * time.Millisecond)
+	_ = recorder.RecordSend(MessageText, []byte("second"))
+
+	hook.mu.Lock()
+	defer hook.mu.Unlock()
+
+	if len(hook.frames) != 2 {
+		t.Fatalf("Expected 2 frames, got %d", len(hook.frames))
+	}
+
+	// Second frame's RelativeMs should be >= first frame's
+	if hook.frames[1].RelativeMs < hook.frames[0].RelativeMs {
+		t.Errorf("RelativeMs should increase: frame0=%d, frame1=%d",
+			hook.frames[0].RelativeMs, hook.frames[1].RelativeMs)
+	}
+}
+
+// --- convertMessageType tests ---
+
+func TestConvertMessageType(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    MessageType
+		expected recording.MessageType
+	}{
+		{"text", MessageText, recording.MessageTypeText},
+		{"binary", MessageBinary, recording.MessageTypeBinary},
+		{"unknown defaults to text", MessageType(99), recording.MessageTypeText},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := convertMessageType(tt.input)
+			if got != tt.expected {
+				t.Errorf("convertMessageType(%v) = %v, want %v", tt.input, got, tt.expected)
+			}
+		})
+	}
+}

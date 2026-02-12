@@ -1489,3 +1489,159 @@ func findSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+// =============================================================================
+// Session 12: MaxItems capacity tests
+// =============================================================================
+
+func TestResource_MaxItems(t *testing.T) {
+	t.Run("enforces max items on create", func(t *testing.T) {
+		store := NewStateStore()
+		store.Register(&ResourceConfig{
+			Name:     "limited",
+			BasePath: "/api/limited",
+			MaxItems: 2,
+		})
+
+		resource := store.Get("limited")
+
+		// Create first item — should succeed
+		_, err := resource.Create(map[string]interface{}{"name": "first"}, nil)
+		if err != nil {
+			t.Fatalf("first create should succeed: %v", err)
+		}
+
+		// Create second item — should succeed
+		_, err = resource.Create(map[string]interface{}{"name": "second"}, nil)
+		if err != nil {
+			t.Fatalf("second create should succeed: %v", err)
+		}
+
+		// Create third item — should fail with CapacityError
+		_, err = resource.Create(map[string]interface{}{"name": "third"}, nil)
+		if err == nil {
+			t.Fatal("third create should fail due to capacity limit")
+		}
+
+		capErr, ok := err.(*CapacityError)
+		if !ok {
+			t.Fatalf("expected *CapacityError, got %T: %v", err, err)
+		}
+		if capErr.Resource != "limited" {
+			t.Errorf("expected resource 'limited', got %q", capErr.Resource)
+		}
+		if capErr.MaxItems != 2 {
+			t.Errorf("expected MaxItems 2, got %d", capErr.MaxItems)
+		}
+		if capErr.StatusCode() != 507 {
+			t.Errorf("expected status 507, got %d", capErr.StatusCode())
+		}
+	})
+
+	t.Run("zero maxItems means unlimited", func(t *testing.T) {
+		store := NewStateStore()
+		store.Register(&ResourceConfig{
+			Name:     "unlimited",
+			BasePath: "/api/unlimited",
+			MaxItems: 0,
+		})
+
+		resource := store.Get("unlimited")
+
+		// Create many items — all should succeed
+		for i := 0; i < 100; i++ {
+			_, err := resource.Create(map[string]interface{}{
+				"name": "item",
+			}, nil)
+			if err != nil {
+				t.Fatalf("create %d should succeed with unlimited: %v", i, err)
+			}
+		}
+	})
+
+	t.Run("reset frees capacity", func(t *testing.T) {
+		store := NewStateStore()
+		store.Register(&ResourceConfig{
+			Name:     "resettable",
+			BasePath: "/api/resettable",
+			MaxItems: 1,
+		})
+
+		resource := store.Get("resettable")
+
+		// Fill the resource
+		_, err := resource.Create(map[string]interface{}{"name": "first"}, nil)
+		if err != nil {
+			t.Fatalf("first create should succeed: %v", err)
+		}
+
+		// Should be at capacity
+		_, err = resource.Create(map[string]interface{}{"name": "second"}, nil)
+		if err == nil {
+			t.Fatal("should fail at capacity")
+		}
+
+		// Reset should clear items
+		resource.Reset()
+
+		// Should be able to create again (no seed data)
+		_, err = resource.Create(map[string]interface{}{"name": "after-reset"}, nil)
+		if err != nil {
+			t.Fatalf("create after reset should succeed: %v", err)
+		}
+	})
+
+	t.Run("capacity error in ToErrorResponse", func(t *testing.T) {
+		err := &CapacityError{Resource: "users", MaxItems: 100}
+		resp := ToErrorResponse(err)
+		if resp.Error != "resource capacity exceeded" {
+			t.Errorf("expected 'resource capacity exceeded', got %q", resp.Error)
+		}
+		if resp.Resource != "users" {
+			t.Errorf("expected resource 'users', got %q", resp.Resource)
+		}
+		if resp.StatusCode != 507 {
+			t.Errorf("expected status 507, got %d", resp.StatusCode)
+		}
+	})
+}
+
+// =============================================================================
+// Session 12: Reset lock release test
+// =============================================================================
+
+func TestStateStore_ResetDoesNotHoldStoreLock(t *testing.T) {
+	store := NewStateStore()
+
+	// Register multiple resources with seed data
+	for _, name := range []string{"users", "products", "orders"} {
+		store.Register(&ResourceConfig{
+			Name:     name,
+			BasePath: "/api/" + name,
+			SeedData: []map[string]interface{}{
+				{"id": "seed-1", "name": name + " seed"},
+			},
+		})
+	}
+
+	// Reset all — should not deadlock even with concurrent reads
+	done := make(chan bool, 1)
+	go func() {
+		resp, err := store.Reset("")
+		if err != nil {
+			t.Errorf("reset failed: %v", err)
+		}
+		if len(resp.Resources) != 3 {
+			t.Errorf("expected 3 resources reset, got %d", len(resp.Resources))
+		}
+		done <- true
+	}()
+
+	// Concurrent reads while reset is happening
+	for i := 0; i < 10; i++ {
+		names := store.List()
+		_ = names
+	}
+
+	<-done
+}

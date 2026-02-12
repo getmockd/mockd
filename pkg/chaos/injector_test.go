@@ -3,6 +3,8 @@ package chaos
 import (
 	"context"
 	"io"
+	"math"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -810,4 +812,241 @@ func TestMiddleware_SlowBodyFault(t *testing.T) {
 
 	// At 1000 bytes/sec, 100 bytes should take ~100ms
 	t.Logf("SlowBody fault elapsed: %v", elapsed)
+}
+
+// =============================================================================
+// Session 12: Probability distribution tests
+// =============================================================================
+
+func TestInjector_ShouldInject_Probability50(t *testing.T) {
+	config := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: "/api/.*",
+				Probability: 1.0, // Rule always matches
+				Faults: []FaultConfig{
+					{
+						Type:        FaultError,
+						Probability: 0.5, // Fault fires ~50% of the time
+						Config: map[string]interface{}{
+							"statusCodes": []int{500},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	injector, err := NewInjector(config)
+	if err != nil {
+		t.Fatalf("NewInjector failed: %v", err)
+	}
+
+	const n = 1000
+	injected := 0
+
+	for i := 0; i < n; i++ {
+		req := httptest.NewRequest("GET", "/api/data", nil)
+		faults := injector.ShouldInject(req)
+		if len(faults) > 0 {
+			injected++
+		}
+	}
+
+	rate := float64(injected) / float64(n)
+	t.Logf("Probability 0.5: %d/%d injected (%.2f%%)", injected, n, rate*100)
+
+	// With 1000 samples and probability 0.5, expect rate within [0.40, 0.60]
+	// (roughly ±3 standard deviations for binomial distribution)
+	if math.Abs(rate-0.5) > 0.10 {
+		t.Errorf("Expected ~50%% injection rate, got %.1f%% (%d/%d)", rate*100, injected, n)
+	}
+}
+
+func TestInjector_ShouldInject_ProbabilityZero(t *testing.T) {
+	config := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: "/api/.*",
+				Probability: 1.0,
+				Faults: []FaultConfig{
+					{
+						Type:        FaultError,
+						Probability: 0.0, // Never inject
+						Config: map[string]interface{}{
+							"statusCodes": []int{500},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	injector, err := NewInjector(config)
+	if err != nil {
+		t.Fatalf("NewInjector failed: %v", err)
+	}
+
+	for i := 0; i < 100; i++ {
+		req := httptest.NewRequest("GET", "/api/data", nil)
+		faults := injector.ShouldInject(req)
+		if len(faults) > 0 {
+			t.Fatal("Probability 0.0 should never inject faults")
+		}
+	}
+}
+
+func TestInjector_ShouldInject_RuleProbability(t *testing.T) {
+	// Test that the RULE-level probability is also checked
+	config := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: "/api/.*",
+				Probability: 0.5, // Rule matches ~50% of requests
+				Faults: []FaultConfig{
+					{
+						Type:        FaultError,
+						Probability: 1.0, // Fault always fires when rule matches
+						Config: map[string]interface{}{
+							"statusCodes": []int{500},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	injector, err := NewInjector(config)
+	if err != nil {
+		t.Fatalf("NewInjector failed: %v", err)
+	}
+
+	const n = 1000
+	injected := 0
+
+	for i := 0; i < n; i++ {
+		req := httptest.NewRequest("GET", "/api/data", nil)
+		faults := injector.ShouldInject(req)
+		if len(faults) > 0 {
+			injected++
+		}
+	}
+
+	rate := float64(injected) / float64(n)
+	t.Logf("Rule probability 0.5: %d/%d injected (%.2f%%)", injected, n, rate*100)
+
+	if math.Abs(rate-0.5) > 0.10 {
+		t.Errorf("Expected ~50%% injection rate, got %.1f%% (%d/%d)", rate*100, injected, n)
+	}
+}
+
+// =============================================================================
+// Session 12: Connection reset fault test
+// =============================================================================
+
+func TestMiddleware_ConnectionReset(t *testing.T) {
+	config := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: "/.*",
+				Probability: 1.0,
+				Faults: []FaultConfig{
+					{
+						Type:        FaultConnectionReset,
+						Probability: 1.0,
+					},
+				},
+			},
+		},
+	}
+
+	injector, err := NewInjector(config)
+	if err != nil {
+		t.Fatalf("NewInjector failed: %v", err)
+	}
+
+	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("should not reach client"))
+	})
+
+	middleware := NewMiddleware(backend, injector)
+	server := httptest.NewServer(middleware)
+	defer server.Close()
+
+	// Make a request - should get a connection error
+	client := &http.Client{Timeout: 5 * time.Second}
+	_, err = client.Get(server.URL + "/test")
+	if err == nil {
+		t.Fatal("Expected connection error for connection reset fault")
+	}
+
+	// The error should be a connection-level error (EOF, reset, etc.)
+	errStr := err.Error()
+	isConnectionError := strings.Contains(errStr, "EOF") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "broken pipe") ||
+		strings.Contains(errStr, "forcibly closed") ||
+		strings.Contains(errStr, "unexpected EOF")
+
+	if !isConnectionError {
+		// On some platforms, the error may be wrapped differently
+		if _, ok := err.(*net.OpError); ok {
+			isConnectionError = true
+		}
+	}
+
+	if !isConnectionError {
+		t.Errorf("Expected connection-level error, got: %v", err)
+	}
+}
+
+func TestMiddleware_ConnectionReset_NonHijackable(t *testing.T) {
+	// When the ResponseWriter doesn't support Hijack (e.g., test recorder),
+	// the connection reset fault should be a no-op (request passes through).
+	config := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: "/.*",
+				Probability: 1.0,
+				Faults: []FaultConfig{
+					{
+						Type:        FaultConnectionReset,
+						Probability: 1.0,
+					},
+				},
+			},
+		},
+	}
+
+	injector, err := NewInjector(config)
+	if err != nil {
+		t.Fatalf("NewInjector failed: %v", err)
+	}
+
+	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("passthrough"))
+	})
+
+	middleware := NewMiddleware(backend, injector)
+
+	// Using httptest.NewRecorder which does NOT implement http.Hijacker
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/test", nil)
+
+	middleware.ServeHTTP(w, req)
+
+	// With a non-hijackable writer, the Hijack() call fails, so the
+	// middleware returns early without calling the backend handler.
+	// The response body should be empty (no-op connection reset).
+	body := w.Body.String()
+	if body != "" {
+		t.Errorf("Expected empty body (connection reset no-op), got %q", body)
+	}
 }

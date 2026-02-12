@@ -1,9 +1,13 @@
 package portability
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/mock"
 )
 
 // ============================================================================
@@ -1261,24 +1265,27 @@ func TestExtractWireMockVariables(t *testing.T) {
 	}
 }
 
-func TestItoa(t *testing.T) {
-	tests := []struct {
-		input    int
-		expected string
-	}{
-		{0, "0"},
-		{1, "1"},
-		{42, "42"},
-		{-1, "-1"},
-		{-42, "-42"},
-		{123456789, "123456789"},
+func TestImportError_FormatWithLineAndColumn(t *testing.T) {
+	err := &ImportError{
+		Format:  FormatCURL,
+		Line:    10,
+		Column:  5,
+		Message: "syntax error",
+	}
+	got := err.Error()
+	if got != "curl: syntax error (line 10, column 5)" {
+		t.Errorf("ImportError.Error() = %q, expected %q", got, "curl: syntax error (line 10, column 5)")
 	}
 
-	for _, tt := range tests {
-		result := itoa(tt.input)
-		if result != tt.expected {
-			t.Errorf("itoa(%d) = %q, expected %q", tt.input, result, tt.expected)
-		}
+	// Line only, no column
+	err2 := &ImportError{
+		Format:  FormatHAR,
+		Line:    42,
+		Message: "bad value",
+	}
+	got2 := err2.Error()
+	if got2 != "har: bad value (line 42)" {
+		t.Errorf("ImportError.Error() = %q, expected %q", got2, "har: bad value (line 42)")
 	}
 }
 
@@ -1307,5 +1314,863 @@ func TestGenerateDefaultBody(t *testing.T) {
 		if tt.shouldMatch == "" && result != "" {
 			t.Errorf("generateDefaultBody(%d) = %q, expected empty", tt.status, result)
 		}
+	}
+}
+
+// ============================================================================
+// Session 12: HAR base64 body decoding tests
+// ============================================================================
+
+func TestHARImporter_Base64Body(t *testing.T) {
+	importer := &HARImporter{}
+
+	t.Run("decodes base64-encoded response body", func(t *testing.T) {
+		originalBody := `{"users": [{"id": 1, "name": "Alice"}]}`
+		encoded := base64.StdEncoding.EncodeToString([]byte(originalBody))
+
+		har := `{
+			"log": {
+				"version": "1.2",
+				"creator": {"name": "test", "version": "1.0"},
+				"entries": [{
+					"request": {
+						"method": "GET",
+						"url": "https://api.example.com/users",
+						"headers": []
+					},
+					"response": {
+						"status": 200,
+						"headers": [{"name": "Content-Type", "value": "application/json"}],
+						"content": {
+							"mimeType": "application/json",
+							"text": "` + encoded + `",
+							"encoding": "base64"
+						}
+					}
+				}]
+			}
+		}`
+
+		result, err := importer.Import([]byte(har))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		if len(result.Mocks) != 1 {
+			t.Fatalf("Expected 1 mock, got %d", len(result.Mocks))
+		}
+
+		body := result.Mocks[0].HTTP.Response.Body
+		if body != originalBody {
+			t.Errorf("Expected decoded body %q, got %q", originalBody, body)
+		}
+	})
+
+	t.Run("handles base64 encoding case-insensitively", func(t *testing.T) {
+		originalBody := "Hello World"
+		encoded := base64.StdEncoding.EncodeToString([]byte(originalBody))
+
+		har := `{
+			"log": {
+				"version": "1.2",
+				"creator": {"name": "test", "version": "1.0"},
+				"entries": [{
+					"request": {
+						"method": "GET",
+						"url": "https://api.example.com/hello",
+						"headers": []
+					},
+					"response": {
+						"status": 200,
+						"headers": [],
+						"content": {
+							"mimeType": "text/plain",
+							"text": "` + encoded + `",
+							"encoding": "Base64"
+						}
+					}
+				}]
+			}
+		}`
+
+		result, err := importer.Import([]byte(har))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		body := result.Mocks[0].HTTP.Response.Body
+		if body != originalBody {
+			t.Errorf("Expected decoded body %q, got %q", originalBody, body)
+		}
+	})
+
+	t.Run("falls through to raw text when base64 decode fails", func(t *testing.T) {
+		har := `{
+			"log": {
+				"version": "1.2",
+				"creator": {"name": "test", "version": "1.0"},
+				"entries": [{
+					"request": {
+						"method": "GET",
+						"url": "https://api.example.com/broken",
+						"headers": []
+					},
+					"response": {
+						"status": 200,
+						"headers": [],
+						"content": {
+							"mimeType": "text/plain",
+							"text": "not-valid-base64!!!",
+							"encoding": "base64"
+						}
+					}
+				}]
+			}
+		}`
+
+		result, err := importer.Import([]byte(har))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		body := result.Mocks[0].HTTP.Response.Body
+		if body != "not-valid-base64!!!" {
+			t.Errorf("Expected raw text fallback, got %q", body)
+		}
+	})
+
+	t.Run("uses raw text when no encoding specified", func(t *testing.T) {
+		har := `{
+			"log": {
+				"version": "1.2",
+				"creator": {"name": "test", "version": "1.0"},
+				"entries": [{
+					"request": {
+						"method": "GET",
+						"url": "https://api.example.com/plain",
+						"headers": []
+					},
+					"response": {
+						"status": 200,
+						"headers": [],
+						"content": {
+							"mimeType": "text/plain",
+							"text": "plain text body"
+						}
+					}
+				}]
+			}
+		}`
+
+		result, err := importer.Import([]byte(har))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		body := result.Mocks[0].HTTP.Response.Body
+		if body != "plain text body" {
+			t.Errorf("Expected raw text %q, got %q", "plain text body", body)
+		}
+	})
+}
+
+// ============================================================================
+// Session 12: WireMock advanced matcher tests
+// ============================================================================
+
+func TestWireMockImporter_AdvancedMatchers(t *testing.T) {
+	importer := &WireMockImporter{}
+
+	t.Run("imports contains header matcher", func(t *testing.T) {
+		mapping := `{
+			"request": {
+				"method": "GET",
+				"urlPath": "/api/data",
+				"headers": {
+					"Authorization": {"contains": "Bearer"}
+				}
+			},
+			"response": {"status": 200}
+		}`
+
+		result, err := importer.Import([]byte(mapping))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Matcher.Headers["Authorization"] != "Bearer" {
+			t.Errorf("Expected header value 'Bearer', got %q", mock.HTTP.Matcher.Headers["Authorization"])
+		}
+	})
+
+	t.Run("imports matches header matcher", func(t *testing.T) {
+		mapping := `{
+			"request": {
+				"method": "GET",
+				"urlPath": "/api/data",
+				"headers": {
+					"X-Request-ID": {"matches": "[a-f0-9-]+"}
+				}
+			},
+			"response": {"status": 200}
+		}`
+
+		result, err := importer.Import([]byte(mapping))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Matcher.Headers["X-Request-ID"] != "[a-f0-9-]+" {
+			t.Errorf("Expected header pattern '[a-f0-9-]+', got %q", mock.HTTP.Matcher.Headers["X-Request-ID"])
+		}
+	})
+
+	t.Run("imports contains query parameter matcher", func(t *testing.T) {
+		mapping := `{
+			"request": {
+				"method": "GET",
+				"urlPath": "/search",
+				"queryParameters": {
+					"q": {"contains": "test"}
+				}
+			},
+			"response": {"status": 200}
+		}`
+
+		result, err := importer.Import([]byte(mapping))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Matcher.QueryParams["q"] != "test" {
+			t.Errorf("Expected query param 'test', got %q", mock.HTTP.Matcher.QueryParams["q"])
+		}
+	})
+
+	t.Run("imports equalToJson body pattern", func(t *testing.T) {
+		mapping := `{
+			"request": {
+				"method": "POST",
+				"urlPath": "/api/users",
+				"bodyPatterns": [
+					{"equalToJson": "{\"name\": \"Alice\"}"}
+				]
+			},
+			"response": {"status": 201}
+		}`
+
+		result, err := importer.Import([]byte(mapping))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Matcher.BodyEquals != `{"name": "Alice"}` {
+			t.Errorf("Expected BodyEquals to be set, got %q", mock.HTTP.Matcher.BodyEquals)
+		}
+	})
+
+	t.Run("imports multiple body patterns", func(t *testing.T) {
+		mapping := `{
+			"request": {
+				"method": "POST",
+				"urlPath": "/api/data",
+				"bodyPatterns": [
+					{"contains": "hello"},
+					{"matches": ".*world.*"}
+				]
+			},
+			"response": {"status": 200}
+		}`
+
+		result, err := importer.Import([]byte(mapping))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Matcher.BodyContains != "hello" {
+			t.Errorf("Expected BodyContains 'hello', got %q", mock.HTTP.Matcher.BodyContains)
+		}
+		if mock.HTTP.Matcher.BodyPattern != ".*world.*" {
+			t.Errorf("Expected BodyPattern '.*world.*', got %q", mock.HTTP.Matcher.BodyPattern)
+		}
+	})
+
+	t.Run("imports base64Body response", func(t *testing.T) {
+		originalBody := `{"decoded": true}`
+		encoded := base64.StdEncoding.EncodeToString([]byte(originalBody))
+
+		mapping := `{
+			"request": {"method": "GET", "urlPath": "/binary"},
+			"response": {
+				"status": 200,
+				"base64Body": "` + encoded + `"
+			}
+		}`
+
+		result, err := importer.Import([]byte(mapping))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Response.Body != originalBody {
+			t.Errorf("Expected decoded body %q, got %q", originalBody, mock.HTTP.Response.Body)
+		}
+	})
+
+	t.Run("prefers equalTo over contains in headers", func(t *testing.T) {
+		// When both are present, equalTo should win (it's checked first)
+		mapping := `{
+			"request": {
+				"method": "GET",
+				"urlPath": "/test",
+				"headers": {
+					"Accept": {"equalTo": "application/json"}
+				}
+			},
+			"response": {"status": 200}
+		}`
+
+		result, err := importer.Import([]byte(mapping))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Matcher.Headers["Accept"] != "application/json" {
+			t.Errorf("Expected 'application/json', got %q", mock.HTTP.Matcher.Headers["Accept"])
+		}
+	})
+}
+
+// ============================================================================
+// Session 12: cURL method-appropriate defaults tests
+// ============================================================================
+
+func TestCURLImporter_MethodDefaults(t *testing.T) {
+	importer := &CURLImporter{}
+
+	t.Run("POST returns 201 Created", func(t *testing.T) {
+		cmd := `curl -X POST -d '{"name":"test"}' https://api.example.com/users`
+
+		result, err := importer.Import([]byte(cmd))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Response.StatusCode != 201 {
+			t.Errorf("Expected 201 for POST, got %d", mock.HTTP.Response.StatusCode)
+		}
+		if !strings.Contains(mock.HTTP.Response.Body, "created") {
+			t.Errorf("Expected 'created' in body, got %q", mock.HTTP.Response.Body)
+		}
+	})
+
+	t.Run("DELETE returns 204 No Content", func(t *testing.T) {
+		cmd := `curl -X DELETE https://api.example.com/users/123`
+
+		result, err := importer.Import([]byte(cmd))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Response.StatusCode != 204 {
+			t.Errorf("Expected 204 for DELETE, got %d", mock.HTTP.Response.StatusCode)
+		}
+		if mock.HTTP.Response.Body != "" {
+			t.Errorf("Expected empty body for DELETE, got %q", mock.HTTP.Response.Body)
+		}
+	})
+
+	t.Run("PUT returns 200 with updated body", func(t *testing.T) {
+		cmd := `curl -X PUT -d '{"name":"updated"}' https://api.example.com/users/123`
+
+		result, err := importer.Import([]byte(cmd))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Response.StatusCode != 200 {
+			t.Errorf("Expected 200 for PUT, got %d", mock.HTTP.Response.StatusCode)
+		}
+		if !strings.Contains(mock.HTTP.Response.Body, "updated") {
+			t.Errorf("Expected 'updated' in body, got %q", mock.HTTP.Response.Body)
+		}
+	})
+
+	t.Run("GET returns 200 with ok body", func(t *testing.T) {
+		cmd := `curl https://api.example.com/users`
+
+		result, err := importer.Import([]byte(cmd))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Response.StatusCode != 200 {
+			t.Errorf("Expected 200 for GET, got %d", mock.HTTP.Response.StatusCode)
+		}
+		if !strings.Contains(mock.HTTP.Response.Body, "ok") {
+			t.Errorf("Expected 'ok' in body, got %q", mock.HTTP.Response.Body)
+		}
+	})
+
+	t.Run("request body stored as BodyEquals matcher", func(t *testing.T) {
+		cmd := `curl -X POST -d '{"name":"test"}' https://api.example.com/users`
+
+		result, err := importer.Import([]byte(cmd))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		if mock.HTTP.Matcher.BodyEquals != `{"name":"test"}` {
+			t.Errorf("Expected BodyEquals to be set, got %q", mock.HTTP.Matcher.BodyEquals)
+		}
+	})
+
+	t.Run("Accept header used as content type hint", func(t *testing.T) {
+		cmd := `curl -H "Accept: text/xml" https://api.example.com/data`
+
+		result, err := importer.Import([]byte(cmd))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		mock := result.Mocks[0]
+		ct := mock.HTTP.Response.Headers["Content-Type"]
+		if ct != "text/xml" {
+			t.Errorf("Expected Content-Type 'text/xml', got %q", ct)
+		}
+	})
+}
+
+// ============================================================================
+// Session 12: YAML format detection with proper parsing
+// ============================================================================
+
+func TestDetectFormatFromYAML(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		expected Format
+	}{
+		{
+			name:     "OpenAPI YAML",
+			yaml:     "openapi: '3.0.3'\ninfo:\n  title: Test\npaths: {}",
+			expected: FormatOpenAPI,
+		},
+		{
+			name:     "Swagger 2.0 YAML",
+			yaml:     "swagger: '2.0'\ninfo:\n  title: Legacy\nbasePath: /api",
+			expected: FormatOpenAPI,
+		},
+		{
+			name:     "Mockd with kind MockCollection",
+			yaml:     "kind: MockCollection\nversion: '1.0'\nmocks: []",
+			expected: FormatMockd,
+		},
+		{
+			name:     "Mockd with version and mocks",
+			yaml:     "version: '1.0'\nmocks:\n  - type: http",
+			expected: FormatMockd,
+		},
+		{
+			name:     "Mockd with just mocks array",
+			yaml:     "mocks:\n  - type: http\n    http:\n      matcher:\n        path: /api",
+			expected: FormatMockd,
+		},
+		{
+			name:     "Single mock with type field",
+			yaml:     "type: http\nhttp:\n  matcher:\n    path: /test",
+			expected: FormatMockd,
+		},
+		{
+			name:     "GraphQL single mock",
+			yaml:     "type: graphql\ngraphql:\n  path: /graphql",
+			expected: FormatMockd,
+		},
+		{
+			name:     "Unknown YAML content",
+			yaml:     "name: something\ndata:\n  - item1\n  - item2",
+			expected: FormatUnknown,
+		},
+		{
+			name:     "Invalid YAML falls back to string check",
+			yaml:     "openapi: 3.0.3\n  bad indent: [",
+			expected: FormatOpenAPI, // string fallback catches it
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := detectFormatFromYAML([]byte(tt.yaml))
+			if result != tt.expected {
+				t.Errorf("detectFormatFromYAML() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Session 12: curlDefaultResponse unit tests
+// ============================================================================
+
+func TestCurlDefaultResponse(t *testing.T) {
+	tests := []struct {
+		method     string
+		wantStatus int
+		wantBody   string
+	}{
+		{"POST", 201, `{"status": "created"}`},
+		{"DELETE", 204, ""},
+		{"PUT", 200, `{"status": "updated"}`},
+		{"PATCH", 200, `{"status": "updated"}`},
+		{"HEAD", 200, ""},
+		{"OPTIONS", 200, ""},
+		{"GET", 200, `{"status": "ok"}`},
+		{"get", 200, `{"status": "ok"}`}, // case-insensitive
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method, func(t *testing.T) {
+			status, body := curlDefaultResponse(tt.method)
+			if status != tt.wantStatus {
+				t.Errorf("curlDefaultResponse(%q) status = %d, want %d", tt.method, status, tt.wantStatus)
+			}
+			if body != tt.wantBody {
+				t.Errorf("curlDefaultResponse(%q) body = %q, want %q", tt.method, body, tt.wantBody)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Session 12: decodeHARBody unit tests
+// ============================================================================
+
+func TestDecodeHARBody(t *testing.T) {
+	t.Run("decodes base64", func(t *testing.T) {
+		content := HARContent{
+			Text:     base64.StdEncoding.EncodeToString([]byte("hello world")),
+			Encoding: "base64",
+		}
+		result := decodeHARBody(content)
+		if result != "hello world" {
+			t.Errorf("Expected 'hello world', got %q", result)
+		}
+	})
+
+	t.Run("returns raw text when no encoding", func(t *testing.T) {
+		content := HARContent{
+			Text: "plain text",
+		}
+		result := decodeHARBody(content)
+		if result != "plain text" {
+			t.Errorf("Expected 'plain text', got %q", result)
+		}
+	})
+
+	t.Run("returns empty for empty content", func(t *testing.T) {
+		content := HARContent{}
+		result := decodeHARBody(content)
+		if result != "" {
+			t.Errorf("Expected empty, got %q", result)
+		}
+	})
+
+	t.Run("falls back to raw on invalid base64", func(t *testing.T) {
+		content := HARContent{
+			Text:     "not-base64-at-all!!!",
+			Encoding: "base64",
+		}
+		result := decodeHARBody(content)
+		if result != "not-base64-at-all!!!" {
+			t.Errorf("Expected raw fallback, got %q", result)
+		}
+	})
+}
+
+// =============================================================================
+// Session 13: DryRun and Native format round-trip tests
+// =============================================================================
+
+func TestImport_DryRun(t *testing.T) {
+	// A simple cURL command
+	curlData := []byte(`curl -X GET https://api.example.com/users/1`)
+
+	result, err := Import(curlData, "request.sh", &ImportOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("Import DryRun failed: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Expected non-nil result for DryRun")
+	}
+	if result.Collection == nil {
+		t.Fatal("Expected non-nil collection in DryRun")
+	}
+	if result.EndpointCount == 0 {
+		t.Error("Expected at least 1 endpoint in DryRun result")
+	}
+}
+
+func TestImport_DryRunNameOverride(t *testing.T) {
+	curlData := []byte(`curl -X POST https://api.example.com/users -d '{"name":"Alice"}'`)
+
+	result, err := Import(curlData, "request.sh", &ImportOptions{
+		DryRun: true,
+		Name:   "My Custom Collection",
+	})
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+
+	if result.Collection.Name != "My Custom Collection" {
+		t.Errorf("Expected name 'My Custom Collection', got %q", result.Collection.Name)
+	}
+}
+
+func TestImport_DryRunVsNormal_SameResult(t *testing.T) {
+	curlData := []byte(`curl -X GET https://api.example.com/health`)
+
+	dryResult, err := Import(curlData, "request.sh", &ImportOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("DryRun import failed: %v", err)
+	}
+
+	normalResult, err := Import(curlData, "request.sh", &ImportOptions{DryRun: false})
+	if err != nil {
+		t.Fatalf("Normal import failed: %v", err)
+	}
+
+	// Both should produce the same endpoint count
+	if dryResult.EndpointCount != normalResult.EndpointCount {
+		t.Errorf("DryRun endpoint count %d != normal %d",
+			dryResult.EndpointCount, normalResult.EndpointCount)
+	}
+}
+
+func TestImport_UndetectableFormat(t *testing.T) {
+	data := []byte(`this is not any recognizable format at all 12345`)
+	_, err := Import(data, "unknown.txt", nil)
+	if err == nil {
+		t.Fatal("Expected error for undetectable format")
+	}
+}
+
+func TestNativeExporter_RoundTrip(t *testing.T) {
+	// Create a collection using the actual NativeV1 format and convert
+	enabled := true
+	collection := &config.MockCollection{
+		Name: "Test Collection",
+		Mocks: []*config.MockConfiguration{
+			{
+				Type:    mock.TypeHTTP,
+				Name:    "Get Users",
+				Enabled: &enabled,
+				HTTP: &mock.HTTPSpec{
+					Matcher: &mock.HTTPMatcher{
+						Method: "GET",
+						Path:   "/api/users",
+					},
+					Response: &mock.HTTPResponse{
+						StatusCode: 200,
+						Body:       `{"users":["Alice","Bob"]}`,
+						Headers: map[string]string{
+							"Content-Type": "application/json",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Export to native YAML format
+	exporter := &NativeExporter{AsYAML: true}
+	exported, err := exporter.Export(collection)
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	if len(exported) == 0 {
+		t.Fatal("Expected non-empty export")
+	}
+
+	// Re-import the exported data
+	nativeImporter := &NativeImporter{}
+	reimported, err := nativeImporter.Import(exported)
+	if err != nil {
+		t.Fatalf("Re-import failed: %v\nExported:\n%s", err, string(exported))
+	}
+
+	if reimported == nil {
+		t.Fatal("Expected non-nil reimported collection")
+	}
+
+	// Verify key fields survived round-trip
+	if len(reimported.Mocks) != 1 {
+		t.Fatalf("Expected 1 mock after round-trip, got %d", len(reimported.Mocks))
+	}
+
+	m := reimported.Mocks[0]
+	if m.HTTP == nil {
+		t.Fatal("Expected HTTP config after round-trip")
+	}
+	if m.HTTP.Matcher == nil {
+		t.Fatal("Expected HTTP matcher after round-trip")
+	}
+	if m.HTTP.Matcher.Method != "GET" {
+		t.Errorf("Expected method GET, got %q", m.HTTP.Matcher.Method)
+	}
+	if m.HTTP.Matcher.Path != "/api/users" {
+		t.Errorf("Expected path '/api/users', got %q", m.HTTP.Matcher.Path)
+	}
+	if m.HTTP.Response == nil {
+		t.Fatal("Expected HTTP response after round-trip")
+	}
+	if m.HTTP.Response.StatusCode != 200 {
+		t.Errorf("Expected status 200 after round-trip, got %d", m.HTTP.Response.StatusCode)
+	}
+}
+
+func TestNativeExporter_JSON_RoundTrip(t *testing.T) {
+	enabled := true
+	collection := &config.MockCollection{
+		Name: "JSON Test",
+		Mocks: []*config.MockConfiguration{
+			{
+				Type:    mock.TypeHTTP,
+				Name:    "Health",
+				Enabled: &enabled,
+				HTTP: &mock.HTTPSpec{
+					Matcher: &mock.HTTPMatcher{
+						Method: "GET",
+						Path:   "/health",
+					},
+					Response: &mock.HTTPResponse{
+						StatusCode: 200,
+						Body:       "ok",
+					},
+				},
+			},
+		},
+	}
+
+	// Export to JSON
+	exporter := &NativeExporter{AsYAML: false}
+	exported, err := exporter.Export(collection)
+	if err != nil {
+		t.Fatalf("JSON export failed: %v", err)
+	}
+
+	// Re-import
+	nativeImporter := &NativeImporter{}
+	reimported, err := nativeImporter.Import(exported)
+	if err != nil {
+		t.Fatalf("JSON re-import failed: %v\nExported:\n%s", err, string(exported))
+	}
+
+	if len(reimported.Mocks) != 1 {
+		t.Fatalf("Expected 1 mock, got %d", len(reimported.Mocks))
+	}
+	if reimported.Mocks[0].HTTP == nil || reimported.Mocks[0].HTTP.Matcher == nil {
+		t.Fatal("Expected HTTP matcher after JSON round-trip")
+	}
+	if reimported.Mocks[0].HTTP.Matcher.Path != "/health" {
+		t.Errorf("Expected path '/health', got %q", reimported.Mocks[0].HTTP.Matcher.Path)
+	}
+}
+
+func TestNativeExporter_WithStateful(t *testing.T) {
+	enabled := true
+	collection := &config.MockCollection{
+		Name: "Stateful Test",
+		Mocks: []*config.MockConfiguration{
+			{
+				Type:    mock.TypeHTTP,
+				Name:    "API",
+				Enabled: &enabled,
+				HTTP: &mock.HTTPSpec{
+					Matcher: &mock.HTTPMatcher{
+						Method: "GET",
+						Path:   "/api/items",
+					},
+					Response: &mock.HTTPResponse{
+						StatusCode: 200,
+					},
+				},
+			},
+		},
+		StatefulResources: []*config.StatefulResourceConfig{
+			{
+				Name:     "products",
+				BasePath: "/api/products",
+			},
+		},
+	}
+
+	exporter := &NativeExporter{AsYAML: true}
+	exported, err := exporter.Export(collection)
+	if err != nil {
+		t.Fatalf("Export with stateful failed: %v", err)
+	}
+
+	nativeImporter := &NativeImporter{}
+	reimported, err := nativeImporter.Import(exported)
+	if err != nil {
+		t.Fatalf("Re-import with stateful failed: %v", err)
+	}
+
+	if len(reimported.StatefulResources) != 1 {
+		t.Fatalf("Expected 1 stateful resource, got %d", len(reimported.StatefulResources))
+	}
+	if reimported.StatefulResources[0].Name != "products" {
+		t.Errorf("Expected resource name 'products', got %q", reimported.StatefulResources[0].Name)
+	}
+}
+
+func TestExport_DefaultsToMockd(t *testing.T) {
+	enabled := true
+	collection := &config.MockCollection{
+		Name: "Default Format Test",
+		Mocks: []*config.MockConfiguration{
+			{
+				Type:    mock.TypeHTTP,
+				Enabled: &enabled,
+				HTTP: &mock.HTTPSpec{
+					Matcher: &mock.HTTPMatcher{
+						Method: "GET",
+						Path:   "/ping",
+					},
+					Response: &mock.HTTPResponse{
+						StatusCode: 200,
+						Body:       "pong",
+					},
+				},
+			},
+		},
+	}
+
+	result, err := Export(collection, nil)
+	if err != nil {
+		t.Fatalf("Export with nil opts failed: %v", err)
+	}
+	if result.Format != FormatMockd {
+		t.Errorf("Expected format mockd, got %s", result.Format)
+	}
+	if result.EndpointCount != 1 {
+		t.Errorf("Expected endpoint count 1, got %d", result.EndpointCount)
+	}
+	if len(result.Data) == 0 {
+		t.Error("Expected non-empty export data")
 	}
 }
