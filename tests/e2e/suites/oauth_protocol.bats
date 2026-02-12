@@ -157,12 +157,10 @@ setup() {
 # ── PKCE (RFC 7636) ──────────────────────────────────────────────────────────
 
 @test "OAUTH-012: PKCE S256 flow succeeds" {
-  # code_verifier: a random string
+  # code_verifier: a random string (RFC 7636 example)
   local code_verifier="dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
-  # code_challenge: BASE64URL(SHA256(code_verifier))
-  local code_challenge
-  code_challenge=$(printf '%s' "$code_verifier" | openssl dgst -sha256 -binary 2>/dev/null | base64 | tr '+/' '-_' | tr -d '=') || \
-  code_challenge=$(printf '%s' "$code_verifier" | sha256sum | xxd -r -p | base64 | tr '+/' '-_' | tr -d '=')
+  # code_challenge: BASE64URL(SHA256(code_verifier)) — precomputed to avoid openssl/xxd dependency
+  local code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
 
   # Step 1: Authorize with code_challenge
   local redirect
@@ -183,9 +181,8 @@ setup() {
 
 @test "OAUTH-013: PKCE wrong verifier rejected" {
   local code_verifier="correct-verifier-value-long-enough-for-pkce"
-  local code_challenge
-  code_challenge=$(printf '%s' "$code_verifier" | openssl dgst -sha256 -binary 2>/dev/null | base64 | tr '+/' '-_' | tr -d '=') || \
-  code_challenge=$(printf '%s' "$code_verifier" | sha256sum | xxd -r -p | base64 | tr '+/' '-_' | tr -d '=')
+  # Precomputed BASE64URL(SHA256(code_verifier)) — avoids openssl/xxd dependency in Alpine
+  local code_challenge="6JXavkWXGUoS2woo4y0DCvHIgLNXN2Nu9VYGej4qD3w"
 
   local redirect
   redirect=$(curl -s -o /dev/null -w '%{redirect_url}' \

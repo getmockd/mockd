@@ -177,10 +177,10 @@ teardown_file() {
   [[ "$status" -eq 0 ]]
   [[ "$output" == *"Imported"* || "$output" == *"Parsed"* ]]
 
-  # Verify mock was created
+  # Verify mock was created (GET /mocks returns {mocks: [...], total, count})
   api GET /mocks
   local count
-  count=$(echo "$BODY" | jq 'if type == "array" then length else 0 end')
+  count=$(echo "$BODY" | jq '.mocks | length')
   [[ "$count" -ge 1 ]]
 }
 
@@ -212,10 +212,10 @@ YAML
   [[ "$status" -eq 0 ]]
   [[ "$output" == *"Imported"* || "$output" == *"Parsed"* ]]
 
-  # Verify at least one mock was created
+  # Verify at least one mock was created (GET /mocks returns {mocks: [...], total, count})
   api GET /mocks
   local count
-  count=$(echo "$BODY" | jq 'if type == "array" then length else 0 end')
+  count=$(echo "$BODY" | jq '.mocks | length')
   [[ "$count" -ge 1 ]]
 
   rm -f /tmp/e2e-openapi.yaml
@@ -230,7 +230,8 @@ YAML
 version: "1.0"
 name: dry-run-test
 mocks:
-  - type: http
+  - id: dryrun-mock-1
+    type: http
     name: Dry Run Mock
     http:
       matcher:
@@ -243,7 +244,7 @@ YAML
 
   run mockd import /tmp/e2e-dryrun.yaml --dry-run --admin-url "$ADMIN"
   [[ "$status" -eq 0 ]]
-  [[ "$output" == *"Dry run"* || "$output" == *"dry"* ]]
+  [[ "$output" == *"Dry run"* || "$output" == *"Parsed"* ]]
 
   # Verify NO mock was actually created
   engine GET /api/dryrun

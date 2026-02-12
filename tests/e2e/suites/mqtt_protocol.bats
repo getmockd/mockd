@@ -201,7 +201,7 @@ mqtt_mock_id() {
       "auth": {
         "enabled": true,
         "users": [
-          {"username": "sensor", "password": "s3cret", "acl": "readwrite"}
+          {"username": "sensor", "password": "s3cret"}
         ]
       },
       "topics": [
