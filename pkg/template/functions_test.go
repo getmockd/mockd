@@ -65,9 +65,10 @@ func TestFuncRandomInt(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:     "no args returns empty",
+			name:     "no args returns 0-100",
 			template: "{{random.int}}",
-			wantErr:  true,
+			min:      0,
+			max:      100,
 		},
 	}
 

@@ -510,9 +510,7 @@ func (h *ConditionalResponseHandler) executeResponse(cfg responseConfig, trigger
 	}
 
 	// Render payload template (MQTT-specific variables first, then shared variables)
-	template := NewTemplate(cfg.payloadTemplate, h.sequences)
-	responsePayload := template.Render(ctx)
-	responsePayload = processSharedTemplateVars(responsePayload)
+	responsePayload := ProcessMQTTTemplate(cfg.payloadTemplate, ctx, h.sequences)
 
 	// Prevent infinite loop: mark this topic as an active mock response.
 	// If the topic is already marked, a loop has been detected.

@@ -48,8 +48,30 @@ func funcRandomInt(min, max int) string {
 
 // funcRandomFloat returns a random float between 0 and 1 as a string
 func funcRandomFloat() string {
-	// Use math/rand/v2 which is automatically seeded
 	return fmt.Sprintf("%f", rand.Float64())
+}
+
+// funcRandomFloatRange returns a random float in a range with optional precision.
+// minStr and maxStr are parsed as float64; precisionStr is parsed as int (-1 if empty).
+func funcRandomFloatRange(minStr, maxStr, precisionStr string) string {
+	minVal, _ := strconv.ParseFloat(minStr, 64)
+	maxVal, _ := strconv.ParseFloat(maxStr, 64)
+	precision := -1
+	if precisionStr != "" {
+		precision, _ = strconv.Atoi(precisionStr)
+	}
+
+	if minVal >= maxVal {
+		maxVal = minVal + 1
+	}
+
+	val := minVal + rand.Float64()*(maxVal-minVal)
+
+	if precision >= 0 {
+		format := fmt.Sprintf("%%.%df", precision)
+		return fmt.Sprintf(format, val)
+	}
+	return strconv.FormatFloat(val, 'f', -1, 64)
 }
 
 // String functions

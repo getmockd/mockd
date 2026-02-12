@@ -383,19 +383,15 @@ func (p *PerTopicDeviceSimulator) generatePayload(deviceID string) []byte {
 	}
 
 	// Use the template engine
-	tmpl := NewTemplate(payloadTemplate, p.sequences)
 	ctx := &TemplateContext{
 		DeviceID: deviceID,
 		Topic:    p.generateTopic(deviceID),
 	}
 
-	rendered := tmpl.Render(ctx)
+	rendered := ProcessMQTTTemplate(payloadTemplate, ctx, p.sequences)
 	if rendered == "" {
 		return []byte(payloadTemplate)
 	}
-
-	// Process shared template variables ({{now}}, {{uuid.short}}, etc.)
-	rendered = processSharedTemplateVars(rendered)
 
 	return []byte(rendered)
 }
@@ -460,19 +456,15 @@ func (s *Simulator) publishMessage(topic TopicConfig, msg MessageConfig) {
 
 // processPayload processes the payload through the template engine
 func (s *Simulator) processPayload(rawPayload, topicName string) []byte {
-	tmpl := NewTemplate(rawPayload, s.sequences)
 	ctx := &TemplateContext{
 		Topic: topicName,
 	}
 
-	rendered := tmpl.Render(ctx)
+	rendered := ProcessMQTTTemplate(rawPayload, ctx, s.sequences)
 	if rendered == "" {
 		slog.Default().Warn("MQTT simulator: template rendered empty, using raw payload", "topic", topicName)
 		return []byte(rawPayload)
 	}
-
-	// Process shared template variables ({{now}}, {{uuid.short}}, etc.)
-	rendered = processSharedTemplateVars(rendered)
 
 	return []byte(rendered)
 }
@@ -851,18 +843,14 @@ func (m *MultiDeviceSimulator) generatePayload(deviceID string) []byte {
 	}
 
 	// Use the template engine
-	tmpl := NewTemplate(m.config.PayloadTemplate, m.sequences)
 	ctx := &TemplateContext{
 		DeviceID: deviceID,
 	}
 
-	rendered := tmpl.Render(ctx)
+	rendered := ProcessMQTTTemplate(m.config.PayloadTemplate, ctx, m.sequences)
 	if rendered == "" {
 		return []byte(m.config.PayloadTemplate)
 	}
-
-	// Process shared template variables ({{now}}, {{uuid.short}}, etc.)
-	rendered = processSharedTemplateVars(rendered)
 
 	return []byte(rendered)
 }

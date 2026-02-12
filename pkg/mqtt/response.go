@@ -119,9 +119,7 @@ func (h *ResponseHandler) executeResponse(resp *MockResponse, triggerTopic strin
 	}
 
 	// Render payload template (MQTT-specific variables first, then shared variables)
-	template := NewTemplate(resp.PayloadTemplate, h.sequences)
-	responsePayload := template.Render(ctx)
-	responsePayload = processSharedTemplateVars(responsePayload)
+	responsePayload := ProcessMQTTTemplate(resp.PayloadTemplate, ctx, h.sequences)
 
 	// Prevent infinite loop: mark this topic as an active mock response.
 	// If the topic is already marked, a loop has been detected.
