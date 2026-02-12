@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 )
 
 // Level represents a log level.
@@ -96,14 +97,14 @@ func Nop() *slog.Logger {
 // Valid values: "debug", "info", "warn", "error".
 // Returns LevelInfo if the string is not recognized.
 func ParseLevel(s string) Level {
-	switch s {
-	case "debug", "DEBUG":
+	switch strings.ToLower(s) {
+	case "debug":
 		return LevelDebug
-	case "info", "INFO", "":
+	case "info", "":
 		return LevelInfo
-	case "warn", "WARN", "warning", "WARNING":
+	case "warn", "warning":
 		return LevelWarn
-	case "error", "ERROR":
+	case "error":
 		return LevelError
 	default:
 		return LevelInfo
@@ -114,8 +115,8 @@ func ParseLevel(s string) Level {
 // Valid values: "text", "json".
 // Returns FormatText if the string is not recognized.
 func ParseFormat(s string) Format {
-	switch s {
-	case "json", "JSON":
+	switch strings.ToLower(s) {
+	case "json":
 		return FormatJSON
 	default:
 		return FormatText

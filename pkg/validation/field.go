@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // ValidateField validates a value against a FieldValidator
@@ -130,14 +131,15 @@ func getJSONType(value interface{}) string {
 
 // validateString validates string-specific constraints
 func validateString(field, location string, value string, validator *FieldValidator, result *Result) {
-	// MinLength
-	if validator.MinLength != nil && len(value) < *validator.MinLength {
-		result.AddError(NewMinLengthError(field, location, *validator.MinLength, len(value)))
+	// MinLength (use rune count per JSON Schema spec, not byte count)
+	runeCount := utf8.RuneCountInString(value)
+	if validator.MinLength != nil && runeCount < *validator.MinLength {
+		result.AddError(NewMinLengthError(field, location, *validator.MinLength, runeCount))
 	}
 
-	// MaxLength
-	if validator.MaxLength != nil && len(value) > *validator.MaxLength {
-		result.AddError(NewMaxLengthError(field, location, *validator.MaxLength, len(value)))
+	// MaxLength (use rune count per JSON Schema spec, not byte count)
+	if validator.MaxLength != nil && runeCount > *validator.MaxLength {
+		result.AddError(NewMaxLengthError(field, location, *validator.MaxLength, runeCount))
 	}
 
 	// Pattern (regex)

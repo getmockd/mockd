@@ -196,12 +196,11 @@ func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.R
 
 	// Add mocks to engine via HTTP client
 	mockIDs := make([]string, 0, len(mocks))
-	addedCount := 0
 	ctx := r.Context()
 	for _, mock := range mocks {
 		if client != nil {
-			if _, err := client.CreateMock(ctx, mock); err == nil {
-				addedCount++
+			if _, err := client.CreateMock(ctx, mock); err != nil {
+				continue // skip failed mocks
 			}
 		}
 		mockIDs = append(mockIDs, mock.ID)
@@ -209,7 +208,7 @@ func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.R
 
 	writeJSON(w, http.StatusOK, ConvertResult{
 		MockIDs: mockIDs,
-		Count:   addedCount,
+		Count:   len(mockIDs),
 	})
 }
 

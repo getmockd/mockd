@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // InferValidation automatically generates validation rules from seed data.
@@ -200,8 +201,8 @@ func inferType(value interface{}) string {
 
 // analyzeString analyzes a string value for format and constraints
 func analyzeString(value string, info *fieldAnalysis) {
-	// Track string length
-	strLen := len(value)
+	// Track string length (use rune count per JSON Schema spec)
+	strLen := utf8.RuneCountInString(value)
 	if info.minLength == 0 || strLen < info.minLength {
 		info.minLength = strLen
 	}

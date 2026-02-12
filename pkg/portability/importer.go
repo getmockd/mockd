@@ -1,6 +1,8 @@
 package portability
 
 import (
+	"strconv"
+
 	"github.com/getmockd/mockd/pkg/config"
 )
 
@@ -116,9 +118,9 @@ func (e *ImportError) Error() string {
 	}
 	if e.Line > 0 {
 		if e.Column > 0 {
-			msg = msg + " (line " + itoa(e.Line) + ", column " + itoa(e.Column) + ")"
+			msg = msg + " (line " + strconv.Itoa(e.Line) + ", column " + strconv.Itoa(e.Column) + ")"
 		} else {
-			msg = msg + " (line " + itoa(e.Line) + ")"
+			msg = msg + " (line " + strconv.Itoa(e.Line) + ")"
 		}
 	}
 	if e.Cause != nil {
@@ -129,22 +131,4 @@ func (e *ImportError) Error() string {
 
 func (e *ImportError) Unwrap() error {
 	return e.Cause
-}
-
-// itoa converts int to string without importing strconv.
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	if i < 0 {
-		return "-" + itoa(-i)
-	}
-	var buf [20]byte
-	n := 19
-	for i > 0 {
-		buf[n] = byte('0' + i%10)
-		i /= 10
-		n--
-	}
-	return string(buf[n+1:])
 }

@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
@@ -44,7 +45,7 @@ func (a *API) handleGetHandler(w http.ResponseWriter, r *http.Request, engine *e
 
 	handler, err := engine.GetHandler(r.Context(), id)
 	if err != nil {
-		if err == engineclient.ErrNotFound {
+		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "handler not found")
 			return
 		}
@@ -65,7 +66,7 @@ func (a *API) handleGetHandlerHealth(w http.ResponseWriter, r *http.Request, eng
 
 	handler, err := engine.GetHandler(r.Context(), id)
 	if err != nil {
-		if err == engineclient.ErrNotFound {
+		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "handler not found")
 			return
 		}
@@ -90,7 +91,7 @@ func (a *API) handleGetHandlerStats(w http.ResponseWriter, r *http.Request, engi
 
 	handler, err := engine.GetHandler(r.Context(), id)
 	if err != nil {
-		if err == engineclient.ErrNotFound {
+		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "handler not found")
 			return
 		}

@@ -154,10 +154,3 @@ func formatString(format string, args ...interface{}) string {
 	}
 	return fmt.Sprintf(format, args...)
 }
-
-// BatchRequest represents a batch of JSON-RPC requests.
-// Note: Batch requests are not currently supported in mockd MCP implementation.
-type BatchRequest []*JSONRPCRequest
-
-// BatchResponse represents a batch of JSON-RPC responses.
-type BatchResponse []*JSONRPCResponse

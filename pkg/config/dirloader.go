@@ -200,21 +200,14 @@ func (d *DirectoryLoader) Validate() ([]LoadError, error) {
 
 	var errors []LoadError
 	for _, file := range files {
-		collection, err := LoadFromFile(file)
+		// LoadFromFile already calls Validate() internally via ParseJSON/ParseYAML,
+		// so there is no need to validate again here.
+		_, err := LoadFromFile(file)
 		if err != nil {
 			errors = append(errors, LoadError{
 				Path:    file,
 				Message: "validation failed",
 				Err:     err,
-			})
-			continue
-		}
-
-		if verr := collection.Validate(); verr != nil {
-			errors = append(errors, LoadError{
-				Path:    file,
-				Message: "validation failed",
-				Err:     verr,
 			})
 		}
 	}

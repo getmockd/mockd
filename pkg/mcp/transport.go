@@ -31,7 +31,7 @@ type SSEWriter struct {
 	w       http.ResponseWriter
 	flusher http.Flusher
 	eventID atomic.Int64
-	closed  bool
+	closed  atomic.Bool
 }
 
 // NewSSEWriter creates a new SSE writer.
@@ -57,7 +57,7 @@ func (s *SSEWriter) WriteHeaders() {
 
 // WriteEvent writes an SSE event.
 func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
-	if s.closed {
+	if s.closed.Load() {
 		return errors.New("writer is closed")
 	}
 
@@ -112,7 +112,7 @@ func (s *SSEWriter) WriteEvent(event *SSEEvent) error {
 
 // WriteComment writes an SSE comment (keepalive).
 func (s *SSEWriter) WriteComment(comment string) error {
-	if s.closed {
+	if s.closed.Load() {
 		return errors.New("writer is closed")
 	}
 
@@ -132,7 +132,7 @@ func (s *SSEWriter) WriteKeepalive() error {
 
 // Close marks the writer as closed.
 func (s *SSEWriter) Close() {
-	s.closed = true
+	s.closed.Store(true)
 }
 
 // TransportConfig holds transport-specific configuration.

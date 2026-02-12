@@ -70,7 +70,7 @@ func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, eng
 
 	name := r.PathValue("name")
 	if name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "resource name required"})
+		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
 		return
 	}
 
@@ -89,7 +89,7 @@ func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, e
 
 	name := r.PathValue("name")
 	if name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "resource name required"})
+		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
 		return
 	}
 

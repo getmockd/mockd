@@ -703,6 +703,9 @@ func mergeStatefulResource(base, overlay StatefulResourceConfig) StatefulResourc
 	if overlay.ParentField != "" {
 		base.ParentField = overlay.ParentField
 	}
+	if overlay.MaxItems != 0 {
+		base.MaxItems = overlay.MaxItems
+	}
 	if len(overlay.SeedData) > 0 {
 		base.SeedData = overlay.SeedData
 	}

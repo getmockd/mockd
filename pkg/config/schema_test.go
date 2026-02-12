@@ -531,3 +531,77 @@ func TestDefaultProjectConfig(t *testing.T) {
 		t.Errorf("Workspaces[0].Name = %q, want %q", cfg.Workspaces[0].Name, "default")
 	}
 }
+
+func TestMergeStatefulResource_MaxItems(t *testing.T) {
+	t.Run("overlay sets MaxItems on base", func(t *testing.T) {
+		base := StatefulResourceConfig{
+			Name:     "products",
+			BasePath: "/products",
+		}
+		overlay := StatefulResourceConfig{
+			Name:     "products",
+			MaxItems: 100,
+		}
+		result := mergeStatefulResource(base, overlay)
+		if result.MaxItems != 100 {
+			t.Errorf("MaxItems = %d, want 100", result.MaxItems)
+		}
+	})
+
+	t.Run("overlay overrides existing MaxItems", func(t *testing.T) {
+		base := StatefulResourceConfig{
+			Name:     "products",
+			MaxItems: 50,
+		}
+		overlay := StatefulResourceConfig{
+			Name:     "products",
+			MaxItems: 200,
+		}
+		result := mergeStatefulResource(base, overlay)
+		if result.MaxItems != 200 {
+			t.Errorf("MaxItems = %d, want 200", result.MaxItems)
+		}
+	})
+
+	t.Run("overlay zero MaxItems preserves base", func(t *testing.T) {
+		base := StatefulResourceConfig{
+			Name:     "products",
+			MaxItems: 50,
+		}
+		overlay := StatefulResourceConfig{
+			Name: "products",
+			// MaxItems: 0 (zero value — cannot reset)
+		}
+		result := mergeStatefulResource(base, overlay)
+		if result.MaxItems != 50 {
+			t.Errorf("MaxItems = %d, want 50 (zero-value should not override)", result.MaxItems)
+		}
+	})
+
+	t.Run("mergeStatefulResources propagates MaxItems by name", func(t *testing.T) {
+		base := []StatefulResourceConfig{
+			{Name: "users", BasePath: "/users", MaxItems: 10},
+			{Name: "orders", BasePath: "/orders"},
+		}
+		overlay := []StatefulResourceConfig{
+			{Name: "orders", MaxItems: 500},
+			{Name: "products", BasePath: "/products", MaxItems: 1000},
+		}
+		result := mergeStatefulResources(base, overlay)
+		if len(result) != 3 {
+			t.Fatalf("len(result) = %d, want 3", len(result))
+		}
+		// users: unchanged
+		if result[0].MaxItems != 10 {
+			t.Errorf("users.MaxItems = %d, want 10", result[0].MaxItems)
+		}
+		// orders: overlay applied
+		if result[1].MaxItems != 500 {
+			t.Errorf("orders.MaxItems = %d, want 500", result[1].MaxItems)
+		}
+		// products: new from overlay
+		if result[2].MaxItems != 1000 {
+			t.Errorf("products.MaxItems = %d, want 1000", result[2].MaxItems)
+		}
+	})
+}

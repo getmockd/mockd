@@ -454,6 +454,53 @@ func TestValidateFields(t *testing.T) {
 	})
 }
 
+func TestValidateString_RuneCount(t *testing.T) {
+	ptrInt := func(i int) *int { return &i }
+
+	t.Run("ASCII minLength works normally", func(t *testing.T) {
+		validator := &FieldValidator{Type: "string", MinLength: ptrInt(3)}
+		result := ValidateField("name", "body", "ab", validator)
+		assert.False(t, result.Valid, "2-char ASCII string should fail minLength=3")
+	})
+
+	t.Run("ASCII maxLength works normally", func(t *testing.T) {
+		validator := &FieldValidator{Type: "string", MaxLength: ptrInt(5)}
+		result := ValidateField("name", "body", "abcdef", validator)
+		assert.False(t, result.Valid, "6-char ASCII string should fail maxLength=5")
+	})
+
+	t.Run("multi-byte chars counted as single rune for minLength", func(t *testing.T) {
+		// "café" is 4 runes but 5 bytes (é = 2 bytes in UTF-8)
+		validator := &FieldValidator{Type: "string", MinLength: ptrInt(5)}
+		result := ValidateField("name", "body", "café", validator)
+		assert.False(t, result.Valid, "'café' is 4 runes, should fail minLength=5")
+
+		// But should pass minLength=4
+		validator2 := &FieldValidator{Type: "string", MinLength: ptrInt(4)}
+		result2 := ValidateField("name", "body", "café", validator2)
+		assert.True(t, result2.Valid, "'café' is 4 runes, should pass minLength=4")
+	})
+
+	t.Run("multi-byte chars counted as single rune for maxLength", func(t *testing.T) {
+		// "日本語" is 3 runes but 9 bytes (each CJK char = 3 bytes in UTF-8)
+		validator := &FieldValidator{Type: "string", MaxLength: ptrInt(3)}
+		result := ValidateField("name", "body", "日本語", validator)
+		assert.True(t, result.Valid, "'日本語' is 3 runes, should pass maxLength=3")
+
+		// But should fail maxLength=2
+		validator2 := &FieldValidator{Type: "string", MaxLength: ptrInt(2)}
+		result2 := ValidateField("name", "body", "日本語", validator2)
+		assert.False(t, result2.Valid, "'日本語' is 3 runes, should fail maxLength=2")
+	})
+
+	t.Run("emoji counted as single rune", func(t *testing.T) {
+		// "👍" is 1 rune but 4 bytes in UTF-8
+		validator := &FieldValidator{Type: "string", MaxLength: ptrInt(1)}
+		result := ValidateField("name", "body", "👍", validator)
+		assert.True(t, result.Valid, "'👍' is 1 rune, should pass maxLength=1")
+	})
+}
+
 // Helper function
 func ptrFloat(f float64) *float64 {
 	return &f

@@ -188,7 +188,7 @@ func looksLikeNativeV1YAML(data []byte) bool {
 	// (not indented, so it's a top-level key)
 	for _, line := range bytes.Split(data, []byte("\n")) {
 		trimmed := bytes.TrimSpace(line)
-		if bytes.HasPrefix(trimmed, []byte("endpoints:")) || bytes.Equal(trimmed, []byte("endpoints:")) {
+		if bytes.HasPrefix(trimmed, []byte("endpoints:")) {
 			// Make sure it's a top-level key (not indented)
 			if len(line) > 0 && line[0] != ' ' && line[0] != '\t' {
 				return true

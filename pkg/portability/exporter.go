@@ -22,12 +22,6 @@ type ExportOptions struct {
 	// AsYAML if true and format is Mockd, outputs YAML instead of JSON
 	AsYAML bool
 
-	// Version tags the export with a version string
-	Version string
-
-	// IncludeDefaults if true, includes fields with default values
-	IncludeDefaults bool
-
 	// Pretty if true, formats output with indentation
 	Pretty bool
 }
