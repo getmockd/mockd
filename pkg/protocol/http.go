@@ -3,8 +3,7 @@ package protocol
 import "net/http"
 
 // HTTPHandler is the interface for HTTP-based protocol handlers.
-// This includes GraphQL, SOAP, SSE (via StreamingHTTPHandler), and
-// WebSocket (via WebSocketUpgradeHandler).
+// This includes GraphQL, SOAP, and SSE (via StreamingHTTPHandler).
 //
 // Handlers that implement this interface can be registered with an
 // http.ServeMux using the Pattern() method to determine the route.
@@ -43,16 +42,4 @@ type StreamingHTTPHandler interface {
 	// IsStreamingRequest returns true if the request should be handled
 	// as a streaming response (e.g., SSE Accept header).
 	IsStreamingRequest(r *http.Request) bool
-}
-
-// WebSocketUpgradeHandler is for HTTP handlers that upgrade to WebSocket.
-//
-// The engine uses IsUpgradeRequest to determine if the request
-// is a WebSocket upgrade and should be handled specially.
-type WebSocketUpgradeHandler interface {
-	HTTPHandler
-
-	// IsUpgradeRequest returns true if the request is a WebSocket
-	// upgrade request (e.g., Connection: Upgrade header).
-	IsUpgradeRequest(r *http.Request) bool
 }

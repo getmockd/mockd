@@ -19,17 +19,11 @@
 //	│   └── GroupableConnections
 //	├── Broadcaster           - Message broadcasting
 //	│   └── GroupBroadcaster
-//	├── Publisher / Subscriber
-//	│   └── PubSub
 //	├── Recordable            - Recording support
-//	│   └── Replayable
 //	├── HTTPHandler           - HTTP-based protocols
-//	│   ├── StreamingHTTPHandler
-//	│   └── WebSocketUpgradeHandler
+//	│   └── StreamingHTTPHandler
 //	├── StandaloneServer      - TCP server protocols
-//	├── RPCHandler            - RPC protocols (gRPC, Thrift)
-//	└── MessageBroker         - Message broker protocols
-//	    └── QueueBroker
+//	└── RPCHandler            - RPC protocols (gRPC, Thrift)
 //
 // # Basic Usage
 //
@@ -93,11 +87,5 @@
 //	if cm, ok := handler.(protocol.ConnectionManager); ok {
 //	    conns := cm.ListConnections()
 //	    fmt.Printf("Active connections: %d\n", len(conns))
-//	}
-//
-//	// Check if handler supports pub/sub
-//	if ps, ok := handler.(protocol.PubSub); ok {
-//	    topics := ps.ListTopics()
-//	    fmt.Printf("Topics: %v\n", topics)
 //	}
 package protocol
