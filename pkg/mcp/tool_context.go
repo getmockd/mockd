@@ -142,6 +142,26 @@ func handleSwitchWorkspace(args map[string]interface{}, session *MCPSession, ser
 		return ToolResultError("id is required"), nil
 	}
 
+	// Validate the workspace exists before switching
+	client := session.GetAdminClient()
+	if client != nil {
+		workspaces, err := client.ListWorkspaces()
+		if err == nil {
+			found := false
+			for _, ws := range workspaces {
+				if ws.ID == id {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return ToolResultError("workspace not found: " + id), nil
+			}
+		}
+		// If ListWorkspaces fails, allow the switch anyway — the server may be
+		// temporarily unreachable but the workspace ID could still be valid.
+	}
+
 	session.SetWorkspace(id)
 
 	result := map[string]interface{}{

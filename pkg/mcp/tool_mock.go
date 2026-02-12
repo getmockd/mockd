@@ -218,18 +218,21 @@ func handleUpdateMock(args map[string]interface{}, session *MCPSession, server *
 		existingMock.Enabled = &enabled
 	}
 
-	// For protocol-specific updates, re-marshal the args and overlay.
-	// This handles partial merges at the JSON level.
+	// For protocol-specific updates, extract ONLY the protocol fields and overlay
+	// them onto the existing mock. We must not re-serialize all args (which includes
+	// "id", "name", etc.) to avoid overwriting fields that were already handled above.
 	protocolFields := []string{"http", "websocket", "graphql", "grpc", "soap", "mqtt", "oauth"}
+	protocolUpdate := make(map[string]interface{})
 	for _, field := range protocolFields {
-		if _, ok := args[field]; ok {
-			// Re-serialize just the protocol field update and apply
-			updateJSON, _ := json.Marshal(args)
-			if err := json.Unmarshal(updateJSON, existingMock); err != nil {
-				//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-				return ToolResultError("failed to merge update: " + err.Error()), nil
-			}
-			break // Only need to do this once
+		if val, ok := args[field]; ok {
+			protocolUpdate[field] = val
+		}
+	}
+	if len(protocolUpdate) > 0 {
+		updateJSON, _ := json.Marshal(protocolUpdate)
+		if err := json.Unmarshal(updateJSON, existingMock); err != nil {
+			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+			return ToolResultError("failed to merge update: " + err.Error()), nil
 		}
 	}
 

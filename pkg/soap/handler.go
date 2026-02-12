@@ -507,6 +507,7 @@ func (h *Handler) buildFault11(fault *SOAPFault) []byte {
 	buf.WriteString(`<faultcode>` + escapeXML(fault.Code) + `</faultcode>`)
 	buf.WriteString(`<faultstring>` + escapeXML(fault.Message) + `</faultstring>`)
 	if fault.Detail != "" {
+		// Detail contains application-specific XML per SOAP spec — not escaped
 		buf.WriteString(`<detail>` + fault.Detail + `</detail>`)
 	}
 	buf.WriteString(`</soap:Fault>`)
@@ -534,6 +535,7 @@ func (h *Handler) buildFault12(fault *SOAPFault) []byte {
 	buf.WriteString(`<soap:Code><soap:Value>` + escapeXML(code) + `</soap:Value></soap:Code>`)
 	buf.WriteString(`<soap:Reason><soap:Text xml:lang="en">` + escapeXML(fault.Message) + `</soap:Text></soap:Reason>`)
 	if fault.Detail != "" {
+		// Detail contains application-specific XML per SOAP spec — not escaped
 		buf.WriteString(`<soap:Detail>` + fault.Detail + `</soap:Detail>`)
 	}
 	buf.WriteString(`</soap:Fault>`)

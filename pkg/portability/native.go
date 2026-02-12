@@ -383,12 +383,15 @@ func MockCollectionToNativeV1(collection *config.MockCollection) (*NativeV1, err
 		native.Settings.Logging = collection.ServerConfig.LogRequests
 	}
 
-	// Convert mocks to endpoints
+	// Convert HTTP mocks to endpoints (NativeV1 only supports HTTP)
 	native.Endpoints = make([]NativeV1Endpoint, 0, len(collection.Mocks))
-	for _, mock := range collection.Mocks {
-		ep, err := convertMockToEndpoint(mock)
+	for _, m := range collection.Mocks {
+		if m.Type != "" && m.Type != mock.TypeHTTP {
+			continue // NativeV1 format only supports HTTP mocks; skip others
+		}
+		ep, err := convertMockToEndpoint(m)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert mock %s: %w", mock.ID, err)
+			return nil, fmt.Errorf("failed to convert mock %s: %w", m.ID, err)
 		}
 		native.Endpoints = append(native.Endpoints, *ep)
 	}

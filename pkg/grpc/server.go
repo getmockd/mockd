@@ -137,6 +137,11 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.listener = listener
 
+	// Reflect the actual bound port back to config (important when Port=0)
+	if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
+		s.config.Port = tcpAddr.Port
+	}
+
 	// Create gRPC server with unknown service handler
 	s.grpcServer = grpc.NewServer(
 		grpc.UnknownServiceHandler(s.handleStream),
@@ -1014,34 +1019,44 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 		reqMap := dynamicMessageToMap(reqMsg)
 		allRequests = append(allRequests, reqMap)
 
-		// Send response if available
-		if respIndex < len(responses) {
-			// Create template context from current request for response processing
-			templateCtx := s.createTemplateContext(md, reqMap)
-
-			resp, err := s.buildResponse(method, responses[respIndex], templateCtx)
-			if err != nil {
-				grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
+		// Send response — use configured response or replay last one when exhausted
+		useIndex := respIndex
+		if useIndex >= len(responses) {
+			if len(responses) == 0 {
+				// No responses configured at all — return RESOURCE_EXHAUSTED
+				grpcErr := status.Error(codes.ResourceExhausted, "no responses configured for bidirectional stream")
 				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
 				return grpcErr
 			}
+			// Replay the last configured response for additional client messages
+			useIndex = len(responses) - 1
+		}
 
-			if err := stream.SendMsg(resp); err != nil {
-				grpcErr := status.Errorf(codes.Internal, "failed to send response: %v", err)
-				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
-				return grpcErr
-			}
+		// Create template context from current request for response processing
+		templateCtx := s.createTemplateContext(md, reqMap)
 
-			// Collect response for logging
-			allResponses = append(allResponses, dynamicMessageToMap(resp))
+		resp, err := s.buildResponse(method, responses[useIndex], templateCtx)
+		if err != nil {
+			grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
+			return grpcErr
+		}
 
-			respIndex++
-			s.applyDelayWithContext(ctx, methodCfg.StreamDelay)
-			if ctx.Err() != nil {
-				grpcErr := status.Error(codes.Canceled, "client cancelled during stream delay")
-				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
-				return grpcErr
-			}
+		if err := stream.SendMsg(resp); err != nil {
+			grpcErr := status.Errorf(codes.Internal, "failed to send response: %v", err)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
+			return grpcErr
+		}
+
+		// Collect response for logging
+		allResponses = append(allResponses, dynamicMessageToMap(resp))
+
+		respIndex++
+		s.applyDelayWithContext(ctx, methodCfg.StreamDelay)
+		if ctx.Err() != nil {
+			grpcErr := status.Error(codes.Canceled, "client cancelled during stream delay")
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
+			return grpcErr
 		}
 	}
 }

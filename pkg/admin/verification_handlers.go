@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 )
@@ -44,24 +45,22 @@ func (a *API) handleGetMockVerification(w http.ResponseWriter, r *http.Request, 
 
 	// Filter to get only requests that matched this mock
 	callCount := 0
-	var lastCalledAt *string
+	var lastCalledAt *time.Time
 	for _, req := range result.Requests {
 		if req.MatchedMockID == id {
 			callCount++
-			if lastCalledAt == nil {
-				ts := req.Timestamp.String()
+			if lastCalledAt == nil || req.Timestamp.After(*lastCalledAt) {
+				ts := req.Timestamp
 				lastCalledAt = &ts
 			}
 		}
 	}
 
 	verification := MockVerification{
-		MockID:    id,
-		CallCount: callCount,
+		MockID:       id,
+		CallCount:    callCount,
+		LastCalledAt: lastCalledAt,
 	}
-
-	// Note: lastCalledAt is intentionally unused here.
-	// The timestamp is already captured in the verification struct via the query results.
 
 	writeJSON(w, http.StatusOK, verification)
 }

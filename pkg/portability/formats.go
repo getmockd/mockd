@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Format represents a supported import/export format.
@@ -161,43 +163,61 @@ func detectFormatFromJSON(data []byte) Format {
 	return FormatUnknown
 }
 
-// detectFormatFromYAML detects format from YAML content.
-// Since YAML is a superset of JSON for simple cases, we can use similar detection.
+// detectFormatFromYAML detects format from YAML content by parsing into a map
+// and inspecting top-level keys, rather than fragile string matching.
 func detectFormatFromYAML(data []byte) Format {
-	// Check for common YAML key patterns using string matching
-	content := string(data)
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		// If YAML parsing fails entirely, fall back to basic string checks
+		// for the most critical indicators.
+		content := string(data)
+		if strings.Contains(content, "openapi:") || strings.Contains(content, "swagger:") {
+			return FormatOpenAPI
+		}
+		return FormatUnknown
+	}
 
 	// Check for OpenAPI 3.x
-	if strings.Contains(content, "openapi:") {
+	if _, ok := raw["openapi"]; ok {
 		return FormatOpenAPI
 	}
 
 	// Check for Swagger 2.0
-	if strings.Contains(content, "swagger:") {
+	if _, ok := raw["swagger"]; ok {
 		return FormatOpenAPI
 	}
 
-	// Check for Mockd native format - multiple indicators
+	// Check for Mockd native format
 	// 1. Explicit kind: MockCollection
-	if strings.Contains(content, "kind:") && strings.Contains(content, "MockCollection") {
-		return FormatMockd
-	}
-	// 2. Has version: and mocks: fields
-	if strings.Contains(content, "version:") && strings.Contains(content, "mocks:") {
-		return FormatMockd
-	}
-	// 3. Has mocks: array with http: or type: http entries (even without version header)
-	if strings.Contains(content, "mocks:") {
-		if strings.Contains(content, "http:") || strings.Contains(content, "type: http") ||
-			strings.Contains(content, "websocket:") || strings.Contains(content, "type: websocket") ||
-			strings.Contains(content, "graphql:") || strings.Contains(content, "type: graphql") ||
-			strings.Contains(content, "grpc:") || strings.Contains(content, "type: grpc") {
+	if kind, ok := raw["kind"]; ok {
+		if kindStr, ok := kind.(string); ok && kindStr == "MockCollection" {
 			return FormatMockd
 		}
 	}
-	// 4. Single mock definition with http.matcher
-	if strings.Contains(content, "matcher:") && strings.Contains(content, "path:") {
+	// 2. Has version + mocks
+	_, hasVersion := raw["version"]
+	_, hasMocks := raw["mocks"]
+	if hasVersion && hasMocks {
 		return FormatMockd
+	}
+	// 3. Has mocks array (even without version)
+	if hasMocks {
+		return FormatMockd
+	}
+	// 4. Single mock definition with matcher + path (inline mock)
+	if _, hasMatcher := raw["matcher"]; hasMatcher {
+		if _, hasPath := raw["path"]; hasPath {
+			return FormatMockd
+		}
+	}
+	// 5. Has type field with protocol spec (single mock)
+	if t, ok := raw["type"]; ok {
+		if ts, ok := t.(string); ok {
+			switch ts {
+			case "http", "websocket", "graphql", "grpc", "soap", "mqtt", "oauth":
+				return FormatMockd
+			}
+		}
 	}
 
 	return FormatUnknown

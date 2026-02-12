@@ -1,6 +1,7 @@
 package portability
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -167,12 +168,19 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 		m.HTTP.Matcher.PathPattern = req.URLPathPattern
 	}
 
-	// Headers
+	// Headers — map equalTo to exact match; contains and matches are best-effort
+	// mapped to the same header value (mockd supports exact header matching only,
+	// so contains/matches are imported as the literal pattern for documentation).
 	if len(req.Headers) > 0 {
 		headers := make(map[string]string)
 		for name, matcher := range req.Headers {
-			if matcher.EqualTo != "" {
+			switch {
+			case matcher.EqualTo != "":
 				headers[name] = matcher.EqualTo
+			case matcher.Contains != "":
+				headers[name] = matcher.Contains
+			case matcher.Matches != "":
+				headers[name] = matcher.Matches
 			}
 		}
 		if len(headers) > 0 {
@@ -180,12 +188,17 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 		}
 	}
 
-	// Query parameters
+	// Query parameters — same approach as headers
 	if len(req.QueryParameters) > 0 {
 		queryParams := make(map[string]string)
 		for name, matcher := range req.QueryParameters {
-			if matcher.EqualTo != "" {
+			switch {
+			case matcher.EqualTo != "":
 				queryParams[name] = matcher.EqualTo
+			case matcher.Contains != "":
+				queryParams[name] = matcher.Contains
+			case matcher.Matches != "":
+				queryParams[name] = matcher.Matches
 			}
 		}
 		if len(queryParams) > 0 {
@@ -193,12 +206,14 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 		}
 	}
 
-	// Body patterns
-	if len(req.BodyPatterns) > 0 {
-		bp := req.BodyPatterns[0]
+	// Body patterns — process all patterns (mockd only supports one of each type,
+	// so later patterns of the same type win; different types can coexist)
+	for _, bp := range req.BodyPatterns {
 		switch {
 		case bp.EqualTo != "":
 			m.HTTP.Matcher.BodyEquals = bp.EqualTo
+		case bp.EqualToJSON != "":
+			m.HTTP.Matcher.BodyEquals = bp.EqualToJSON
 		case bp.Contains != "":
 			m.HTTP.Matcher.BodyContains = bp.Contains
 		case bp.Matches != "":
@@ -223,18 +238,24 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 		m.HTTP.Response.Headers[name] = value
 	}
 
-	// Response body
-	if resp.Body != "" {
+	// Response body — prefer explicit body, then jsonBody, then base64Body
+	switch {
+	case resp.Body != "":
 		m.HTTP.Response.Body = resp.Body
-	} else if resp.JSONBody != nil {
+	case resp.JSONBody != nil:
 		bodyBytes, _ := json.MarshalIndent(resp.JSONBody, "", "  ")
 		m.HTTP.Response.Body = string(bodyBytes)
 		if _, ok := m.HTTP.Response.Headers["Content-Type"]; !ok {
 			m.HTTP.Response.Headers["Content-Type"] = "application/json"
 		}
+	case resp.Base64Body != "":
+		decoded, err := base64.StdEncoding.DecodeString(resp.Base64Body)
+		if err == nil {
+			m.HTTP.Response.Body = string(decoded)
+		}
 	}
 
-	// Note: base64Body and bodyFileName not supported - would need file system access
+	// Note: bodyFileName not supported — would need file system access
 
 	return m
 }

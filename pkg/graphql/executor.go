@@ -11,7 +11,6 @@ import (
 	"github.com/getmockd/mockd/pkg/template"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
-	"github.com/vektah/gqlparser/v2/validator"
 )
 
 // Executor executes GraphQL operations against configured resolvers.
@@ -94,6 +93,8 @@ func (e *Executor) Execute(ctx context.Context, req *GraphQLRequest) *GraphQLRes
 }
 
 // parseQuery parses and validates a GraphQL query against the schema.
+// gqlparser.LoadQuery already performs both parsing and schema validation,
+// so no separate validator.Validate call is needed.
 func (e *Executor) parseQuery(query string) (*ast.QueryDocument, error) {
 	doc, parseErr := gqlparser.LoadQuery(e.schema.AST(), query)
 	if parseErr != nil {
@@ -102,12 +103,6 @@ func (e *Executor) parseQuery(query string) (*ast.QueryDocument, error) {
 			return nil, fmt.Errorf("parse error: %s", parseErr[0].Message)
 		}
 		return nil, errors.New("parse error")
-	}
-
-	// Validate the query
-	validationErrs := validator.Validate(e.schema.AST(), doc)
-	if len(validationErrs) > 0 {
-		return nil, fmt.Errorf("validation error: %s", validationErrs[0].Message)
 	}
 
 	return doc, nil

@@ -6,11 +6,15 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
 // FormatValidator is a function that validates a string against a format
 type FormatValidator func(value string) bool
+
+// formatMu protects concurrent access to the formatValidators map.
+var formatMu sync.RWMutex
 
 // formatValidators maps format names to their validation functions
 var formatValidators = map[string]FormatValidator{
@@ -29,7 +33,9 @@ var formatValidators = map[string]FormatValidator{
 
 // ValidateFormat checks if a value matches the specified format
 func ValidateFormat(format, value string) bool {
+	formatMu.RLock()
 	validator, ok := formatValidators[strings.ToLower(format)]
+	formatMu.RUnlock()
 	if !ok {
 		// Unknown format - pass validation (don't fail on unknown formats)
 		return true
@@ -39,13 +45,18 @@ func ValidateFormat(format, value string) bool {
 
 // IsKnownFormat returns true if the format is recognized
 func IsKnownFormat(format string) bool {
+	formatMu.RLock()
+	defer formatMu.RUnlock()
 	_, ok := formatValidators[strings.ToLower(format)]
 	return ok
 }
 
-// RegisterFormat allows registering custom format validators
+// RegisterFormat allows registering custom format validators.
+// Safe for concurrent use.
 func RegisterFormat(name string, validator FormatValidator) {
+	formatMu.Lock()
 	formatValidators[strings.ToLower(name)] = validator
+	formatMu.Unlock()
 }
 
 // Email validation using RFC 5322

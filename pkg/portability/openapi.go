@@ -661,6 +661,22 @@ func (e *OpenAPIExporter) mockToOperation(m *config.MockConfiguration) *Operatio
 			}
 		}
 
+		// Include response headers (excluding Content-Type which is already in Content)
+		if len(m.HTTP.Response.Headers) > 0 {
+			responseHeaders := make(map[string]Header)
+			for name := range m.HTTP.Response.Headers {
+				if strings.EqualFold(name, "Content-Type") {
+					continue
+				}
+				responseHeaders[name] = Header{
+					Schema: &Schema{Type: "string"},
+				}
+			}
+			if len(responseHeaders) > 0 {
+				response.Headers = responseHeaders
+			}
+		}
+
 		op.Responses[statusStr] = response
 	}
 

@@ -2,9 +2,8 @@ package validation
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 )
 
@@ -97,8 +96,9 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !result.Valid {
 			if m.config.LogWarnings {
 				for _, err := range result.Errors {
-					log.Printf("[validation] request error: type=%s field=%s message=%s location=%s",
-						err.Code, err.Field, err.Message, err.Location)
+					slog.Warn("validation: request error",
+						"code", err.Code, "field", err.Field,
+						"message", err.Message, "location", err.Location)
 				}
 			}
 			if m.config.FailOnError {
@@ -122,8 +122,9 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	result := m.validator.ValidateResponse(r, recorder.statusCode, recorder.Header(), recorder.body.Bytes())
 	if !result.Valid && m.config.LogWarnings {
 		for _, err := range result.Errors {
-			log.Printf("[validation] response error: type=%s field=%s message=%s location=%s",
-				err.Code, err.Field, err.Message, err.Location)
+			slog.Warn("validation: response error",
+				"code", err.Code, "field", err.Field,
+				"message", err.Message, "location", err.Location)
 		}
 	}
 
@@ -131,23 +132,10 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// We can't change the response at this point
 }
 
-// handleError writes a validation error response
+// handleError writes a validation error response using RFC 7807 Problem Details.
 func (m *Middleware) handleError(w http.ResponseWriter, result *Result) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-
-	response := ValidationErrorResponse{
-		Error:   "Request validation failed",
-		Details: result.Errors,
-	}
-
-	_ = json.NewEncoder(w).Encode(response)
-}
-
-// ValidationErrorResponse is the error response format
-type ValidationErrorResponse struct {
-	Error   string        `json:"error"`
-	Details []*FieldError `json:"details,omitempty"`
+	resp := NewErrorResponse(result, http.StatusBadRequest)
+	resp.WriteResponse(w)
 }
 
 // MiddlewareFunc is an adapter to use Middleware as middleware function

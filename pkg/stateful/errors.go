@@ -98,6 +98,26 @@ func (e *PayloadTooLargeError) Hint() string {
 	return fmt.Sprintf("Reduce request body size to under %d bytes.", e.MaxSize)
 }
 
+// CapacityError is returned when a resource has reached its maximum item limit.
+type CapacityError struct {
+	Resource string
+	MaxItems int
+}
+
+func (e *CapacityError) Error() string {
+	return fmt.Sprintf("resource %q has reached its maximum capacity of %d items", e.Resource, e.MaxItems)
+}
+
+// StatusCode returns the HTTP status code for this error.
+func (e *CapacityError) StatusCode() int {
+	return http.StatusInsufficientStorage // 507
+}
+
+// Hint returns a user-friendly suggestion for resolving this error.
+func (e *CapacityError) Hint() string {
+	return fmt.Sprintf("Delete existing items or increase the maxItems limit (currently %d) for resource %q.", e.MaxItems, e.Resource)
+}
+
 // StatusCodeError is an interface for errors that have an HTTP status code.
 type StatusCodeError interface {
 	error
@@ -135,6 +155,12 @@ func ToErrorResponse(err error) *ErrorResponse {
 		resp.Hint = e.Hint()
 	case *PayloadTooLargeError:
 		resp.Error = "payload too large"
+		resp.Detail = e.Error()
+		resp.StatusCode = e.StatusCode()
+		resp.Hint = e.Hint()
+	case *CapacityError:
+		resp.Error = "resource capacity exceeded"
+		resp.Resource = e.Resource
 		resp.Detail = e.Error()
 		resp.StatusCode = e.StatusCode()
 		resp.Hint = e.Hint()

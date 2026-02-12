@@ -280,6 +280,27 @@ func (i *CURLImporter) parsedToMock(parsed *curlParsed, id int, now time.Time) *
 		}
 	}
 
+	// Infer method-appropriate response defaults since cURL is request-only
+	statusCode, body := curlDefaultResponse(parsed.method)
+
+	// Determine response content type: prefer what the request implies
+	respContentType := "application/json"
+	if parsed.contentType != "" {
+		respContentType = parsed.contentType
+	} else if accept, ok := parsed.headers["Accept"]; ok {
+		// Use the first Accept media type as a hint
+		if idx := strings.Index(accept, ","); idx > 0 {
+			respContentType = strings.TrimSpace(accept[:idx])
+		} else {
+			respContentType = strings.TrimSpace(accept)
+		}
+	}
+
+	// Store the request body as a BodyEquals matcher when present
+	if parsed.body != "" {
+		matcher.BodyEquals = parsed.body
+	}
+
 	enabled := true
 	m := &config.MockConfiguration{
 		ID:        fmt.Sprintf("imported-%d", id),
@@ -292,16 +313,33 @@ func (i *CURLImporter) parsedToMock(parsed *curlParsed, id int, now time.Time) *
 			Priority: 0,
 			Matcher:  matcher,
 			Response: &mock.HTTPResponse{
-				StatusCode: 200,
+				StatusCode: statusCode,
 				Headers: map[string]string{
-					"Content-Type": "application/json",
+					"Content-Type": respContentType,
 				},
-				Body: `{"status": "ok"}`,
+				Body: body,
 			},
 		},
 	}
 
 	return m
+}
+
+// curlDefaultResponse returns a method-appropriate default status code and body
+// since cURL commands only describe requests, not responses.
+func curlDefaultResponse(method string) (statusCode int, body string) {
+	switch strings.ToUpper(method) {
+	case "POST":
+		return 201, `{"status": "created"}`
+	case "DELETE":
+		return 204, ""
+	case "PUT", "PATCH":
+		return 200, `{"status": "updated"}`
+	case "HEAD", "OPTIONS":
+		return 200, ""
+	default: // GET and others
+		return 200, `{"status": "ok"}`
+	}
 }
 
 // Format returns FormatCURL.

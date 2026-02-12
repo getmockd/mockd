@@ -284,24 +284,39 @@ func (a *API) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	if err := folderStore.Delete(ctx, id); err != nil {
+
+	// Verify folder exists before reparenting children
+	if _, err := folderStore.Get(ctx, id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "folder not found")
 			return
 		}
-		a.logger().Error("failed to delete folder", "id", id, "error", err)
+		a.logger().Error("failed to get folder for delete", "id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
 
-	// Move orphaned children to root
-	folders, _ := folderStore.List(ctx, nil)
-	for _, f := range folders {
-		if f.ParentID == id {
-			f.ParentID = ""
-			f.UpdatedAt = time.Now()
-			_ = folderStore.Update(ctx, f)
+	// Reparent orphaned children BEFORE deleting the folder to avoid dangling references
+	folders, err := folderStore.List(ctx, nil)
+	if err != nil {
+		a.logger().Error("failed to list folders for orphan reparenting", "id", id, "error", err)
+	} else {
+		for _, f := range folders {
+			if f.ParentID == id {
+				f.ParentID = ""
+				f.UpdatedAt = time.Now()
+				if err := folderStore.Update(ctx, f); err != nil {
+					a.logger().Error("failed to reparent orphaned folder", "folderId", f.ID, "deletedParent", id, "error", err)
+				}
+			}
 		}
+	}
+
+	// Now delete the folder
+	if err := folderStore.Delete(ctx, id); err != nil {
+		a.logger().Error("failed to delete folder", "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)

@@ -242,6 +242,7 @@ func (s *mockStore) Count(ctx context.Context, mockType mock.Type) (int, error) 
 }
 
 // BulkCreate creates multiple mocks in a single operation.
+// The operation is atomic: either all mocks are created or none are.
 func (s *mockStore) BulkCreate(ctx context.Context, mocks []*mock.Mock) error {
 	s.fs.mu.Lock()
 	defer s.fs.mu.Unlock()
@@ -250,18 +251,21 @@ func (s *mockStore) BulkCreate(ctx context.Context, mocks []*mock.Mock) error {
 		return store.ErrReadOnly
 	}
 
-	now := time.Now()
+	// Phase 1: Validate all IDs before inserting any (atomic check)
 	existingIDs := make(map[string]bool)
 	for _, m := range s.fs.data.Mocks {
 		existingIDs[m.ID] = true
 	}
-
 	for _, m := range mocks {
 		if existingIDs[m.ID] {
 			return store.ErrAlreadyExists
 		}
-		existingIDs[m.ID] = true
+		existingIDs[m.ID] = true // detect intra-batch duplicates
+	}
 
+	// Phase 2: All IDs valid — insert all mocks
+	now := time.Now()
+	for _, m := range mocks {
 		if m.CreatedAt.IsZero() {
 			m.CreatedAt = now
 		}
@@ -281,6 +285,7 @@ func (s *mockStore) BulkCreate(ctx context.Context, mocks []*mock.Mock) error {
 }
 
 // BulkUpdate updates multiple mocks in a single operation.
+// The operation is atomic: either all mocks are updated or none are.
 func (s *mockStore) BulkUpdate(ctx context.Context, mocks []*mock.Mock) error {
 	s.fs.mu.Lock()
 	defer s.fs.mu.Unlock()
@@ -289,17 +294,22 @@ func (s *mockStore) BulkUpdate(ctx context.Context, mocks []*mock.Mock) error {
 		return store.ErrReadOnly
 	}
 
-	now := time.Now()
 	mockIndex := make(map[string]int)
 	for i, m := range s.fs.data.Mocks {
 		mockIndex[m.ID] = i
 	}
 
+	// Phase 1: Validate all mocks exist before mutating any
 	for _, m := range mocks {
-		idx, exists := mockIndex[m.ID]
-		if !exists {
+		if _, exists := mockIndex[m.ID]; !exists {
 			return store.ErrNotFound
 		}
+	}
+
+	// Phase 2: All mocks exist — apply updates
+	now := time.Now()
+	for _, m := range mocks {
+		idx := mockIndex[m.ID]
 		if m.CreatedAt.IsZero() {
 			m.CreatedAt = s.fs.data.Mocks[idx].CreatedAt
 		}

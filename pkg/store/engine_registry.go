@@ -583,6 +583,7 @@ func (r *EngineRegistry) SetTunnelConfig(engineID string, cfg *TunnelConfig) err
 }
 
 // GetTunnelConfig returns the tunnel configuration for an engine.
+// The returned value is a deep copy — callers can safely modify it.
 func (r *EngineRegistry) GetTunnelConfig(engineID string) (*TunnelConfig, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -596,9 +597,52 @@ func (r *EngineRegistry) GetTunnelConfig(engineID string) (*TunnelConfig, error)
 		return nil, nil
 	}
 
-	// Return a deep copy
-	cfg := *engine.Tunnel
-	return &cfg, nil
+	return deepCopyTunnelConfig(engine.Tunnel), nil
+}
+
+// deepCopyTunnelConfig returns a fully independent copy of a TunnelConfig.
+func deepCopyTunnelConfig(src *TunnelConfig) *TunnelConfig {
+	cfg := *src // shallow copy scalars and strings
+
+	// Deep copy Expose slices
+	cfg.Expose.Workspaces = copyStringSlice(src.Expose.Workspaces)
+	cfg.Expose.Folders = copyStringSlice(src.Expose.Folders)
+	cfg.Expose.Mocks = copyStringSlice(src.Expose.Mocks)
+	cfg.Expose.Types = copyStringSlice(src.Expose.Types)
+
+	// Deep copy Exclude
+	if src.Expose.Exclude != nil {
+		excl := *src.Expose.Exclude
+		excl.Workspaces = copyStringSlice(src.Expose.Exclude.Workspaces)
+		excl.Folders = copyStringSlice(src.Expose.Exclude.Folders)
+		excl.Mocks = copyStringSlice(src.Expose.Exclude.Mocks)
+		cfg.Expose.Exclude = &excl
+	}
+
+	// Deep copy Auth
+	if src.Auth != nil {
+		auth := *src.Auth
+		auth.AllowedIPs = copyStringSlice(src.Auth.AllowedIPs)
+		cfg.Auth = &auth
+	}
+
+	// Deep copy ConnectedAt
+	if src.ConnectedAt != nil {
+		t := *src.ConnectedAt
+		cfg.ConnectedAt = &t
+	}
+
+	return &cfg
+}
+
+// copyStringSlice returns a new independent copy of a string slice.
+func copyStringSlice(s []string) []string {
+	if s == nil {
+		return nil
+	}
+	cp := make([]string, len(s))
+	copy(cp, s)
+	return cp
 }
 
 // UpdateTunnelStatus updates the runtime tunnel status for an engine.

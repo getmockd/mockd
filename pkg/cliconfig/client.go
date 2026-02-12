@@ -17,7 +17,12 @@ const (
 func GetAPIKeyFilePath() string {
 	dataDir := os.Getenv("XDG_DATA_HOME")
 	if dataDir == "" {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			// Fall back to /tmp to avoid a relative path that could resolve
+			// to an unexpected location.
+			return filepath.Join(os.TempDir(), "mockd", DefaultKeyFileName)
+		}
 		dataDir = filepath.Join(home, ".local", "share")
 	}
 	return filepath.Join(dataDir, "mockd", DefaultKeyFileName)

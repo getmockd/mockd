@@ -128,10 +128,14 @@ func (s *requestLogStore) Append(ctx context.Context, entry *store.RequestLogEnt
 		return store.ErrReadOnly
 	}
 
-	// Keep only last 10000 entries to prevent unbounded growth
+	// Keep only last 10000 entries to prevent unbounded growth.
+	// When evicting, compact the slice to a fresh backing array so that
+	// repeated [1:] re-slices don't leak memory from the old array.
 	const maxEntries = 10000
 	if len(s.fs.data.RequestLog) >= maxEntries {
-		s.fs.data.RequestLog = s.fs.data.RequestLog[1:]
+		compacted := make([]*store.RequestLogEntry, maxEntries-1, maxEntries)
+		copy(compacted, s.fs.data.RequestLog[1:])
+		s.fs.data.RequestLog = compacted
 	}
 
 	s.fs.data.RequestLog = append(s.fs.data.RequestLog, entry)

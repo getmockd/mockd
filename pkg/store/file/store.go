@@ -35,6 +35,7 @@ type FileStore struct {
 	closeCh      chan struct{}
 	closeOnce    sync.Once
 	closedCh     chan struct{} // signals when saveLoop has exited
+	saveLoopOnce sync.Once     // ensures saveLoop starts exactly once
 	log          *slog.Logger
 }
 
@@ -71,8 +72,8 @@ func New(cfg store.Config) *FileStore {
 		closedCh:     make(chan struct{}),
 		log:          slog.Default(),
 	}
-	// Start debounced save goroutine
-	go fs.saveLoop()
+	// Note: saveLoop goroutine is started in Open(), not here,
+	// to ensure the data directory exists and data is loaded first.
 	return fs
 }
 
@@ -136,6 +137,7 @@ func (s *FileStore) Open(ctx context.Context) error {
 		if os.IsNotExist(err) {
 			// No data file yet, start fresh
 			s.data = &storeData{Version: dataVersion}
+			s.saveLoopOnce.Do(func() { go s.saveLoop() })
 			return nil
 		}
 		return err
@@ -148,11 +150,17 @@ func (s *FileStore) Open(ctx context.Context) error {
 
 	s.data = &stored
 	s.dirty.Store(false)
+	s.saveLoopOnce.Do(func() { go s.saveLoop() })
 	return nil
 }
 
 // Close saves any pending changes and closes the store. Safe to call multiple times.
+// Safe to call even if Open() was never called or Open() failed.
 func (s *FileStore) Close() error {
+	// Ensure saveLoop is running so closedCh will eventually be signaled.
+	// If Open() was never called, this starts saveLoop which will see closeCh
+	// is closed and exit immediately.
+	s.saveLoopOnce.Do(func() { go s.saveLoop() })
 	s.closeOnce.Do(func() {
 		close(s.closeCh)
 	})

@@ -1,6 +1,8 @@
 // Package cliconfig provides configuration types and loading for the mockd CLI.
 package cliconfig
 
+import "fmt"
+
 // CLIConfig represents the complete configuration for the mockd CLI.
 // Configuration values can come from multiple sources with the following precedence:
 // 1. Command-line flags (highest priority)
@@ -50,3 +52,30 @@ const (
 	SourceLocal   = "local"
 	SourceFlag    = "flag"
 )
+
+// Validate checks that all numeric config values are within acceptable ranges.
+// Returns nil if the configuration is valid.
+func (c *CLIConfig) Validate() error {
+	if c.Port < 0 || c.Port > 65535 {
+		return fmt.Errorf("port %d is out of range (0-65535)", c.Port)
+	}
+	if c.AdminPort < 0 || c.AdminPort > 65535 {
+		return fmt.Errorf("adminPort %d is out of range (0-65535)", c.AdminPort)
+	}
+	if c.HTTPSPort < 0 || c.HTTPSPort > 65535 {
+		return fmt.Errorf("httpsPort %d is out of range (0-65535)", c.HTTPSPort)
+	}
+	if c.ReadTimeout < 0 || c.ReadTimeout > 3600 {
+		return fmt.Errorf("readTimeout %d is out of range (0-3600 seconds)", c.ReadTimeout)
+	}
+	if c.WriteTimeout < 0 || c.WriteTimeout > 3600 {
+		return fmt.Errorf("writeTimeout %d is out of range (0-3600 seconds)", c.WriteTimeout)
+	}
+	if c.MaxLogEntries < 0 || c.MaxLogEntries > 100000 {
+		return fmt.Errorf("maxLogEntries %d is out of range (0-100000)", c.MaxLogEntries)
+	}
+	if c.Port != 0 && c.AdminPort != 0 && c.Port == c.AdminPort {
+		return fmt.Errorf("port and adminPort cannot be the same (%d)", c.Port)
+	}
+	return nil
+}

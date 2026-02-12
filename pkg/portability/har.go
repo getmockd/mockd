@@ -1,6 +1,7 @@
 package portability
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -310,12 +311,26 @@ func (i *HARImporter) entryToMock(entry HAREntry, id int, now time.Time) *config
 			Response: &mock.HTTPResponse{
 				StatusCode: entry.Response.Status,
 				Headers:    respHeaders,
-				Body:       entry.Response.Content.Text,
+				Body:       decodeHARBody(entry.Response.Content),
 			},
 		},
 	}
 
 	return m
+}
+
+// decodeHARBody returns the response body, decoding base64 if the encoding
+// field indicates it. Per the HAR spec, when Content.Encoding is "base64"
+// the Text field contains a base64-encoded string.
+func decodeHARBody(content HARContent) string {
+	if strings.EqualFold(content.Encoding, "base64") && content.Text != "" {
+		decoded, err := base64.StdEncoding.DecodeString(content.Text)
+		if err == nil {
+			return string(decoded)
+		}
+		// Fall through to raw text if decode fails
+	}
+	return content.Text
 }
 
 // Format returns FormatHAR.

@@ -83,7 +83,7 @@ Logs are sent with the following labels:
 
 | Label | Description |
 |-------|-------------|
-| `app` | Always `mockd` |
+| `job` | Always `mockd` |
 | `level` | Log level (debug, info, warn, error) |
 | `component` | Component name (server, admin, engine) |
 
@@ -105,23 +105,22 @@ services:
 
 ```logql
 # All mockd logs
-{app="mockd"}
+{job="mockd"}
 
 # Errors only
-{app="mockd", level="error"}
+{job="mockd", level="error"}
 
 # Request logs
-{app="mockd"} |= "request"
+{job="mockd"} |= "request"
 
 # Filter by path
-{app="mockd"} | json | path="/api/users"
+{job="mockd"} | json | path="/api/users"
 ```
 
 ### Log Batching
 
 Logs are batched for efficiency:
-- Batch size: 100 entries or 1 second (whichever comes first)
-- Automatic retry on failure
+- Batch size: 100 entries or 5 seconds (whichever comes first)
 - Graceful shutdown flushes pending logs
 
 ---

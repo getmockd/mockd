@@ -6,19 +6,41 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // StateStore is the global container managing all stateful resources.
 type StateStore struct {
 	mu        sync.RWMutex
 	resources map[string]*StatefulResource
+	observer  Observer
 }
 
 // NewStateStore creates a new StateStore.
 func NewStateStore() *StateStore {
 	return &StateStore{
 		resources: make(map[string]*StatefulResource),
+		observer:  &NoopObserver{},
 	}
+}
+
+// SetObserver sets the observer for metrics/logging hooks.
+// Pass nil to disable observation (uses NoopObserver).
+func (s *StateStore) SetObserver(obs Observer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if obs == nil {
+		s.observer = &NoopObserver{}
+	} else {
+		s.observer = obs
+	}
+}
+
+// Observer returns the current observer.
+func (s *StateStore) GetObserver() Observer {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.observer
 }
 
 // Register adds a new stateful resource to the store.
@@ -110,27 +132,45 @@ func (s *StateStore) MatchPath(path string) (*StatefulResource, string, map[stri
 
 // Reset resets stateful resources to their initial seed state.
 // If resourceName is empty, all resources are reset.
+// The store lock is only held to snapshot which resources to reset;
+// individual resource resets use the resource's own mutex so they
+// don't block other store operations for the entire duration.
 func (s *StateStore) Reset(resourceName string) (*ResetResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	start := time.Now()
 
-	var resetNames []string
-
+	// Snapshot the target resources under a read lock.
+	s.mu.RLock()
+	type target struct {
+		name     string
+		resource *StatefulResource
+	}
+	var targets []target
 	if resourceName == "" {
-		// Reset all resources
+		targets = make([]target, 0, len(s.resources))
 		for name, resource := range s.resources {
-			resource.Reset()
-			resetNames = append(resetNames, name)
+			targets = append(targets, target{name, resource})
 		}
 	} else {
-		// Reset specific resource
 		resource, ok := s.resources[resourceName]
 		if !ok {
+			s.mu.RUnlock()
 			return nil, fmt.Errorf("resource %q not found", resourceName)
 		}
-		resource.Reset()
-		resetNames = []string{resourceName}
+		targets = []target{{resourceName, resource}}
 	}
+	observer := s.observer
+	s.mu.RUnlock()
+
+	// Reset each resource outside the store lock.
+	// Each resource.Reset() acquires its own per-resource mutex.
+	resetNames := make([]string, 0, len(targets))
+	for _, t := range targets {
+		t.resource.Reset()
+		resetNames = append(resetNames, t.name)
+	}
+	sort.Strings(resetNames) // deterministic ordering
+
+	observer.OnReset(resetNames, time.Since(start))
 
 	return &ResetResponse{
 		Reset:     true,

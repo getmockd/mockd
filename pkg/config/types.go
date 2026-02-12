@@ -256,6 +256,9 @@ type StatefulResourceConfig struct {
 	IDField string `json:"idField,omitempty" yaml:"idField,omitempty"`
 	// ParentField is the field name for parent FK in nested resources
 	ParentField string `json:"parentField,omitempty" yaml:"parentField,omitempty"`
+	// MaxItems limits the number of items this resource can hold (0 = unlimited).
+	// When the limit is reached, Create operations return an error.
+	MaxItems int `json:"maxItems,omitempty" yaml:"maxItems,omitempty"`
 	// SeedData is the initial data to load on startup/reset
 	SeedData []map[string]interface{} `json:"seedData,omitempty" yaml:"seedData,omitempty"`
 	// Validation defines validation rules for CRUD operations

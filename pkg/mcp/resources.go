@@ -25,6 +25,20 @@ func NewResourceProvider(client cli.AdminClient, store *stateful.StateStore) *Re
 	}
 }
 
+// WithClient returns a shallow copy of the ResourceProvider using the given
+// admin client. This is used so that session-scoped context switches are
+// reflected in resource listings (the session may point at a different
+// admin server after switch_context).
+func (p *ResourceProvider) WithClient(client cli.AdminClient) *ResourceProvider {
+	if client == nil {
+		return p
+	}
+	return &ResourceProvider{
+		adminClient:   client,
+		statefulStore: p.statefulStore,
+	}
+}
+
 // List returns all available resources.
 func (p *ResourceProvider) List() []ResourceDefinition {
 	resources := make([]ResourceDefinition, 0)

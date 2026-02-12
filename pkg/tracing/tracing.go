@@ -32,6 +32,24 @@ func (s SpanStatus) String() string {
 	}
 }
 
+// SpanKind describes the relationship between the Span, its parents and children.
+type SpanKind int
+
+const (
+	// SpanKindUnspecified is the default, unspecified span kind.
+	SpanKindUnspecified SpanKind = 0
+	// SpanKindInternal indicates an internal operation.
+	SpanKindInternal SpanKind = 1
+	// SpanKindServer indicates a server-side handling of an RPC or HTTP request.
+	SpanKindServer SpanKind = 2
+	// SpanKindClient indicates a client-side RPC or HTTP request.
+	SpanKindClient SpanKind = 3
+	// SpanKindProducer indicates a message producer.
+	SpanKindProducer SpanKind = 4
+	// SpanKindConsumer indicates a message consumer.
+	SpanKindConsumer SpanKind = 5
+)
+
 // SpanEvent represents an event that occurred during a span.
 type SpanEvent struct {
 	Name      string            `json:"name"`
@@ -45,6 +63,7 @@ type Span struct {
 	SpanID        string            `json:"spanId"`
 	ParentID      string            `json:"parentId,omitempty"`
 	Name          string            `json:"name"`
+	Kind          SpanKind          `json:"kind,omitempty"`
 	StartTime     time.Time         `json:"startTime"`
 	EndTime       time.Time         `json:"endTime,omitempty"`
 	Status        SpanStatus        `json:"status"`
@@ -108,6 +127,16 @@ func (s *Span) AddEvent(name string, attrs ...string) {
 	}
 
 	s.Events = append(s.Events, event)
+}
+
+// SetKind sets the kind of the span. This should be called before End().
+func (s *Span) SetKind(kind SpanKind) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ended {
+		return
+	}
+	s.Kind = kind
 }
 
 // SetStatus sets the status of the span.

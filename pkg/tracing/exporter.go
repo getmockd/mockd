@@ -393,7 +393,7 @@ func convertSpan(span *Span) otlpSpan {
 		SpanID:            span.SpanID,
 		ParentSpanID:      span.ParentID,
 		Name:              span.Name,
-		Kind:              0, // UNSPECIFIED
+		Kind:              int(span.Kind),
 		StartTimeUnixNano: strconv.FormatInt(span.StartTime.UnixNano(), 10),
 		EndTimeUnixNano:   strconv.FormatInt(span.EndTime.UnixNano(), 10),
 		Attributes:        attrs,

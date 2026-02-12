@@ -1,6 +1,7 @@
 package cliconfig
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -125,43 +126,41 @@ func (e *ConfigError) Error() string {
 	return e.Path + ": " + e.Message
 }
 
-// FindLineColumn finds the line and column number for a byte offset.
-func FindLineColumn(data []byte, offset int64) (line, col int) {
-	line = 1
-	col = 1
-	for i := int64(0); i < offset && int(i) < len(data); i++ {
-		if data[i] == '\n' {
-			line++
-			col = 1
-		} else {
-			col++
-		}
-	}
-	return line, col
-}
-
 // LoadAll loads configuration from all sources and merges them.
 // Precedence: flags > env > local config > global config > defaults
+// Parse errors in config files are logged as warnings but do not prevent
+// loading from other sources.
 func LoadAll() (*CLIConfig, error) {
 	// Start with defaults
 	cfg := NewDefault()
 
 	// Load global config
 	if globalPath, err := FindGlobalConfig(); err == nil && globalPath != "" {
-		if globalCfg, err := LoadConfigFile(globalPath); err == nil {
+		globalCfg, err := LoadConfigFile(globalPath)
+		if err != nil {
+			slog.Warn("failed to parse global config file, skipping", "path", globalPath, "error", err)
+		} else {
 			MergeConfig(cfg, globalCfg, SourceGlobal)
 		}
 	}
 
 	// Load local config
 	if localPath, err := FindLocalConfig(); err == nil && localPath != "" {
-		if localCfg, err := LoadConfigFile(localPath); err == nil {
+		localCfg, err := LoadConfigFile(localPath)
+		if err != nil {
+			slog.Warn("failed to parse local config file, skipping", "path", localPath, "error", err)
+		} else {
 			MergeConfig(cfg, localCfg, SourceLocal)
 		}
 	}
 
 	// Load environment variables
 	LoadEnvConfig(cfg)
+
+	// Validate final merged config
+	if err := cfg.Validate(); err != nil {
+		slog.Warn("config validation warning", "error", err)
+	}
 
 	return cfg, nil
 }

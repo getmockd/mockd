@@ -252,10 +252,7 @@ func (m *WorkspaceManager) StopAll() error {
 		}
 	}
 
-	if len(errs) > 0 {
-		return errs[0]
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // GetWorkspaceStatus returns detailed status info for a workspace.

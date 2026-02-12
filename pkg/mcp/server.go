@@ -402,7 +402,9 @@ func (s *Server) handleResourcesList(session *MCPSession) (interface{}, *JSONRPC
 	if session.GetState() != SessionStateReady {
 		return nil, NotInitializedError()
 	}
-	return &ResourcesListResult{Resources: s.resources.List()}, nil
+	// Use the session's admin client so switch_context is reflected in resource listings.
+	rp := s.resources.WithClient(session.GetAdminClient())
+	return &ResourcesListResult{Resources: rp.List()}, nil
 }
 
 func (s *Server) handleResourcesRead(session *MCPSession, params json.RawMessage) (interface{}, *JSONRPCError) {
@@ -413,7 +415,9 @@ func (s *Server) handleResourcesRead(session *MCPSession, params json.RawMessage
 	if err != nil {
 		return nil, err
 	}
-	contents, readErr := s.resources.Read(readParams.URI)
+	// Use the session's admin client so switch_context is reflected in resource reads.
+	rp := s.resources.WithClient(session.GetAdminClient())
+	contents, readErr := rp.Read(readParams.URI)
 	if readErr != nil {
 		return nil, readErr
 	}

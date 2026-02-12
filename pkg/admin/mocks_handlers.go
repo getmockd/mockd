@@ -461,7 +461,11 @@ func (a *API) checkWorkspaceEnginePortConflicts(ctx context.Context, engineID, w
 	return conflicts
 }
 
-// applyMockPatch applies common patch fields to a mock.
+// applyMockPatch applies common (metadata) patch fields to a mock.
+// Protocol-specific fields (http, websocket, graphql, grpc, soap, mqtt, oauth)
+// are intentionally NOT patched here — use PUT for full mock replacement.
+// This is by design: protocol changes may involve port conflicts, schema
+// validation, and listener restarts that require the full update pipeline.
 func applyMockPatch(m *mock.Mock, patch map[string]interface{}) {
 	if name, ok := patch["name"].(string); ok {
 		m.Name = name

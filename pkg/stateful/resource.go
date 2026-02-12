@@ -19,6 +19,7 @@ type StatefulResource struct {
 	basePath         string
 	idField          string
 	parentField      string
+	maxItems         int
 	items            map[string]*ResourceItem
 	seedData         []map[string]interface{}
 	pathRegex        *regexp.Regexp
@@ -44,6 +45,7 @@ func NewStatefulResourceWithLogger(config *ResourceConfig, logger *slog.Logger) 
 		basePath:         config.BasePath,
 		idField:          idField,
 		parentField:      config.ParentField,
+		maxItems:         config.MaxItems,
 		items:            make(map[string]*ResourceItem),
 		seedData:         config.SeedData,
 		validationConfig: config.Validation,
@@ -211,6 +213,11 @@ func (r *StatefulResource) loadSeed() error {
 func (r *StatefulResource) Create(data map[string]interface{}, pathParams map[string]string) (*ResourceItem, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	// Enforce memory limit
+	if r.maxItems > 0 && len(r.items) >= r.maxItems {
+		return nil, &CapacityError{Resource: r.name, MaxItems: r.maxItems}
+	}
 
 	item := FromJSON(data, r.idField)
 
