@@ -52,6 +52,17 @@ func (tm *TLSManager) BuildConfig() (*tls.Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to load certificate: %w", err)
 		}
+
+		// Check expiry on user-provided certs — we can't auto-regenerate these,
+		// so return a clear error telling the user their cert needs renewal.
+		if len(tlsCert.Certificate) > 0 {
+			leaf, parseErr := x509.ParseCertificate(tlsCert.Certificate[0])
+			if parseErr == nil {
+				if expiryErr := mockdtls.CheckCertExpiry(leaf, mockdtls.CertExpiryGracePeriod); expiryErr != nil {
+					return nil, fmt.Errorf("TLS certificate at %s: %w — please provide a renewed certificate", tm.cfg.CertFile, expiryErr)
+				}
+			}
+		}
 	}
 
 	tlsConfig := &tls.Config{
