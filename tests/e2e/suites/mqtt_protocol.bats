@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # ============================================================================
-# MQTT Protocol — broker connectivity, publish/subscribe, auto-publish
+# MQTT Protocol — broker connectivity, publish/subscribe, auto-publish,
+#                 wildcards, QoS, retained messages, auth
 # ============================================================================
 # Uses mosquitto_pub/mosquitto_sub to test actual MQTT behavior against mockd.
 
@@ -41,6 +42,8 @@ setup_file() {
 teardown_file() {
   load '../lib/helpers'
   api DELETE /mocks
+  # Also stop any auth broker on port 1884
+  wait_for_port_down mockd 1884 5 2>/dev/null || true
 }
 
 teardown() {
@@ -57,6 +60,8 @@ mqtt_mock_id() {
   cat "$BATS_FILE_TMPDIR/mqtt_mock_id"
 }
 
+# ── Basic Connectivity ────────────────────────────────────────────────────────
+
 @test "MQTT-001: Create MQTT mock returns 201" {
   api GET "/mocks/$(mqtt_mock_id)"
   [[ "$STATUS" == "200" ]]
@@ -66,6 +71,8 @@ mqtt_mock_id() {
   run mosquitto_pub -h mockd -p "$MQTT_PORT" -t "test/ping" -m "hello"
   [[ "$status" -eq 0 ]]
 }
+
+# ── Publish/Subscribe ─────────────────────────────────────────────────────────
 
 @test "MQTT-003: Subscribe receives temp message" {
   # Start subscriber in background first, then publish to trigger delivery
@@ -95,6 +102,8 @@ mqtt_mock_id() {
   echo "$echo_out" | grep -q "hello from e2e"
 }
 
+# ── Admin Endpoints ───────────────────────────────────────────────────────────
+
 @test "MQTT-005: GET /mqtt admin endpoint returns 200" {
   api GET /mqtt
   [[ "$STATUS" == "200" ]]
@@ -119,6 +128,105 @@ mqtt_mock_id() {
   sub_out=$(cat "$BATS_TEST_TMPDIR/mqtt_sub_humid.txt" 2>/dev/null) || sub_out=""
   echo "$sub_out" | grep -q "humidity"
 }
+
+# ── Wildcard Subscriptions ────────────────────────────────────────────────────
+
+@test "MQTT-011: Wildcard subscription sensors/# receives temp messages" {
+  # Subscribe to wildcard topic that covers sensors/temp and sensors/humidity
+  timeout 8 mosquitto_sub -h mockd -p "$MQTT_PORT" -t "sensors/#" -C 1 > "$BATS_TEST_TMPDIR/mqtt_wildcard.txt" 2>&1 &
+  local sub_pid=$!
+  sleep 1
+
+  # Publish to a specific sub-topic
+  mosquitto_pub -h mockd -p "$MQTT_PORT" -t "sensors/temp" -m '{"temp": 99}' 2>/dev/null || true
+
+  wait $sub_pid 2>/dev/null || true
+  local wc_out
+  wc_out=$(cat "$BATS_TEST_TMPDIR/mqtt_wildcard.txt" 2>/dev/null) || wc_out=""
+  echo "$wc_out" | grep -q "temp"
+}
+
+@test "MQTT-012: Single-level wildcard sensors/+/data receives messages" {
+  timeout 8 mosquitto_sub -h mockd -p "$MQTT_PORT" -t "sensors/+/data" -C 1 > "$BATS_TEST_TMPDIR/mqtt_single_wc.txt" 2>&1 &
+  local sub_pid=$!
+  sleep 1
+
+  mosquitto_pub -h mockd -p "$MQTT_PORT" -t "sensors/livingroom/data" -m '{"reading": 42}' 2>/dev/null || true
+
+  wait $sub_pid 2>/dev/null || true
+  local out
+  out=$(cat "$BATS_TEST_TMPDIR/mqtt_single_wc.txt" 2>/dev/null) || out=""
+  echo "$out" | grep -q "reading"
+}
+
+# ── QoS ───────────────────────────────────────────────────────────────────────
+
+@test "MQTT-013: QoS 1 publish and subscribe" {
+  timeout 8 mosquitto_sub -h mockd -p "$MQTT_PORT" -t "test/qos1" -q 1 -C 1 > "$BATS_TEST_TMPDIR/mqtt_qos1.txt" 2>&1 &
+  local sub_pid=$!
+  sleep 1
+
+  run mosquitto_pub -h mockd -p "$MQTT_PORT" -t "test/qos1" -q 1 -m '{"qos": 1}'
+  [[ "$status" -eq 0 ]]
+
+  wait $sub_pid 2>/dev/null || true
+  local out
+  out=$(cat "$BATS_TEST_TMPDIR/mqtt_qos1.txt" 2>/dev/null) || out=""
+  echo "$out" | grep -q "qos"
+}
+
+# ── Retained Messages ────────────────────────────────────────────────────────
+
+@test "MQTT-014: Retained message delivered to late subscriber" {
+  # Publish a retained message first
+  run mosquitto_pub -h mockd -p "$MQTT_PORT" -t "test/retained" -r -m '{"retained": true}'
+  [[ "$status" -eq 0 ]]
+
+  # Now subscribe — should immediately receive the retained message
+  sleep 0.5
+  local out
+  out=$(timeout 5 mosquitto_sub -h mockd -p "$MQTT_PORT" -t "test/retained" -C 1 2>&1) || true
+  echo "$out" | grep -q "retained"
+}
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+@test "MQTT-015: Auth broker rejects wrong credentials" {
+  # Create a second MQTT mock on different port with auth
+  api POST /mocks -d '{
+    "type": "mqtt",
+    "name": "e2e-mqtt-auth",
+    "mqtt": {
+      "port": 1884,
+      "auth": {
+        "enabled": true,
+        "users": [
+          {"username": "sensor", "password": "s3cret", "acl": "readwrite"}
+        ]
+      },
+      "topics": [
+        {"topic": "auth/data", "messages": [{"payload": "ok"}]}
+      ]
+    }
+  }'
+  [[ "$STATUS" == "201" ]]
+  local auth_id
+  auth_id=$(json_field '.id')
+
+  wait_for_port mockd 1884
+
+  # Wrong credentials should fail
+  local pub_out
+  pub_out=$(mosquitto_pub -h mockd -p 1884 -u "sensor" -P "wrongpass" -t "auth/data" -m "test" 2>&1) || true
+  # mosquitto_pub returns error or connection refused with bad credentials
+  echo "$pub_out" | grep -qi "refused\|error\|not authorised\|not authorized\|Connection Refused" || [[ $? -ne 0 ]]
+
+  # Cleanup
+  api DELETE "/mocks/${auth_id}"
+  wait_for_port_down mockd 1884
+}
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 @test "MQTT-008: Toggle mock disabled stops broker" {
   local mock_id

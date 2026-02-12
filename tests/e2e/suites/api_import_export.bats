@@ -165,3 +165,89 @@ teardown_file() {
   engine GET /api/merge-c
   [[ "$STATUS" == "200" ]]
 }
+
+# ─── CLI Curl Import ─────────────────────────────────────────────────────────
+
+@test "IMP-CURL-001: Import curl command creates working mock" {
+  api DELETE /mocks
+
+  run mockd import \
+    'curl -X GET https://api.example.com/users -H "Accept: application/json"' \
+    --admin-url "$ADMIN"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"Imported"* || "$output" == *"Parsed"* ]]
+
+  # Verify mock was created
+  api GET /mocks
+  local count
+  count=$(echo "$BODY" | jq 'if type == "array" then length else 0 end')
+  [[ "$count" -ge 1 ]]
+}
+
+# ─── CLI OpenAPI Import ───────────────────────────────────────────────────────
+
+@test "IMP-OAS-001: Import OpenAPI spec creates mocks" {
+  api DELETE /mocks
+
+  cat > /tmp/e2e-openapi.yaml << 'YAML'
+openapi: "3.0.0"
+info:
+  title: Test API
+  version: "1.0.0"
+paths:
+  /api/pets:
+    get:
+      summary: List pets
+      responses:
+        "200":
+          description: A list of pets
+          content:
+            application/json:
+              example:
+                - id: 1
+                  name: Rex
+YAML
+
+  run mockd import /tmp/e2e-openapi.yaml --admin-url "$ADMIN"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"Imported"* || "$output" == *"Parsed"* ]]
+
+  # Verify at least one mock was created
+  api GET /mocks
+  local count
+  count=$(echo "$BODY" | jq 'if type == "array" then length else 0 end')
+  [[ "$count" -ge 1 ]]
+
+  rm -f /tmp/e2e-openapi.yaml
+}
+
+# ─── Dry-Run Import ──────────────────────────────────────────────────────────
+
+@test "IMP-DRY-001: Import with --dry-run does not create mocks" {
+  api DELETE /mocks
+
+  cat > /tmp/e2e-dryrun.yaml << 'YAML'
+version: "1.0"
+name: dry-run-test
+mocks:
+  - type: http
+    name: Dry Run Mock
+    http:
+      matcher:
+        method: GET
+        path: /api/dryrun
+      response:
+        statusCode: 200
+        body: '{"dry": true}'
+YAML
+
+  run mockd import /tmp/e2e-dryrun.yaml --dry-run --admin-url "$ADMIN"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"Dry run"* || "$output" == *"dry"* ]]
+
+  # Verify NO mock was actually created
+  engine GET /api/dryrun
+  [[ "$STATUS" == "404" ]]
+
+  rm -f /tmp/e2e-dryrun.yaml
+}

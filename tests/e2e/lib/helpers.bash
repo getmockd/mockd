@@ -45,6 +45,21 @@ engine() {
   rm -f "$tmpfile"
 }
 
+# Hit the mock engine with form-encoded body (for OAuth token endpoints, etc.).
+# Usage: engine_form POST /oauth/token "grant_type=client_credentials&client_id=app"
+engine_form() {
+  local method="$1" path="$2" data="$3"
+  shift 3
+  local url="${ENGINE}${path}"
+  local tmpfile
+  tmpfile=$(mktemp)
+  STATUS=$(curl -s -w '%{http_code}' -o "$tmpfile" -X "$method" "$url" \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    -d "$data" "$@" 2>/dev/null) || STATUS="000"
+  BODY=$(cat "$tmpfile")
+  rm -f "$tmpfile"
+}
+
 # ─── JSON Helpers ──────────────────────────────────────────────────────────────
 
 # Extract a JSON field from $BODY.
