@@ -1,6 +1,8 @@
 package oauth
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -33,6 +35,12 @@ func testConfig() *OAuthConfig {
 				ClientID:     "code-only-client",
 				ClientSecret: "code-secret",
 				RedirectURIs: []string{"https://code.example.com/callback"},
+				GrantTypes:   []string{"authorization_code"},
+			},
+			{
+				ClientID:     "public-client",
+				ClientSecret: "", // Public client — no secret, relies on PKCE
+				RedirectURIs: []string{"https://spa.example.com/callback"},
 				GrantTypes:   []string{"authorization_code"},
 			},
 		},
@@ -1341,5 +1349,302 @@ func TestHandleOpenIDConfig_IncludesIntrospection(t *testing.T) {
 
 	if config.IntrospectionEndpoint != "https://mock.example.com/introspect" {
 		t.Errorf("expected introspection_endpoint=https://mock.example.com/introspect, got %v", config.IntrospectionEndpoint)
+	}
+}
+
+// ============================================================================
+// PKCE (Proof Key for Code Exchange) Tests — RFC 7636
+// ============================================================================
+
+// pkceS256Challenge computes the S256 code_challenge from a code_verifier:
+// BASE64URL(SHA256(code_verifier))
+func pkceS256Challenge(verifier string) string {
+	hash := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(hash[:])
+}
+
+// pkceAuthorize performs the authorize step and returns the authorization code from the redirect.
+func pkceAuthorize(t *testing.T, handler *Handler, clientID, redirectURI, codeChallenge, codeChallengeMethod string) string {
+	t.Helper()
+
+	params := url.Values{}
+	params.Set("client_id", clientID)
+	params.Set("redirect_uri", redirectURI)
+	params.Set("response_type", "code")
+	params.Set("scope", "openid")
+	params.Set("state", "pkce-state")
+	if codeChallenge != "" {
+		params.Set("code_challenge", codeChallenge)
+	}
+	if codeChallengeMethod != "" {
+		params.Set("code_challenge_method", codeChallengeMethod)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/authorize?"+params.Encode(), nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleAuthorize(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("authorize: expected status 302, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	location := rec.Header().Get("Location")
+	u, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("authorize: failed to parse redirect URL: %v", err)
+	}
+
+	code := u.Query().Get("code")
+	if code == "" {
+		t.Fatalf("authorize: expected code in redirect, got location=%s", location)
+	}
+	return code
+}
+
+// pkceTokenExchange performs the token exchange step and returns the recorder.
+func pkceTokenExchange(handler *Handler, clientID, clientSecret, code, redirectURI, codeVerifier string) *httptest.ResponseRecorder {
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", redirectURI)
+	form.Set("client_id", clientID)
+	if clientSecret != "" {
+		form.Set("client_secret", clientSecret)
+	}
+	if codeVerifier != "" {
+		form.Set("code_verifier", codeVerifier)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	handler.HandleToken(rec, req)
+	return rec
+}
+
+func TestPKCE_S256Flow(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	codeVerifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	codeChallenge := pkceS256Challenge(codeVerifier)
+
+	// Authorize with S256 code_challenge
+	code := pkceAuthorize(t, handler, "test-client", "https://app.example.com/callback", codeChallenge, "S256")
+
+	// Exchange with correct code_verifier — should succeed
+	rec := pkceTokenExchange(handler, "test-client", "test-secret", code, "https://app.example.com/callback", codeVerifier)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response TokenResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if response.AccessToken == "" {
+		t.Error("expected access_token in S256 PKCE flow")
+	}
+	if response.IDToken == "" {
+		t.Error("expected id_token for openid scope in S256 PKCE flow")
+	}
+}
+
+func TestPKCE_PlainFlow(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	codeVerifier := "plain-verifier-value-that-is-at-least-43-characters-long"
+
+	// For plain method, code_challenge == code_verifier
+	code := pkceAuthorize(t, handler, "test-client", "https://app.example.com/callback", codeVerifier, "plain")
+
+	// Exchange with correct code_verifier — should succeed
+	rec := pkceTokenExchange(handler, "test-client", "test-secret", code, "https://app.example.com/callback", codeVerifier)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response TokenResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if response.AccessToken == "" {
+		t.Error("expected access_token in plain PKCE flow")
+	}
+}
+
+func TestPKCE_MissingCodeVerifier(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	codeVerifier := "verifier-for-missing-test-at-least-43-characters-long"
+	codeChallenge := pkceS256Challenge(codeVerifier)
+
+	// Authorize with code_challenge
+	code := pkceAuthorize(t, handler, "test-client", "https://app.example.com/callback", codeChallenge, "S256")
+
+	// Exchange WITHOUT code_verifier — should fail
+	rec := pkceTokenExchange(handler, "test-client", "test-secret", code, "https://app.example.com/callback", "")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 for missing code_verifier, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var errResp ErrorResponse
+	json.Unmarshal(rec.Body.Bytes(), &errResp)
+	if errResp.Error != string(ErrInvalidGrant) {
+		t.Errorf("expected error=invalid_grant, got %v", errResp.Error)
+	}
+	if !strings.Contains(errResp.ErrorDescription, "code_verifier") {
+		t.Errorf("expected error_description to mention code_verifier, got %q", errResp.ErrorDescription)
+	}
+}
+
+func TestPKCE_WrongCodeVerifier(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	codeVerifier := "correct-verifier-value-that-is-long-enough-here"
+	codeChallenge := pkceS256Challenge(codeVerifier)
+
+	// Authorize with correct code_challenge
+	code := pkceAuthorize(t, handler, "test-client", "https://app.example.com/callback", codeChallenge, "S256")
+
+	// Exchange with WRONG code_verifier — should fail
+	rec := pkceTokenExchange(handler, "test-client", "test-secret", code, "https://app.example.com/callback", "wrong-verifier-completely-different-value")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 for wrong code_verifier, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var errResp ErrorResponse
+	json.Unmarshal(rec.Body.Bytes(), &errResp)
+	if errResp.Error != string(ErrInvalidGrant) {
+		t.Errorf("expected error=invalid_grant, got %v", errResp.Error)
+	}
+	if !strings.Contains(errResp.ErrorDescription, "code_verifier does not match") {
+		t.Errorf("expected error_description about mismatch, got %q", errResp.ErrorDescription)
+	}
+}
+
+func TestPKCE_PublicClientWithS256(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	codeVerifier := "public-client-verifier-with-enough-length-for-pkce"
+	codeChallenge := pkceS256Challenge(codeVerifier)
+
+	// Authorize as public client with S256 code_challenge
+	code := pkceAuthorize(t, handler, "public-client", "https://spa.example.com/callback", codeChallenge, "S256")
+
+	// Exchange as public client (no client_secret) with correct code_verifier
+	rec := pkceTokenExchange(handler, "public-client", "", code, "https://spa.example.com/callback", codeVerifier)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for public client with PKCE, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response TokenResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if response.AccessToken == "" {
+		t.Error("expected access_token for public client PKCE flow")
+	}
+}
+
+func TestPKCE_PublicClientWrongVerifier(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	codeVerifier := "public-client-verifier-for-wrong-test-long-enough"
+	codeChallenge := pkceS256Challenge(codeVerifier)
+
+	// Authorize as public client
+	code := pkceAuthorize(t, handler, "public-client", "https://spa.example.com/callback", codeChallenge, "S256")
+
+	// Exchange with wrong verifier — public client should also fail PKCE check
+	rec := pkceTokenExchange(handler, "public-client", "", code, "https://spa.example.com/callback", "wrong-verifier-for-public-client-test")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 for wrong code_verifier on public client, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var errResp ErrorResponse
+	json.Unmarshal(rec.Body.Bytes(), &errResp)
+	if errResp.Error != string(ErrInvalidGrant) {
+		t.Errorf("expected error=invalid_grant, got %v", errResp.Error)
+	}
+}
+
+func TestPKCE_UnsupportedChallengeMethod(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	// Authorize with unsupported code_challenge_method "S512"
+	params := url.Values{}
+	params.Set("client_id", "test-client")
+	params.Set("redirect_uri", "https://app.example.com/callback")
+	params.Set("response_type", "code")
+	params.Set("scope", "openid")
+	params.Set("state", "pkce-state")
+	params.Set("code_challenge", "some-challenge-value")
+	params.Set("code_challenge_method", "S512")
+
+	req := httptest.NewRequest(http.MethodGet, "/authorize?"+params.Encode(), nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleAuthorize(rec, req)
+
+	// Should redirect with error (per handler.go line 196-199)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected status 302 (error redirect), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	location := rec.Header().Get("Location")
+	u, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("failed to parse redirect URL: %v", err)
+	}
+
+	errParam := u.Query().Get("error")
+	if errParam != string(ErrInvalidRequest) {
+		t.Errorf("expected error=invalid_request in redirect, got %v", errParam)
+	}
+
+	errDesc := u.Query().Get("error_description")
+	if !strings.Contains(errDesc, "code_challenge_method") {
+		t.Errorf("expected error_description to mention code_challenge_method, got %q", errDesc)
+	}
+}
+
+func TestPKCE_DefaultMethodIsPlain(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	codeVerifier := "default-method-verifier-at-least-43-chars-long-here"
+
+	// Authorize with code_challenge but WITHOUT code_challenge_method
+	// Per handler.go line 201-203, default should be "plain"
+	code := pkceAuthorize(t, handler, "test-client", "https://app.example.com/callback", codeVerifier, "")
+
+	// Exchange with code_verifier == code_challenge (plain comparison)
+	rec := pkceTokenExchange(handler, "test-client", "test-secret", code, "https://app.example.com/callback", codeVerifier)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for default plain method, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response TokenResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if response.AccessToken == "" {
+		t.Error("expected access_token when default method is plain")
 	}
 }
