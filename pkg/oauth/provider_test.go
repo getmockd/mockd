@@ -249,31 +249,30 @@ func TestGetJWKS(t *testing.T) {
 	t.Run("returns valid JWKS", func(t *testing.T) {
 		jwks := provider.GetJWKS()
 
-		keys, ok := jwks["keys"].([]map[string]interface{})
-		if !ok {
-			t.Fatal("expected keys array")
+		if jwks == nil {
+			t.Fatal("expected non-nil JWKS")
 		}
-		if len(keys) != 1 {
-			t.Fatalf("expected 1 key, got %d", len(keys))
+		if len(jwks.Keys) != 1 {
+			t.Fatalf("expected 1 key, got %d", len(jwks.Keys))
 		}
 
-		key := keys[0]
-		if key["kty"] != "RSA" {
-			t.Errorf("expected kty=RSA, got %v", key["kty"])
+		key := jwks.Keys[0]
+		if key.Kty != "RSA" {
+			t.Errorf("expected kty=RSA, got %v", key.Kty)
 		}
-		if key["use"] != "sig" {
-			t.Errorf("expected use=sig, got %v", key["use"])
+		if key.Use != "sig" {
+			t.Errorf("expected use=sig, got %v", key.Use)
 		}
-		if key["alg"] != "RS256" {
-			t.Errorf("expected alg=RS256, got %v", key["alg"])
+		if key.Alg != "RS256" {
+			t.Errorf("expected alg=RS256, got %v", key.Alg)
 		}
-		if key["kid"] != provider.keyID {
-			t.Errorf("expected kid=%s, got %v", provider.keyID, key["kid"])
+		if key.Kid != provider.keyID {
+			t.Errorf("expected kid=%s, got %v", provider.keyID, key.Kid)
 		}
-		if key["n"] == nil || key["n"] == "" {
+		if key.N == "" {
 			t.Error("expected n to be set")
 		}
-		if key["e"] == nil || key["e"] == "" {
+		if key.E == "" {
 			t.Error("expected e to be set")
 		}
 	})

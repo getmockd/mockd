@@ -181,21 +181,21 @@ func (p *Provider) GenerateRefreshToken() (string, error) {
 	return generateRandomString(64)
 }
 
-// GetJWKS returns the JSON Web Key Set
-func (p *Provider) GetJWKS() map[string]interface{} {
+// GetJWKS returns the JSON Web Key Set using typed structs.
+func (p *Provider) GetJWKS() *JWKS {
 	// Encode the public key components
 	n := base64.RawURLEncoding.EncodeToString(p.publicKey.N.Bytes())
 	e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(p.publicKey.E)).Bytes())
 
-	return map[string]interface{}{
-		"keys": []map[string]interface{}{
+	return &JWKS{
+		Keys: []JWK{
 			{
-				"kty": "RSA",
-				"use": "sig",
-				"kid": p.keyID,
-				"alg": "RS256",
-				"n":   n,
-				"e":   e,
+				Kty: "RSA",
+				Use: "sig",
+				Kid: p.keyID,
+				Alg: "RS256",
+				N:   n,
+				E:   e,
 			},
 		},
 	}

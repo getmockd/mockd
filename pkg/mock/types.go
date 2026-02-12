@@ -74,7 +74,7 @@ type Mock struct {
 func (m *Mock) UnmarshalJSON(data []byte) error {
 	// Probe for format detection using RawMessage for field presence
 	var probe struct {
-		Type    Type        `json:"type"`
+		Type    Type            `json:"type"`
 		Matcher json.RawMessage `json:"matcher"`
 		HTTP    json.RawMessage `json:"http"`
 	}
@@ -502,7 +502,28 @@ type GraphQLErrorConfig struct {
 
 // SubscriptionConfig configures GraphQL subscriptions.
 type SubscriptionConfig struct {
-	// TODO: Add subscription-specific fields
+	// Events is a list of events to stream to the client.
+	Events []SubscriptionEventConfig `json:"events,omitempty" yaml:"events,omitempty"`
+	// Timing configures the timing behavior for events.
+	Timing *SubscriptionTimingConfig `json:"timing,omitempty" yaml:"timing,omitempty"`
+}
+
+// SubscriptionEventConfig configures a single subscription event.
+type SubscriptionEventConfig struct {
+	// Data is the event payload to send.
+	Data any `json:"data" yaml:"data"`
+	// Delay is the delay before sending this event (e.g., "100ms", "2s").
+	Delay string `json:"delay,omitempty" yaml:"delay,omitempty"`
+}
+
+// SubscriptionTimingConfig configures timing behavior for subscription events.
+type SubscriptionTimingConfig struct {
+	// FixedDelay is a fixed delay between events (e.g., "100ms", "1s").
+	FixedDelay string `json:"fixedDelay,omitempty" yaml:"fixedDelay,omitempty"`
+	// RandomDelay is a random delay range between events (e.g., "100ms-500ms").
+	RandomDelay string `json:"randomDelay,omitempty" yaml:"randomDelay,omitempty"`
+	// Repeat indicates whether to repeat the events after the sequence completes.
+	Repeat bool `json:"repeat,omitempty" yaml:"repeat,omitempty"`
 }
 
 // ============================================================================
