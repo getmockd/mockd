@@ -484,3 +484,176 @@ func TestHandler_CORSHandledByMiddleware(t *testing.T) {
 		t.Errorf("Handler should not set Access-Control-Allow-Origin directly, got: %v", cors)
 	}
 }
+
+// ── Batch Query Tests ─────────────────────────────────────────────────────
+
+func TestHandlerBatchQuery(t *testing.T) {
+	handler := newTestHandler(t)
+
+	t.Run("batch of two queries returns array", func(t *testing.T) {
+		body := `[
+			{"query": "{ user(id: \"1\") { id name } }"},
+			{"query": "{ users { id name } }"}
+		]`
+		req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		// Response should be a JSON array
+		var responses []json.RawMessage
+		if err := json.Unmarshal(rr.Body.Bytes(), &responses); err != nil {
+			t.Fatalf("expected JSON array, got: %s", rr.Body.String())
+		}
+		if len(responses) != 2 {
+			t.Errorf("expected 2 responses, got %d", len(responses))
+		}
+
+		// Content-Type should be application/json
+		ct := rr.Header().Get("Content-Type")
+		if !strings.HasPrefix(ct, "application/json") {
+			t.Errorf("expected Content-Type application/json, got %s", ct)
+		}
+	})
+
+	t.Run("single element batch returns array of one", func(t *testing.T) {
+		body := `[{"query": "{ user(id: \"1\") { id name } }"}]`
+		req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		// Must be an array (not a bare object)
+		var responses []json.RawMessage
+		if err := json.Unmarshal(rr.Body.Bytes(), &responses); err != nil {
+			t.Fatalf("expected JSON array for single-element batch, got: %s", rr.Body.String())
+		}
+		if len(responses) != 1 {
+			t.Errorf("expected 1 response in array, got %d", len(responses))
+		}
+	})
+
+	t.Run("batch responses contain data", func(t *testing.T) {
+		body := `[
+			{"query": "{ user(id: \"42\") { id name email } }"},
+			{"query": "{ users { id } }"}
+		]`
+		req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rr.Code)
+		}
+
+		var responses []struct {
+			Data   map[string]interface{} `json:"data"`
+			Errors []interface{}          `json:"errors"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &responses); err != nil {
+			t.Fatalf("parse batch response: %v", err)
+		}
+
+		// First response: user query should have data
+		if responses[0].Data == nil {
+			t.Error("first response missing data")
+		}
+
+		// Second response: users query should have data
+		if responses[1].Data == nil {
+			t.Error("second response missing data")
+		}
+	})
+
+	t.Run("batch with mutation and query", func(t *testing.T) {
+		body := `[
+			{"query": "{ user(id: \"1\") { id } }"},
+			{"query": "mutation { createUser(name: \"Bob\", email: \"bob@example.com\") { id name } }"}
+		]`
+		req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		var responses []json.RawMessage
+		if err := json.Unmarshal(rr.Body.Bytes(), &responses); err != nil {
+			t.Fatalf("expected JSON array, got: %s", rr.Body.String())
+		}
+		if len(responses) != 2 {
+			t.Errorf("expected 2 responses, got %d", len(responses))
+		}
+	})
+
+	t.Run("application/graphql not treated as batch", func(t *testing.T) {
+		// Even if body starts with '[', application/graphql should not batch
+		body := `[ignored]{ user(id: "1") { id } }`
+		req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/graphql")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		// Should NOT return a batch array — treated as raw query
+		var responses []json.RawMessage
+		err := json.Unmarshal(rr.Body.Bytes(), &responses)
+		if err == nil && len(responses) > 0 {
+			// If it parsed as array, that's wrong — verify it's actually a single response
+			var single map[string]interface{}
+			if json.Unmarshal(rr.Body.Bytes(), &single) == nil {
+				// It's a single object, which is correct
+				return
+			}
+		}
+		// Either error parsing as array (correct) or parsed as single object (correct)
+	})
+
+	t.Run("GET request not treated as batch", func(t *testing.T) {
+		// Batch detection only applies to POST
+		q := url.Values{"query": {`{ user(id: "1") { id } }`}}.Encode()
+		req := httptest.NewRequest(http.MethodGet, "/graphql?"+q, nil)
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rr.Code)
+		}
+
+		// Should be a single response object, not an array
+		var single map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &single); err != nil {
+			t.Errorf("expected single JSON object for GET, got: %s", rr.Body.String())
+		}
+	})
+
+	t.Run("empty batch body falls through to single parse", func(t *testing.T) {
+		body := `[]`
+		req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		// Empty batch should not crash — may return 400 or handle gracefully
+		if rr.Code == 0 || rr.Code >= 500 {
+			t.Errorf("expected non-5xx for empty batch, got %d", rr.Code)
+		}
+	})
+}

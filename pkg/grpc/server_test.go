@@ -1310,5 +1310,481 @@ func TestMatchMetadataValue(t *testing.T) {
 	}
 }
 
+// ── Error Detail Builder Tests ──────────────────────────────────────────────
+
+func TestBuildBadRequest(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("valid field violations", func(t *testing.T) {
+		data := map[string]interface{}{
+			"field_violations": []interface{}{
+				map[string]interface{}{"field": "email", "description": "invalid format"},
+				map[string]interface{}{"field": "name", "description": "required"},
+			},
+		}
+		br := srv.buildBadRequest(data)
+		require.NotNil(t, br)
+		assert.Len(t, br.FieldViolations, 2)
+		assert.Equal(t, "email", br.FieldViolations[0].Field)
+		assert.Equal(t, "invalid format", br.FieldViolations[0].Description)
+		assert.Equal(t, "name", br.FieldViolations[1].Field)
+		assert.Equal(t, "required", br.FieldViolations[1].Description)
+	})
+
+	t.Run("empty violations returns nil", func(t *testing.T) {
+		data := map[string]interface{}{
+			"field_violations": []interface{}{},
+		}
+		assert.Nil(t, srv.buildBadRequest(data))
+	})
+
+	t.Run("no field_violations key returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildBadRequest(map[string]interface{}{}))
+	})
+
+	t.Run("partial fields", func(t *testing.T) {
+		data := map[string]interface{}{
+			"field_violations": []interface{}{
+				map[string]interface{}{"field": "email"},
+			},
+		}
+		br := srv.buildBadRequest(data)
+		require.NotNil(t, br)
+		assert.Equal(t, "email", br.FieldViolations[0].Field)
+		assert.Empty(t, br.FieldViolations[0].Description)
+	})
+
+	t.Run("non-map violations skipped", func(t *testing.T) {
+		data := map[string]interface{}{
+			"field_violations": []interface{}{"not-a-map"},
+		}
+		assert.Nil(t, srv.buildBadRequest(data))
+	})
+}
+
+func TestBuildErrorInfo(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("full error info", func(t *testing.T) {
+		data := map[string]interface{}{
+			"reason": "QUOTA_EXCEEDED",
+			"domain": "googleapis.com",
+			"metadata": map[string]interface{}{
+				"consumer": "project:my-project",
+				"limit":    "100",
+			},
+		}
+		ei := srv.buildErrorInfo(data)
+		require.NotNil(t, ei)
+		assert.Equal(t, "QUOTA_EXCEEDED", ei.Reason)
+		assert.Equal(t, "googleapis.com", ei.Domain)
+		assert.Equal(t, "project:my-project", ei.Metadata["consumer"])
+		assert.Equal(t, "100", ei.Metadata["limit"])
+	})
+
+	t.Run("reason only", func(t *testing.T) {
+		ei := srv.buildErrorInfo(map[string]interface{}{"reason": "RATE_LIMITED"})
+		require.NotNil(t, ei)
+		assert.Equal(t, "RATE_LIMITED", ei.Reason)
+		assert.Empty(t, ei.Domain)
+	})
+
+	t.Run("domain only", func(t *testing.T) {
+		ei := srv.buildErrorInfo(map[string]interface{}{"domain": "example.com"})
+		require.NotNil(t, ei)
+		assert.Equal(t, "example.com", ei.Domain)
+	})
+
+	t.Run("empty returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildErrorInfo(map[string]interface{}{}))
+	})
+
+	t.Run("non-string metadata values skipped", func(t *testing.T) {
+		data := map[string]interface{}{
+			"reason":   "TEST",
+			"metadata": map[string]interface{}{"key": 123},
+		}
+		ei := srv.buildErrorInfo(data)
+		require.NotNil(t, ei)
+		assert.Empty(t, ei.Metadata)
+	})
+}
+
+func TestBuildRetryInfo(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("valid duration", func(t *testing.T) {
+		ri := srv.buildRetryInfo(map[string]interface{}{"retry_delay": "5s"})
+		require.NotNil(t, ri)
+		assert.Equal(t, int64(5), ri.RetryDelay.Seconds)
+	})
+
+	t.Run("millisecond duration", func(t *testing.T) {
+		ri := srv.buildRetryInfo(map[string]interface{}{"retry_delay": "500ms"})
+		require.NotNil(t, ri)
+		assert.Equal(t, int32(500000000), ri.RetryDelay.Nanos)
+	})
+
+	t.Run("invalid duration returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildRetryInfo(map[string]interface{}{"retry_delay": "invalid"}))
+	})
+
+	t.Run("missing key returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildRetryInfo(map[string]interface{}{}))
+	})
+}
+
+func TestBuildDebugInfo(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("stack entries and detail", func(t *testing.T) {
+		data := map[string]interface{}{
+			"stack_entries": []interface{}{"main.go:42", "handler.go:100"},
+			"detail":        "nil pointer dereference",
+		}
+		di := srv.buildDebugInfo(data)
+		require.NotNil(t, di)
+		assert.Equal(t, []string{"main.go:42", "handler.go:100"}, di.StackEntries)
+		assert.Equal(t, "nil pointer dereference", di.Detail)
+	})
+
+	t.Run("detail only", func(t *testing.T) {
+		di := srv.buildDebugInfo(map[string]interface{}{"detail": "something went wrong"})
+		require.NotNil(t, di)
+		assert.Empty(t, di.StackEntries)
+		assert.Equal(t, "something went wrong", di.Detail)
+	})
+
+	t.Run("stack entries only", func(t *testing.T) {
+		data := map[string]interface{}{
+			"stack_entries": []interface{}{"line1"},
+		}
+		di := srv.buildDebugInfo(data)
+		require.NotNil(t, di)
+		assert.Len(t, di.StackEntries, 1)
+	})
+
+	t.Run("empty returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildDebugInfo(map[string]interface{}{}))
+	})
+
+	t.Run("non-string stack entries skipped", func(t *testing.T) {
+		data := map[string]interface{}{
+			"stack_entries": []interface{}{123, "valid"},
+			"detail":        "",
+		}
+		di := srv.buildDebugInfo(data)
+		require.NotNil(t, di)
+		assert.Equal(t, []string{"valid"}, di.StackEntries)
+	})
+}
+
+func TestBuildQuotaFailure(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("valid violations", func(t *testing.T) {
+		data := map[string]interface{}{
+			"violations": []interface{}{
+				map[string]interface{}{"subject": "project:my-project", "description": "Quota exceeded"},
+			},
+		}
+		qf := srv.buildQuotaFailure(data)
+		require.NotNil(t, qf)
+		assert.Len(t, qf.Violations, 1)
+		assert.Equal(t, "project:my-project", qf.Violations[0].Subject)
+		assert.Equal(t, "Quota exceeded", qf.Violations[0].Description)
+	})
+
+	t.Run("empty violations returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildQuotaFailure(map[string]interface{}{
+			"violations": []interface{}{},
+		}))
+	})
+
+	t.Run("no violations key returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildQuotaFailure(map[string]interface{}{}))
+	})
+}
+
+func TestBuildPreconditionFailure(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("valid violations", func(t *testing.T) {
+		data := map[string]interface{}{
+			"violations": []interface{}{
+				map[string]interface{}{
+					"type":        "TOS",
+					"subject":     "google.com/tos",
+					"description": "Terms of service not accepted",
+				},
+			},
+		}
+		pf := srv.buildPreconditionFailure(data)
+		require.NotNil(t, pf)
+		assert.Len(t, pf.Violations, 1)
+		assert.Equal(t, "TOS", pf.Violations[0].Type)
+		assert.Equal(t, "google.com/tos", pf.Violations[0].Subject)
+		assert.Equal(t, "Terms of service not accepted", pf.Violations[0].Description)
+	})
+
+	t.Run("multiple violations", func(t *testing.T) {
+		data := map[string]interface{}{
+			"violations": []interface{}{
+				map[string]interface{}{"type": "TOS"},
+				map[string]interface{}{"type": "AGE"},
+			},
+		}
+		pf := srv.buildPreconditionFailure(data)
+		require.NotNil(t, pf)
+		assert.Len(t, pf.Violations, 2)
+	})
+
+	t.Run("empty returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildPreconditionFailure(map[string]interface{}{}))
+	})
+}
+
+func TestBuildResourceInfo(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("full resource info", func(t *testing.T) {
+		data := map[string]interface{}{
+			"resource_type": "compute.googleapis.com/Instance",
+			"resource_name": "projects/123/zones/us-central1-a/instances/my-vm",
+			"owner":         "user@example.com",
+			"description":   "VM instance not found",
+		}
+		ri := srv.buildResourceInfo(data)
+		require.NotNil(t, ri)
+		assert.Equal(t, "compute.googleapis.com/Instance", ri.ResourceType)
+		assert.Equal(t, "projects/123/zones/us-central1-a/instances/my-vm", ri.ResourceName)
+		assert.Equal(t, "user@example.com", ri.Owner)
+		assert.Equal(t, "VM instance not found", ri.Description)
+	})
+
+	t.Run("type only", func(t *testing.T) {
+		ri := srv.buildResourceInfo(map[string]interface{}{"resource_type": "User"})
+		require.NotNil(t, ri)
+		assert.Equal(t, "User", ri.ResourceType)
+	})
+
+	t.Run("name only", func(t *testing.T) {
+		ri := srv.buildResourceInfo(map[string]interface{}{"resource_name": "user-123"})
+		require.NotNil(t, ri)
+		assert.Equal(t, "user-123", ri.ResourceName)
+	})
+
+	t.Run("only owner and description returns nil", func(t *testing.T) {
+		data := map[string]interface{}{"owner": "admin", "description": "test"}
+		assert.Nil(t, srv.buildResourceInfo(data))
+	})
+
+	t.Run("empty returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildResourceInfo(map[string]interface{}{}))
+	})
+}
+
+func TestBuildHelp(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("valid links", func(t *testing.T) {
+		data := map[string]interface{}{
+			"links": []interface{}{
+				map[string]interface{}{
+					"description": "API Documentation",
+					"url":         "https://docs.example.com/api",
+				},
+				map[string]interface{}{
+					"description": "Support",
+					"url":         "https://support.example.com",
+				},
+			},
+		}
+		h := srv.buildHelp(data)
+		require.NotNil(t, h)
+		assert.Len(t, h.Links, 2)
+		assert.Equal(t, "API Documentation", h.Links[0].Description)
+		assert.Equal(t, "https://docs.example.com/api", h.Links[0].Url)
+	})
+
+	t.Run("empty links returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildHelp(map[string]interface{}{
+			"links": []interface{}{},
+		}))
+	})
+
+	t.Run("no links key returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildHelp(map[string]interface{}{}))
+	})
+
+	t.Run("non-map link skipped", func(t *testing.T) {
+		data := map[string]interface{}{
+			"links": []interface{}{"not-a-map"},
+		}
+		assert.Nil(t, srv.buildHelp(data))
+	})
+}
+
+func TestBuildLocalizedMessage(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("locale and message", func(t *testing.T) {
+		data := map[string]interface{}{
+			"locale":  "en-US",
+			"message": "Resource not found",
+		}
+		lm := srv.buildLocalizedMessage(data)
+		require.NotNil(t, lm)
+		assert.Equal(t, "en-US", lm.Locale)
+		assert.Equal(t, "Resource not found", lm.Message)
+	})
+
+	t.Run("locale only", func(t *testing.T) {
+		lm := srv.buildLocalizedMessage(map[string]interface{}{"locale": "fr-FR"})
+		require.NotNil(t, lm)
+		assert.Equal(t, "fr-FR", lm.Locale)
+	})
+
+	t.Run("message only", func(t *testing.T) {
+		lm := srv.buildLocalizedMessage(map[string]interface{}{"message": "Error"})
+		require.NotNil(t, lm)
+		assert.Equal(t, "Error", lm.Message)
+	})
+
+	t.Run("empty returns nil", func(t *testing.T) {
+		assert.Nil(t, srv.buildLocalizedMessage(map[string]interface{}{}))
+	})
+}
+
+func TestBuildErrorDetails(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("multiple detail types", func(t *testing.T) {
+		details := map[string]interface{}{
+			"bad_request": map[string]interface{}{
+				"field_violations": []interface{}{
+					map[string]interface{}{"field": "email", "description": "invalid"},
+				},
+			},
+			"error_info": map[string]interface{}{
+				"reason": "RATE_LIMITED",
+				"domain": "example.com",
+			},
+			"retry_info": map[string]interface{}{
+				"retry_delay": "10s",
+			},
+		}
+		result := srv.buildErrorDetails(details)
+		assert.Len(t, result, 3)
+	})
+
+	t.Run("unknown keys ignored", func(t *testing.T) {
+		details := map[string]interface{}{
+			"unknown_type": map[string]interface{}{"key": "value"},
+			"error_info": map[string]interface{}{
+				"reason": "TEST",
+			},
+		}
+		result := srv.buildErrorDetails(details)
+		assert.Len(t, result, 1)
+	})
+
+	t.Run("nil builders filtered", func(t *testing.T) {
+		details := map[string]interface{}{
+			"bad_request": map[string]interface{}{}, // no violations → nil
+			"error_info":  map[string]interface{}{}, // no reason/domain → nil
+		}
+		result := srv.buildErrorDetails(details)
+		assert.Empty(t, result)
+	})
+
+	t.Run("empty details", func(t *testing.T) {
+		result := srv.buildErrorDetails(map[string]interface{}{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("all 9 detail types", func(t *testing.T) {
+		details := map[string]interface{}{
+			"bad_request": map[string]interface{}{
+				"field_violations": []interface{}{map[string]interface{}{"field": "f"}},
+			},
+			"error_info":           map[string]interface{}{"reason": "R"},
+			"retry_info":           map[string]interface{}{"retry_delay": "1s"},
+			"debug_info":           map[string]interface{}{"detail": "D"},
+			"quota_failure":        map[string]interface{}{"violations": []interface{}{map[string]interface{}{"subject": "S"}}},
+			"precondition_failure": map[string]interface{}{"violations": []interface{}{map[string]interface{}{"type": "T"}}},
+			"resource_info":        map[string]interface{}{"resource_type": "RT"},
+			"help":                 map[string]interface{}{"links": []interface{}{map[string]interface{}{"url": "U"}}},
+			"localized_message":    map[string]interface{}{"locale": "en", "message": "M"},
+		}
+		result := srv.buildErrorDetails(details)
+		assert.Len(t, result, 9)
+	})
+}
+
+func TestToGRPCErrorWithDetails(t *testing.T) {
+	srv := &Server{}
+
+	t.Run("error with bad_request details", func(t *testing.T) {
+		errCfg := &GRPCErrorConfig{
+			Code:    "INVALID_ARGUMENT",
+			Message: "validation failed",
+			Details: map[string]interface{}{
+				"bad_request": map[string]interface{}{
+					"field_violations": []interface{}{
+						map[string]interface{}{"field": "email", "description": "must be valid email"},
+					},
+				},
+			},
+		}
+		err := srv.toGRPCError(errCfg)
+		require.NotNil(t, err)
+
+		st, ok := status.FromError(err)
+		require.True(t, ok)
+		assert.Equal(t, codes.InvalidArgument, st.Code())
+		assert.Equal(t, "validation failed", st.Message())
+		assert.Len(t, st.Details(), 1)
+	})
+
+	t.Run("error with multiple details", func(t *testing.T) {
+		errCfg := &GRPCErrorConfig{
+			Code:    "RESOURCE_EXHAUSTED",
+			Message: "quota exceeded",
+			Details: map[string]interface{}{
+				"error_info": map[string]interface{}{
+					"reason": "QUOTA_EXCEEDED",
+					"domain": "example.com",
+				},
+				"retry_info": map[string]interface{}{
+					"retry_delay": "30s",
+				},
+			},
+		}
+		err := srv.toGRPCError(errCfg)
+		require.NotNil(t, err)
+
+		st, ok := status.FromError(err)
+		require.True(t, ok)
+		assert.Equal(t, codes.ResourceExhausted, st.Code())
+		assert.Len(t, st.Details(), 2)
+	})
+
+	t.Run("error with empty details map", func(t *testing.T) {
+		errCfg := &GRPCErrorConfig{
+			Code:    "NOT_FOUND",
+			Message: "not found",
+			Details: map[string]interface{}{},
+		}
+		err := srv.toGRPCError(errCfg)
+		require.NotNil(t, err)
+
+		st, ok := status.FromError(err)
+		require.True(t, ok)
+		assert.Equal(t, codes.NotFound, st.Code())
+		assert.Empty(t, st.Details())
+	})
+}
+
 // Helper to avoid unused import warning
 var _ = json.Marshal
