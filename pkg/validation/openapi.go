@@ -135,8 +135,10 @@ func LoadSpecFromString(spec string) (*openapi3.T, error) {
 	return doc, nil
 }
 
-// ValidateRequest validates an incoming HTTP request
-func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *Result {
+// ValidateRequest validates an incoming HTTP request.
+// If bodyBytes is non-nil, it is used as the request body (avoiding a redundant re-read).
+// If bodyBytes is nil and r.Body is non-nil, the body is read from r and restored afterward.
+func (v *OpenAPIValidator) ValidateRequest(r *http.Request, bodyBytes []byte) *Result {
 	result := &Result{Valid: true}
 
 	// If validation is disabled or no spec loaded, return valid
@@ -168,10 +170,10 @@ func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *Result {
 		},
 	}
 
-	// Store body for potential re-read (needed if body validation is performed)
-	if r.Body != nil && r.Body != http.NoBody {
+	// Use pre-buffered body if provided; otherwise read it ourselves
+	if bodyBytes == nil && r.Body != nil && r.Body != http.NoBody {
 		const maxValidationBodySize = 10 << 20 // 10MB defense-in-depth
-		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxValidationBodySize))
+		bodyBytes, err = io.ReadAll(io.LimitReader(r.Body, maxValidationBodySize))
 		if err != nil {
 			result.AddError(&FieldError{
 				Location: LocationBody,
@@ -181,6 +183,10 @@ func (v *OpenAPIValidator) ValidateRequest(r *http.Request) *Result {
 			return result
 		}
 		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	}
+
+	// Set body on the validation input for openapi3filter
+	if len(bodyBytes) > 0 {
 		requestValidationInput.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
 

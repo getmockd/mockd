@@ -11,6 +11,9 @@ import (
 // This is for internal operational logging (debug, errors, etc.),
 // not for user-visible request logging.
 //
+// Status: Capability contract for future Admin API extensions.
+// Implemented by gRPC and MQTT handlers but not type-asserted at runtime.
+//
 // Example implementation:
 //
 //	type MyHandler struct {
@@ -65,6 +68,9 @@ type RequestLoggable interface {
 // Observable handlers expose operational metrics.
 // These metrics are used by the Admin API stats endpoints and
 // can be displayed in the Admin API.
+//
+// Status: Capability contract for future Admin API extensions.
+// Implemented by gRPC, MQTT, and WebSocket handlers but not type-asserted at runtime.
 //
 // Example implementation:
 //

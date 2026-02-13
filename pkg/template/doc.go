@@ -39,4 +39,14 @@
 //   - {{mtls.verified}} - "true" or "false" if certificate was verified
 //
 // If no mTLS identity is present, all mtls.* variables return empty strings.
+//
+// # Template Engine Boundary
+//
+// This package is the primary template engine for HTTP, GraphQL, SSE, SOAP,
+// and WebSocket response bodies. The MQTT handler (pkg/mqtt) has its own
+// independent template processing for topic patterns and message payloads,
+// which handles MQTT-specific concerns like topic wildcards and QoS-aware
+// substitution. Consolidating the two engines is a post-launch consideration;
+// for now, changes to template syntax here do not automatically propagate
+// to MQTT templates.
 package template

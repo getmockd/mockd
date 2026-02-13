@@ -19,6 +19,9 @@ type Message struct {
 // Implement this interface for protocols that support broadcasting
 // like WebSocket, SSE, etc.
 //
+// Status: Capability contract for future Admin API extensions.
+// Implemented by WebSocket handler but not type-asserted at runtime.
+//
 // Example implementation:
 //
 //	func (h *MyHandler) Broadcast(msg protocol.Message) (int, error) {
@@ -46,6 +49,9 @@ type Broadcaster interface {
 // GroupBroadcaster can broadcast to connection groups.
 // This extends Broadcaster with group-based broadcasting, useful for
 // protocols that support rooms/channels.
+//
+// Status: Capability contract for future Admin API extensions.
+// Implemented by WebSocket handler but not type-asserted at runtime.
 //
 // Example implementation:
 //

@@ -74,6 +74,9 @@ type ConnectionInfo struct {
 // This extends ConnectionManager with group operations, useful for
 // protocols that support rooms (Socket.IO) or channels (WebSocket).
 //
+// Status: Capability contract for future Admin API extensions.
+// Currently implemented by WebSocket handler but not type-asserted at runtime.
+//
 // Example implementation:
 //
 //	func (h *MyHandler) JoinGroup(connID, group string) error {

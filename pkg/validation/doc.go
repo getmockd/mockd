@@ -26,7 +26,7 @@
 //
 // Validate a request:
 //
-//	result := validator.ValidateRequest(req)
+//	result := validator.ValidateRequest(req, nil)
 //	if !result.Valid {
 //	    for _, e := range result.Errors {
 //	        log.Printf("Validation error: %s - %s", e.Type, e.Message)

@@ -3,6 +3,9 @@ package protocol
 // RPCHandler handles RPC-style protocols (gRPC, JSON-RPC, Thrift).
 // Implement this interface for protocols that expose services and methods.
 //
+// Status: Capability contract for future Admin API extensions.
+// Implemented by gRPC handler but not type-asserted at runtime.
+//
 // Example implementation:
 //
 //	func (h *GRPCHandler) ListServices() []protocol.ServiceInfo {

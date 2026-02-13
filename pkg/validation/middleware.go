@@ -86,7 +86,7 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Validate request
 	if m.config.ValidateRequest {
-		result := m.validator.ValidateRequest(r)
+		result := m.validator.ValidateRequest(r, bodyBytes)
 
 		// Restore body for handler
 		if len(bodyBytes) > 0 {
@@ -172,5 +172,5 @@ func ValidateRequestOnly(validator *OpenAPIValidator, r *http.Request) (*Result,
 		return &Result{Valid: true}, nil
 	}
 
-	return validator.ValidateRequest(r), nil
+	return validator.ValidateRequest(r, nil), nil
 }

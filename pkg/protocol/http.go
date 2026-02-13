@@ -3,8 +3,12 @@ package protocol
 import "net/http"
 
 // HTTPHandler is the interface for HTTP-based protocol handlers.
-// This includes GraphQL, SOAP, and SSE (via StreamingHTTPHandler).
+// This includes GraphQL and SOAP (which implement standard http.Handler).
+// SSE has a non-standard ServeHTTP signature (requires mock config) and
+// does not implement this interface.
 //
+// Status: Capability contract for future Admin API extensions.
+// GraphQL and SOAP satisfy this interface but it is not type-asserted at runtime.
 // Handlers that implement this interface can be registered with an
 // http.ServeMux using the Pattern() method to determine the route.
 //
@@ -32,10 +36,13 @@ type HTTPHandler interface {
 }
 
 // StreamingHTTPHandler is for HTTP handlers that support streaming responses.
-// SSE is the primary example of this pattern.
+// SSE is the canonical example, but its non-standard ServeHTTP(w, r, mock)
+// signature prevents it from satisfying this interface directly.
 //
-// The engine uses IsStreamingRequest to determine if special handling
-// is needed (e.g., disabling response buffering, setting timeouts).
+// Status: Capability contract for future Admin API extensions.
+// Not type-asserted at runtime. The engine uses IsStreamingRequest to
+// determine if special handling is needed (e.g., disabling response
+// buffering, setting timeouts).
 type StreamingHTTPHandler interface {
 	HTTPHandler
 

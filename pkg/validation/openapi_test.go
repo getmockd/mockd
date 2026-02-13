@@ -252,7 +252,7 @@ func TestValidateRequest_PathParams(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, "http://localhost:8080"+tt.path, nil)
-			result := validator.ValidateRequest(req)
+			result := validator.ValidateRequest(req, nil)
 
 			if result.Valid != tt.expectValid {
 				t.Errorf("expected valid=%v, got valid=%v, errors=%v", tt.expectValid, result.Valid, result.Errors)
@@ -317,7 +317,7 @@ func TestValidateRequest_QueryParams(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "http://localhost:8080"+tt.path, nil)
-			result := validator.ValidateRequest(req)
+			result := validator.ValidateRequest(req, nil)
 
 			if result.Valid != tt.expectValid {
 				t.Errorf("expected valid=%v, got valid=%v, errors=%v", tt.expectValid, result.Valid, result.Errors)
@@ -376,7 +376,7 @@ func TestValidateRequest_Headers(t *testing.T) {
 				req.Header.Set(k, v)
 			}
 
-			result := validator.ValidateRequest(req)
+			result := validator.ValidateRequest(req, nil)
 
 			if result.Valid != tt.expectValid {
 				t.Errorf("expected valid=%v, got valid=%v, errors=%v", tt.expectValid, result.Valid, result.Errors)
@@ -504,7 +504,7 @@ func TestValidateRequest_Body(t *testing.T) {
 				req.Header.Set("Content-Type", tt.contentType)
 			}
 
-			result := validator.ValidateRequest(req)
+			result := validator.ValidateRequest(req, nil)
 
 			if result.Valid != tt.expectValid {
 				t.Errorf("expected valid=%v, got valid=%v, errors=%v", tt.expectValid, result.Valid, result.Errors)
@@ -879,7 +879,7 @@ func TestValidateRequest_BodyReusable(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	// Validate request (this reads the body)
-	result := validator.ValidateRequest(req)
+	result := validator.ValidateRequest(req, nil)
 	if !result.Valid {
 		t.Errorf("expected valid request, got errors: %v", result.Errors)
 	}
@@ -963,7 +963,7 @@ func BenchmarkValidateRequest(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		req := httptest.NewRequest("POST", "http://localhost:8080/users", bytes.NewReader([]byte(body)))
 		req.Header.Set("Content-Type", "application/json")
-		validator.ValidateRequest(req)
+		validator.ValidateRequest(req, nil)
 	}
 }
 
