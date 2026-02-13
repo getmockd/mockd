@@ -188,9 +188,15 @@ func (r *StatefulResource) loadSeed() error {
 	for i, data := range r.seedData {
 		item := FromJSON(data, r.idField)
 
-		// Generate ID if not provided
+		// Generate ID if not provided, and persist it back into seedData
+		// so that Reset() reuses the same IDs (deterministic across resets).
 		if item.ID == "" {
 			item.ID = id.UUID()
+			idField := r.idField
+			if idField == "" {
+				idField = "id"
+			}
+			r.seedData[i][idField] = item.ID
 		}
 
 		// Check for duplicate ID

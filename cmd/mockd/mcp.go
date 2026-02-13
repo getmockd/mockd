@@ -79,6 +79,7 @@ Flags:
 	// Create MCP server (provides dispatch/tools/resources, not HTTP).
 	// Provide a real stateful store so stateful CRUD tools work in stdio mode.
 	stateStore := stateful.NewStateStore()
+	mcp.SetServerVersion(Version)
 	server := mcp.NewServer(mcpCfg, adminClient, stateStore)
 
 	// Seed sessions with resolved context so tools know which server they're talking to.
@@ -138,6 +139,7 @@ func startMCPHTTP(adminURL string, port int, allowRemote bool, storeIface interf
 		store = s
 	}
 
+	mcp.SetServerVersion(Version)
 	server := mcp.NewServer(mcpCfg, adminClient, store)
 
 	// Seed sessions with the resolved context so tools know which server they're talking to.

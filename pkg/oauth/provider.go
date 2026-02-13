@@ -543,17 +543,29 @@ func (p *Provider) cleanupExpiredTokens() {
 	p.revokedTokensMu.Unlock()
 }
 
-// generateRandomString generates a cryptographically random string
+// generateRandomString generates a cryptographically random string with uniform distribution.
+// Uses rejection sampling to avoid modulo bias.
 func generateRandomString(length int) (string, error) {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, length)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("failed to generate random string: %w", err)
+	const maxByte = 256 - (256 % len(charset)) // 248 for charset length 62
+	result := make([]byte, length)
+	buf := make([]byte, length+(length/4)+1) // over-allocate to reduce Read calls
+	filled := 0
+	for filled < length {
+		if _, err := rand.Read(buf); err != nil {
+			return "", fmt.Errorf("failed to generate random string: %w", err)
+		}
+		for _, b := range buf {
+			if int(b) < maxByte {
+				result[filled] = charset[int(b)%len(charset)]
+				filled++
+				if filled >= length {
+					break
+				}
+			}
+		}
 	}
-	for i := range b {
-		b[i] = charset[int(b[i])%len(charset)]
-	}
-	return string(b), nil
+	return string(result), nil
 }
 
 // parseDuration parses a duration string that supports days (e.g., "7d")

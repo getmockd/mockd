@@ -16,8 +16,17 @@ import (
 	"github.com/getmockd/mockd/pkg/stateful"
 )
 
-// ServerVersion is the mockd server version.
-const ServerVersion = "0.2.4"
+// ServerVersion is the mockd server version reported by the MCP server.
+// Overwritten at startup by SetServerVersion() from the CLI build info.
+var ServerVersion = "dev"
+
+// SetServerVersion sets the version reported by the MCP server.
+// Called once at startup from the CLI wiring layer with the build-time version.
+func SetServerVersion(v string) {
+	if v != "" {
+		ServerVersion = v
+	}
+}
 
 // ClientFactory creates an AdminClient for a given admin URL.
 // Injected at wiring time to keep pkg/mcp testable.

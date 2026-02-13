@@ -550,7 +550,7 @@ func (m *ConnectionManager) LogConnect(conn *Connection, remoteAddr string) {
 	}
 
 	entry := &requestlog.Entry{
-		ID:         GenerateConnectionID(),
+		ID:         generateLogID(),
 		Timestamp:  time.Now(),
 		Protocol:   requestlog.ProtocolWebSocket,
 		Method:     "CONNECT",
@@ -577,7 +577,7 @@ func (m *ConnectionManager) LogDisconnect(conn *Connection, closeCode CloseCode,
 	}
 
 	entry := &requestlog.Entry{
-		ID:         GenerateConnectionID(),
+		ID:         generateLogID(),
 		Timestamp:  time.Now(),
 		Protocol:   requestlog.ProtocolWebSocket,
 		Method:     "DISCONNECT",
@@ -612,7 +612,7 @@ func (m *ConnectionManager) LogMessageReceived(conn *Connection, msgType Message
 	}
 
 	entry := &requestlog.Entry{
-		ID:         GenerateConnectionID(),
+		ID:         generateLogID(),
 		Timestamp:  time.Now(),
 		Protocol:   requestlog.ProtocolWebSocket,
 		Method:     "MESSAGE",
@@ -650,7 +650,7 @@ func (m *ConnectionManager) LogMessageSent(conn *Connection, msgType MessageType
 	}
 
 	entry := &requestlog.Entry{
-		ID:         GenerateConnectionID(),
+		ID:         generateLogID(),
 		Timestamp:  time.Now(),
 		Protocol:   requestlog.ProtocolWebSocket,
 		Method:     "MESSAGE",

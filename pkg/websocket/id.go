@@ -3,11 +3,23 @@ package websocket
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"sync/atomic"
 	"time"
 )
 
-var connectionCounter uint64
+var (
+	connectionCounter uint64
+	logCounter        uint64
+)
+
+// generateLogID generates a unique log entry ID for request logging.
+// The format is "ws-log-{timestamp_hex}-{counter}" for uniqueness and sortability.
+func generateLogID() string {
+	ts := time.Now().UnixNano()
+	counter := atomic.AddUint64(&logCounter, 1)
+	return fmt.Sprintf("ws-log-%016x-%08x", ts, counter)
+}
 
 // GenerateConnectionID generates a unique connection ID.
 // The format is "conn-{timestamp_hex}-{counter}-{random}" for uniqueness and sortability.

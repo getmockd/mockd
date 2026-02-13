@@ -137,8 +137,8 @@ func (item *ResourceItem) ToJSON() map[string]interface{} {
 
 	// Set/override system fields
 	result["id"] = item.ID
-	result["createdAt"] = item.CreatedAt.Format(time.RFC3339)
-	result["updatedAt"] = item.UpdatedAt.Format(time.RFC3339)
+	result["createdAt"] = item.CreatedAt.Format(time.RFC3339Nano)
+	result["updatedAt"] = item.UpdatedAt.Format(time.RFC3339Nano)
 
 	return result
 }

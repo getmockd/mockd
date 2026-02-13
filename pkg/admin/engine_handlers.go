@@ -223,18 +223,18 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate a new engine ID
-	id := id.ULID()
+	engineID := id.ULID()
 
 	// Generate an engine-specific token for subsequent calls
-	engineToken, err := a.generateEngineToken(id)
+	engineToken, err := a.generateEngineToken(engineID)
 	if err != nil {
-		a.logger().Error("failed to generate engine token", "error", err, "engineID", id)
+		a.logger().Error("failed to generate engine token", "error", err, "engineID", engineID)
 		writeError(w, http.StatusInternalServerError, "token_generation_failed", ErrMsgInternalError)
 		return
 	}
 
 	engine := &store.Engine{
-		ID:           id,
+		ID:           engineID,
 		Name:         req.Name,
 		Host:         req.Host,
 		Port:         req.Port,
@@ -247,8 +247,8 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := a.engineRegistry.Register(engine); err != nil {
-		a.removeEngineToken(id) // Clean up the token on failure
-		a.logger().Error("failed to register engine", "error", err, "engineID", id)
+		a.removeEngineToken(engineID) // Clean up the token on failure
+		a.logger().Error("failed to register engine", "error", err, "engineID", engineID)
 		writeError(w, http.StatusInternalServerError, "registration_failed", ErrMsgInternalError)
 		return
 	}
@@ -259,7 +259,7 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	if a.localEngine.Load() == nil {
 		engineURL := fmt.Sprintf("http://%s:%d", req.Host, req.Port)
 		a.localEngine.Store(engineclient.New(engineURL))
-		a.logger().Info("auto-set localEngine from registration", "engineId", id, "url", engineURL)
+		a.logger().Info("auto-set localEngine from registration", "engineId", engineID, "url", engineURL)
 
 		// Push any persisted stateful resources to the newly connected engine.
 		// Mocks are handled separately (via BulkCreate from the CLI or re-import),
@@ -268,9 +268,9 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, RegisterEngineResponse{
-		ID:             id,
+		ID:             engineID,
 		Token:          engineToken,
-		ConfigEndpoint: "/engines/" + id + "/config",
+		ConfigEndpoint: "/engines/" + engineID + "/config",
 	})
 }
 

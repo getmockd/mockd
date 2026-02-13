@@ -456,7 +456,7 @@ func mockToInsomniaResource(m *config.MockConfiguration, parentID string, now in
 		}
 		res.ID = "req_" + m.ID
 		res.Type = "websocket_request"
-		res.URL = "ws://localhost:4280" + m.WebSocket.Path
+		res.URL = "{{ _.base_url }}" + m.WebSocket.Path
 		res.Headers = []insomniaHeader{}
 		res.Parameters = []insomniaParam{}
 		res.Authentication = map[string]any{}
@@ -832,7 +832,7 @@ func writeWebSocketRequestV5(sb *strings.Builder, m *config.MockConfiguration, n
 	// Build description with sample payloads from matchers
 	description := buildWSDescription(m)
 
-	fmt.Fprintf(sb, "      - url: ws://localhost:4280%s\n", m.WebSocket.Path)
+	fmt.Fprintf(sb, "      - url: {{ _.base_url }}%s\n", m.WebSocket.Path)
 	fmt.Fprintf(sb, "        name: %s\n", name)
 	sb.WriteString("        meta:\n")
 	fmt.Fprintf(sb, "          id: ws-req_%s\n", m.ID) // Must start with ws-req for Insomnia v5

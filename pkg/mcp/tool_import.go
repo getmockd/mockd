@@ -113,7 +113,7 @@ func handleExportMocks(args map[string]interface{}, session *MCPSession, server 
 	asYAML := format != "json"
 	exportResult, err := portability.Export(collection, &portability.ExportOptions{
 		Format: portability.FormatMockd,
-		AsYAML: asYAML,
+		AsYAML: &asYAML,
 		Pretty: true,
 	})
 	if err != nil {

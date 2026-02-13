@@ -1,6 +1,9 @@
 package portability
 
 import (
+	"bytes"
+	"encoding/json"
+
 	"github.com/getmockd/mockd/pkg/config"
 )
 
@@ -19,10 +22,11 @@ type ExportOptions struct {
 	// Format is the output format (defaults to FormatMockd)
 	Format Format
 
-	// AsYAML if true and format is Mockd, outputs YAML instead of JSON
-	AsYAML bool
+	// AsYAML controls YAML vs JSON output. nil = use exporter default (YAML),
+	// ptr-to-true = force YAML, ptr-to-false = force JSON.
+	AsYAML *bool
 
-	// Pretty if true, formats output with indentation
+	// Pretty if true, formats output with indentation (default true)
 	Pretty bool
 }
 
@@ -66,9 +70,29 @@ func Export(collection *config.MockCollection, opts *ExportOptions) (*ExportResu
 		}
 	}
 
+	// Wire caller options into the exporter when explicitly set.
+	// NativeExporter and OpenAPIExporter both honour AsYAML.
+	if opts.AsYAML != nil {
+		switch e := exporter.(type) {
+		case *NativeExporter:
+			e.AsYAML = *opts.AsYAML
+		case *OpenAPIExporter:
+			e.AsYAML = *opts.AsYAML
+		}
+	}
+
 	data, err := exporter.Export(collection)
 	if err != nil {
 		return nil, err
+	}
+
+	// Compact JSON output when Pretty is false and output is JSON.
+	isYAML := opts.AsYAML != nil && *opts.AsYAML
+	if !opts.Pretty && !isYAML && len(data) > 0 {
+		var buf bytes.Buffer
+		if json.Compact(&buf, data) == nil {
+			data = buf.Bytes()
+		}
 	}
 
 	result := &ExportResult{
