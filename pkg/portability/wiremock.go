@@ -206,20 +206,8 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 		}
 	}
 
-	// Body patterns — process all patterns (mockd only supports one of each type,
-	// so later patterns of the same type win; different types can coexist)
-	for _, bp := range req.BodyPatterns {
-		switch {
-		case bp.EqualTo != "":
-			m.HTTP.Matcher.BodyEquals = bp.EqualTo
-		case bp.EqualToJSON != "":
-			m.HTTP.Matcher.BodyEquals = bp.EqualToJSON
-		case bp.Contains != "":
-			m.HTTP.Matcher.BodyContains = bp.Contains
-		case bp.Matches != "":
-			m.HTTP.Matcher.BodyPattern = bp.Matches
-		}
-	}
+	// Body patterns
+	applyBodyPatterns(m.HTTP.Matcher, req.BodyPatterns)
 
 	// Convert response
 	resp := mapping.Response
@@ -258,6 +246,23 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 	// Note: bodyFileName not supported — would need file system access
 
 	return m
+}
+
+// applyBodyPatterns maps WireMock body pattern matchers to mockd matcher fields.
+// Later patterns of the same type win; different types can coexist.
+func applyBodyPatterns(matcher *mock.HTTPMatcher, patterns []WireMockBodyPattern) {
+	for _, bp := range patterns {
+		switch {
+		case bp.EqualTo != "":
+			matcher.BodyEquals = bp.EqualTo
+		case bp.EqualToJSON != "":
+			matcher.BodyEquals = bp.EqualToJSON
+		case bp.Contains != "":
+			matcher.BodyContains = bp.Contains
+		case bp.Matches != "":
+			matcher.BodyPattern = bp.Matches
+		}
+	}
 }
 
 // Format returns FormatWireMock.

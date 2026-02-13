@@ -290,19 +290,20 @@ func splitFuncArgs(s string) []string {
 
 	for i := 0; i < len(s); i++ {
 		ch := s[i]
-		if inQuote {
+		switch {
+		case inQuote:
 			current.WriteByte(ch)
 			if ch == quoteChar {
 				inQuote = false
 			}
-		} else if ch == '"' || ch == '\'' {
+		case ch == '"' || ch == '\'':
 			inQuote = true
 			quoteChar = ch
 			current.WriteByte(ch)
-		} else if ch == ',' {
+		case ch == ',':
 			args = append(args, strings.TrimSpace(current.String()))
 			current.Reset()
-		} else {
+		default:
 			current.WriteByte(ch)
 		}
 	}

@@ -226,6 +226,7 @@ func (e *Endpoint) SetTemplateEngine(engine *template.Engine) {
 }
 
 // CanAccept returns whether a new connection can be accepted.
+//
 // Deprecated: Use TryAccept for atomic check-and-add to avoid TOCTOU races.
 func (e *Endpoint) CanAccept() bool {
 	if e.maxConnections <= 0 {

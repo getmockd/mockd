@@ -36,7 +36,7 @@ func (s *StateStore) SetObserver(obs Observer) {
 	}
 }
 
-// Observer returns the current observer.
+// GetObserver returns the current observer.
 func (s *StateStore) GetObserver() Observer {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

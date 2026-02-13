@@ -1291,24 +1291,7 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 
 	now := time.Now()
 	queryWorkspaceID := r.URL.Query().Get("workspaceId")
-	for _, m := range mocks {
-		if m.ID == "" {
-			m.ID = generateMockID(m.Type)
-		}
-		m.CreatedAt = now
-		m.UpdatedAt = now
-		if m.MetaSortKey == 0 {
-			m.MetaSortKey = float64(-now.UnixMilli())
-		}
-		// Set workspaceId from query param if not provided in body
-		if m.WorkspaceID == "" && queryWorkspaceID != "" {
-			m.WorkspaceID = queryWorkspaceID
-		}
-		// Default to "local" workspace if still not set
-		if m.WorkspaceID == "" {
-			m.WorkspaceID = store.DefaultWorkspaceID
-		}
-	}
+	prepareBulkMocks(mocks, now, queryWorkspaceID)
 
 	// If replace=true, delete existing mocks with matching IDs first.
 	// This enables idempotent `mockd up` — re-running with the same config works.
@@ -1396,6 +1379,26 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusCreated, response)
+}
+
+// prepareBulkMocks assigns IDs, timestamps, and workspace IDs to bulk-created mocks.
+func prepareBulkMocks(mocks []*mock.Mock, now time.Time, queryWorkspaceID string) {
+	for _, m := range mocks {
+		if m.ID == "" {
+			m.ID = generateMockID(m.Type)
+		}
+		m.CreatedAt = now
+		m.UpdatedAt = now
+		if m.MetaSortKey == 0 {
+			m.MetaSortKey = float64(-now.UnixMilli())
+		}
+		if m.WorkspaceID == "" && queryWorkspaceID != "" {
+			m.WorkspaceID = queryWorkspaceID
+		}
+		if m.WorkspaceID == "" {
+			m.WorkspaceID = store.DefaultWorkspaceID
+		}
+	}
 }
 
 // generateMockID generates a unique ID for a mock based on its type.

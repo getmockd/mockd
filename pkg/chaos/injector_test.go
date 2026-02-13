@@ -980,7 +980,10 @@ func TestMiddleware_ConnectionReset(t *testing.T) {
 
 	// Make a request - should get a connection error
 	client := &http.Client{Timeout: 5 * time.Second}
-	_, err = client.Get(server.URL + "/test")
+	resp, err := client.Get(server.URL + "/test")
+	if resp != nil {
+		resp.Body.Close()
+	}
 	if err == nil {
 		t.Fatal("Expected connection error for connection reset fault")
 	}

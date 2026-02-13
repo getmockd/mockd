@@ -58,14 +58,6 @@ func newReadOnlyStore(t *testing.T) *FileStore {
 func boolPtr(b bool) *bool    { return &b }
 func strPtr(s string) *string { return &s }
 
-func makeMock(id, name string, mockType mock.Type) *mock.Mock {
-	return &mock.Mock{
-		ID:   id,
-		Name: name,
-		Type: mockType,
-	}
-}
-
 // ============================================================================
 // FileStore Core — Open / Close / Save / Persistence
 // ============================================================================

@@ -421,7 +421,7 @@ func TestAlphanumeric_SmallLengths(t *testing.T) {
 			t.Errorf("Alphanumeric(1) length = %d, want 1", len(result))
 		}
 		c := result[0]
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
 			t.Errorf("Alphanumeric(1) = %q, not alphanumeric", result)
 		}
 	}

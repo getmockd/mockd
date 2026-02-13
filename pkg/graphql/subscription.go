@@ -524,27 +524,6 @@ func resolveASTValue(value *ast.Value, variables map[string]interface{}) interfa
 	}
 }
 
-// parseValue attempts to parse a string value into appropriate Go type.
-func parseValue(s string) interface{} {
-	// Try boolean
-	if s == "true" {
-		return true
-	}
-	if s == "false" {
-		return false
-	}
-	// Try integer
-	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return i
-	}
-	// Try float
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
-		return f
-	}
-	// Return as string
-	return s
-}
-
 // findSubscriptionConfig finds the subscription configuration for a field.
 func (h *SubscriptionHandler) findSubscriptionConfig(fieldName string) *SubscriptionConfig {
 	if h.config == nil || h.config.Subscriptions == nil {

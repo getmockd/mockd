@@ -37,18 +37,6 @@ func jsonHandler(t *testing.T, statusCode int, body interface{}) http.HandlerFun
 	}
 }
 
-func routingHandler(routes map[string]http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		key := r.Method + " " + r.URL.Path
-		if h, ok := routes[key]; ok {
-			h(w, r)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"error":"not_found","message":"no route"}`))
-	}
-}
-
 // --- New / Options Tests ---
 
 func TestNew(t *testing.T) {
