@@ -221,9 +221,17 @@ type BandwidthConfig struct {
 
 // ChaosRuleConfig represents a path-specific chaos rule.
 type ChaosRuleConfig struct {
-	PathPattern string   `json:"pathPattern"`
-	Methods     []string `json:"methods,omitempty"`
-	Probability float64  `json:"probability,omitempty"`
+	PathPattern string             `json:"pathPattern"`
+	Methods     []string           `json:"methods,omitempty"`
+	Faults      []ChaosFaultConfig `json:"faults,omitempty"`
+	Probability float64            `json:"probability,omitempty"`
+}
+
+// ChaosFaultConfig represents a fault within a chaos rule.
+type ChaosFaultConfig struct {
+	Type        string         `json:"type"`
+	Probability float64        `json:"probability"`
+	Config      map[string]any `json:"config,omitempty"`
 }
 
 // ChaosStats represents chaos injection statistics.

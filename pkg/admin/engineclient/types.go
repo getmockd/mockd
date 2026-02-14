@@ -35,6 +35,7 @@ type (
 	ErrorRateConfig     = types.ErrorRateConfig
 	BandwidthConfig     = types.BandwidthConfig
 	ChaosRuleConfig     = types.ChaosRuleConfig
+	ChaosStats          = types.ChaosStats
 	StatefulResource    = types.StatefulResource
 	StateOverview       = types.StateOverview
 	ProtocolHandler     = types.ProtocolHandler

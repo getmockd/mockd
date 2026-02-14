@@ -167,11 +167,19 @@ func (a *ControlAPIAdapter) GetChaosConfig() *api.ChaosConfig {
 
 	// Convert rules
 	for _, rule := range cfg.Rules {
-		apiCfg.Rules = append(apiCfg.Rules, api.ChaosRuleConfig{
+		apiRule := api.ChaosRuleConfig{
 			PathPattern: rule.PathPattern,
 			Methods:     rule.Methods,
 			Probability: rule.Probability,
-		})
+		}
+		for _, f := range rule.Faults {
+			apiRule.Faults = append(apiRule.Faults, api.ChaosFaultConfig{
+				Type:        string(f.Type),
+				Probability: f.Probability,
+				Config:      f.Config,
+			})
+		}
+		apiCfg.Rules = append(apiCfg.Rules, apiRule)
 	}
 
 	return apiCfg
@@ -216,11 +224,24 @@ func (a *ControlAPIAdapter) SetChaosConfig(cfg *api.ChaosConfig) error {
 
 	// Convert rules
 	for _, rule := range cfg.Rules {
-		chaosCfg.Rules = append(chaosCfg.Rules, chaos.ChaosRule{
+		cr := chaos.ChaosRule{
 			PathPattern: rule.PathPattern,
 			Methods:     rule.Methods,
 			Probability: rule.Probability,
-		})
+		}
+		for _, f := range rule.Faults {
+			cr.Faults = append(cr.Faults, chaos.FaultConfig{
+				Type:        chaos.FaultType(f.Type),
+				Probability: f.Probability,
+				Config:      f.Config,
+			})
+		}
+		chaosCfg.Rules = append(chaosCfg.Rules, cr)
+	}
+
+	// Validate configuration before creating injector
+	if err := chaosCfg.Validate(); err != nil {
+		return err
 	}
 
 	// Create injector

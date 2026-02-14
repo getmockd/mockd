@@ -138,6 +138,8 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	// Chaos injection management
 	mux.HandleFunc("GET /chaos", a.requireEngine(a.handleGetChaos))
 	mux.HandleFunc("PUT /chaos", a.requireEngine(a.handleSetChaos))
+	mux.HandleFunc("GET /chaos/stats", a.requireEngine(a.handleGetChaosStats))
+	mux.HandleFunc("POST /chaos/stats/reset", a.requireEngine(a.handleResetChaosStats))
 
 	// gRPC server management (convenience — proxies to /mocks?type=grpc)
 	mux.HandleFunc("GET /grpc", func(w http.ResponseWriter, r *http.Request) {
