@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ func (a *API) getMockStore() store.MockStore {
 type MockFilter struct {
 	Type        string
 	ParentID    string
+	FolderID    string
 	Enabled     *bool
 	WorkspaceID string
 }
@@ -50,10 +52,14 @@ func applyPagination(mocks []*mock.Mock, query interface{ Get(string) string }) 
 	offset := 0
 	limit := 0
 	if v := query.Get("offset"); v != "" {
-		fmt.Sscanf(v, "%d", &offset)
+		if n, err := strconv.Atoi(v); err == nil {
+			offset = n
+		}
 	}
 	if v := query.Get("limit"); v != "" {
-		fmt.Sscanf(v, "%d", &limit)
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
 	}
 	if offset <= 0 && limit <= 0 {
 		return mocks
@@ -90,6 +96,16 @@ func applyMockFilter(mocks []*mock.Mock, filter *MockFilter) []*mock.Mock {
 		filtered := make([]*mock.Mock, 0, len(mocks))
 		for _, m := range mocks {
 			if m.ParentID == filter.ParentID {
+				filtered = append(filtered, m)
+			}
+		}
+		mocks = filtered
+	}
+
+	if filter.FolderID != "" {
+		filtered := make([]*mock.Mock, 0, len(mocks))
+		for _, m := range mocks {
+			if m.ParentID == filter.FolderID {
 				filtered = append(filtered, m)
 			}
 		}
@@ -168,6 +184,26 @@ func isPortError(errMsg string) bool {
 	}
 	for _, indicator := range portIndicators {
 		if strings.Contains(errLower, indicator) {
+			return true
+		}
+	}
+	return false
+}
+
+// isValidationError checks if an error indicates a validation or configuration issue
+// that should be surfaced to the client rather than hidden behind a generic error.
+func isValidationError(errMsg string) bool {
+	indicators := []string{
+		"failed to parse proto",
+		"failed to start grpc",
+		"failed to create",
+		"proto file",
+		"schema",
+		"validation",
+	}
+	lower := strings.ToLower(errMsg)
+	for _, ind := range indicators {
+		if strings.Contains(lower, ind) {
 			return true
 		}
 	}
@@ -528,6 +564,7 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 		filter := &MockFilter{
 			Type:        query.Get("type"),
 			ParentID:    query.Get("parentId"),
+			FolderID:    query.Get("folderId"),
 			WorkspaceID: query.Get("workspaceId"),
 		}
 		if enabled := query.Get("enabled"); enabled != "" {
@@ -564,13 +601,22 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 		filter.Type = mock.Type(t)
 	}
 
-	// Filter by parent folder
+	// Filter by parent folder (parentId or folderId)
 	if parentID := query.Get("parentId"); parentID != "" {
 		filter.ParentID = &parentID
 	} else if query.Has("parentId") {
 		// Explicitly set to root level (empty string)
 		empty := ""
 		filter.ParentID = &empty
+	}
+	// folderId is an alias for parentId — apply if parentId wasn't already set
+	if filter.ParentID == nil {
+		if folderID := query.Get("folderId"); folderID != "" {
+			filter.ParentID = &folderID
+		} else if query.Has("folderId") {
+			empty := ""
+			filter.ParentID = &empty
+		}
 	}
 
 	// Filter by enabled state
@@ -658,7 +704,7 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	var m mock.Mock
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -756,10 +802,13 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 			a.logger().Error("failed to activate mock in engine", "id", m.ID, "error", err)
 			errMsg := err.Error()
-			if isPortError(errMsg) {
+			switch {
+			case isPortError(errMsg):
 				writeError(w, http.StatusConflict, "port_unavailable",
 					"Failed to start mock: the port may be in use by another process")
-			} else {
+			case isValidationError(errMsg):
+				writeError(w, http.StatusBadRequest, "validation_error", errMsg)
+			default:
 				writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
 			}
 			return
@@ -859,7 +908,7 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	var m mock.Mock
 	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -966,7 +1015,7 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	// Decode patch into a map first to see which fields are being updated
 	var patch map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -1181,7 +1230,7 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		response := map[string]interface{}{
 			"id":      updated.ID,
 			"action":  "toggled",
-			"message": fmt.Sprintf("Mock %s", state),
+			"message": "Mock " + state,
 			"mock":    updated,
 		}
 		writeJSON(w, http.StatusOK, response)
@@ -1224,7 +1273,7 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"id":      m.ID,
 		"action":  "toggled",
-		"message": fmt.Sprintf("Mock %s", fallbackState),
+		"message": "Mock " + fallbackState,
 		"mock":    m,
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -1336,7 +1385,7 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 
 	var mocks []*mock.Mock
 	if err := json.NewDecoder(r.Body).Decode(&mocks); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_body", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 

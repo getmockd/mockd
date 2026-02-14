@@ -44,6 +44,11 @@ type Mock struct {
 	// ParentID is the folder ID this mock belongs to ("" = root level)
 	ParentID string `json:"parentId,omitempty" yaml:"parentId,omitempty"`
 
+	// FolderID is an alias for ParentID, used by UI clients.
+	// On unmarshal, if FolderID is set and ParentID is empty, ParentID is populated from FolderID.
+	// On marshal, FolderID is omitted (parentId is the canonical field).
+	FolderID string `json:"folderId,omitempty" yaml:"folderId,omitempty"`
+
 	// MetaSortKey is used for manual ordering within a folder
 	MetaSortKey float64 `json:"metaSortKey,omitempty" yaml:"metaSortKey,omitempty"`
 
@@ -92,7 +97,19 @@ func (m *Mock) UnmarshalJSON(data []byte) error {
 	// Use standard unmarshaling with an alias to avoid recursion
 	type MockAlias Mock
 	alias := (*MockAlias)(m)
-	return json.Unmarshal(data, alias)
+	if err := json.Unmarshal(data, alias); err != nil {
+		return err
+	}
+
+	// Reconcile FolderID -> ParentID: if folderId was provided but parentId was not,
+	// copy folderId into parentId so downstream code only needs to check ParentID.
+	if m.FolderID != "" && m.ParentID == "" {
+		m.ParentID = m.FolderID
+	}
+	// Clear FolderID so it doesn't get re-serialized (parentId is canonical)
+	m.FolderID = ""
+
+	return nil
 }
 
 // unmarshalLegacyHTTP handles the old format where matcher/response are at the top level.
