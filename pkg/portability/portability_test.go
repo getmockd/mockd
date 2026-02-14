@@ -356,12 +356,12 @@ func TestOpenAPIImporter_Import(t *testing.T) {
 		// Check path parameter conversion
 		var foundUserByID bool
 		for _, m := range collection.Mocks {
-			if m.HTTP.Matcher.Path == "/users/:id" {
+			if m.HTTP.Matcher.Path == "/users/{id}" {
 				foundUserByID = true
 			}
 		}
 		if !foundUserByID {
-			t.Error("Expected path parameter {id} to be converted to :id")
+			t.Error("Expected path parameter {id} to be preserved as {id}")
 		}
 	})
 
@@ -1187,10 +1187,10 @@ func TestConvertOpenAPIPath(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"/users/{id}", "/users/:id"},
-		{"/users/{userId}/posts/{postId}", "/users/:userId/posts/:postId"},
+		{"/users/{id}", "/users/{id}"},
+		{"/users/{userId}/posts/{postId}", "/users/{userId}/posts/{postId}"},
 		{"/users", "/users"},
-		{"/{version}/api", "/:version/api"},
+		{"/{version}/api", "/{version}/api"},
 	}
 
 	for _, tt := range tests {

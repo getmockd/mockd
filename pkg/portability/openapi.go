@@ -690,20 +690,10 @@ func (e *OpenAPIExporter) Format() Format {
 
 // Helper functions
 
-// convertOpenAPIPath converts OpenAPI path params {param} to mockd format :param.
+// convertOpenAPIPath returns the path as-is since mockd natively supports
+// OpenAPI-style {param} path parameters.
 func convertOpenAPIPath(path string) string {
-	result := path
-	for strings.Contains(result, "{") {
-		start := strings.Index(result, "{")
-		end := strings.Index(result, "}")
-		if start >= 0 && end > start {
-			paramName := result[start+1 : end]
-			result = result[:start] + ":" + paramName + result[end+1:]
-		} else {
-			break
-		}
-	}
-	return result
+	return path
 }
 
 // convertMockdPath converts mockd path params :param to OpenAPI format {param}.
