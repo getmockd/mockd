@@ -4,6 +4,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"maps"
@@ -156,12 +157,33 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 		r = r.WithContext(mtls.WithIdentity(r.Context(), identity))
 	}
 
+	// Enforce maximum body size to prevent denial-of-service via oversized payloads.
+	// MaxBytesReader returns an error when the limit is exceeded, unlike LimitReader
+	// which silently truncates.
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodySize)
+
 	// Capture request body for logging (bounded to prevent memory exhaustion)
 	var bodyBytes []byte
 	if r.Body != nil {
 		var err error
-		bodyBytes, err = io.ReadAll(io.LimitReader(r.Body, MaxRequestBodySize))
+		bodyBytes, err = io.ReadAll(r.Body)
 		if err != nil {
+			// Check if the error is due to body size limit exceeded
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				h.log.Warn("request body too large", "path", r.URL.Path, "limit", MaxRequestBodySize)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusRequestEntityTooLarge)
+				errResp := map[string]string{
+					"error":   "body_too_large",
+					"message": "Request body exceeds maximum allowed size",
+				}
+				if jsonBytes, jsonErr := json.Marshal(errResp); jsonErr == nil {
+					_, _ = w.Write(jsonBytes)
+				}
+				h.logRequest(startTime, r, nil, bodyBytes, "", http.StatusRequestEntityTooLarge)
+				return
+			}
 			h.log.Warn("failed to read request body", "path", r.URL.Path, "error", err)
 		}
 		r.Body = io.NopCloser(NewBodyReader(bodyBytes))
@@ -369,11 +391,12 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 
 	// Set default Content-Type based on body content if not specified
 	if w.Header().Get("Content-Type") == "" {
-		if looksLikeJSON(body) {
+		switch {
+		case looksLikeJSON(body):
 			w.Header().Set("Content-Type", "application/json")
-		} else if looksLikeXML(body) {
+		case looksLikeXML(body):
 			w.Header().Set("Content-Type", "application/xml")
-		} else {
+		default:
 			w.Header().Set("Content-Type", "text/plain")
 		}
 	}
