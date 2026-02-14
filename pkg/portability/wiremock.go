@@ -1,9 +1,12 @@
 package portability
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -130,8 +133,21 @@ func (i *WireMockImporter) convertMappings(mappings []WireMockMapping) (*config.
 // mappingToMock converts a WireMock mapping to a MockConfiguration.
 func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now time.Time) *config.MockConfiguration {
 	enabled := true
+
+	// Generate a unique mock ID. Prefer WireMock's own UUID/ID if present,
+	// otherwise generate a content-based hash to avoid ID collisions on repeated imports.
+	mockID := mapping.UUID
+	if mockID == "" {
+		mockID = mapping.ID
+	}
+	if mockID == "" {
+		path := mapping.Request.URLPath + mapping.Request.URL + mapping.Request.URLPattern + mapping.Request.URLPathPattern
+		h := sha256.Sum256([]byte(fmt.Sprintf("wm-%s-%s-%d-%d", mapping.Request.Method, path, id, now.UnixNano())))
+		mockID = "wm_" + hex.EncodeToString(h[:8])
+	}
+
 	m := &config.MockConfiguration{
-		ID:        fmt.Sprintf("imported-%d", id),
+		ID:        mockID,
 		Name:      mapping.Name,
 		Type:      mock.TypeHTTP,
 		Enabled:   &enabled,
@@ -161,7 +177,23 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 	case req.URLPath != "":
 		m.HTTP.Matcher.Path = req.URLPath
 	case req.URL != "":
-		m.HTTP.Matcher.Path = req.URL
+		// WireMock's url field is an exact URL match that may include query strings.
+		// Split into path and query parameters for correct mockd matching.
+		if qIdx := strings.IndexByte(req.URL, '?'); qIdx >= 0 {
+			m.HTTP.Matcher.Path = req.URL[:qIdx]
+			if parsed, err := url.ParseQuery(req.URL[qIdx+1:]); err == nil && len(parsed) > 0 {
+				if m.HTTP.Matcher.QueryParams == nil {
+					m.HTTP.Matcher.QueryParams = make(map[string]string)
+				}
+				for key, values := range parsed {
+					if len(values) > 0 {
+						m.HTTP.Matcher.QueryParams[key] = values[0]
+					}
+				}
+			}
+		} else {
+			m.HTTP.Matcher.Path = req.URL
+		}
 	case req.URLPattern != "":
 		m.HTTP.Matcher.PathPattern = req.URLPattern
 	case req.URLPathPattern != "":
