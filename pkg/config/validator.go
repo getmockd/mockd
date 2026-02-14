@@ -186,6 +186,36 @@ func (m *MTLSConfig) Validate() error {
 	return nil
 }
 
+// Validate checks if the RateLimitConfig is valid.
+func (r *RateLimitConfig) Validate() error {
+	if r == nil || !r.Enabled {
+		return nil
+	}
+
+	if r.RequestsPerSecond < 0 {
+		return &ValidationError{
+			Field:   "rateLimit.requestsPerSecond",
+			Message: "requestsPerSecond must be >= 0",
+		}
+	}
+
+	if r.BurstSize < 0 {
+		return &ValidationError{
+			Field:   "rateLimit.burstSize",
+			Message: "burstSize must be >= 0",
+		}
+	}
+
+	if r.MaxBuckets < 0 {
+		return &ValidationError{
+			Field:   "rateLimit.maxBuckets",
+			Message: "maxBuckets must be >= 0",
+		}
+	}
+
+	return nil
+}
+
 // ValidateAuditConfig checks if the AuditConfig is valid.
 func ValidateAuditConfig(a *audit.AuditConfig) error {
 	if a == nil || !a.Enabled {
@@ -351,6 +381,13 @@ func (s *ServerConfiguration) Validate() error { //nolint:gocyclo // comprehensi
 		}
 	}
 
+	// Validate RateLimit config if present
+	if s.RateLimit != nil {
+		if err := s.RateLimit.Validate(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -400,6 +437,11 @@ func (s *ServerConfiguration) ValidatePartial() error {
 	}
 	if s.Audit != nil {
 		if err := ValidateAuditConfig(s.Audit); err != nil {
+			return err
+		}
+	}
+	if s.RateLimit != nil {
+		if err := s.RateLimit.Validate(); err != nil {
 			return err
 		}
 	}
