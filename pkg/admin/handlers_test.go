@@ -349,6 +349,36 @@ func TestHandleImportConfig(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
 
+	t.Run("imports unwrapped config (export format)", func(t *testing.T) {
+		server := newMockEngineServer()
+		defer server.Close()
+
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
+
+		// This is the format returned by GET /config (export) — no "config" wrapper.
+		importData := map[string]interface{}{
+			"version": "1.0",
+			"name":    "mockd-export",
+			"mocks": []map[string]interface{}{
+				{
+					"id":      "imported-mock",
+					"name":    "Imported Mock",
+					"enabled": true,
+					"type":    "http",
+				},
+			},
+		}
+		body, _ := json.Marshal(importData)
+
+		req := httptest.NewRequest("POST", "/config", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		api.handleImportConfig(rec, req, server.client())
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
 	t.Run("returns 400 for missing config", func(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()

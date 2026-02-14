@@ -44,8 +44,9 @@ func writeError(w http.ResponseWriter, status int, errCode, message string) {
 // handleHealth handles GET /health.
 func (a *API) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, HealthResponse{
-		Status: "ok",
-		Uptime: a.Uptime(),
+		Status:    "ok",
+		Uptime:    a.Uptime(),
+		Timestamp: time.Now().UTC(),
 	})
 }
 
@@ -139,28 +140,47 @@ func (a *API) decodeImportRequest(w http.ResponseWriter, r *http.Request) (*Conf
 	const maxImportBodySize = 10 << 20 // 10MB
 	r.Body = http.MaxBytesReader(w, r.Body, maxImportBodySize)
 
+	// Read the full body so we can try multiple decode strategies.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "body_too_large", "Request body too large")
+			return nil, err
+		}
+		writeError(w, http.StatusBadRequest, "read_error", "Failed to read request body")
+		return nil, err
+	}
+
 	// Detect YAML content type and decode accordingly.
 	ct := r.Header.Get("Content-Type")
 	if strings.Contains(ct, "yaml") {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			var maxBytesErr *http.MaxBytesError
-			if errors.As(err, &maxBytesErr) {
-				writeError(w, http.StatusRequestEntityTooLarge, "body_too_large", "Request body too large")
-				return nil, err
-			}
-			writeError(w, http.StatusBadRequest, "read_error", "Failed to read request body")
-			return nil, err
-		}
 		if err := yaml.Unmarshal(body, &req); err != nil {
 			a.logger().Debug("YAML parsing failed", "error", err)
 			writeError(w, http.StatusBadRequest, "invalid_yaml", "Invalid YAML in request body")
 			return nil, err
 		}
 	} else {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.Unmarshal(body, &req); err != nil {
 			writeJSONDecodeError(w, err, a.logger())
 			return nil, err
+		}
+	}
+
+	// Support unwrapped format: if the body has no "config" wrapper but
+	// contains a "mocks" key, treat the entire body as a MockCollection.
+	// This allows the output of GET /config (export) to be directly
+	// re-imported via POST /config without manual wrapping.
+	if req.Config == nil {
+		var collection config.MockCollection
+		if strings.Contains(ct, "yaml") {
+			if err := yaml.Unmarshal(body, &collection); err == nil && collection.Mocks != nil {
+				req.Config = &collection
+			}
+		} else {
+			if err := json.Unmarshal(body, &collection); err == nil && collection.Mocks != nil {
+				req.Config = &collection
+			}
 		}
 	}
 
