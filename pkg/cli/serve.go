@@ -820,8 +820,8 @@ func startServers(sctx *serveContext) error {
 		return fmt.Errorf("engine control API did not become healthy: %w", err)
 	}
 
-	// Write PID file if in detach mode
-	if f.detach {
+	// Write PID file for process management (both foreground and detach modes)
+	if f.pidFile != "" {
 		mocksCount, _ := engClient.ListMocks(sctx.ctx)
 		pidMocksLoaded := len(mocksCount)
 		if stateOverview, err := engClient.GetStateOverview(sctx.ctx); err == nil {
@@ -883,7 +883,7 @@ func runMainLoop(sctx *serveContext) error {
 	defer shutdownCancel()
 
 	// Remove PID file if it was written
-	if f.detach && f.pidFile != "" {
+	if f.pidFile != "" {
 		if err := RemovePIDFile(f.pidFile); err != nil {
 			output.Warn("failed to remove PID file: %v", err)
 		}
