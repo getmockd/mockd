@@ -64,6 +64,7 @@ func buildRegistry() *Registry {
 	reg.register(&Command{Name: "status", Short: "Show status of running mockd server", Category: "Core", Run: cli.RunStatus})
 	reg.register(&Command{Name: "ports", Short: "Show all ports in use by mockd", Category: "Core", Run: cli.RunPorts})
 	reg.register(&Command{Name: "validate", Short: "Validate config file without starting services", Category: "Core", Run: cli.RunValidate})
+	reg.register(&Command{Name: "health", Short: "Check if server is healthy and reachable", Category: "Core", Run: cli.RunHealth})
 
 	// Configuration
 	reg.register(&Command{Name: "context", Short: "Manage contexts (admin server + workspace pairs)", Category: "Configuration", Run: cli.RunContext})
