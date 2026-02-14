@@ -370,11 +370,18 @@ func TestHandleStateful_MethodRouting(t *testing.T) {
 			expectedStatus: http.StatusNoContent,
 		},
 		{
-			name:           "PATCH not allowed",
+			name:           "PATCH with ID",
 			method:         http.MethodPatch,
 			itemID:         "item-1",
 			body:           `{"name": "Patched"}`,
-			expectedStatus: http.StatusMethodNotAllowed,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "PATCH without ID returns error",
+			method:         http.MethodPatch,
+			itemID:         "",
+			body:           `{"name": "Patched"}`,
+			expectedStatus: http.StatusBadRequest,
 		},
 	}
 

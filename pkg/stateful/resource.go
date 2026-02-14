@@ -321,6 +321,42 @@ func (r *StatefulResource) Update(id string, data map[string]interface{}) (*Reso
 	return item, nil
 }
 
+// Patch partially updates an existing item by merging the provided fields
+// into the existing data. Fields not present in the patch are preserved.
+func (r *StatefulResource) Patch(id string, data map[string]interface{}) (*ResourceItem, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.items[id]
+	if !ok {
+		return nil, &NotFoundError{Resource: r.name, ID: id}
+	}
+
+	// Merge patch data into existing data
+	merged := make(map[string]interface{})
+	for k, v := range existing.Data {
+		merged[k] = v
+	}
+	for k, v := range data {
+		// Skip system fields
+		if k == "createdAt" || k == "updatedAt" || k == r.idField {
+			continue
+		}
+		merged[k] = v
+	}
+
+	// Build updated item preserving system fields
+	item := &ResourceItem{
+		ID:        id,
+		Data:      merged,
+		CreatedAt: existing.CreatedAt,
+		UpdatedAt: time.Now(),
+	}
+
+	r.items[id] = item
+	return item, nil
+}
+
 // Delete removes an item by ID.
 func (r *StatefulResource) Delete(id string) error {
 	r.mu.Lock()
@@ -385,6 +421,7 @@ func (r *StatefulResource) Info() *ResourceInfo {
 		SeedCount:   len(r.seedData),
 		IDField:     r.idField,
 		ParentField: r.parentField,
+		MaxItems:    r.maxItems,
 	}
 }
 

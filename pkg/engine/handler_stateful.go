@@ -43,6 +43,12 @@ func (h *Handler) handleStateful(w http.ResponseWriter, r *http.Request, resourc
 		}
 		return h.handleStatefulUpdate(w, r, resource, itemID, pathParams, bodyBytes)
 
+	case http.MethodPatch:
+		if itemID == "" {
+			return h.writeStatefulError(w, http.StatusBadRequest, "ID required for PATCH", resource.Name(), "")
+		}
+		return h.handleStatefulPatch(w, r, resource, itemID, pathParams, bodyBytes)
+
 	case http.MethodDelete:
 		if itemID == "" {
 			return h.writeStatefulError(w, http.StatusBadRequest, "ID required for DELETE", resource.Name(), "")
@@ -118,8 +124,18 @@ func (h *Handler) handleStatefulCreate(w http.ResponseWriter, r *http.Request, r
 	return http.StatusCreated
 }
 
-// handleStatefulUpdate updates an existing item.
+// handleStatefulUpdate updates an existing item (full replace).
 func (h *Handler) handleStatefulUpdate(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, itemID string, pathParams map[string]string, bodyBytes []byte) int {
+	return h.handleStatefulMutate(w, r, resource, itemID, pathParams, bodyBytes, resource.Update)
+}
+
+// handleStatefulPatch partially updates an existing item by merging fields.
+func (h *Handler) handleStatefulPatch(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, itemID string, pathParams map[string]string, bodyBytes []byte) int {
+	return h.handleStatefulMutate(w, r, resource, itemID, pathParams, bodyBytes, resource.Patch)
+}
+
+// handleStatefulMutate is the shared implementation for update and patch operations.
+func (h *Handler) handleStatefulMutate(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, itemID string, pathParams map[string]string, bodyBytes []byte, mutate func(string, map[string]any) (*stateful.ResourceItem, error)) int {
 	if len(bodyBytes) > MaxStatefulBodySize {
 		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", resource.Name(), itemID, "Reduce request body size to under 1MB")
 	}
@@ -138,7 +154,7 @@ func (h *Handler) handleStatefulUpdate(w http.ResponseWriter, r *http.Request, r
 		}
 	}
 
-	item, err := resource.Update(itemID, data)
+	item, err := mutate(itemID, data)
 	if err != nil {
 		if _, ok := err.(*stateful.NotFoundError); ok {
 			return h.writeStatefulError(w, http.StatusNotFound, "resource not found", resource.Name(), itemID)
@@ -148,7 +164,7 @@ func (h *Handler) handleStatefulUpdate(w http.ResponseWriter, r *http.Request, r
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(item.ToJSON()); err != nil {
-		h.log.Error("failed to encode stateful update response", "error", err)
+		h.log.Error("failed to encode stateful response", "error", err)
 	}
 	return http.StatusOK
 }

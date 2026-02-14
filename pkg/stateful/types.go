@@ -84,6 +84,8 @@ type ResourceInfo struct {
 	IDField string `json:"idField"`
 	// ParentField is the field used for parent FK (if nested)
 	ParentField string `json:"parentField,omitempty"`
+	// MaxItems is the maximum number of items allowed (0 = unlimited)
+	MaxItems int `json:"maxItems"`
 }
 
 // ResetResponse is returned after a state reset operation.
