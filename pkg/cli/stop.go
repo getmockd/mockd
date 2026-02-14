@@ -4,8 +4,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
 // RunStop handles the stop command.
@@ -13,6 +16,7 @@ func RunStop(args []string) error {
 	fs := flag.NewFlagSet("stop", flag.ContinueOnError)
 
 	pidFile := fs.String("pid-file", "", "Path to PID file (default: ~/.mockd/mockd.pid)")
+	adminURL := fs.String("admin-url", "", "Admin API base URL (e.g., http://localhost:4290)")
 	force := fs.Bool("force", false, "Send SIGKILL instead of SIGTERM")
 	fs.BoolVar(force, "f", false, "Send SIGKILL instead of SIGTERM (shorthand)")
 	timeout := fs.Int("timeout", 10, "Timeout in seconds to wait for graceful shutdown")
@@ -28,6 +32,7 @@ Arguments:
 
 Flags:
       --pid-file    Path to PID file (default: ~/.mockd/mockd.pid)
+      --admin-url   Admin API base URL to verify server before stopping
   -f, --force       Send SIGKILL instead of SIGTERM
       --timeout     Timeout in seconds to wait for shutdown (default: 10)
 
@@ -43,6 +48,9 @@ Examples:
 
   # Stop with longer timeout
   mockd stop --timeout 30
+
+  # Stop a server running on a specific admin URL
+  mockd stop --admin-url http://localhost:4290
 
 Note: Stopping individual components (admin/engine) is not yet supported.
       This will stop the entire mockd process.
@@ -63,6 +71,22 @@ Note: Stopping individual components (admin/engine) is not yet supported.
 		if component != "" {
 			fmt.Fprintf(os.Stderr, "Note: Stopping individual components is not yet supported.\n")
 			fmt.Fprintf(os.Stderr, "      Stopping entire mockd process instead.\n\n")
+		}
+	}
+
+	// Resolve admin URL from flag, env, or config
+	resolvedAdminURL := cliconfig.ResolveAdminURL(*adminURL)
+
+	// If admin-url is specified, verify the server is reachable before trying to stop
+	if *adminURL != "" {
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Get(resolvedAdminURL + "/health")
+		if err != nil {
+			return fmt.Errorf("cannot reach admin API at %s: %w", resolvedAdminURL, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("admin API at %s returned status %d", resolvedAdminURL, resp.StatusCode)
 		}
 	}
 
