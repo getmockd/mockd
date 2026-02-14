@@ -103,6 +103,36 @@ func (h *AuthHook) OnACLCheck(cl *mqtt.Client, topic string, write bool) bool {
 	return false
 }
 
+// checkPublishACL verifies if a user has publish (write) permission for a topic.
+// Returns true if the user is allowed to publish to the topic.
+func checkPublishACL(config *MQTTAuthConfig, username, topic string) bool {
+	for _, user := range config.Users {
+		if user.Username != username {
+			continue
+		}
+
+		// If user has no ACL rules, allow all operations
+		if len(user.ACL) == 0 {
+			return true
+		}
+
+		for _, rule := range user.ACL {
+			if matchTopic(rule.Topic, topic) {
+				if !checkAccess(rule.Access, true) {
+					return false // deny publish
+				}
+				return true // allow publish
+			}
+		}
+
+		// User has ACL rules but none match this topic — deny
+		return false
+	}
+
+	// User not found in auth config
+	return false
+}
+
 // matchTopic checks if a topic pattern matches a topic
 // Supports MQTT wildcards: + (single level) and # (multi-level)
 func matchTopic(pattern, topic string) bool {
@@ -153,13 +183,19 @@ func checkAccess(access string, write bool) bool {
 // MessageHook handles message events for the MQTT broker
 type MessageHook struct {
 	mqtt.HookBase
-	broker *Broker
+	broker     *Broker
+	authConfig *MQTTAuthConfig
 }
 
 // NewMessageHook creates a new message hook
 func NewMessageHook(broker *Broker) *MessageHook {
+	var authCfg *MQTTAuthConfig
+	if broker.config != nil {
+		authCfg = broker.config.Auth
+	}
 	return &MessageHook{
-		broker: broker,
+		broker:     broker,
+		authConfig: authCfg,
 	}
 }
 
@@ -180,6 +216,16 @@ func (h *MessageHook) Provides(b byte) bool {
 
 // OnPublish handles incoming publish messages
 func (h *MessageHook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Packet, error) {
+	// Defense-in-depth: enforce ACL on publish for non-inline clients.
+	// mochi-mqtt checks ACL at the server level before calling OnPublish,
+	// but we also check here to guard against any bypass scenarios.
+	if !cl.Net.Inline && h.authConfig != nil && h.authConfig.Enabled {
+		username := string(cl.Properties.Username)
+		if !checkPublishACL(h.authConfig, username, pk.TopicName) {
+			return pk, packets.ErrRejectPacket
+		}
+	}
+
 	startTime := time.Now()
 	topic := pk.TopicName
 	payload := pk.Payload
