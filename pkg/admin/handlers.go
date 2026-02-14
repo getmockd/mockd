@@ -14,6 +14,7 @@ import (
 	types "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/httputil"
+	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/store"
 	"gopkg.in/yaml.v3"
@@ -198,6 +199,30 @@ func (a *API) persistStatefulResources(ctx context.Context, cfg *config.MockColl
 	}
 }
 
+// preValidateImportMocks validates each mock that has a type and protocol config,
+// returning an error that identifies the failing mock by index and ID.
+func preValidateImportMocks(mocks []*mock.Mock) error {
+	for idx, m := range mocks {
+		if m == nil || m.Type == "" {
+			continue
+		}
+		// Only validate mocks that carry protocol-specific config; bare
+		// stubs (type set but no spec) are allowed to pass through.
+		hasSpec := m.HTTP != nil || m.GRPC != nil || m.MQTT != nil ||
+			m.GraphQL != nil || m.WebSocket != nil || m.SOAP != nil || m.OAuth != nil
+		if !hasSpec {
+			continue
+		}
+		if m.ID == "" {
+			m.ID = generateMockID(m.Type)
+		}
+		if err := m.Validate(); err != nil {
+			return fmt.Errorf("mock at index %d (id=%q): %s", idx, m.ID, err.Error())
+		}
+	}
+	return nil
+}
+
 // handleImportConfig handles POST /config.
 func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
@@ -290,6 +315,12 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 
 	// Dual-write stateful resources to the file store so they survive restarts.
 	a.persistStatefulResources(ctx, req.Config, req.Replace)
+
+	// Pre-validate mocks so we can surface which mock (by index) is invalid.
+	if err := preValidateImportMocks(req.Config.Mocks); err != nil {
+		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
 
 	// Forward to engine for runtime registration (starts gRPC/MQTT servers, registers handlers).
 	if err := engine.ImportConfig(ctx, req.Config, req.Replace); err != nil {
