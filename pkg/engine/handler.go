@@ -276,8 +276,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 
 		// Standard response
 		if match.HTTP != nil && match.HTTP.Response != nil {
-			statusCode = match.HTTP.Response.StatusCode
-			h.writeResponse(w, r, bodyBytes, pathParams, pathPatternCaptures, match.HTTP.Response)
+			statusCode = h.writeResponse(w, r, bodyBytes, pathParams, pathPatternCaptures, match.HTTP.Response)
 		}
 	} else {
 		// No match found - check for fallback health endpoints
@@ -337,7 +336,7 @@ func (h *Handler) logRequest(startTime time.Time, r *http.Request, headers map[s
 
 // writeResponse writes the mock response to the HTTP response writer.
 // It processes template variables in both response headers and body using the request context.
-func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyBytes []byte, pathParams map[string]string, pathPatternCaptures map[string]string, resp *mock.HTTPResponse) {
+func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyBytes []byte, pathParams map[string]string, pathPatternCaptures map[string]string, resp *mock.HTTPResponse) int {
 	// Apply delay if specified
 	if resp.DelayMs > 0 {
 		time.Sleep(time.Duration(resp.DelayMs) * time.Millisecond)
@@ -371,14 +370,32 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 		cleanPath, safe := util.SafeFilePathAllowAbsolute(resp.BodyFile)
 		if !safe {
 			h.log.Error("unsafe path in bodyFile (traversal)", "file", resp.BodyFile)
-		} else {
-			data, err := os.ReadFile(cleanPath)
-			if err != nil {
-				h.log.Error("failed to read body file", "file", cleanPath, "error", err)
-			} else {
-				body = string(data)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadGateway)
+			errResp := map[string]string{
+				"error":   "body_file_error",
+				"message": "bodyFile path contains path traversal",
 			}
+			if jsonBytes, jsonErr := json.Marshal(errResp); jsonErr == nil {
+				_, _ = w.Write(jsonBytes)
+			}
+			return http.StatusBadGateway
 		}
+		data, err := os.ReadFile(cleanPath)
+		if err != nil {
+			h.log.Error("failed to read body file", "file", cleanPath, "error", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadGateway)
+			errResp := map[string]string{
+				"error":   "body_file_error",
+				"message": "failed to read bodyFile: " + err.Error(),
+			}
+			if jsonBytes, jsonErr := json.Marshal(errResp); jsonErr == nil {
+				_, _ = w.Write(jsonBytes)
+			}
+			return http.StatusBadGateway
+		}
+		body = string(data)
 	}
 
 	// Process body templates before setting Content-Type (so detection works on final content)
@@ -406,6 +423,7 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 	if body != "" {
 		_, _ = w.Write([]byte(body))
 	}
+	return resp.StatusCode
 }
 
 // looksLikeJSON returns true if the string appears to be JSON content.
