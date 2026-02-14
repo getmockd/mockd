@@ -913,7 +913,13 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, m)
+	response := map[string]interface{}{
+		"id":      m.ID,
+		"action":  "updated",
+		"message": fmt.Sprintf("Updated %s mock", m.Type),
+		"mock":    m,
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 // handlePatchUnifiedMock partially updates a mock.
@@ -977,7 +983,13 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, existing)
+	response := map[string]interface{}{
+		"id":      existing.ID,
+		"action":  "updated",
+		"message": fmt.Sprintf("Updated %s mock", existing.Type),
+		"mock":    existing,
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 // handleDeleteUnifiedMock deletes a mock by ID.
@@ -1163,7 +1175,13 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, m)
+	response := map[string]interface{}{
+		"id":      m.ID,
+		"action":  "updated",
+		"message": fmt.Sprintf("Updated %s mock", m.Type),
+		"mock":    m,
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 // BulkPortConflict represents a port conflict found during bulk operations.
