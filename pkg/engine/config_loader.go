@@ -146,6 +146,14 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 		}
 	}
 
+	// Merge collection's ServerConfig into the running server configuration.
+	// This allows YAML config files to set server-level settings (rate limiting,
+	// CORS, etc.) that are otherwise only configurable via CLI flags.
+	// CLI flags take precedence: only fields not already set by flags are merged.
+	if collection.ServerConfig != nil {
+		cl.mergeServerConfig(collection.ServerConfig)
+	}
+
 	// Load GraphQL endpoints from collection's ServerConfig
 	if collection.ServerConfig != nil {
 		for _, gqlCfg := range collection.ServerConfig.GraphQL {
@@ -271,6 +279,46 @@ func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) 
 	}
 
 	return nil
+}
+
+// mergeServerConfig merges a collection's ServerConfig into the running server
+// configuration. CLI flags take precedence — only fields not already set by
+// flags are merged from the YAML/JSON config file.
+func (cl *ConfigLoader) mergeServerConfig(src *config.ServerConfiguration) {
+	dst := cl.server.cfg
+
+	// Rate limiting: merge if not already configured via CLI flags
+	if dst.RateLimit == nil && src.RateLimit != nil {
+		dst.RateLimit = src.RateLimit
+		cl.log.Info("rate limiting configured from config file",
+			"enabled", src.RateLimit.Enabled,
+			"rps", src.RateLimit.RequestsPerSecond,
+			"burst", src.RateLimit.BurstSize)
+	}
+
+	// CORS: merge if not already configured
+	if dst.CORS == nil && src.CORS != nil {
+		dst.CORS = src.CORS
+		cl.log.Info("CORS configured from config file")
+	}
+
+	// TLS: merge if not already configured via CLI flags
+	if dst.TLS == nil && src.TLS != nil {
+		dst.TLS = src.TLS
+		cl.log.Info("TLS configured from config file")
+	}
+
+	// mTLS: merge if not already configured
+	if dst.MTLS == nil && src.MTLS != nil {
+		dst.MTLS = src.MTLS
+		cl.log.Info("mTLS configured from config file")
+	}
+
+	// OAuth: merge if not already configured via CLI flags
+	if len(dst.OAuth) == 0 && len(src.OAuth) > 0 {
+		dst.OAuth = src.OAuth
+		cl.log.Info("OAuth configured from config file", "count", len(src.OAuth))
+	}
 }
 
 // registerStatefulResource registers a stateful resource from config.
