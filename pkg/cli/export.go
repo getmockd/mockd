@@ -89,9 +89,15 @@ Supported export formats: mockd, openapi`, *format)
 		collection.Version = *version
 	}
 
-	// Determine output format (YAML vs JSON) from file extension
+	// Determine output format (YAML vs JSON).
+	// Priority: explicit --format json/yaml > file extension > default (YAML)
+	formatLower := strings.ToLower(strings.TrimSpace(*format))
 	asYAML := true
-	if *output != "" {
+	if formatLower == "json" {
+		asYAML = false
+	} else if formatLower == "yaml" || formatLower == "yml" {
+		asYAML = true
+	} else if *output != "" {
 		ext := strings.ToLower(filepath.Ext(*output))
 		asYAML = ext == ".yaml" || ext == ".yml"
 	}
