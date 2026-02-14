@@ -228,7 +228,7 @@ func (a *apiKeyAuth) middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Get API key from header or query param
+		// Get API key from header, query param, or Authorization header
 		apiKey := r.Header.Get(APIKeyHeader)
 		if apiKey == "" {
 			// Also check Authorization header (Bearer token format)
@@ -238,8 +238,12 @@ func (a *apiKeyAuth) middleware(next http.Handler) http.Handler {
 			}
 		}
 		if apiKey == "" {
+			// Also check query parameter (e.g., ?api_key=xxx)
+			apiKey = r.URL.Query().Get("api_key")
+		}
+		if apiKey == "" {
 			writeError(w, http.StatusUnauthorized, "missing_api_key",
-				"API key required. Provide via X-API-Key header or Authorization: Bearer <key>.")
+				"API key required. Provide via X-API-Key header, Authorization: Bearer <key>, or ?api_key= query parameter.")
 			return
 		}
 
