@@ -65,6 +65,10 @@ Examples:
 		return err
 	}
 
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %v", fs.Args())
+	}
+
 	// Load config(s)
 	var cfg *config.ProjectConfig
 	var err error

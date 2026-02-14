@@ -51,6 +51,10 @@ Examples:
 		return err
 	}
 
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %v", fs.Args())
+	}
+
 	out := VersionOutput{
 		Version: info.Version,
 		Commit:  info.Commit,

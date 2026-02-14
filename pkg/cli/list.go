@@ -57,6 +57,10 @@ Examples:
 		return err
 	}
 
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %v", fs.Args())
+	}
+
 	var mocks []*mock.Mock
 
 	// Load mocks from config file or admin API
