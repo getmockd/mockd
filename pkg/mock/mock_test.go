@@ -1536,7 +1536,7 @@ func TestMock_Validate_GraphQL(t *testing.T) {
 				Type: TypeGraphQL,
 				GraphQL: &GraphQLSpec{
 					Path:          "/graphql",
-					Schema:        "type Query { user: User }",
+					Schema:        "type Query { user: User }\ntype User { name: String }",
 					Introspection: true,
 					Resolvers: map[string]ResolverConfig{
 						"Query.user": {Response: map[string]string{"name": "Alice"}},

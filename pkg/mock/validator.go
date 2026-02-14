@@ -7,6 +7,8 @@ import (
 
 	"github.com/getmockd/mockd/pkg/util"
 	"github.com/ohler55/ojg/jp"
+	"github.com/vektah/gqlparser/v2"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // ValidationError represents a validation failure with context.
@@ -484,6 +486,20 @@ func (m *Mock) validateGraphQL() error {
 
 	if hasSchema && hasSchemaFile {
 		return &ValidationError{Field: "graphql", Message: "cannot specify both schema and schemaFile"}
+	}
+
+	// Validate inline schema is parseable
+	if hasSchema {
+		source := &ast.Source{
+			Name:  "schema",
+			Input: m.GraphQL.Schema,
+		}
+		if _, err := gqlparser.LoadSchema(source); err != nil {
+			return &ValidationError{
+				Field:   "graphql.schema",
+				Message: "invalid GraphQL schema: " + err.Error(),
+			}
+		}
 	}
 
 	// Validate schemaFile path against traversal
