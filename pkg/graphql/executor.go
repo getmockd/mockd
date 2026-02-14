@@ -828,18 +828,23 @@ func (e *Executor) collectSelectedFields(doc *ast.QueryDocument, dst, src map[st
 
 // shouldSkipField evaluates @skip(if:) and @include(if:) directives.
 // Returns true if the field/fragment should be omitted from the result.
+// Per the GraphQL spec, null values for the "if" argument are treated as false.
 func (e *Executor) shouldSkipField(directives ast.DirectiveList, variables map[string]interface{}) bool {
 	for _, dir := range directives {
 		switch dir.Name {
 		case "skip":
 			if arg := dir.Arguments.ForName("if"); arg != nil {
-				if val := e.resolveValue(arg.Value, variables); val == true {
+				val := e.resolveValue(arg.Value, variables)
+				// null is treated as false (don't skip)
+				if val == true {
 					return true
 				}
 			}
 		case "include":
 			if arg := dir.Arguments.ForName("if"); arg != nil {
-				if val := e.resolveValue(arg.Value, variables); val == false {
+				val := e.resolveValue(arg.Value, variables)
+				// null is treated as false (don't include = skip)
+				if val == nil || val == false {
 					return true
 				}
 			}
@@ -1034,6 +1039,9 @@ func (e *Executor) applyVariables(data interface{}, args map[string]interface{})
 			}
 			fieldName := parts[1]
 			if val, ok := args[fieldName]; ok {
+				if val == nil {
+					return ""
+				}
 				return fmt.Sprintf("%v", val)
 			}
 			return match
