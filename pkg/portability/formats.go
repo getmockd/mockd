@@ -144,6 +144,19 @@ func detectFormatFromJSON(data []byte) Format {
 			}
 		}
 
+		// Check for WireMock mappings wrapper format: {"mappings": [...]}
+		if mappingsRaw, hasMappings := raw["mappings"]; hasMappings {
+			var arr []json.RawMessage
+			if json.Unmarshal(mappingsRaw, &arr) == nil && len(arr) > 0 {
+				var firstMapping map[string]json.RawMessage
+				if json.Unmarshal(arr[0], &firstMapping) == nil {
+					if _, hasReq := firstMapping["request"]; hasReq {
+						return FormatWireMock
+					}
+				}
+			}
+		}
+
 		return FormatUnknown
 	}
 

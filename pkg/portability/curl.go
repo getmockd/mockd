@@ -303,7 +303,7 @@ func (i *CURLImporter) parsedToMock(parsed *curlParsed, id int, now time.Time) *
 
 	enabled := true
 	m := &config.MockConfiguration{
-		ID:        fmt.Sprintf("imported-%d", id),
+		ID:        generateCURLMockID(parsed),
 		Type:      mock.TypeHTTP,
 		Name:      fmt.Sprintf("%s %s", parsed.method, path),
 		Enabled:   &enabled,
@@ -340,6 +340,12 @@ func curlDefaultResponse(method string) (statusCode int, body string) {
 	default: // GET and others
 		return 200, `{"status": "ok"}`
 	}
+}
+
+// generateCURLMockID creates a unique ID for a cURL import,
+// reusing the shared generateImportID helper.
+func generateCURLMockID(_ *curlParsed) string {
+	return generateImportID()
 }
 
 // Format returns FormatCURL.
