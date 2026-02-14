@@ -62,6 +62,9 @@ func LoadFromFile(path string) (*MockCollection, error) {
 		return nil, fmt.Errorf("%w: %s", ErrEmptyFile, path)
 	}
 
+	// Expand environment variable references ($VAR or ${VAR}) in config data
+	data = []byte(os.ExpandEnv(string(data)))
+
 	// Detect format based on file extension
 	ext := strings.ToLower(filepath.Ext(path))
 	if ext == ".yaml" || ext == ".yml" {
