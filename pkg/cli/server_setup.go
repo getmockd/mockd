@@ -36,11 +36,13 @@ type ServerFlags struct {
 	ConfigFile string
 
 	// Timeouts
-	ReadTimeout  int
-	WriteTimeout int
+	ReadTimeout    int
+	WriteTimeout   int
+	RequestTimeout int
 
 	// Limits
-	MaxLogEntries int
+	MaxLogEntries  int
+	MaxConnections int
 
 	// TLS flags
 	TLSCert  string
@@ -102,9 +104,11 @@ func RegisterServerFlags(fs *flag.FlagSet, f *ServerFlags) {
 	// Timeouts
 	fs.IntVar(&f.ReadTimeout, "read-timeout", cliconfig.DefaultReadTimeout, "Read timeout in seconds")
 	fs.IntVar(&f.WriteTimeout, "write-timeout", cliconfig.DefaultWriteTimeout, "Write timeout in seconds")
+	fs.IntVar(&f.RequestTimeout, "request-timeout", 0, "Request timeout in seconds (sets both read and write timeout, 0 = use individual timeouts)")
 
 	// Limits
 	fs.IntVar(&f.MaxLogEntries, "max-log-entries", cliconfig.DefaultMaxLogEntries, "Maximum request log entries")
+	fs.IntVar(&f.MaxConnections, "max-connections", 0, "Maximum concurrent HTTP connections (0 = unlimited)")
 	fs.BoolVar(&f.AutoCert, "auto-cert", cliconfig.DefaultAutoCert, "Auto-generate TLS certificate")
 
 	// TLS flags
@@ -150,14 +154,23 @@ func RegisterServerFlags(fs *flag.FlagSet, f *ServerFlags) {
 
 // BuildServerConfig creates a ServerConfiguration from the flags.
 func BuildServerConfig(f *ServerFlags) *config.ServerConfiguration {
+	readTimeout := f.ReadTimeout
+	writeTimeout := f.WriteTimeout
+	// --request-timeout is a convenience flag that sets both read and write timeout
+	if f.RequestTimeout > 0 {
+		readTimeout = f.RequestTimeout
+		writeTimeout = f.RequestTimeout
+	}
+
 	serverCfg := &config.ServerConfiguration{
-		HTTPPort:      f.Port,
-		HTTPSPort:     f.HTTPSPort,
-		AdminPort:     f.AdminPort,
-		ReadTimeout:   f.ReadTimeout,
-		WriteTimeout:  f.WriteTimeout,
-		MaxLogEntries: f.MaxLogEntries,
-		LogRequests:   true,
+		HTTPPort:       f.Port,
+		HTTPSPort:      f.HTTPSPort,
+		AdminPort:      f.AdminPort,
+		ReadTimeout:    readTimeout,
+		WriteTimeout:   writeTimeout,
+		MaxConnections: f.MaxConnections,
+		MaxLogEntries:  f.MaxLogEntries,
+		LogRequests:    true,
 	}
 
 	// Configure TLS if any TLS flags are set or HTTPS port is configured

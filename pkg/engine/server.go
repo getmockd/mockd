@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/netutil"
+
 	"github.com/getmockd/mockd/internal/storage"
 	"github.com/getmockd/mockd/pkg/chaos"
 	"github.com/getmockd/mockd/pkg/config"
@@ -311,6 +313,11 @@ func (s *Server) Start() error {
 		if err != nil {
 			return fmt.Errorf("failed to listen on HTTP port %d: %w", s.cfg.HTTPPort, err)
 		}
+		// Apply connection limit if configured
+		if s.cfg.MaxConnections > 0 {
+			httpLn = netutil.LimitListener(httpLn, s.cfg.MaxConnections)
+			s.log.Info("connection limit enabled", "maxConnections", s.cfg.MaxConnections)
+		}
 		s.log.Info("starting HTTP server", "port", s.cfg.HTTPPort)
 		go func() {
 			if err := s.httpServer.Serve(httpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -339,6 +346,10 @@ func (s *Server) Start() error {
 		httpsLn, err := net.Listen("tcp", s.httpsServer.Addr)
 		if err != nil {
 			return fmt.Errorf("failed to listen on HTTPS port %d: %w", s.cfg.HTTPSPort, err)
+		}
+		// Apply connection limit if configured
+		if s.cfg.MaxConnections > 0 {
+			httpsLn = netutil.LimitListener(httpsLn, s.cfg.MaxConnections)
 		}
 		tlsLn := tls.NewListener(httpsLn, s.tlsConfig)
 		go func() {

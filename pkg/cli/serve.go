@@ -41,14 +41,16 @@ const shutdownTimeout = 30 * time.Second
 // serveFlags holds all parsed command-line flags for the serve command.
 type serveFlags struct {
 	// Standard server flags
-	port          int
-	adminPort     int
-	configFile    string
-	httpsPort     int
-	readTimeout   int
-	writeTimeout  int
-	maxLogEntries int
-	autoCert      bool
+	port           int
+	adminPort      int
+	configFile     string
+	httpsPort      int
+	readTimeout    int
+	writeTimeout   int
+	requestTimeout int
+	maxLogEntries  int
+	maxConnections int
+	autoCert       bool
 
 	// TLS flags
 	tlsCert string
@@ -251,7 +253,9 @@ func parseServeFlags(args []string) (*serveFlags, error) {
 	fs.IntVar(&f.httpsPort, "https-port", cliconfig.DefaultHTTPSPort, "HTTPS server port (0 = disabled)")
 	fs.IntVar(&f.readTimeout, "read-timeout", cliconfig.DefaultReadTimeout, "Read timeout in seconds")
 	fs.IntVar(&f.writeTimeout, "write-timeout", cliconfig.DefaultWriteTimeout, "Write timeout in seconds")
+	fs.IntVar(&f.requestTimeout, "request-timeout", 0, "Request timeout in seconds (sets both read and write timeout, 0 = use individual timeouts)")
 	fs.IntVar(&f.maxLogEntries, "max-log-entries", cliconfig.DefaultMaxLogEntries, "Maximum request log entries")
+	fs.IntVar(&f.maxConnections, "max-connections", 0, "Maximum concurrent HTTP connections (0 = unlimited)")
 	fs.BoolVar(&f.autoCert, "auto-cert", cliconfig.DefaultAutoCert, "Auto-generate TLS certificate")
 
 	// TLS flags
@@ -355,7 +359,9 @@ Flags:
       --https-port    HTTPS server port (0 = disabled)
       --read-timeout  Read timeout in seconds (default: 30)
       --write-timeout Write timeout in seconds (default: 30)
+      --request-timeout Request timeout in seconds (sets both read and write timeout)
       --max-log-entries Maximum request log entries (default: 1000)
+      --max-connections Maximum concurrent HTTP connections (0 = unlimited)
       --auto-cert     Auto-generate TLS certificate (default: true)
 
 TLS flags:
@@ -515,14 +521,23 @@ func checkPortConflicts(f *serveFlags) error {
 //
 //nolint:unparam // error is always nil but kept for future validation
 func buildServerConfiguration(f *serveFlags) (*config.ServerConfiguration, error) {
+	readTimeout := f.readTimeout
+	writeTimeout := f.writeTimeout
+	// --request-timeout is a convenience flag that sets both read and write timeout
+	if f.requestTimeout > 0 {
+		readTimeout = f.requestTimeout
+		writeTimeout = f.requestTimeout
+	}
+
 	serverCfg := &config.ServerConfiguration{
-		HTTPPort:      f.port,
-		HTTPSPort:     f.httpsPort,
-		AdminPort:     f.adminPort,
-		ReadTimeout:   f.readTimeout,
-		WriteTimeout:  f.writeTimeout,
-		MaxLogEntries: f.maxLogEntries,
-		LogRequests:   true,
+		HTTPPort:       f.port,
+		HTTPSPort:      f.httpsPort,
+		AdminPort:      f.adminPort,
+		ReadTimeout:    readTimeout,
+		WriteTimeout:   writeTimeout,
+		MaxConnections: f.maxConnections,
+		MaxLogEntries:  f.maxLogEntries,
+		LogRequests:    true,
 	}
 
 	// Configure TLS if any TLS flags are set or HTTPS port is configured

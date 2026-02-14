@@ -155,6 +155,8 @@ type ServerConfiguration struct {
 	ReadTimeout int `json:"readTimeout,omitempty" yaml:"readTimeout,omitempty"`
 	// WriteTimeout is the HTTP write timeout in seconds
 	WriteTimeout int `json:"writeTimeout,omitempty" yaml:"writeTimeout,omitempty"`
+	// MaxConnections limits concurrent HTTP connections (default: 0 = unlimited)
+	MaxConnections int `json:"maxConnections,omitempty" yaml:"maxConnections,omitempty"`
 	// Audit configures audit logging for request/response tracking
 	Audit *audit.AuditConfig `json:"audit,omitempty" yaml:"audit,omitempty"`
 
