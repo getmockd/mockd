@@ -2,8 +2,11 @@
 package proxy
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -26,8 +29,12 @@ type Options struct {
 	Mode Mode
 	// Filter is the traffic filter configuration
 	Filter *FilterConfig
-	// Store is the recording store for captured traffic
+	// Store is the recording store for captured traffic (in-memory, used by admin API)
 	Store *recording.Store
+	// DiskDir is the directory to write recordings to disk as they are captured.
+	// When set, each recording is written as a JSON file organized by host.
+	// This is the primary persistence mechanism for CLI proxy usage.
+	DiskDir string
 	// CAManager handles certificate generation for HTTPS
 	CAManager *CAManager
 	// Logger for traffic logging (nil = no logging)
@@ -36,13 +43,14 @@ type Options struct {
 
 // Proxy is an HTTP/HTTPS MITM proxy server.
 type Proxy struct {
-	mu     sync.RWMutex
-	mode   Mode
-	filter *FilterConfig
-	store  *recording.Store
-	ca     *CAManager
-	logger *log.Logger
-	client *http.Client // Shared HTTP client for connection pooling
+	mu      sync.RWMutex
+	mode    Mode
+	filter  *FilterConfig
+	store   *recording.Store
+	diskDir string
+	ca      *CAManager
+	logger  *log.Logger
+	client  *http.Client // Shared HTTP client for connection pooling
 }
 
 // New creates a new Proxy with the given options.
@@ -63,11 +71,12 @@ func New(opts Options) *Proxy {
 	}
 
 	return &Proxy{
-		mode:   mode,
-		filter: filter,
-		store:  store,
-		ca:     opts.CAManager,
-		logger: opts.Logger,
+		mode:    mode,
+		filter:  filter,
+		store:   store,
+		diskDir: opts.DiskDir,
+		ca:      opts.CAManager,
+		logger:  opts.Logger,
 		client: &http.Client{
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse // Don't follow redirects
@@ -133,6 +142,37 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleConnect is implemented in https.go
+
+// persistToDisk writes a recording to disk organized by host.
+// This is a best-effort operation — errors are logged but don't affect proxying.
+func (p *Proxy) persistToDisk(rec *recording.Recording) {
+	if p.diskDir == "" {
+		return
+	}
+
+	host := rec.Request.Host
+	if host == "" {
+		host = "_unknown"
+	}
+
+	hostDir := filepath.Join(p.diskDir, host)
+	if err := os.MkdirAll(hostDir, 0700); err != nil {
+		p.log("Error creating host directory %s: %v", hostDir, err)
+		return
+	}
+
+	data, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		p.log("Error marshaling recording: %v", err)
+		return
+	}
+
+	filename := filepath.Join(hostDir, "rec_"+rec.ID+".json")
+	if err := os.WriteFile(filename, data, 0600); err != nil {
+		p.log("Error writing recording to disk: %v", err)
+		return
+	}
+}
 
 // log logs a message if a logger is configured.
 func (p *Proxy) log(format string, args ...interface{}) {

@@ -6,39 +6,55 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/recording"
 )
 
-// RunConvert handles the convert command and its subcommands.
+// RunConvert handles the convert command.
+// It reads recordings from disk (written by mockd proxy start) and converts
+// them to mock definitions that can be imported into a mockd server.
 func RunConvert(args []string) error {
 	fs := flag.NewFlagSet("convert", flag.ContinueOnError)
 
-	// Recording conversion flags
-	recordingID := fs.String("recording", "", "Convert a single recording by ID")
-	sessionID := fs.String("session", "", "Convert all recordings from a session")
+	// Source selection
+	sessionName := fs.String("session", "", "Session name or directory (default: latest)")
+	fs.StringVar(sessionName, "s", "", "Session name (shorthand)")
+	file := fs.String("file", "", "Path to a recording file or directory")
+	fs.StringVar(file, "f", "", "Path to a recording file or directory (shorthand)")
+	recordingsDir := fs.String("recordings-dir", "", "Base recordings directory")
+	includeHosts := fs.String("include-hosts", "", "Comma-separated host patterns to include")
+
+	// Conversion options
 	pathFilter := fs.String("path-filter", "", "Glob pattern to filter paths (e.g., /api/*)")
 	methodFilter := fs.String("method", "", "Comma-separated HTTP methods (e.g., GET,POST)")
 	statusFilter := fs.String("status", "", "Status code filter (e.g., 2xx, 200,201)")
 	smartMatch := fs.Bool("smart-match", false, "Convert dynamic path segments to parameters")
 	duplicates := fs.String("duplicates", "first", "Duplicate handling: first, last, all")
 	includeHeaders := fs.Bool("include-headers", false, "Include request headers in matchers")
+	checkSensitive := fs.Bool("check-sensitive", true, "Check for sensitive data and warn")
+
+	// Output
 	output := fs.String("output", "", "Output file path (default: stdout)")
 	fs.StringVar(output, "o", "", "Output file path (shorthand)")
-	checkSensitive := fs.Bool("check-sensitive", true, "Check for sensitive data and warn")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd convert [flags]
 
 Convert recorded API traffic to mock definitions.
+Reads recordings from disk (written by 'mockd proxy start') and produces
+mock configuration that can be imported with 'mockd import'.
 
-Flags:
-      --recording       Convert a single recording by ID
-      --session         Convert all recordings from a session (use "latest" for most recent)
+Source Selection:
+  -s, --session         Session name or directory (default: latest)
+  -f, --file            Path to a recording file or directory
+      --recordings-dir  Base recordings directory override
+      --include-hosts   Comma-separated host patterns to include
+
+Conversion Options:
       --path-filter     Glob pattern to filter paths (e.g., /api/*)
       --method          Comma-separated HTTP methods (e.g., GET,POST)
       --status          Status code filter (e.g., 2xx, 200,201)
@@ -46,23 +62,25 @@ Flags:
       --duplicates      Duplicate handling strategy: first, last, all (default: first)
       --include-headers Include request headers in mock matchers
       --check-sensitive Check for sensitive data and show warnings (default: true)
+
+Output:
   -o, --output          Output file path (default: stdout)
 
 Examples:
-  # Convert a single recording
-  mockd convert --recording abc123
+  # Convert latest session
+  mockd convert
 
-  # Convert latest session with smart matching
-  mockd convert --session latest --smart-match
+  # Convert named session with smart matching
+  mockd convert --session stripe-api --smart-match
 
-  # Convert session filtering only GET requests to /api/*
-  mockd convert --session my-session --path-filter '/api/*' --method GET
+  # Convert only specific hosts and methods
+  mockd convert --include-hosts "api.stripe.com" --method GET,POST
 
-  # Convert and save to file
-  mockd convert --session latest -o mocks.json
+  # Convert a specific file
+  mockd convert --file ./my-recordings/rec_abc123.json
 
-  # Convert only successful responses
-  mockd convert --session latest --status 2xx
+  # Pipe directly to import
+  mockd convert --session my-api --smart-match | mockd import
 `)
 	}
 
@@ -70,150 +88,54 @@ Examples:
 		return err
 	}
 
-	// Check if proxy is running with recordings
-	if proxyServer.store == nil {
-		return errors.New("no recordings available (proxy not running)")
+	// Load recordings from disk
+	recordings, err := loadRecordingsFromFlags(*file, *sessionName, *recordingsDir)
+	if err != nil {
+		return err
 	}
 
-	// Determine what to convert
-	if *recordingID != "" {
-		return convertSingleRecording(*recordingID, *smartMatch, *includeHeaders, *checkSensitive, *output)
-	}
-
-	if *sessionID != "" {
-		return convertSessionRecordings(*sessionID, convertSessionFlags{
-			pathFilter:     *pathFilter,
-			methodFilter:   *methodFilter,
-			statusFilter:   *statusFilter,
-			smartMatch:     *smartMatch,
-			duplicates:     *duplicates,
-			includeHeaders: *includeHeaders,
-			checkSensitive: *checkSensitive,
-			output:         *output,
-		})
-	}
-
-	// Default: convert all recordings
-	return convertAllRecordings(convertSessionFlags{
-		pathFilter:     *pathFilter,
-		methodFilter:   *methodFilter,
-		statusFilter:   *statusFilter,
-		smartMatch:     *smartMatch,
-		duplicates:     *duplicates,
-		includeHeaders: *includeHeaders,
-		checkSensitive: *checkSensitive,
-		output:         *output,
-	})
-}
-
-type convertSessionFlags struct {
-	pathFilter     string
-	methodFilter   string
-	statusFilter   string
-	smartMatch     bool
-	duplicates     string
-	includeHeaders bool
-	checkSensitive bool
-	output         string
-}
-
-func convertSingleRecording(id string, smartMatch, includeHeaders, checkSensitive bool, output string) error {
-	rec := proxyServer.store.GetRecording(id)
-	if rec == nil {
-		return fmt.Errorf("recording not found: %s", id)
-	}
-
-	opts := recording.ConvertOptions{
-		IncludeHeaders: includeHeaders,
-		SmartMatch:     smartMatch,
-	}
-
-	// Check for sensitive data
-	if checkSensitive {
-		warnings := recording.CheckSensitiveData(rec)
-		if len(warnings) > 0 {
-			fmt.Fprintf(os.Stderr, "Warning: Found %d potential sensitive data issues:\n", len(warnings))
-			for _, w := range warnings {
-				fmt.Fprintf(os.Stderr, "  - [%s] %s: %s\n", w.Location, w.Type, w.Message)
-			}
-			fmt.Fprintln(os.Stderr)
-		}
-	}
-
-	mock := recording.ToMock(rec, opts)
-
-	// Apply smart matching
-	if smartMatch && mock.HTTP != nil && mock.HTTP.Matcher != nil {
-		originalPath := mock.HTTP.Matcher.Path
-		mock.HTTP.Matcher.Path = recording.SmartPathMatcher(mock.HTTP.Matcher.Path)
-		if originalPath != mock.HTTP.Matcher.Path {
-			fmt.Fprintf(os.Stderr, "Smart match: %s -> %s\n", originalPath, mock.HTTP.Matcher.Path)
-		}
-	}
-
-	return outputMockConfigs([]*config.MockConfiguration{mock}, output)
-}
-
-func convertSessionRecordings(sessionID string, flags convertSessionFlags) error {
-	var session *recording.Session
-
-	if sessionID == "latest" {
-		session = proxyServer.store.ActiveSession()
-		if session == nil {
-			sessions := proxyServer.store.ListSessions()
-			if len(sessions) > 0 {
-				session = sessions[len(sessions)-1]
-			}
-		}
-	} else {
-		session = proxyServer.store.GetSession(sessionID)
-	}
-
-	if session == nil {
-		return fmt.Errorf("session not found: %s", sessionID)
-	}
-
-	return convertRecordingsWithFlags(session.Recordings(), flags)
-}
-
-func convertAllRecordings(flags convertSessionFlags) error {
-	recordings, _ := proxyServer.store.ListRecordings(recording.RecordingFilter{})
 	if len(recordings) == 0 {
-		return errors.New("no recordings to convert")
+		return errors.New("no recordings found")
 	}
 
-	return convertRecordingsWithFlags(recordings, flags)
-}
+	// Filter by host if specified
+	if *includeHosts != "" {
+		hostPatterns := splitPatterns(*includeHosts)
+		recordings = filterByHosts(recordings, hostPatterns)
+		if len(recordings) == 0 {
+			return errors.New("no recordings match the host filter")
+		}
+	}
 
-func convertRecordingsWithFlags(recordings []*recording.Recording, flags convertSessionFlags) error {
-	statusCodes, statusRange := recording.ParseStatusFilter(flags.statusFilter)
+	// Build conversion options
+	statusCodes, statusRange := recording.ParseStatusFilter(*statusFilter)
 
 	opts := recording.SessionConvertOptions{
 		ConvertOptions: recording.ConvertOptions{
-			IncludeHeaders: flags.includeHeaders,
-			Deduplicate:    flags.duplicates != "all",
-			SmartMatch:     flags.smartMatch,
+			IncludeHeaders: *includeHeaders,
+			Deduplicate:    *duplicates != "all",
+			SmartMatch:     *smartMatch,
 		},
 		Filter: recording.FilterOptions{
-			PathPattern: flags.pathFilter,
-			Methods:     recording.ParseMethodFilter(flags.methodFilter),
+			PathPattern: *pathFilter,
+			Methods:     recording.ParseMethodFilter(*methodFilter),
 			StatusCodes: statusCodes,
 			StatusRange: statusRange,
 		},
-		Duplicates: flags.duplicates,
+		Duplicates: *duplicates,
 	}
 
 	if opts.Duplicates == "" {
 		opts.Duplicates = "first"
 	}
 
+	// Convert
 	result := recording.ConvertRecordingsWithOptions(recordings, opts)
 
-	// Show warnings
-	if flags.checkSensitive && len(result.Warnings) > 0 {
+	// Show sensitive data warnings
+	if *checkSensitive && len(result.Warnings) > 0 {
 		fmt.Fprintf(os.Stderr, "Warning: Found %d potential sensitive data issues:\n", len(result.Warnings))
 
-		// Group warnings by type
 		warningsByType := make(map[string][]recording.SensitiveDataWarning)
 		for _, w := range result.Warnings {
 			warningsByType[w.Type] = append(warningsByType[w.Type], w)
@@ -241,29 +163,69 @@ func convertRecordingsWithFlags(recordings []*recording.Recording, flags convert
 	}
 	fmt.Fprintf(os.Stderr, ", generated %d mocks\n", len(result.Mocks))
 
-	return outputConversionResult(result, flags.output)
+	return outputConversionResult(result, *output)
 }
 
-func outputMockConfigs(mocks []*config.MockConfiguration, output string) error {
-	mockOutput, err := json.MarshalIndent(mocks, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal mocks: %w", err)
-	}
-
-	if output == "" {
-		fmt.Println(string(mockOutput))
-	} else {
-		if err := os.WriteFile(output, mockOutput, 0644); err != nil {
-			return fmt.Errorf("failed to write mocks: %w", err)
+// loadRecordingsFromFlags resolves the recording source from CLI flags.
+func loadRecordingsFromFlags(file, sessionName, recordingsDir string) ([]*recording.Recording, error) {
+	// --file takes precedence: load from explicit path
+	if file != "" {
+		info, err := os.Stat(file)
+		if err != nil {
+			return nil, fmt.Errorf("cannot access %s: %w", file, err)
 		}
-		fmt.Fprintf(os.Stderr, "Output written to: %s\n", output)
+		if info.IsDir() {
+			return recording.LoadFromDir(file)
+		}
+		return recording.LoadFromFile(file)
 	}
 
-	return nil
+	// --session or default to latest
+	sessionDir, err := recording.ResolveSessionDir(recordingsDir, sessionName)
+	if err != nil {
+		if sessionName == "" || sessionName == "latest" {
+			return nil, errors.New("no recordings found. Run 'mockd proxy start' to capture traffic first")
+		}
+		return nil, err
+	}
+
+	return recording.LoadFromDir(sessionDir)
+}
+
+// filterByHosts filters recordings to only include requests matching host patterns.
+func filterByHosts(recordings []*recording.Recording, patterns []string) []*recording.Recording {
+	var filtered []*recording.Recording
+	for _, r := range recordings {
+		for _, pattern := range patterns {
+			if matchHost(r.Request.Host, pattern) {
+				filtered = append(filtered, r)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
+// matchHost checks if a host matches a glob pattern (supports * wildcards).
+func matchHost(host, pattern string) bool {
+	matched, _ := filepath.Match(pattern, host)
+	return matched
+}
+
+// configEnvelope wraps mock configurations in the format accepted by
+// mockd's config import endpoint (POST /config) and the 'mockd import -f mockd' command.
+type configEnvelope struct {
+	Version string      `json:"version"`
+	Mocks   interface{} `json:"mocks"`
 }
 
 func outputConversionResult(result *recording.ConversionResult, output string) error {
-	mockOutput, err := json.MarshalIndent(result.Mocks, "", "  ")
+	envelope := configEnvelope{
+		Version: "1.0",
+		Mocks:   result.Mocks,
+	}
+
+	mockOutput, err := json.MarshalIndent(envelope, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal mocks: %w", err)
 	}

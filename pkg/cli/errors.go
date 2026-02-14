@@ -4,6 +4,6 @@ import "errors"
 
 // Common CLI errors
 var (
-	ErrProxyNotRunning  = errors.New("proxy not running - start with: mockd proxy start")
+	ErrNoRecordings     = errors.New("no recordings found - run 'mockd proxy start' to capture traffic")
 	ErrServerNotRunning = errors.New("server not running - start with: mockd start")
 )

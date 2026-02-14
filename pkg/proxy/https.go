@@ -190,16 +190,20 @@ func (p *Proxy) handleHTTPSRequest(clientConn net.Conn, r *http.Request, fullHos
 		}
 
 		if shouldRecord {
-			// Create and store recording
+			// Create recording
 			rec := recording.NewRecording("")
 			rec.CaptureRequest(r, reqBody)
 			rec.CaptureResponse(resp, respBody, duration)
 
+			// Persist to disk (primary storage for CLI usage)
+			p.persistToDisk(rec)
+
+			// Also add to in-memory store (for admin API usage)
 			if err := p.store.AddRecording(rec); err != nil {
 				p.log("Error storing HTTPS recording: %v", err)
-			} else {
-				p.log("Recorded HTTPS: %s %s (%d) [%v]", r.Method, r.URL.Path, resp.StatusCode, duration)
 			}
+
+			p.log("Recorded HTTPS: %s %s (%d) [%v]", r.Method, r.URL.Path, resp.StatusCode, duration)
 		}
 	}
 

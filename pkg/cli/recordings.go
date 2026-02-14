@@ -5,11 +5,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/recording"
 )
 
@@ -26,8 +25,8 @@ func RunRecordings(args []string) error {
 	switch subcommand {
 	case "list":
 		return runRecordingsList(subArgs)
-	case "convert":
-		return runRecordingsConvert(subArgs)
+	case "sessions":
+		return runRecordingsSessions(subArgs)
 	case "export":
 		return runRecordingsExport(subArgs)
 	case "import":
@@ -45,47 +44,118 @@ func RunRecordings(args []string) error {
 func printRecordingsUsage() {
 	fmt.Print(`Usage: mockd recordings <subcommand> [flags]
 
-Manage recorded API traffic.
+Manage recorded API traffic on disk.
 
 Subcommands:
-  list      List all recordings
-  convert   Convert recordings to mock definitions
+  list      List recordings from a session
+  sessions  List all recording sessions
   export    Export recordings to JSON
-  import    Import recordings from JSON
-  clear     Clear all recordings
+  import    Import recordings from JSON into local storage
+  clear     Clear recordings from a session
 
 Run 'mockd recordings <subcommand> --help' for more information.
 `)
 }
 
-// runRecordingsList lists all recordings.
+// runRecordingsSessions lists all recording sessions.
+func runRecordingsSessions(args []string) error {
+	fs := flag.NewFlagSet("recordings sessions", flag.ContinueOnError)
+
+	recordingsDir := fs.String("recordings-dir", "", "Base recordings directory")
+	jsonOutput := fs.Bool("json", false, "Output as JSON")
+
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, `Usage: mockd recordings sessions [flags]
+
+List all recording sessions.
+
+Flags:
+      --recordings-dir  Base recordings directory override
+      --json            Output as JSON
+
+Examples:
+  mockd recordings sessions
+  mockd recordings sessions --json
+`)
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	sessions, err := recording.ListSessions(*recordingsDir)
+	if err != nil {
+		return err
+	}
+
+	if len(sessions) == 0 {
+		fmt.Println("No recording sessions found")
+		fmt.Println("Run 'mockd proxy start' to capture traffic")
+		return nil
+	}
+
+	if *jsonOutput {
+		return output.JSON(sessions)
+	}
+
+	w := output.Table()
+	_, _ = fmt.Fprintln(w, "SESSION\tNAME\tSTART\tRECORDINGS\tHOSTS")
+	for _, s := range sessions {
+		startTime := s.Meta.StartTime
+		if len(startTime) > 19 {
+			startTime = startTime[:19] // Trim timezone for display
+		}
+		hosts := ""
+		if len(s.Meta.Hosts) > 0 {
+			hosts = fmt.Sprintf("%d hosts", len(s.Meta.Hosts))
+		}
+		count := s.Meta.RecordingCount
+		if count == 0 {
+			// Count from disk if meta doesn't have it
+			count = recording.CountRecordingsInDir(s.Path)
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n",
+			s.DirName, s.Meta.Name, startTime, count, hosts)
+	}
+	_ = w.Flush()
+
+	return nil
+}
+
+// runRecordingsList lists recordings from a session.
 func runRecordingsList(args []string) error {
 	fs := flag.NewFlagSet("recordings list", flag.ContinueOnError)
 
-	sessionID := fs.String("session", "", "Filter by session ID")
+	sessionName := fs.String("session", "", "Session name or directory (default: latest)")
+	fs.StringVar(sessionName, "s", "", "Session name (shorthand)")
+	recordingsDir := fs.String("recordings-dir", "", "Base recordings directory")
 	method := fs.String("method", "", "Filter by HTTP method")
-	path := fs.String("path", "", "Filter by request path")
+	host := fs.String("host", "", "Filter by request host")
 	jsonOutput := fs.Bool("json", false, "Output as JSON")
 	limit := fs.Int("limit", 0, "Maximum number of recordings to show")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd recordings list [flags]
 
-List all recorded API requests.
+List recorded API requests from a session.
 
 Flags:
-      --session   Filter by session ID
-      --method    Filter by HTTP method
-      --path      Filter by request path
-      --json      Output as JSON
-      --limit     Maximum number of recordings to show
+  -s, --session         Session name or directory (default: latest)
+      --recordings-dir  Base recordings directory override
+      --method          Filter by HTTP method
+      --host            Filter by request host
+      --json            Output as JSON
+      --limit           Maximum number of recordings to show
 
 Examples:
-  # List all recordings
+  # List recordings from latest session
   mockd recordings list
 
-  # List only GET requests
-  mockd recordings list --method GET
+  # List recordings from named session
+  mockd recordings list --session stripe-api
+
+  # List only POST requests
+  mockd recordings list --method POST
 
   # List as JSON
   mockd recordings list --json
@@ -96,38 +166,31 @@ Examples:
 		return err
 	}
 
-	// Use in-process store if available, otherwise fall back to admin API.
-	var recordings []*recording.Recording
-	var total int
+	// Load recordings from disk
+	recordings, err := loadRecordingsFromFlags("", *sessionName, *recordingsDir)
+	if err != nil {
+		return err
+	}
 
-	if proxyServer.store != nil {
-		filter := recording.RecordingFilter{
-			SessionID: *sessionID,
-			Method:    *method,
-			Path:      *path,
-			Limit:     *limit,
+	// Apply filters
+	if *method != "" {
+		var filtered []*recording.Recording
+		for _, r := range recordings {
+			if r.Request.Method == *method {
+				filtered = append(filtered, r)
+			}
 		}
-		recordings, total = proxyServer.store.ListRecordings(filter)
-	} else {
-		// Proxy not running in this process — fetch from admin API.
-		adminURL := cliconfig.ResolveAdminURL("")
-		resp, err := http.Get(adminURL + "/recordings")
-		if err != nil {
-			return fmt.Errorf("failed to list recordings: %w (is mockd running?)", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("failed to list recordings: HTTP %d", resp.StatusCode)
-		}
-		var data struct {
-			Recordings []*recording.Recording `json:"recordings"`
-			Total      int                    `json:"total"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-			return fmt.Errorf("failed to decode recordings: %w", err)
-		}
-		recordings = data.Recordings
-		total = data.Total
+		recordings = filtered
+	}
+	if *host != "" {
+		recordings = filterByHosts(recordings, []string{*host})
+	}
+
+	total := len(recordings)
+
+	// Apply limit
+	if *limit > 0 && len(recordings) > *limit {
+		recordings = recordings[:*limit]
 	}
 
 	if *jsonOutput {
@@ -139,12 +202,16 @@ Examples:
 		return nil
 	}
 
-	// Table output
 	w := output.Table()
-	_, _ = fmt.Fprintln(w, "ID\tMETHOD\tPATH\tSTATUS\tDURATION")
+	_, _ = fmt.Fprintln(w, "ID\tMETHOD\tHOST\tPATH\tSTATUS\tDURATION")
 	for _, r := range recordings {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%v\n",
-			r.ID[:8], r.Request.Method, r.Request.Path, r.Response.StatusCode, r.Duration)
+		idShort := r.ID
+		if len(idShort) > 8 {
+			idShort = idShort[:8]
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%v\n",
+			idShort, r.Request.Method, r.Request.Host, r.Request.Path,
+			r.Response.StatusCode, r.Duration)
 	}
 	_ = w.Flush()
 
@@ -155,88 +222,15 @@ Examples:
 	return nil
 }
 
-// runRecordingsConvert converts recordings to mock definitions.
-func runRecordingsConvert(args []string) error {
-	fs := flag.NewFlagSet("recordings convert", flag.ContinueOnError)
-
-	sessionID := fs.String("session", "", "Filter by session ID")
-	deduplicate := fs.Bool("deduplicate", true, "Remove duplicate request patterns")
-	includeHeaders := fs.Bool("include-headers", false, "Include request headers in matchers")
-	output := fs.String("output", "", "Output file path (default: stdout)")
-	fs.StringVar(output, "o", "", "Output file path (shorthand)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd recordings convert [flags]
-
-Convert recordings to mock definitions.
-
-Flags:
-      --session         Filter by session ID
-      --deduplicate     Remove duplicate request patterns (default: true)
-      --include-headers Include request headers in matchers
-  -o, --output          Output file path (default: stdout)
-
-Examples:
-  # Convert all recordings to mocks
-  mockd recordings convert
-
-  # Convert specific session with deduplication
-  mockd recordings convert --session my-session --deduplicate
-
-  # Save to file
-  mockd recordings convert -o mocks.json
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if proxyServer.store == nil {
-		return ErrProxyNotRunning
-	}
-
-	filter := recording.RecordingFilter{
-		SessionID: *sessionID,
-	}
-
-	recordings, _ := proxyServer.store.ListRecordings(filter)
-	if len(recordings) == 0 {
-		return errors.New("no recordings to convert")
-	}
-
-	opts := recording.ConvertOptions{
-		Deduplicate:    *deduplicate,
-		IncludeHeaders: *includeHeaders,
-	}
-
-	mocks := recording.ToMocks(recordings, opts)
-
-	mockOutput, err := json.MarshalIndent(mocks, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal mocks: %w", err)
-	}
-
-	if *output == "" {
-		fmt.Println(string(mockOutput))
-	} else {
-		if err := os.WriteFile(*output, mockOutput, 0644); err != nil {
-			return fmt.Errorf("failed to write mocks: %w", err)
-		}
-		fmt.Printf("Converted %d recordings to %d mocks\n", len(recordings), len(mocks))
-		fmt.Printf("Output written to: %s\n", *output)
-	}
-
-	return nil
-}
-
-// runRecordingsExport exports recordings to JSON.
+// runRecordingsExport exports recordings to a JSON file.
 func runRecordingsExport(args []string) error {
 	fs := flag.NewFlagSet("recordings export", flag.ContinueOnError)
 
-	sessionID := fs.String("session", "", "Export specific session")
-	output := fs.String("output", "", "Output file path (default: stdout)")
-	fs.StringVar(output, "o", "", "Output file path (shorthand)")
+	sessionName := fs.String("session", "", "Session name or directory (default: latest)")
+	fs.StringVar(sessionName, "s", "", "Session name (shorthand)")
+	recordingsDir := fs.String("recordings-dir", "", "Base recordings directory")
+	outputPath := fs.String("output", "", "Output file path (default: stdout)")
+	fs.StringVar(outputPath, "o", "", "Output file path (shorthand)")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd recordings export [flags]
@@ -244,15 +238,16 @@ func runRecordingsExport(args []string) error {
 Export recordings to JSON format.
 
 Flags:
-      --session   Export specific session
-  -o, --output    Output file path (default: stdout)
+  -s, --session         Session name or directory (default: latest)
+      --recordings-dir  Base recordings directory override
+  -o, --output          Output file path (default: stdout)
 
 Examples:
-  # Export all recordings to stdout
+  # Export latest session to stdout
   mockd recordings export
 
-  # Export specific session to file
-  mockd recordings export --session my-session -o recordings.json
+  # Export named session to file
+  mockd recordings export --session stripe-api -o recordings.json
 `)
 	}
 
@@ -260,52 +255,54 @@ Examples:
 		return err
 	}
 
-	if proxyServer.store == nil {
-		return ErrProxyNotRunning
-	}
-
-	var jsonOutput []byte
-	var err error
-
-	if *sessionID != "" {
-		jsonOutput, err = proxyServer.store.ExportSession(*sessionID)
-	} else {
-		jsonOutput, err = proxyServer.store.ExportRecordings(recording.RecordingFilter{})
-	}
-
+	recordings, err := loadRecordingsFromFlags("", *sessionName, *recordingsDir)
 	if err != nil {
-		return fmt.Errorf("failed to export recordings: %w", err)
+		return err
 	}
 
-	if *output == "" {
-		fmt.Println(string(jsonOutput))
+	if len(recordings) == 0 {
+		return errors.New("no recordings to export")
+	}
+
+	data, err := json.MarshalIndent(recordings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal recordings: %w", err)
+	}
+
+	if *outputPath == "" {
+		fmt.Println(string(data))
 	} else {
-		if err := os.WriteFile(*output, jsonOutput, 0644); err != nil {
+		if err := os.WriteFile(*outputPath, data, 0644); err != nil {
 			return fmt.Errorf("failed to write export: %w", err)
 		}
-		fmt.Printf("Recordings exported to: %s\n", *output)
+		fmt.Fprintf(os.Stderr, "Exported %d recordings to %s\n", len(recordings), *outputPath)
 	}
 
 	return nil
 }
 
-// runRecordingsImport imports recordings from JSON.
+// runRecordingsImport imports recordings from a JSON file into local storage.
 func runRecordingsImport(args []string) error {
 	fs := flag.NewFlagSet("recordings import", flag.ContinueOnError)
 
 	input := fs.String("input", "", "Input file path (required)")
 	fs.StringVar(input, "i", "", "Input file path (shorthand)")
+	sessionName := fs.String("session", "imported", "Session name for imported recordings")
+	recordingsDir := fs.String("recordings-dir", "", "Base recordings directory")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd recordings import [flags]
 
-Import recordings from JSON format.
+Import recordings from JSON into local disk storage.
 
 Flags:
-  -i, --input   Input file path (required)
+  -i, --input           Input file path (required)
+      --session         Session name for imported recordings (default: imported)
+      --recordings-dir  Base recordings directory override
 
 Examples:
   mockd recordings import -i recordings.json
+  mockd recordings import -i recordings.json --session from-colleague
 `)
 	}
 
@@ -317,49 +314,75 @@ Examples:
 		return errors.New("--input is required")
 	}
 
-	if proxyServer.store == nil {
-		return ErrProxyNotRunning
-	}
-
-	data, err := os.ReadFile(*input)
+	// Load recordings from file
+	recordings, err := recording.LoadFromFile(*input)
 	if err != nil {
-		return fmt.Errorf("failed to read input file: %w", err)
+		return fmt.Errorf("failed to read recordings: %w", err)
 	}
 
-	// Try to parse as recordings array
-	var recordings []*recording.Recording
-	if err := json.Unmarshal(data, &recordings); err != nil {
-		return fmt.Errorf("failed to parse recordings JSON: %w", err)
+	if len(recordings) == 0 {
+		return errors.New("no recordings found in file")
 	}
 
-	// Add recordings to store
-	for _, r := range recordings {
-		if err := proxyServer.store.AddRecording(r); err != nil {
-			return fmt.Errorf("failed to add recording: %w", err)
+	// Determine target directory
+	baseDir := *recordingsDir
+	if baseDir == "" {
+		baseDir = recording.DefaultRecordingsBaseDir()
+	}
+
+	// Create session directory
+	timestamp := "imported"
+	sessionDir := filepath.Join(baseDir, *sessionName+"-"+timestamp)
+	if err := os.MkdirAll(sessionDir, 0700); err != nil {
+		return fmt.Errorf("failed to create session directory: %w", err)
+	}
+
+	// Write each recording to disk organized by host
+	for _, rec := range recordings {
+		host := rec.Request.Host
+		if host == "" {
+			host = "_unknown"
+		}
+		hostDir := filepath.Join(sessionDir, host)
+		if err := os.MkdirAll(hostDir, 0700); err != nil {
+			return fmt.Errorf("failed to create host directory: %w", err)
+		}
+
+		data, err := json.MarshalIndent(rec, "", "  ")
+		if err != nil {
+			continue
+		}
+		filename := filepath.Join(hostDir, "rec_"+rec.ID+".json")
+		if err := os.WriteFile(filename, data, 0600); err != nil {
+			return fmt.Errorf("failed to write recording: %w", err)
 		}
 	}
 
-	fmt.Printf("Imported %d recordings\n", len(recordings))
+	fmt.Printf("Imported %d recordings to %s\n", len(recordings), sessionDir)
 	return nil
 }
 
-// runRecordingsClear clears all recordings.
+// runRecordingsClear clears recordings from a session or all sessions.
 func runRecordingsClear(args []string) error {
 	fs := flag.NewFlagSet("recordings clear", flag.ContinueOnError)
 
+	sessionName := fs.String("session", "", "Session to clear (default: all sessions)")
+	recordingsDir := fs.String("recordings-dir", "", "Base recordings directory")
 	force := fs.Bool("force", false, "Skip confirmation")
 	fs.BoolVar(force, "f", false, "Skip confirmation (shorthand)")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd recordings clear [flags]
 
-Clear all recordings.
+Clear recordings from a session or all sessions.
 
 Flags:
-  -f, --force   Skip confirmation
+      --session         Session to clear (omit for all sessions)
+      --recordings-dir  Base recordings directory override
+  -f, --force           Skip confirmation
 
 Examples:
-  mockd recordings clear
+  mockd recordings clear --session my-session --force
   mockd recordings clear --force
 `)
 	}
@@ -368,27 +391,74 @@ Examples:
 		return err
 	}
 
-	if proxyServer.store == nil {
-		return ErrProxyNotRunning
+	baseDir := *recordingsDir
+	if baseDir == "" {
+		baseDir = recording.DefaultRecordingsBaseDir()
 	}
 
-	if !*force {
-		_, total := proxyServer.store.ListRecordings(recording.RecordingFilter{})
-		if total == 0 {
+	if *sessionName != "" {
+		// Clear specific session
+		sessionDir, err := recording.ResolveSessionDir(baseDir, *sessionName)
+		if err != nil {
+			return err
+		}
+
+		count := recording.CountRecordingsInDir(sessionDir)
+		if count == 0 {
 			fmt.Println("No recordings to clear")
 			return nil
 		}
 
-		fmt.Printf("This will clear %d recordings. Continue? [y/N]: ", total)
-		var response string
-		_, _ = fmt.Scanln(&response)
-		if response != "y" && response != "Y" {
-			fmt.Println("Cancelled")
+		if !*force {
+			fmt.Printf("This will delete %d recordings from %s. Continue? [y/N]: ", count, filepath.Base(sessionDir))
+			var response string
+			_, _ = fmt.Scanln(&response)
+			if response != "y" && response != "Y" {
+				fmt.Println("Cancelled")
+				return nil
+			}
+		}
+
+		if err := recording.DeleteSession(sessionDir); err != nil {
+			return fmt.Errorf("failed to clear session: %w", err)
+		}
+		fmt.Printf("Cleared %d recordings from %s\n", count, filepath.Base(sessionDir))
+	} else {
+		// Clear all sessions
+		sessions, err := recording.ListSessions(baseDir)
+		if err != nil {
+			return err
+		}
+
+		if len(sessions) == 0 {
+			fmt.Println("No recording sessions found")
 			return nil
 		}
+
+		totalCount := 0
+		for _, s := range sessions {
+			totalCount += recording.CountRecordingsInDir(s.Path)
+		}
+
+		if !*force {
+			fmt.Printf("This will delete %d sessions with %d total recordings. Continue? [y/N]: ",
+				len(sessions), totalCount)
+			var response string
+			_, _ = fmt.Scanln(&response)
+			if response != "y" && response != "Y" {
+				fmt.Println("Cancelled")
+				return nil
+			}
+		}
+
+		for _, s := range sessions {
+			_ = recording.DeleteSession(s.Path)
+		}
+		// Also remove the latest symlink
+		_ = os.Remove(filepath.Join(baseDir, "latest"))
+
+		fmt.Printf("Cleared %d sessions with %d recordings\n", len(sessions), totalCount)
 	}
 
-	count := proxyServer.store.Clear()
-	fmt.Printf("Cleared %d recordings\n", count)
 	return nil
 }

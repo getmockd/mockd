@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -16,16 +18,24 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/proxy"
 	"github.com/getmockd/mockd/pkg/recording"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
-// proxyServer holds the global proxy state for CLI commands
-var proxyServer struct {
-	proxy    *proxy.Proxy
-	store    *recording.Store
-	ca       *proxy.CAManager
-	server   *http.Server
-	listener net.Listener
-	running  bool
+// SessionMeta is the metadata written to meta.json for each recording session.
+type SessionMeta struct {
+	Name           string   `json:"name"`
+	StartTime      string   `json:"startTime"`
+	EndTime        string   `json:"endTime,omitempty"`
+	Port           int      `json:"port"`
+	Mode           string   `json:"mode"`
+	RecordingCount int      `json:"recordingCount"`
+	Hosts          []string `json:"hosts,omitempty"`
+	Filters        *struct {
+		IncludePaths []string `json:"includePaths,omitempty"`
+		ExcludePaths []string `json:"excludePaths,omitempty"`
+		IncludeHosts []string `json:"includeHosts,omitempty"`
+		ExcludeHosts []string `json:"excludeHosts,omitempty"`
+	} `json:"filters,omitempty"`
 }
 
 // RunProxy handles the proxy command and its subcommands.
@@ -41,12 +51,6 @@ func RunProxy(args []string) error {
 	switch subcommand {
 	case "start":
 		return runProxyStart(subArgs)
-	case "stop":
-		return runProxyStop(subArgs)
-	case "status":
-		return runProxyStatus(subArgs)
-	case "mode":
-		return runProxyMode(subArgs)
 	case "ca":
 		return runProxyCA(subArgs)
 	case "help", "--help", "-h":
@@ -63,17 +67,15 @@ func printProxyUsage() {
 Manage the MITM proxy for recording API traffic.
 
 Subcommands:
-  start     Start the proxy server
-  stop      Stop the proxy server
-  status    Show proxy server status
-  mode      Get or set proxy mode (record/passthrough)
+  start     Start the proxy server (foreground, Ctrl+C to stop)
   ca        Manage CA certificate
 
 Run 'mockd proxy <subcommand> --help' for more information.
 `)
 }
 
-// runProxyStart starts the proxy server.
+// runProxyStart starts the proxy server in the foreground.
+// Recordings are written to disk continuously as traffic is captured.
 func runProxyStart(args []string) error {
 	fs := flag.NewFlagSet("proxy start", flag.ContinueOnError)
 
@@ -86,6 +88,8 @@ func runProxyStart(args []string) error {
 	session := fs.String("session", "", "Recording session name")
 	fs.StringVar(session, "s", "", "Recording session name (shorthand)")
 
+	recordingsDir := fs.String("recordings-dir", "", "Base directory for recordings (default: ~/.local/share/mockd/recordings)")
+
 	caPath := fs.String("ca-path", "", "Path to CA certificate directory")
 
 	includePaths := fs.String("include", "", "Comma-separated path patterns to include")
@@ -97,26 +101,29 @@ func runProxyStart(args []string) error {
 		fmt.Fprint(os.Stderr, `Usage: mockd proxy start [flags]
 
 Start the MITM proxy server for recording API traffic.
+Recordings are written to disk as traffic flows through the proxy.
+Press Ctrl+C to stop. Use 'mockd recordings list' to view captured traffic.
 
 Flags:
-  -p, --port          Proxy server port (default: 8888)
-  -m, --mode          Proxy mode: record or passthrough (default: record)
-  -s, --session       Recording session name
-      --ca-path       Path to CA certificate directory
-      --include       Comma-separated path patterns to include
-      --exclude       Comma-separated path patterns to exclude
-      --include-hosts Comma-separated host patterns to include
-      --exclude-hosts Comma-separated host patterns to exclude
+  -p, --port            Proxy server port (default: 8888)
+  -m, --mode            Proxy mode: record or passthrough (default: record)
+  -s, --session         Recording session name (default: auto-generated)
+      --recordings-dir  Base directory for recordings
+      --ca-path         Path to CA certificate directory (enables HTTPS recording)
+      --include         Comma-separated path patterns to include
+      --exclude         Comma-separated path patterns to exclude
+      --include-hosts   Comma-separated host patterns to include
+      --exclude-hosts   Comma-separated host patterns to exclude
 
 Examples:
   # Start proxy in record mode
   mockd proxy start
 
-  # Start with custom port and session
-  mockd proxy start --port 9000 --session my-session
+  # Start with named session and HTTPS support
+  mockd proxy start --session stripe-api --ca-path ~/.mockd/ca
 
-  # Start with filters
-  mockd proxy start --include "/api/*" --exclude "/api/health"
+  # Record only specific hosts
+  mockd proxy start --session my-api --include-hosts "api.example.com,*.stripe.com"
 `)
 	}
 
@@ -140,24 +147,27 @@ Examples:
 		return fmt.Errorf("invalid mode: %s (must be 'record' or 'passthrough')", *mode)
 	}
 
-	// Create store and session
-	store := recording.NewStore()
+	// Determine session name and directory
 	sessionName := *session
 	if sessionName == "" {
 		sessionName = "default"
 	}
-	store.CreateSession(sessionName, nil)
+	timestamp := time.Now().Format("20060102-150405")
+	sessionDirName := sessionName + "-" + timestamp
 
-	// Create CA manager
-	var ca *proxy.CAManager
-	if *caPath != "" {
-		ca = proxy.NewCAManager(*caPath+"/ca.crt", *caPath+"/ca.key")
-		if err := ca.EnsureCA(); err != nil {
-			return fmt.Errorf("failed to initialize CA: %w", err)
-		}
+	// Determine recordings base directory
+	baseDir := *recordingsDir
+	if baseDir == "" {
+		baseDir = store.DefaultRecordingsDir()
+	}
+	sessionDir := filepath.Join(baseDir, sessionDirName)
+
+	// Create session directory
+	if err := os.MkdirAll(sessionDir, 0700); err != nil {
+		return fmt.Errorf("failed to create session directory: %w", err)
 	}
 
-	// Create filter config
+	// Build filter config
 	filter := proxy.NewFilterConfig()
 	if *includePaths != "" {
 		filter.IncludePaths = splitPatterns(*includePaths)
@@ -172,11 +182,49 @@ Examples:
 		filter.ExcludeHosts = splitPatterns(*excludeHosts)
 	}
 
-	// Create proxy
+	// Write initial meta.json
+	meta := SessionMeta{
+		Name:      sessionName,
+		StartTime: time.Now().Format(time.RFC3339),
+		Port:      *port,
+		Mode:      *mode,
+	}
+	if *includePaths != "" || *excludePaths != "" || *includeHosts != "" || *excludeHosts != "" {
+		meta.Filters = &struct {
+			IncludePaths []string `json:"includePaths,omitempty"`
+			ExcludePaths []string `json:"excludePaths,omitempty"`
+			IncludeHosts []string `json:"includeHosts,omitempty"`
+			ExcludeHosts []string `json:"excludeHosts,omitempty"`
+		}{
+			IncludePaths: filter.IncludePaths,
+			ExcludePaths: filter.ExcludePaths,
+			IncludeHosts: filter.IncludeHosts,
+			ExcludeHosts: filter.ExcludeHosts,
+		}
+	}
+	if err := writeSessionMeta(sessionDir, &meta); err != nil {
+		return fmt.Errorf("failed to write session metadata: %w", err)
+	}
+
+	// Create CA manager (optional, enables HTTPS MITM)
+	var ca *proxy.CAManager
+	if *caPath != "" {
+		ca = proxy.NewCAManager(*caPath+"/ca.crt", *caPath+"/ca.key")
+		if err := ca.EnsureCA(); err != nil {
+			return fmt.Errorf("failed to initialize CA: %w", err)
+		}
+	}
+
+	// Create in-memory store (for summary on exit)
+	memStore := recording.NewStore()
+	memStore.CreateSession(sessionName, nil)
+
+	// Create proxy with disk persistence
 	logger := log.New(os.Stdout, "[proxy] ", log.LstdFlags)
 	p := proxy.New(proxy.Options{
 		Mode:      proxyMode,
-		Store:     store,
+		Store:     memStore,
+		DiskDir:   sessionDir,
 		Filter:    filter,
 		CAManager: ca,
 		Logger:    logger,
@@ -196,17 +244,11 @@ Examples:
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// Store state
-	proxyServer.proxy = p
-	proxyServer.store = store
-	proxyServer.ca = ca
-	proxyServer.server = server
-	proxyServer.listener = listener
-	proxyServer.running = true
-
+	// Print startup info
 	fmt.Printf("Proxy server running on http://localhost:%d\n", *port)
 	fmt.Printf("Mode: %s\n", proxyMode)
 	fmt.Printf("Session: %s\n", sessionName)
+	fmt.Printf("Recordings: %s\n", sessionDir)
 	if ca != nil {
 		fmt.Printf("CA certificate: %s\n", ca.CertPath())
 	}
@@ -229,129 +271,73 @@ Examples:
 		output.Warn("server shutdown error: %v", err)
 	}
 
-	proxyServer.running = false
-	fmt.Println("Proxy stopped")
+	// Update meta.json with final stats
+	hosts := discoverHosts(sessionDir)
+	recordings, total := memStore.ListRecordings(recording.RecordingFilter{})
+	meta.EndTime = time.Now().Format(time.RFC3339)
+	meta.RecordingCount = total
+	meta.Hosts = hosts
+	if err := writeSessionMeta(sessionDir, &meta); err != nil {
+		output.Warn("failed to update session metadata: %v", err)
+	}
 
-	// Print recording summary
-	recordings, total := store.ListRecordings(recording.RecordingFilter{})
+	// Update "latest" symlink
+	updateLatestSymlink(baseDir, sessionDirName)
+
+	// Print summary
+	fmt.Println("Proxy stopped")
 	if total > 0 {
-		fmt.Printf("\nCaptured %d recordings\n", total)
+		fmt.Printf("\nCaptured %d recordings in %s\n", total, sessionDir)
 		for _, r := range recordings {
-			fmt.Printf("  %s %s (%d)\n", r.Request.Method, r.Request.Path, r.Response.StatusCode)
+			fmt.Printf("  %s %s %s (%d)\n", r.Request.Method, r.Request.Host, r.Request.Path, r.Response.StatusCode)
 		}
+		fmt.Printf("\nUse 'mockd recordings list --session %s' to view\n", sessionDirName)
+		fmt.Println("Use 'mockd convert --session " + sessionDirName + "' to generate mocks")
+	} else {
+		fmt.Println("\nNo recordings captured")
 	}
 
 	return nil
 }
 
-// runProxyStop stops the proxy server.
-func runProxyStop(args []string) error {
-	fs := flag.NewFlagSet("proxy stop", flag.ContinueOnError)
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd proxy stop
-
-Stop the running proxy server.
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
+// writeSessionMeta writes the meta.json file for a session directory.
+func writeSessionMeta(sessionDir string, meta *SessionMeta) error {
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
 		return err
 	}
-
-	if !proxyServer.running {
-		return errors.New("proxy is not running")
-	}
-
-	if proxyServer.server != nil {
-		if err := proxyServer.server.Close(); err != nil {
-			return fmt.Errorf("failed to stop proxy: %w", err)
-		}
-	}
-
-	proxyServer.running = false
-	fmt.Println("Proxy stopped")
-	return nil
+	return os.WriteFile(filepath.Join(sessionDir, "meta.json"), data, 0600)
 }
 
-// runProxyStatus shows proxy status.
-func runProxyStatus(args []string) error {
-	fs := flag.NewFlagSet("proxy status", flag.ContinueOnError)
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd proxy status
-
-Show the current proxy server status.
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if !proxyServer.running {
-		fmt.Println("Proxy is not running")
+// discoverHosts scans a session directory for host subdirectories.
+func discoverHosts(sessionDir string) []string {
+	entries, err := os.ReadDir(sessionDir)
+	if err != nil {
 		return nil
 	}
 
-	fmt.Println("Proxy is running")
-	if proxyServer.proxy != nil {
-		fmt.Printf("Mode: %s\n", proxyServer.proxy.Mode())
+	var hosts []string
+	for _, e := range entries {
+		if e.IsDir() {
+			hosts = append(hosts, e.Name())
+		}
 	}
-	if proxyServer.store != nil {
-		_, total := proxyServer.store.ListRecordings(recording.RecordingFilter{})
-		fmt.Printf("Recordings: %d\n", total)
-	}
-
-	return nil
+	return hosts
 }
 
-// runProxyMode gets or sets the proxy mode.
-func runProxyMode(args []string) error {
-	fs := flag.NewFlagSet("proxy mode", flag.ContinueOnError)
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd proxy mode [mode]
+// updateLatestSymlink creates or updates a "latest" symlink pointing to the session directory.
+func updateLatestSymlink(baseDir, sessionDirName string) {
+	latestLink := filepath.Join(baseDir, "latest")
 
-Get or set the proxy operating mode.
+	// Remove existing symlink (ignore errors — may not exist)
+	_ = os.Remove(latestLink)
 
-Arguments:
-  mode    New mode: record or passthrough (optional)
-
-Examples:
-  # Get current mode
-  mockd proxy mode
-
-  # Set mode to passthrough
-  mockd proxy mode passthrough
-`)
+	// Create new symlink (relative path so it's portable)
+	if err := os.Symlink(sessionDirName, latestLink); err != nil {
+		// Symlinks may not be supported (e.g., some Windows configs).
+		// Fall back to writing the session name to a "latest" file.
+		_ = os.WriteFile(latestLink, []byte(sessionDirName), 0600)
 	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if !proxyServer.running {
-		return errors.New("proxy is not running")
-	}
-
-	// Get mode
-	if fs.NArg() == 0 {
-		fmt.Printf("Current mode: %s\n", proxyServer.proxy.Mode())
-		return nil
-	}
-
-	// Set mode
-	newMode := fs.Arg(0)
-	switch newMode {
-	case "record":
-		proxyServer.proxy.SetMode(proxy.ModeRecord)
-		fmt.Println("Mode set to: record")
-	case "passthrough":
-		proxyServer.proxy.SetMode(proxy.ModePassthrough)
-		fmt.Println("Mode set to: passthrough")
-	default:
-		return fmt.Errorf("invalid mode: %s (must be 'record' or 'passthrough')", newMode)
-	}
-
-	return nil
 }
 
 // runProxyCA handles CA certificate commands.
@@ -394,8 +380,8 @@ Run 'mockd proxy ca <subcommand> --help' for more information.
 func runProxyCAExport(args []string) error {
 	fs := flag.NewFlagSet("proxy ca export", flag.ContinueOnError)
 
-	output := fs.String("output", "", "Output file path (default: stdout)")
-	fs.StringVar(output, "o", "", "Output file path (shorthand)")
+	outputPath := fs.String("output", "", "Output file path (default: stdout)")
+	fs.StringVar(outputPath, "o", "", "Output file path (shorthand)")
 
 	caPath := fs.String("ca-path", "", "Path to CA certificate directory")
 
@@ -410,10 +396,10 @@ Flags:
 
 Examples:
   # Export to stdout
-  mockd proxy ca export
+  mockd proxy ca export --ca-path ~/.mockd/ca
 
   # Export to file
-  mockd proxy ca export -o ca.crt
+  mockd proxy ca export --ca-path ~/.mockd/ca -o ca.crt
 `)
 	}
 
@@ -421,18 +407,13 @@ Examples:
 		return err
 	}
 
-	// Use running proxy's CA if available
-	var ca *proxy.CAManager
-	switch {
-	case proxyServer.ca != nil:
-		ca = proxyServer.ca
-	case *caPath != "":
-		ca = proxy.NewCAManager(*caPath+"/ca.crt", *caPath+"/ca.key")
-		if err := ca.Load(); err != nil {
-			return fmt.Errorf("failed to load CA: %w", err)
-		}
-	default:
-		return errors.New("no CA available (start proxy with --ca-path or specify --ca-path)")
+	if *caPath == "" {
+		return errors.New("--ca-path is required")
+	}
+
+	ca := proxy.NewCAManager(*caPath+"/ca.crt", *caPath+"/ca.key")
+	if err := ca.Load(); err != nil {
+		return fmt.Errorf("failed to load CA: %w", err)
 	}
 
 	certPEM, err := ca.CACertPEM()
@@ -440,13 +421,13 @@ Examples:
 		return fmt.Errorf("failed to export CA certificate: %w", err)
 	}
 
-	if *output == "" {
+	if *outputPath == "" {
 		fmt.Print(string(certPEM))
 	} else {
-		if err := os.WriteFile(*output, certPEM, 0644); err != nil {
+		if err := os.WriteFile(*outputPath, certPEM, 0644); err != nil {
 			return fmt.Errorf("failed to write certificate: %w", err)
 		}
-		fmt.Printf("CA certificate exported to: %s\n", *output)
+		fmt.Printf("CA certificate exported to: %s\n", *outputPath)
 	}
 
 	return nil

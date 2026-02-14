@@ -15,25 +15,6 @@ const (
 	DefaultMaxBodySize = 10 * 1024 * 1024
 )
 
-// ProxiedRequest represents a captured request with timing information.
-type ProxiedRequest struct {
-	Method    string
-	URL       string
-	Host      string
-	Headers   http.Header
-	Body      []byte
-	StartTime time.Time
-}
-
-// ProxiedResponse represents a captured response with timing information.
-type ProxiedResponse struct {
-	StatusCode int
-	Status     string
-	Headers    http.Header
-	Body       []byte
-	Duration   time.Duration
-}
-
 // handleHTTP handles regular HTTP proxy requests with optional recording.
 func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
@@ -89,16 +70,20 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if shouldRecord {
-			// Create and store recording
+			// Create recording
 			rec := recording.NewRecording("")
 			rec.CaptureRequest(r, reqBody)
 			rec.CaptureResponse(resp, respBody, duration)
 
+			// Persist to disk (primary storage for CLI usage)
+			p.persistToDisk(rec)
+
+			// Also add to in-memory store (for admin API usage)
 			if err := p.store.AddRecording(rec); err != nil {
 				p.log("Error storing recording: %v", err)
-			} else {
-				p.log("Recorded: %s %s (%d) [%v]", r.Method, r.URL.Path, resp.StatusCode, duration)
 			}
+
+			p.log("Recorded: %s %s (%d) [%v]", r.Method, r.URL.Path, resp.StatusCode, duration)
 		}
 	}
 
