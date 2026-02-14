@@ -241,6 +241,13 @@ func (s *ServerConfiguration) Validate() error { //nolint:gocyclo // comprehensi
 		}
 	}
 
+	if s.ManagementPort != 0 && (s.ManagementPort < 1 || s.ManagementPort > 65535) {
+		return &ValidationError{
+			Field:   "serverConfig.managementPort",
+			Message: "managementPort must be between 1 and 65535",
+		}
+	}
+
 	// Ports must not conflict (all different if > 0)
 	ports := make(map[int]string)
 	if s.HTTPPort > 0 {
