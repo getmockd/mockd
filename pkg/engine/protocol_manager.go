@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/graphql"
@@ -443,9 +445,17 @@ func (pm *ProtocolManager) StartGRPCServer(cfg *grpc.GRPCConfig) (*grpc.Server, 
 		server.SetRequestLogger(pm.requestLogger)
 	}
 
-	// Start the server
+	// Start the server. If the port was just released by a stopped server,
+	// the OS may need a moment to fully free it — retry once after a short delay.
 	if err := server.Start(context.Background()); err != nil {
-		return nil, fmt.Errorf("failed to start gRPC server on port %d: %w", cfg.Port, err)
+		if isAddrInUse(err) {
+			time.Sleep(150 * time.Millisecond)
+			if retryErr := server.Start(context.Background()); retryErr != nil {
+				return nil, fmt.Errorf("failed to start gRPC server on port %d (after retry): %w", cfg.Port, retryErr)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to start gRPC server on port %d: %w", cfg.Port, err)
+		}
 	}
 
 	// Register with protocol registry for unified handler management
@@ -666,4 +676,16 @@ func (pm *ProtocolManager) OAuthHandlers() []*oauth.Handler {
 	result := make([]*oauth.Handler, len(pm.oauthHandlers))
 	copy(result, pm.oauthHandlers)
 	return result
+}
+
+// isAddrInUse reports whether err is caused by a port already being in use.
+func isAddrInUse(err error) bool {
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		var sysErr *syscall.Errno
+		if errors.As(opErr.Err, &sysErr) {
+			return *sysErr == syscall.EADDRINUSE
+		}
+	}
+	return false
 }

@@ -158,9 +158,11 @@ func (s *Server) Start(ctx context.Context) error {
 		s.registerReflectionService()
 	}
 
-	// Start serving in a goroutine
+	// Start serving in a goroutine. Capture grpcServer in a local variable
+	// so the goroutine doesn't dereference s.grpcServer after Stop() nils it.
+	grpcSrv := s.grpcServer
 	go func() {
-		if err := s.grpcServer.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+		if err := grpcSrv.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			// Log error but don't crash - server may have been stopped
 			s.log.Error("gRPC server error", "error", err)
 		}
@@ -171,7 +173,9 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the gRPC server gracefully.
+// Stop stops the gRPC server gracefully. It blocks until the underlying
+// gRPC server and its listener are fully released so the port can be
+// immediately reused by a new server.
 func (s *Server) Stop(ctx context.Context, timeout time.Duration) error {
 	s.mu.Lock()
 
@@ -181,12 +185,15 @@ func (s *Server) Stop(ctx context.Context, timeout time.Duration) error {
 	}
 
 	grpcSrv := s.grpcServer
+	lis := s.listener
 
-	// Mark as not running before releasing the lock so new callers
-	// see the state transition immediately. Health/Stats/IsRunning
-	// will no longer block while we wait for graceful shutdown.
+	// Mark as not running and nil out references before releasing the lock
+	// so new callers see the state transition immediately and stale
+	// references cannot be reused.
 	s.running = false
 	s.startedAt = time.Time{}
+	s.grpcServer = nil
+	s.listener = nil
 	s.mu.Unlock()
 
 	if grpcSrv != nil {
@@ -200,14 +207,23 @@ func (s *Server) Stop(ctx context.Context, timeout time.Duration) error {
 		// Wait for graceful stop or timeout
 		select {
 		case <-done:
-			// Graceful stop completed
+			// Graceful stop completed — port is released
 		case <-time.After(timeout):
-			// Timeout - force stop
+			// Timeout — force stop, then wait for the GracefulStop
+			// goroutine to exit (it returns quickly once Stop is called)
 			grpcSrv.Stop()
+			<-done
 		case <-ctx.Done():
-			// Context cancelled - force stop
+			// Context cancelled — same pattern
 			grpcSrv.Stop()
+			<-done
 		}
+	}
+
+	// Defensive: ensure the listener is closed even if the gRPC library
+	// didn't close it (double-close on net.Listener is safe).
+	if lis != nil {
+		_ = lis.Close()
 	}
 
 	return nil
