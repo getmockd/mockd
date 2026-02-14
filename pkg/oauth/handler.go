@@ -353,11 +353,17 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 		}
 	}
 
+	// If no scope was present in the authorization code, populate with default scopes
+	scope := authCode.Scope
+	if scope == "" && len(h.provider.config.DefaultScopes) > 0 {
+		scope = strings.Join(h.provider.config.DefaultScopes, " ")
+	}
+
 	// Generate tokens
 	tokenClaims := map[string]interface{}{
 		"sub":       authCode.UserID,
 		"client_id": clientID,
-		"scope":     authCode.Scope,
+		"scope":     scope,
 	}
 
 	accessToken, err := h.provider.GenerateToken(tokenClaims)
@@ -370,7 +376,7 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 		AccessToken: accessToken,
 		TokenType:   "Bearer",
 		ExpiresIn:   int(h.provider.tokenExpiry.Seconds()),
-		Scope:       authCode.Scope,
+		Scope:       scope,
 	}
 
 	// Generate refresh token if client supports it
@@ -384,14 +390,14 @@ func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Re
 			Token:     refreshToken,
 			ClientID:  clientID,
 			UserID:    authCode.UserID,
-			Scope:     authCode.Scope,
+			Scope:     scope,
 			ExpiresAt: time.Now().Add(h.provider.refreshExpiry),
 		})
 		response.RefreshToken = refreshToken
 	}
 
 	// Generate ID token if openid scope is requested
-	if hasScope(authCode.Scope, "openid") {
+	if hasScope(scope, "openid") {
 		if idToken := h.generateIDTokenForUser(authCode.UserID, clientID, authCode.Nonce, nil); idToken != "" {
 			response.IDToken = idToken
 		}
@@ -407,6 +413,11 @@ func (h *Handler) handleClientCredentialsGrant(w http.ResponseWriter, r *http.Re
 	if msg := h.validateScopes(scope); msg != "" {
 		h.errorResponse(w, http.StatusBadRequest, ErrInvalidScope, msg)
 		return
+	}
+
+	// If no scope was requested, populate with default scopes
+	if scope == "" && len(h.provider.config.DefaultScopes) > 0 {
+		scope = strings.Join(h.provider.config.DefaultScopes, " ")
 	}
 
 	// Validate client
@@ -523,6 +534,11 @@ func (h *Handler) handlePasswordGrant(w http.ResponseWriter, r *http.Request, cl
 	if msg := h.validateScopes(scope); msg != "" {
 		h.errorResponse(w, http.StatusBadRequest, ErrInvalidScope, msg)
 		return
+	}
+
+	// If no scope was requested, populate with default scopes
+	if scope == "" && len(h.provider.config.DefaultScopes) > 0 {
+		scope = strings.Join(h.provider.config.DefaultScopes, " ")
 	}
 
 	if username == "" || password == "" {
