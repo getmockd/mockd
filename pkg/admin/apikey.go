@@ -57,7 +57,7 @@ func DefaultAPIKeyConfig() APIKeyConfig {
 	return APIKeyConfig{
 		Enabled:        true,
 		AllowLocalhost: false, // Secure by default
-		ExemptPaths:    []string{"/health"},
+		ExemptPaths:    []string{"/health", "/metrics"},
 	}
 }
 

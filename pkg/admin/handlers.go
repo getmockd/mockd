@@ -161,6 +161,11 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 		return
 	}
 
+	// Allow replace=true via query param (in addition to JSON body field).
+	if r.URL.Query().Get("replace") == "true" {
+		req.Replace = true
+	}
+
 	// If dryRun=true, validate and return a preview without applying changes.
 	if r.URL.Query().Get("dryRun") == "true" {
 		mockCount := 0

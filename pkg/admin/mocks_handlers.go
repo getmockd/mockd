@@ -45,6 +45,31 @@ type MockFilter struct {
 	WorkspaceID string
 }
 
+// applyPagination applies offset and limit query parameters to a mock slice.
+func applyPagination(mocks []*mock.Mock, query interface{ Get(string) string }) []*mock.Mock {
+	offset := 0
+	limit := 0
+	if v := query.Get("offset"); v != "" {
+		fmt.Sscanf(v, "%d", &offset)
+	}
+	if v := query.Get("limit"); v != "" {
+		fmt.Sscanf(v, "%d", &limit)
+	}
+	if offset <= 0 && limit <= 0 {
+		return mocks
+	}
+	if offset > 0 {
+		if offset >= len(mocks) {
+			return nil
+		}
+		mocks = mocks[offset:]
+	}
+	if limit > 0 && limit < len(mocks) {
+		mocks = mocks[:limit]
+	}
+	return mocks
+}
+
 // applyMockFilter filters mocks in-memory based on filter criteria.
 func applyMockFilter(mocks []*mock.Mock, filter *MockFilter) []*mock.Mock {
 	if filter == nil {
@@ -511,9 +536,13 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 		}
 		mocks = applyMockFilter(mocks, filter)
 
+		// Apply pagination
+		total := len(mocks)
+		mocks = applyPagination(mocks, query)
+
 		writeJSON(w, http.StatusOK, MocksListResponse{
 			Mocks: mocks,
-			Total: len(mocks),
+			Total: total,
 			Count: len(mocks),
 		})
 		return
@@ -567,9 +596,12 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	total := len(mocks)
+	mocks = applyPagination(mocks, query)
+
 	writeJSON(w, http.StatusOK, MocksListResponse{
 		Mocks: mocks,
-		Total: len(mocks),
+		Total: total,
 		Count: len(mocks),
 	})
 }
