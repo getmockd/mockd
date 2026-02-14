@@ -770,6 +770,9 @@ func startServers(sctx *serveContext) error {
 
 	// Start the mock server
 	if err := sctx.server.Start(); err != nil {
+		if isAddrInUseError(err) {
+			return fmt.Errorf("port %d is already in use — try a different port with --port or check what's using it: lsof -i :%d", f.port, f.port)
+		}
 		return fmt.Errorf("failed to start mock server: %w", err)
 	}
 
@@ -793,6 +796,9 @@ func startServers(sctx *serveContext) error {
 	sctx.adminAPI.SetLogger(sctx.log.With("component", "admin"))
 	if err := sctx.adminAPI.Start(); err != nil {
 		_ = sctx.server.Stop()
+		if isAddrInUseError(err) {
+			return fmt.Errorf("admin port %d is already in use — try a different port with --admin-port or check what's using it: lsof -i :%d", f.adminPort, f.adminPort)
+		}
 		return fmt.Errorf("failed to start admin API: %w", err)
 	}
 

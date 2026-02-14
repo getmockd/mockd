@@ -14,6 +14,7 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
+	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/store/file"
 )
@@ -34,6 +35,15 @@ func RunStart(args []string) error { //nolint:gocyclo // CLI command handler wit
 	// Engine mode flags
 	engineName := fs.String("engine-name", "", "Name for this engine when registering with admin")
 	adminURL := fs.String("admin-url", "", "Admin server URL to register with (enables engine mode)")
+
+	// Logging flags (shared with serve)
+	logLevel := fs.String("log-level", "info", "Log level (debug, info, warn, error)")
+	logFormat := fs.String("log-format", "text", "Log format (text, json)")
+
+	// Daemon/detach flags (shared with serve)
+	detach := fs.Bool("detach", false, "Run server in background (daemon mode)")
+	fs.BoolVar(detach, "d", false, "Run server in background (shorthand)")
+	pidFile := fs.String("pid-file", DefaultPIDPath(), "Path to PID file")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd start [flags]
@@ -91,6 +101,14 @@ Storage flags:
       --data-dir      Data directory for persistent storage (default: ~/.local/share/mockd)
       --no-auth       Disable API key authentication on admin API
 
+Daemon flags:
+  -d, --detach      Run server in background (daemon mode)
+      --pid-file    Path to PID file (default: ~/.mockd/mockd.pid)
+
+Logging flags:
+      --log-level     Log level (debug, info, warn, error) (default: info)
+      --log-format    Log format (text, json) (default: text)
+
 Examples:
   # Start with defaults
   mockd start
@@ -128,10 +146,22 @@ Examples:
 		return err
 	}
 
+	// Handle detach mode (daemon) - re-exec as child and exit
+	if *detach && os.Getenv("MOCKD_CHILD") == "" {
+		return daemonize(args, *pidFile, sf.Port, sf.AdminPort)
+	}
+
 	// Validate --watch requires --load
 	if *watch && *loadDir == "" {
 		return errors.New("--watch requires --load to be specified")
 	}
+
+	// Initialize structured logger
+	log := logging.New(logging.Config{
+		Level:  logging.ParseLevel(*logLevel),
+		Format: logging.ParseFormat(*logFormat),
+	})
+	_ = log // used by engine/admin below
 
 	// Check for port conflicts
 	if err := ports.Check(sf.Port); err != nil {
@@ -186,6 +216,9 @@ Examples:
 
 	// Start the mock server first (before loading mocks via HTTP)
 	if err := server.Start(); err != nil {
+		if isAddrInUseError(err) {
+			return fmt.Errorf("port %d is already in use — try a different port with --port or check what's using it: lsof -i :%d", sf.Port, sf.Port)
+		}
 		return fmt.Errorf("failed to start mock server: %w", err)
 	}
 
@@ -263,6 +296,9 @@ Examples:
 	adminAPI := admin.NewAPI(sf.AdminPort, adminOpts...)
 	if err := adminAPI.Start(); err != nil {
 		_ = server.Stop()
+		if isAddrInUseError(err) {
+			return fmt.Errorf("admin port %d is already in use — try a different port with --admin-port or check what's using it: lsof -i :%d", sf.AdminPort, sf.AdminPort)
+		}
 		return fmt.Errorf("failed to start admin API: %w", err)
 	}
 
@@ -296,6 +332,18 @@ Examples:
 		defer func() { _ = wsManager.StopAll() }()
 
 		fmt.Printf("Engine mode: connected to admin at %s\n", *adminURL)
+	}
+
+	// Write PID file for process management
+	if *pidFile != "" {
+		if err := writePIDFileForServe(*pidFile, "dev", sf.Port, sf.HTTPSPort, sf.AdminPort, sf.ConfigFile, 0); err != nil {
+			output.Warn("failed to write PID file: %v", err)
+		}
+		defer func() {
+			if err := RemovePIDFile(*pidFile); err != nil {
+				output.Warn("failed to remove PID file: %v", err)
+			}
+		}()
 	}
 
 	// Print startup message

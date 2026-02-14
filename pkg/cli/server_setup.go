@@ -4,6 +4,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -387,4 +388,15 @@ func WaitForShutdownWithContext(ctx context.Context, server *engine.Server, admi
 	}
 
 	fmt.Println("Server stopped")
+}
+
+// isAddrInUseError checks if an error is caused by a port already being in use (EADDRINUSE).
+func isAddrInUseError(err error) bool {
+	var sysErr *os.SyscallError
+	if errors.As(err, &sysErr) {
+		return errors.Is(sysErr.Err, syscall.EADDRINUSE)
+	}
+	// Fallback: check error message for common indicators
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "address already in use") || strings.Contains(msg, "eaddrinuse")
 }
