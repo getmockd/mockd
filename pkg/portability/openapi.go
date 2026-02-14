@@ -338,7 +338,7 @@ func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ 
 		Headers:    make(map[string]string),
 	}
 
-	// Set content type header
+	// Set content type header and extract response body from examples or schema.
 	if response != nil {
 		for contentType, mediaType := range response.Content {
 			respDef.Headers["Content-Type"] = contentType
@@ -350,6 +350,9 @@ func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ 
 				resolved := resolveSchemaRef(mediaType.Schema, components)
 				if resolved.Example != nil {
 					bodyBytes, _ := json.MarshalIndent(resolved.Example, "", "  ")
+					respDef.Body = string(bodyBytes)
+				} else if example := generateExampleFromSchema(resolved, components); example != nil {
+					bodyBytes, _ := json.MarshalIndent(example, "", "  ")
 					respDef.Body = string(bodyBytes)
 				}
 			}
@@ -785,6 +788,115 @@ func parseStatusCode(s string) int {
 		return code
 	}
 	return 200
+}
+
+// generateExampleFromSchema generates an example value from a JSON Schema.
+// It handles objects (from properties), arrays (from items), and primitive types.
+// Returns nil if no meaningful example can be generated.
+func generateExampleFromSchema(schema *Schema, components *OpenAPIComponents) interface{} {
+	if schema == nil {
+		return nil
+	}
+
+	// If the schema itself has an example, use it directly.
+	if schema.Example != nil {
+		return schema.Example
+	}
+
+	// Resolve $ref if present.
+	if schema.Ref != "" {
+		resolved := resolveSchemaRef(schema, components)
+		if resolved == schema {
+			return nil // Couldn't resolve
+		}
+		return generateExampleFromSchema(resolved, components)
+	}
+
+	switch schema.Type {
+	case "object":
+		if len(schema.Properties) == 0 {
+			return nil
+		}
+		obj := make(map[string]interface{}, len(schema.Properties))
+		for name, prop := range schema.Properties {
+			resolved := resolveSchemaRef(prop, components)
+			if resolved != nil && resolved.Example != nil {
+				obj[name] = resolved.Example
+			} else {
+				obj[name] = defaultForType(resolved)
+			}
+		}
+		return obj
+
+	case "array":
+		if schema.Items != nil {
+			item := generateExampleFromSchema(schema.Items, components)
+			if item != nil {
+				return []interface{}{item}
+			}
+		}
+		return []interface{}{}
+
+	case "string":
+		return "string"
+	case "integer":
+		return 0
+	case "number":
+		return 0.0
+	case "boolean":
+		return true
+
+	default:
+		// If type is empty but properties exist, treat as object.
+		if len(schema.Properties) > 0 {
+			obj := make(map[string]interface{}, len(schema.Properties))
+			for name, prop := range schema.Properties {
+				resolved := resolveSchemaRef(prop, components)
+				if resolved != nil && resolved.Example != nil {
+					obj[name] = resolved.Example
+				} else {
+					obj[name] = defaultForType(resolved)
+				}
+			}
+			return obj
+		}
+		return nil
+	}
+}
+
+// defaultForType returns a default placeholder value for a schema type.
+func defaultForType(schema *Schema) interface{} {
+	if schema == nil {
+		return nil
+	}
+	if schema.Example != nil {
+		return schema.Example
+	}
+	switch schema.Type {
+	case "string":
+		if schema.Format == "date-time" {
+			return "2024-01-01T00:00:00Z"
+		}
+		if schema.Format == "email" {
+			return "user@example.com"
+		}
+		if schema.Format == "uuid" {
+			return "00000000-0000-0000-0000-000000000000"
+		}
+		return "string"
+	case "integer":
+		return 0
+	case "number":
+		return 0.0
+	case "boolean":
+		return true
+	case "array":
+		return []interface{}{}
+	case "object":
+		return map[string]interface{}{}
+	default:
+		return nil
+	}
 }
 
 // generateDefaultBody generates a default response body for a status code.
