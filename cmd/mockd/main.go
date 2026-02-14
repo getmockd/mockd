@@ -174,9 +174,7 @@ func run(args []string) error {
 		command = args[0]
 		cmdArgs = args[1:]
 	default:
-		// Unknown argument, try serve
-		command = "serve"
-		cmdArgs = args
+		return fmt.Errorf("unknown command: %s\n\nRun 'mockd --help' for usage", args[0])
 	}
 
 	cmd, ok := reg.lookup(command)
