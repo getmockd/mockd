@@ -503,6 +503,9 @@ func (mm *MockManager) registerSOAPMock(m *mock.Mock) error {
 	if err != nil {
 		return fmt.Errorf("failed to create SOAP handler: %w", err)
 	}
+	if mm.protocolManager != nil && mm.protocolManager.requestLogger != nil {
+		handler.SetRequestLogger(mm.protocolManager.requestLogger)
+	}
 	mm.handler.RegisterSOAPHandler(cfg.Path, handler)
 
 	mm.log.Info("registered SOAP handler", "path", cfg.Path, "name", cfg.Name)
