@@ -104,7 +104,7 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -231,7 +231,7 @@ func (a *API) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -313,6 +313,16 @@ func (a *API) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 		a.logger().Error("failed to get workspace for delete", "error", err, "workspaceID", id)
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
+	}
+
+	// Cascade-delete mocks belonging to this workspace
+	if mockStore := a.getMockStore(); mockStore != nil {
+		mocks, listErr := mockStore.List(ctx, &store.MockFilter{WorkspaceID: id})
+		if listErr == nil {
+			for _, m := range mocks {
+				_ = mockStore.Delete(ctx, m.ID)
+			}
+		}
 	}
 
 	// Delete from store
