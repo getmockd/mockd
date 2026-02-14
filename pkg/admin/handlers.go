@@ -343,13 +343,14 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	}
 
 	// Forward to engine for runtime registration (starts gRPC/MQTT servers, registers handlers).
-	if err := engine.ImportConfig(ctx, req.Config, req.Replace); err != nil {
+	importResult, err := engine.ImportConfig(ctx, req.Config, req.Replace)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "import_error", sanitizeError(err, a.logger(), "import config"))
 		return
 	}
 
-	// Count successfully imported mocks.
-	imported = len(req.Config.Mocks)
+	// Use the engine's actual import counts, not the submitted count.
+	imported = importResult.Imported
 
 	// Get the updated state
 	collection, _ := engine.ExportConfig(ctx, "imported")
@@ -364,6 +365,10 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	}
 	if len(req.Config.StatefulResources) > 0 {
 		response["statefulResources"] = len(req.Config.StatefulResources)
+	}
+	if len(importResult.Errors) > 0 {
+		response["warnings"] = importResult.Errors
+		response["message"] = fmt.Sprintf("Imported %d of %d mocks (%d failed)", imported, importResult.Total, len(importResult.Errors))
 	}
 	writeJSON(w, http.StatusOK, response)
 }

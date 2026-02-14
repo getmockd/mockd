@@ -593,11 +593,18 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 		s.engine.ClearMocks()
 	}
 
-	// Import mocks
+	// Import mocks, collecting per-mock errors so the caller knows which
+	// mocks failed and why (e.g., proto file not found, port in use).
 	imported := 0
-	for _, mock := range req.Config.Mocks {
+	var importErrors []map[string]string
+	for i, mock := range req.Config.Mocks {
 		if err := s.engine.AddMock(mock); err != nil {
-			s.log.Warn("failed to import mock", "id", mock.ID, "error", err)
+			s.log.Warn("failed to import mock", "id", mock.ID, "index", i, "error", err)
+			importErrors = append(importErrors, map[string]string{
+				"index": strconv.Itoa(i),
+				"id":    mock.ID,
+				"error": err.Error(),
+			})
 			continue
 		}
 		imported++
@@ -617,10 +624,14 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]any{
 		"imported": imported,
-		"message":  fmt.Sprintf("imported %d mocks", imported),
+		"total":    len(req.Config.Mocks),
+		"message":  fmt.Sprintf("imported %d of %d mocks", imported, len(req.Config.Mocks)),
 	}
 	if statefulCount > 0 {
 		response["statefulResources"] = statefulCount
+	}
+	if len(importErrors) > 0 {
+		response["errors"] = importErrors
 	}
 
 	writeJSON(w, http.StatusOK, response)

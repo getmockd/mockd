@@ -644,7 +644,7 @@ func (a *API) syncPersistedStatefulResources() {
 		StatefulResources: resources,
 	}
 
-	if err := client.ImportConfig(ctx, collection, false); err != nil {
+	if _, err := client.ImportConfig(ctx, collection, false); err != nil {
 		a.logger().Warn("failed to sync persisted stateful resources to engine", "error", err)
 	}
 }

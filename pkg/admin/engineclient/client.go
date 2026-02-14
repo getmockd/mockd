@@ -405,22 +405,38 @@ func (c *Client) ExportConfig(ctx context.Context, name string) (*config.MockCol
 	return &collection, nil
 }
 
-// ImportConfig imports a configuration to the engine.
-func (c *Client) ImportConfig(ctx context.Context, collection *config.MockCollection, replace bool) error {
+// ImportResult contains the result of a config import operation.
+type ImportResult struct {
+	Imported int                 `json:"imported"`
+	Total    int                 `json:"total"`
+	Message  string              `json:"message"`
+	Errors   []map[string]string `json:"errors,omitempty"`
+}
+
+// ImportConfig imports a configuration to the engine and returns the result
+// including any per-mock errors that occurred during import.
+func (c *Client) ImportConfig(ctx context.Context, collection *config.MockCollection, replace bool) (*ImportResult, error) {
 	body := map[string]interface{}{
 		"config":  collection,
 		"replace": replace,
 	}
 	resp, err := c.post(ctx, "/config", body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return c.parseError(resp)
+		return nil, c.parseError(resp)
 	}
-	return nil
+
+	var result ImportResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		// Response decoded fine on the HTTP side; the import succeeded
+		// even if we can't parse the detailed result.
+		return &ImportResult{Imported: len(collection.Mocks), Total: len(collection.Mocks)}, nil
+	}
+	return &result, nil
 }
 
 // GetRequest returns a specific request log entry.

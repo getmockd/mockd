@@ -190,7 +190,7 @@ func (a *API) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	// Import the generated mocks into the engine via HTTP client
-	if err := engine.ImportConfig(r.Context(), collection, false); err != nil {
+	if _, err := engine.ImportConfig(r.Context(), collection, false); err != nil {
 		writeError(w, http.StatusInternalServerError, "import_error", sanitizeError(err, a.logger(), "import template mocks"))
 		return
 	}

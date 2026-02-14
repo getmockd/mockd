@@ -576,18 +576,24 @@ func TestExportConfig_EmptyName(t *testing.T) {
 }
 
 func TestImportConfig_Success(t *testing.T) {
-	_, c := mockServer(t, jsonHandler(t, 200, nil))
+	_, c := mockServer(t, jsonHandler(t, 200, map[string]any{"imported": 1, "total": 1}))
 
-	err := c.ImportConfig(context.Background(), &config.MockCollection{Name: "test"}, false)
+	result, err := c.ImportConfig(context.Background(), &config.MockCollection{Name: "test"}, false)
 	if err != nil {
 		t.Errorf("ImportConfig() error = %v, want nil", err)
+	}
+	if result == nil {
+		t.Fatal("ImportConfig() result = nil, want non-nil")
+	}
+	if result.Imported != 1 {
+		t.Errorf("ImportConfig() imported = %d, want 1", result.Imported)
 	}
 }
 
 func TestImportConfig_Error(t *testing.T) {
 	_, c := mockServer(t, jsonHandler(t, 400, ErrorResponse{Error: "bad_request", Message: "invalid config"}))
 
-	err := c.ImportConfig(context.Background(), &config.MockCollection{}, false)
+	_, err := c.ImportConfig(context.Background(), &config.MockCollection{}, false)
 	if err == nil {
 		t.Error("ImportConfig() error = nil, want error for 400")
 	}

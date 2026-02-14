@@ -304,43 +304,37 @@ func (mm *MockManager) registerHandlerLocked(cfg *config.MockConfiguration) erro
 	case mock.TypeWebSocket:
 		if cfg.WebSocket != nil {
 			if err := mm.registerWebSocketMock(cfg); err != nil {
-				mm.log.Warn("failed to register WebSocket handler", "name", cfg.Name, "error", err)
-				// WebSocket uses shared HTTP port, don't fail the operation
+				return fmt.Errorf("failed to register WebSocket handler: %w", err)
 			}
 		}
 	case mock.TypeGraphQL:
 		if cfg.GraphQL != nil {
 			if err := mm.registerGraphQLMock(cfg); err != nil {
-				mm.log.Warn("failed to register GraphQL handler", "name", cfg.Name, "error", err)
-				// GraphQL uses shared HTTP port, don't fail the operation
+				return fmt.Errorf("failed to register GraphQL handler: %w", err)
 			}
 		}
 	case mock.TypeSOAP:
 		if cfg.SOAP != nil {
 			if err := mm.registerSOAPMock(cfg); err != nil {
-				mm.log.Warn("failed to register SOAP handler", "name", cfg.Name, "error", err)
-				// SOAP uses shared HTTP port, don't fail the operation
+				return fmt.Errorf("failed to register SOAP handler: %w", err)
 			}
 		}
 	case mock.TypeMQTT:
 		if cfg.MQTT != nil {
 			if err := mm.registerMQTTMock(cfg); err != nil {
-				// MQTT requires exclusive port binding - propagate the error
 				return fmt.Errorf("failed to start MQTT broker: %w", err)
 			}
 		}
 	case mock.TypeGRPC:
 		if cfg.GRPC != nil {
 			if err := mm.registerGRPCMock(cfg); err != nil {
-				// gRPC requires exclusive port binding - propagate the error
 				return fmt.Errorf("failed to start gRPC server: %w", err)
 			}
 		}
 	case mock.TypeOAuth:
 		if cfg.OAuth != nil {
 			if err := mm.registerOAuthMock(cfg); err != nil {
-				mm.log.Warn("failed to register OAuth handler", "name", cfg.Name, "error", err)
-				// OAuth uses shared HTTP port, don't fail the operation
+				return fmt.Errorf("failed to register OAuth handler: %w", err)
 			}
 		}
 		// HTTP mocks are handled by the default request handler via store lookup
