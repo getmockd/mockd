@@ -762,6 +762,145 @@ func TestHandleToken(t *testing.T) {
 	})
 }
 
+func TestDefaultScopesAppliedWhenScopeOmitted(t *testing.T) {
+	provider, _ := NewProvider(testConfig())
+	handler := NewHandler(provider)
+
+	t.Run("client_credentials uses default scopes when scope omitted", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("grant_type", "client_credentials")
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "test-secret")
+		// NOTE: No scope parameter
+
+		req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleToken(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var response TokenResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		expectedScope := "openid profile email"
+		if response.Scope != expectedScope {
+			t.Errorf("expected scope=%q, got %q", expectedScope, response.Scope)
+		}
+	})
+
+	t.Run("password grant uses default scopes when scope omitted", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("grant_type", "password")
+		form.Set("username", "testuser")
+		form.Set("password", "testpass")
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "test-secret")
+		// NOTE: No scope parameter
+
+		req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleToken(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var response TokenResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		expectedScope := "openid profile email"
+		if response.Scope != expectedScope {
+			t.Errorf("expected scope=%q, got %q", expectedScope, response.Scope)
+		}
+	})
+
+	t.Run("authorization_code grant uses default scopes when auth code has no scope", func(t *testing.T) {
+		code := &AuthorizationCode{
+			Code:        "no-scope-auth-code",
+			ClientID:    "test-client",
+			RedirectURI: "https://app.example.com/callback",
+			Scope:       "", // No scope in the auth code
+			UserID:      "user-123",
+			ExpiresAt:   time.Now().Add(10 * time.Minute),
+		}
+		provider.StoreAuthorizationCode(code)
+
+		form := url.Values{}
+		form.Set("grant_type", "authorization_code")
+		form.Set("code", "no-scope-auth-code")
+		form.Set("redirect_uri", "https://app.example.com/callback")
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "test-secret")
+
+		req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleToken(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var response TokenResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		expectedScope := "openid profile email"
+		if response.Scope != expectedScope {
+			t.Errorf("expected scope=%q, got %q", expectedScope, response.Scope)
+		}
+	})
+
+	t.Run("refresh_token grant uses default scopes when original scope is empty", func(t *testing.T) {
+		provider.StoreRefreshToken(&RefreshTokenData{
+			Token:     "no-scope-refresh-token",
+			ClientID:  "test-client",
+			UserID:    "user-123",
+			Scope:     "", // Original token had no scope
+			ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+		})
+
+		form := url.Values{}
+		form.Set("grant_type", "refresh_token")
+		form.Set("refresh_token", "no-scope-refresh-token")
+		form.Set("client_id", "test-client")
+		form.Set("client_secret", "test-secret")
+		// NOTE: No scope parameter
+
+		req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+
+		handler.HandleToken(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var response TokenResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		expectedScope := "openid profile email"
+		if response.Scope != expectedScope {
+			t.Errorf("expected scope=%q, got %q", expectedScope, response.Scope)
+		}
+	})
+}
+
 func TestHandleUserInfo(t *testing.T) {
 	provider, _ := NewProvider(testConfig())
 	handler := NewHandler(provider)

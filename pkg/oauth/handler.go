@@ -230,6 +230,11 @@ func (h *Handler) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 	// Implicit flow (response_type=token)
 	if responseType == ResponseTypeToken {
+		// If no scope was requested, populate with default scopes
+		if scope == "" && len(h.provider.config.DefaultScopes) > 0 {
+			scope = strings.Join(h.provider.config.DefaultScopes, " ")
+		}
+
 		userID := h.getDefaultUserID()
 
 		// Generate access token
@@ -492,6 +497,11 @@ func (h *Handler) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request
 	// Use original scope if not specified
 	if scope == "" {
 		scope = refreshData.Scope
+	}
+
+	// If scope is still empty after refresh data fallback, use default scopes
+	if scope == "" && len(h.provider.config.DefaultScopes) > 0 {
+		scope = strings.Join(h.provider.config.DefaultScopes, " ")
 	}
 
 	// Generate new access token
