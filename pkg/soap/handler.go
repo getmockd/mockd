@@ -81,7 +81,8 @@ func NewHandler(config *SOAPConfig) (*Handler, error) {
 	return h, nil
 }
 
-// loadWSDL loads WSDL content from file or inline config.
+// loadWSDL loads WSDL content from file, inline config, or auto-generates
+// a minimal WSDL from the configured operations.
 // Returns an error if a file is configured but cannot be read.
 func (h *Handler) loadWSDL() error {
 	if h.config.WSDLFile != "" {
@@ -97,8 +98,82 @@ func (h *Handler) loadWSDL() error {
 		h.wsdlData = data
 	} else if h.config.WSDL != "" {
 		h.wsdlData = []byte(h.config.WSDL)
+	} else if len(h.config.Operations) > 0 {
+		// Auto-generate a minimal WSDL from configured operations
+		h.wsdlData = h.generateWSDL()
 	}
 	return nil
+}
+
+// generateWSDL creates a minimal WSDL 1.1 document from the configured operations.
+// This provides a basic service description for tools that need WSDL introspection.
+func (h *Handler) generateWSDL() []byte {
+	serviceName := h.config.Name
+	if serviceName == "" {
+		serviceName = "MockdService"
+	}
+	tns := "http://mockd.dev/soap/" + serviceName
+
+	var messages, portOps, bindingOps, soapActions strings.Builder
+
+	for opName, opCfg := range h.config.Operations {
+		// Message definitions
+		fmt.Fprintf(&messages, `    <wsdl:message name="%sRequest"/>
+    <wsdl:message name="%sResponse"/>
+`, opName, opName)
+
+		// Port type operations
+		fmt.Fprintf(&portOps, `      <wsdl:operation name="%s">
+        <wsdl:input message="tns:%sRequest"/>
+        <wsdl:output message="tns:%sResponse"/>
+      </wsdl:operation>
+`, opName, opName, opName)
+
+		// Binding operations with SOAPAction
+		action := opCfg.SOAPAction
+		if action == "" {
+			action = tns + "/" + opName
+		}
+		_ = soapActions // suppress unused warning
+		fmt.Fprintf(&bindingOps, `      <wsdl:operation name="%s">
+        <soap:operation soapAction="%s"/>
+        <wsdl:input><soap:body use="literal"/></wsdl:input>
+        <wsdl:output><soap:body use="literal"/></wsdl:output>
+      </wsdl:operation>
+`, opName, action)
+	}
+
+	location := "http://localhost:4280" + h.config.Path
+
+	wsdl := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions
+    xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+    xmlns:tns="%s"
+    targetNamespace="%s"
+    name="%s">
+
+%s
+    <wsdl:portType name="%sPortType">
+%s    </wsdl:portType>
+
+    <wsdl:binding name="%sBinding" type="tns:%sPortType">
+      <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+%s    </wsdl:binding>
+
+    <wsdl:service name="%s">
+      <wsdl:port name="%sPort" binding="tns:%sBinding">
+        <soap:address location="%s"/>
+      </wsdl:port>
+    </wsdl:service>
+</wsdl:definitions>`,
+		tns, tns, serviceName,
+		messages.String(),
+		serviceName, portOps.String(),
+		serviceName, serviceName, bindingOps.String(),
+		serviceName, serviceName, serviceName, location)
+
+	return []byte(wsdl)
 }
 
 // ServeHTTP implements the http.Handler interface.
