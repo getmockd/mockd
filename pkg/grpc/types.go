@@ -1,5 +1,12 @@
 package grpc
 
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 // GRPCConfig represents a gRPC endpoint configuration for the mock server.
 // It defines the port, proto files, and service configurations for handling
 // gRPC requests.
@@ -154,6 +161,97 @@ func (c *GRPCConfig) Validate() error {
 	if c.ProtoFile == "" && len(c.ProtoFiles) == 0 {
 		return ErrMissingProtoFile
 	}
+	return nil
+}
+
+// grpcStatusName maps integer status codes to their string names.
+var grpcStatusName = func() map[int]string {
+	m := make(map[int]string, len(GRPCStatusCode))
+	for name, code := range GRPCStatusCode {
+		m[code] = name
+	}
+	return m
+}()
+
+// UnmarshalJSON allows GRPCErrorConfig.Code to accept both string names
+// (e.g., "NOT_FOUND") and integer codes (e.g., 5).
+func (e *GRPCErrorConfig) UnmarshalJSON(data []byte) error {
+	// Use an alias to avoid infinite recursion
+	type Alias GRPCErrorConfig
+	aux := &struct {
+		Code json.RawMessage `json:"code"`
+		*Alias
+	}{
+		Alias: (*Alias)(e),
+	}
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	if len(aux.Code) == 0 {
+		return nil
+	}
+
+	// Try as string first
+	var codeStr string
+	if err := json.Unmarshal(aux.Code, &codeStr); err == nil {
+		e.Code = strings.ToUpper(codeStr)
+		return nil
+	}
+
+	// Try as number
+	var codeNum int
+	if err := json.Unmarshal(aux.Code, &codeNum); err == nil {
+		if name, ok := grpcStatusName[codeNum]; ok {
+			e.Code = name
+			return nil
+		}
+		return fmt.Errorf("unknown gRPC status code: %d", codeNum)
+	}
+
+	return fmt.Errorf("gRPC error code must be a string name or integer, got: %s", string(aux.Code))
+}
+
+// UnmarshalYAML allows GRPCErrorConfig.Code to accept both string names
+// and integer codes in YAML configuration.
+func (e *GRPCErrorConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Use an alias to avoid infinite recursion
+	type Alias GRPCErrorConfig
+	aux := &struct {
+		Code interface{} `yaml:"code"`
+		*Alias
+	}{
+		Alias: (*Alias)(e),
+	}
+
+	if err := unmarshal(aux); err != nil {
+		return err
+	}
+
+	switch v := aux.Code.(type) {
+	case string:
+		e.Code = strings.ToUpper(v)
+	case int:
+		if name, ok := grpcStatusName[v]; ok {
+			e.Code = name
+		} else {
+			return fmt.Errorf("unknown gRPC status code: %d", v)
+		}
+	case float64:
+		// YAML sometimes decodes integers as float64
+		code := int(v)
+		if name, ok := grpcStatusName[code]; ok {
+			e.Code = name
+		} else {
+			return fmt.Errorf("unknown gRPC status code: %s", strconv.FormatFloat(v, 'f', -1, 64))
+		}
+	case nil:
+		// Code not specified
+	default:
+		return fmt.Errorf("gRPC error code must be a string name or integer, got: %T", v)
+	}
+
 	return nil
 }
 
