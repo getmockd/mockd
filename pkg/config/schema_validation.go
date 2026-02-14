@@ -294,7 +294,22 @@ func validateHTTPMock(http *HTTPMockConfig, path string, result *SchemaValidatio
 		result.AddError(path+".matcher.path", "either path or pathPattern is required")
 	}
 
-	// Response validation
+	// Validate HTTP method if specified
+	if http.Matcher.Method != "" {
+		validMethods := map[string]bool{
+			"GET": true, "POST": true, "PUT": true, "DELETE": true,
+			"PATCH": true, "HEAD": true, "OPTIONS": true, "TRACE": true,
+		}
+		method := strings.ToUpper(http.Matcher.Method)
+		if !validMethods[method] {
+			result.AddError(path+".matcher.method", fmt.Sprintf("invalid HTTP method %q, must be one of: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, TRACE", http.Matcher.Method))
+		}
+	}
+
+	// Response validation: at least a status code should be present
+	if http.Response.StatusCode == 0 && http.Response.Body == "" && http.Response.BodyFile == "" {
+		result.AddError(path+".response", "response should specify at least a statusCode, body, or bodyFile")
+	}
 	if http.Response.StatusCode != 0 && (http.Response.StatusCode < 100 || http.Response.StatusCode > 599) {
 		result.AddError(path+".response.statusCode", fmt.Sprintf("invalid status code %d, must be 100-599", http.Response.StatusCode))
 	}

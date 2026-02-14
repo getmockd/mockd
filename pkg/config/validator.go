@@ -347,6 +347,59 @@ func (s *ServerConfiguration) Validate() error { //nolint:gocyclo // comprehensi
 	return nil
 }
 
+// ValidatePartial validates only the fields that are actually set in a
+// ServerConfiguration. This is used for config files where the serverConfig
+// section may only specify supplementary settings (like rateLimit, CORS)
+// while ports and other required fields come from CLI flags.
+func (s *ServerConfiguration) ValidatePartial() error {
+	// Validate port values if specified (must be in valid range)
+	if s.HTTPPort != 0 && (s.HTTPPort < 0 || s.HTTPPort >= 65536) {
+		return &ValidationError{Field: "serverConfig.httpPort", Message: "httpPort must be between 0 and 65535"}
+	}
+	if s.HTTPSPort != 0 && (s.HTTPSPort < 0 || s.HTTPSPort >= 65536) {
+		return &ValidationError{Field: "serverConfig.httpsPort", Message: "httpsPort must be between 0 and 65535"}
+	}
+	if s.AdminPort != 0 && (s.AdminPort < 0 || s.AdminPort >= 65536) {
+		return &ValidationError{Field: "serverConfig.adminPort", Message: "adminPort must be between 0 and 65535"}
+	}
+
+	// Validate size/timeout limits if specified
+	if s.MaxBodySize < 0 {
+		return &ValidationError{Field: "serverConfig.maxBodySize", Message: "maxBodySize must be >= 0"}
+	}
+	if s.MaxBodySize > 100*1024*1024 {
+		return &ValidationError{Field: "serverConfig.maxBodySize", Message: "maxBodySize must be <= 104857600 (100MB)"}
+	}
+	if s.MaxLogEntries < 0 {
+		return &ValidationError{Field: "serverConfig.maxLogEntries", Message: "maxLogEntries must be >= 0"}
+	}
+	if s.ReadTimeout < 0 {
+		return &ValidationError{Field: "serverConfig.readTimeout", Message: "readTimeout must be >= 0"}
+	}
+	if s.WriteTimeout < 0 {
+		return &ValidationError{Field: "serverConfig.writeTimeout", Message: "writeTimeout must be >= 0"}
+	}
+
+	// Validate nested configs if present
+	if s.TLS != nil {
+		if err := s.TLS.Validate(); err != nil {
+			return err
+		}
+	}
+	if s.MTLS != nil {
+		if err := s.MTLS.Validate(); err != nil {
+			return err
+		}
+	}
+	if s.Audit != nil {
+		if err := ValidateAuditConfig(s.Audit); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // Validate checks if the MockCollection is valid.
 func (c *MockCollection) Validate() error {
 	// Version must be "1.0" (only supported version initially)
@@ -381,9 +434,11 @@ func (c *MockCollection) Validate() error {
 		ids[mock.ID] = true
 	}
 
-	// Validate ServerConfig if present
+	// Validate ServerConfig fields that are present.
+	// Skip full Validate() because config files may only specify supplementary
+	// settings (like rateLimit, CORS) without port values — those come from CLI flags.
 	if c.ServerConfig != nil {
-		if err := c.ServerConfig.Validate(); err != nil {
+		if err := c.ServerConfig.ValidatePartial(); err != nil {
 			return err
 		}
 	}
