@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
@@ -27,6 +28,10 @@ func (a *API) handleStateReset(w http.ResponseWriter, r *http.Request, engine *e
 	resourceName := r.URL.Query().Get("resource")
 
 	if err := engine.ResetState(ctx, resourceName); err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Resource not found")
+			return
+		}
 		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "reset state"))
 		return
 	}
@@ -44,6 +49,10 @@ func (a *API) handleResetStateResource(w http.ResponseWriter, r *http.Request, e
 	}
 
 	if err := engine.ResetState(ctx, name); err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Resource not found")
+			return
+		}
 		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "reset state resource"))
 		return
 	}

@@ -105,6 +105,9 @@ func (h *Handler) handleStatefulCreate(w http.ResponseWriter, r *http.Request, r
 		if conflictErr, ok := err.(*stateful.ConflictError); ok {
 			return h.writeStatefulError(w, http.StatusConflict, "resource already exists", resource.Name(), conflictErr.ID)
 		}
+		if capErr, ok := err.(*stateful.CapacityError); ok {
+			return h.writeStatefulErrorWithHint(w, capErr.StatusCode(), capErr.Error(), resource.Name(), "", capErr.Hint())
+		}
 		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), "")
 	}
 

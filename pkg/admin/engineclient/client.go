@@ -478,6 +478,39 @@ func (c *Client) SetChaos(ctx context.Context, cfg *ChaosConfig) error {
 	return nil
 }
 
+// GetChaosStats returns chaos injection statistics.
+func (c *Client) GetChaosStats(ctx context.Context) (*ChaosStats, error) {
+	resp, err := c.get(ctx, "/chaos/stats")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var stats ChaosStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("failed to decode chaos stats: %w", err)
+	}
+	return &stats, nil
+}
+
+// ResetChaosStats resets chaos injection statistics.
+func (c *Client) ResetChaosStats(ctx context.Context) error {
+	resp, err := c.post(ctx, "/chaos/stats/reset", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
 // GetStateOverview returns overview of all stateful resources.
 func (c *Client) GetStateOverview(ctx context.Context) (*StateOverview, error) {
 	resp, err := c.get(ctx, "/state")
@@ -510,6 +543,9 @@ func (c *Client) ResetState(ctx context.Context, resourceName string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
 	}
