@@ -352,10 +352,10 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 	// Determine body content - check inline body first, then file
 	body := resp.Body
 	if body == "" && resp.BodyFile != "" {
-		// Prevent path traversal and absolute path attacks
-		cleanPath, safe := util.SafeFilePath(resp.BodyFile)
+		// Prevent path traversal but allow absolute paths (bodyFile is config-sourced)
+		cleanPath, safe := util.SafeFilePathAllowAbsolute(resp.BodyFile)
 		if !safe {
-			h.log.Error("unsafe path in bodyFile (traversal or absolute)", "file", resp.BodyFile)
+			h.log.Error("unsafe path in bodyFile (traversal)", "file", resp.BodyFile)
 		} else {
 			data, err := os.ReadFile(cleanPath)
 			if err != nil {

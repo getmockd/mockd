@@ -161,6 +161,25 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 		return
 	}
 
+	// If dryRun=true, validate and return a preview without applying changes.
+	if r.URL.Query().Get("dryRun") == "true" {
+		mockCount := 0
+		for _, m := range req.Config.Mocks {
+			if m != nil {
+				mockCount++
+			}
+		}
+		result := map[string]any{
+			"dryRun": true,
+			"mocks":  mockCount,
+		}
+		if len(req.Config.StatefulResources) > 0 {
+			result["statefulResources"] = len(req.Config.StatefulResources)
+		}
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+
 	mockStore := a.getMockStore()
 
 	// Default workspaceId for imported mocks (consistent with POST /mocks and POST /mocks/bulk).

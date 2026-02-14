@@ -317,12 +317,12 @@ func (r *HTTPResponse) Validate() error {
 		}
 	}
 
-	// Validate bodyFile path safety (reject traversal and absolute paths)
+	// Validate bodyFile path safety (reject traversal but allow absolute paths)
 	if r.BodyFile != "" {
-		if _, safe := util.SafeFilePath(r.BodyFile); !safe {
+		if _, safe := util.SafeFilePathAllowAbsolute(r.BodyFile); !safe {
 			return &ValidationError{
 				Field:   "response.bodyFile",
-				Message: "path must be relative and cannot contain '..'",
+				Message: "path cannot contain '..'",
 			}
 		}
 	}
