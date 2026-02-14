@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -341,14 +342,6 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 		w.Header().Set(name, value)
 	}
 
-	// Set default Content-Type if not specified
-	if w.Header().Get("Content-Type") == "" {
-		w.Header().Set("Content-Type", "text/plain")
-	}
-
-	// Write status code
-	w.WriteHeader(resp.StatusCode)
-
 	// Determine body content - check inline body first, then file
 	body := resp.Body
 	if body == "" && resp.BodyFile != "" {
@@ -366,16 +359,43 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 		}
 	}
 
-	// Write body with template processing
-	if body != "" {
-		if tmplCtx != nil {
-			if processedBody, err := h.templateEngine.Process(body, tmplCtx); err == nil {
-				body = processedBody
-			}
-			// On error, use the original body (graceful degradation)
+	// Process body templates before setting Content-Type (so detection works on final content)
+	if body != "" && tmplCtx != nil {
+		if processedBody, err := h.templateEngine.Process(body, tmplCtx); err == nil {
+			body = processedBody
 		}
+		// On error, use the original body (graceful degradation)
+	}
+
+	// Set default Content-Type based on body content if not specified
+	if w.Header().Get("Content-Type") == "" {
+		if looksLikeJSON(body) {
+			w.Header().Set("Content-Type", "application/json")
+		} else if looksLikeXML(body) {
+			w.Header().Set("Content-Type", "application/xml")
+		} else {
+			w.Header().Set("Content-Type", "text/plain")
+		}
+	}
+
+	// Write status code and body
+	w.WriteHeader(resp.StatusCode)
+	if body != "" {
 		_, _ = w.Write([]byte(body))
 	}
+}
+
+// looksLikeJSON returns true if the string appears to be JSON content.
+func looksLikeJSON(s string) bool {
+	s = strings.TrimSpace(s)
+	return (strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")) ||
+		(strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]"))
+}
+
+// looksLikeXML returns true if the string appears to be XML content.
+func looksLikeXML(s string) bool {
+	s = strings.TrimSpace(s)
+	return strings.HasPrefix(s, "<?xml") || strings.HasPrefix(s, "<")
 }
 
 // validateHTTPRequest validates an HTTP request against validation rules.
