@@ -699,7 +699,9 @@ func (e *Executor) executeSelectionSetWithDoc(ctx context.Context, doc *ast.Quer
 			// Resolve the field
 			value, err := e.resolveField(ctx, s, resolver, variables)
 			if err != nil {
-				err.Path = []interface{}{alias}
+				if err.Path == nil {
+					err.Path = []interface{}{alias}
+				}
 				errors = append(errors, err)
 				result[alias] = nil
 			} else {
