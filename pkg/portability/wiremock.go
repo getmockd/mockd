@@ -130,6 +130,85 @@ func (i *WireMockImporter) convertMappings(mappings []WireMockMapping) (*config.
 	return result, nil
 }
 
+// applyRequestMatching converts WireMock request matching rules into the mockd
+// HTTPMatcher, handling URL, headers, query parameters, and body patterns.
+func applyRequestMatching(matcher *mock.HTTPMatcher, req WireMockRequest) {
+	// Method
+	matcher.Method = req.Method
+	if matcher.Method == "" {
+		matcher.Method = "GET" // Default to GET
+	}
+
+	// URL path - prefer urlPath over url over urlPattern
+	switch {
+	case req.URLPath != "":
+		matcher.Path = req.URLPath
+	case req.URL != "":
+		// WireMock's url field is an exact URL match that may include query strings.
+		// Split into path and query parameters for correct mockd matching.
+		if qIdx := strings.IndexByte(req.URL, '?'); qIdx >= 0 {
+			matcher.Path = req.URL[:qIdx]
+			if parsed, err := url.ParseQuery(req.URL[qIdx+1:]); err == nil && len(parsed) > 0 {
+				if matcher.QueryParams == nil {
+					matcher.QueryParams = make(map[string]string)
+				}
+				for key, values := range parsed {
+					if len(values) > 0 {
+						matcher.QueryParams[key] = values[0]
+					}
+				}
+			}
+		} else {
+			matcher.Path = req.URL
+		}
+	case req.URLPattern != "":
+		matcher.PathPattern = req.URLPattern
+	case req.URLPathPattern != "":
+		matcher.PathPattern = req.URLPathPattern
+	}
+
+	// Headers — map equalTo to exact match; contains and matches are best-effort
+	// mapped to the same header value (mockd supports exact header matching only,
+	// so contains/matches are imported as the literal pattern for documentation).
+	if len(req.Headers) > 0 {
+		headers := make(map[string]string)
+		for name, m := range req.Headers {
+			switch {
+			case m.EqualTo != "":
+				headers[name] = m.EqualTo
+			case m.Contains != "":
+				headers[name] = m.Contains
+			case m.Matches != "":
+				headers[name] = m.Matches
+			}
+		}
+		if len(headers) > 0 {
+			matcher.Headers = headers
+		}
+	}
+
+	// Query parameters — same approach as headers
+	if len(req.QueryParameters) > 0 {
+		queryParams := make(map[string]string)
+		for name, m := range req.QueryParameters {
+			switch {
+			case m.EqualTo != "":
+				queryParams[name] = m.EqualTo
+			case m.Contains != "":
+				queryParams[name] = m.Contains
+			case m.Matches != "":
+				queryParams[name] = m.Matches
+			}
+		}
+		if len(queryParams) > 0 {
+			matcher.QueryParams = queryParams
+		}
+	}
+
+	// Body patterns
+	applyBodyPatterns(matcher, req.BodyPatterns)
+}
+
 // mappingToMock converts a WireMock mapping to a MockConfiguration.
 func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now time.Time) *config.MockConfiguration {
 	enabled := true
@@ -163,83 +242,8 @@ func (i *WireMockImporter) mappingToMock(mapping WireMockMapping, id int, now ti
 		m.Name = fmt.Sprintf("WireMock Import %d", id)
 	}
 
-	// Convert request matching
-	req := mapping.Request
-
-	// Method
-	m.HTTP.Matcher.Method = req.Method
-	if m.HTTP.Matcher.Method == "" {
-		m.HTTP.Matcher.Method = "GET" // Default to GET
-	}
-
-	// URL path - prefer urlPath over url over urlPattern
-	switch {
-	case req.URLPath != "":
-		m.HTTP.Matcher.Path = req.URLPath
-	case req.URL != "":
-		// WireMock's url field is an exact URL match that may include query strings.
-		// Split into path and query parameters for correct mockd matching.
-		if qIdx := strings.IndexByte(req.URL, '?'); qIdx >= 0 {
-			m.HTTP.Matcher.Path = req.URL[:qIdx]
-			if parsed, err := url.ParseQuery(req.URL[qIdx+1:]); err == nil && len(parsed) > 0 {
-				if m.HTTP.Matcher.QueryParams == nil {
-					m.HTTP.Matcher.QueryParams = make(map[string]string)
-				}
-				for key, values := range parsed {
-					if len(values) > 0 {
-						m.HTTP.Matcher.QueryParams[key] = values[0]
-					}
-				}
-			}
-		} else {
-			m.HTTP.Matcher.Path = req.URL
-		}
-	case req.URLPattern != "":
-		m.HTTP.Matcher.PathPattern = req.URLPattern
-	case req.URLPathPattern != "":
-		m.HTTP.Matcher.PathPattern = req.URLPathPattern
-	}
-
-	// Headers — map equalTo to exact match; contains and matches are best-effort
-	// mapped to the same header value (mockd supports exact header matching only,
-	// so contains/matches are imported as the literal pattern for documentation).
-	if len(req.Headers) > 0 {
-		headers := make(map[string]string)
-		for name, matcher := range req.Headers {
-			switch {
-			case matcher.EqualTo != "":
-				headers[name] = matcher.EqualTo
-			case matcher.Contains != "":
-				headers[name] = matcher.Contains
-			case matcher.Matches != "":
-				headers[name] = matcher.Matches
-			}
-		}
-		if len(headers) > 0 {
-			m.HTTP.Matcher.Headers = headers
-		}
-	}
-
-	// Query parameters — same approach as headers
-	if len(req.QueryParameters) > 0 {
-		queryParams := make(map[string]string)
-		for name, matcher := range req.QueryParameters {
-			switch {
-			case matcher.EqualTo != "":
-				queryParams[name] = matcher.EqualTo
-			case matcher.Contains != "":
-				queryParams[name] = matcher.Contains
-			case matcher.Matches != "":
-				queryParams[name] = matcher.Matches
-			}
-		}
-		if len(queryParams) > 0 {
-			m.HTTP.Matcher.QueryParams = queryParams
-		}
-	}
-
-	// Body patterns
-	applyBodyPatterns(m.HTTP.Matcher, req.BodyPatterns)
+	// Convert request matching into the mock's HTTP matcher.
+	applyRequestMatching(m.HTTP.Matcher, mapping.Request)
 
 	// Convert response
 	resp := mapping.Response

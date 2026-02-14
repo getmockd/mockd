@@ -37,7 +37,7 @@ func (i *CURLImporter) Import(data []byte) (*config.MockCollection, error) {
 	}
 
 	now := time.Now()
-	mock := i.parsedToMock(parsed, 1, now)
+	mock := i.parsedToMock(parsed, now)
 
 	return &config.MockCollection{
 		Version: "1.0",
@@ -231,7 +231,7 @@ func tokenizeCURL(cmd string) []string {
 }
 
 // parsedToMock converts parsed cURL data to a MockConfiguration.
-func (i *CURLImporter) parsedToMock(parsed *curlParsed, id int, now time.Time) *config.MockConfiguration {
+func (i *CURLImporter) parsedToMock(parsed *curlParsed, now time.Time) *config.MockConfiguration {
 	// Parse URL
 	parsedURL, err := url.Parse(parsed.url)
 	if err != nil {

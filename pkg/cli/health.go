@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -65,7 +66,7 @@ Examples:
 		} else {
 			fmt.Fprintf(os.Stderr, "unhealthy: %s\n", FormatConnectionError(err))
 		}
-		return fmt.Errorf("server is not healthy")
+		return errors.New("server is not healthy")
 	}
 
 	result := healthResult{

@@ -85,7 +85,8 @@ func NewHandler(config *SOAPConfig) (*Handler, error) {
 // a minimal WSDL from the configured operations.
 // Returns an error if a file is configured but cannot be read.
 func (h *Handler) loadWSDL() error {
-	if h.config.WSDLFile != "" {
+	switch {
+	case h.config.WSDLFile != "":
 		// Prevent path traversal and absolute path attacks
 		cleanPath, safe := util.SafeFilePathAllowAbsolute(h.config.WSDLFile)
 		if !safe {
@@ -96,9 +97,9 @@ func (h *Handler) loadWSDL() error {
 			return fmt.Errorf("failed to load WSDL file %q: %w", cleanPath, err)
 		}
 		h.wsdlData = data
-	} else if h.config.WSDL != "" {
+	case h.config.WSDL != "":
 		h.wsdlData = []byte(h.config.WSDL)
-	} else if len(h.config.Operations) > 0 {
+	case len(h.config.Operations) > 0:
 		// Auto-generate a minimal WSDL from configured operations
 		h.wsdlData = h.generateWSDL()
 	}
