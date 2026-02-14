@@ -473,7 +473,7 @@ func (h *Handler) validateHTTPRequest(r *http.Request, bodyBytes []byte, pathPar
 	headers := make(map[string]string)
 	for key, values := range r.Header {
 		if len(values) > 0 {
-			headers[key] = values[0]
+			headers[strings.ToLower(key)] = values[0]
 		}
 	}
 
