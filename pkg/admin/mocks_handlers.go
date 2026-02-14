@@ -1142,7 +1142,17 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		writeJSON(w, http.StatusOK, updated)
+		state := "disabled"
+		if newEnabled {
+			state = "enabled"
+		}
+		response := map[string]interface{}{
+			"id":      updated.ID,
+			"action":  "toggled",
+			"message": fmt.Sprintf("Mock %s", state),
+			"mock":    updated,
+		}
+		writeJSON(w, http.StatusOK, response)
 		return
 	}
 
@@ -1175,10 +1185,14 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fallbackState := "disabled"
+	if newEnabled {
+		fallbackState = "enabled"
+	}
 	response := map[string]interface{}{
 		"id":      m.ID,
-		"action":  "updated",
-		"message": fmt.Sprintf("Updated %s mock", m.Type),
+		"action":  "toggled",
+		"message": fmt.Sprintf("Mock %s", fallbackState),
 		"mock":    m,
 	}
 	writeJSON(w, http.StatusOK, response)
