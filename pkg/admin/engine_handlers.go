@@ -204,7 +204,7 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 
 	var req RegisterEngineRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -356,7 +356,7 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 	var req HeartbeatRequest
 	if r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+			writeJSONDecodeError(w, err, a.logger())
 			return
 		}
 	}
@@ -414,7 +414,7 @@ func (a *API) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	var req AssignWorkspaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -444,7 +444,7 @@ func (a *API) handleAddEngineWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	var req AddEngineWorkspaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -544,7 +544,7 @@ func (a *API) handleUpdateEngineWorkspace(w http.ResponseWriter, r *http.Request
 
 	var req UpdateEngineWorkspaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 

@@ -113,7 +113,7 @@ func (a *API) handleEnableTunnel(w http.ResponseWriter, r *http.Request) {
 
 	var req TunnelEnableRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -242,7 +242,7 @@ func (a *API) handleUpdateTunnelConfig(w http.ResponseWriter, r *http.Request) {
 
 	var req TunnelConfigUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -335,7 +335,7 @@ func (a *API) handleTunnelPreview(w http.ResponseWriter, r *http.Request) {
 
 	var req TunnelPreviewRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 

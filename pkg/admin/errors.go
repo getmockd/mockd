@@ -6,6 +6,7 @@ package admin
 import (
 	"errors"
 	"log/slog"
+	"net/http"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 )
@@ -84,4 +85,16 @@ func sanitizeJSONError(err error, log *slog.Logger) string {
 		log.Debug("JSON parsing failed", "error", err)
 	}
 	return ErrMsgInvalidJSON
+}
+
+// writeJSONDecodeError writes the appropriate error response for a JSON decode failure.
+// If the error is caused by the request body exceeding the size limit, it returns 413
+// (Request Entity Too Large) instead of 400.
+func writeJSONDecodeError(w http.ResponseWriter, err error, log *slog.Logger) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		writeError(w, http.StatusRequestEntityTooLarge, "body_too_large", "Request body too large")
+		return
+	}
+	writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, log))
 }

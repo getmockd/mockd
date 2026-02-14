@@ -47,7 +47,7 @@ func (a *API) handleUpdatePreferences(w http.ResponseWriter, r *http.Request) {
 
 	var prefs store.Preferences
 	if err := json.NewDecoder(r.Body).Decode(&prefs); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 

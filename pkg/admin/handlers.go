@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -127,9 +128,10 @@ func (a *API) handleExportConfig(w http.ResponseWriter, r *http.Request, engine 
 	writeJSON(w, http.StatusOK, collection)
 }
 
-// handleImportConfig handles POST /config.
-func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
-	ctx := r.Context()
+// decodeImportRequest reads and decodes a ConfigImportRequest from the HTTP
+// request body, handling both YAML and JSON content types. It writes an HTTP
+// error and returns a non-nil error on failure.
+func (a *API) decodeImportRequest(w http.ResponseWriter, r *http.Request) (*ConfigImportRequest, error) {
 	var req ConfigImportRequest
 
 	// Override the default body limit — config imports can be large.
@@ -141,23 +143,67 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	if strings.Contains(ct, "yaml") {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				writeError(w, http.StatusRequestEntityTooLarge, "body_too_large", "Request body too large")
+				return nil, err
+			}
 			writeError(w, http.StatusBadRequest, "read_error", "Failed to read request body")
-			return
+			return nil, err
 		}
 		if err := yaml.Unmarshal(body, &req); err != nil {
 			a.logger().Debug("YAML parsing failed", "error", err)
 			writeError(w, http.StatusBadRequest, "invalid_yaml", "Invalid YAML in request body")
-			return
+			return nil, err
 		}
 	} else {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
-			return
+			writeJSONDecodeError(w, err, a.logger())
+			return nil, err
 		}
 	}
 
 	if req.Config == nil {
 		writeError(w, http.StatusBadRequest, "missing_config", "config field is required")
+		return nil, errors.New("missing config")
+	}
+
+	return &req, nil
+}
+
+// persistStatefulResources dual-writes stateful resources from the imported
+// config into the file store so they survive restarts.
+func (a *API) persistStatefulResources(ctx context.Context, cfg *config.MockCollection, replace bool) {
+	if len(cfg.StatefulResources) == 0 || a.dataStore == nil {
+		return
+	}
+	resStore := a.dataStore.StatefulResources()
+	if replace {
+		_ = resStore.DeleteAll(ctx)
+	}
+	for _, res := range cfg.StatefulResources {
+		if res == nil {
+			continue
+		}
+		if err := resStore.Create(ctx, res); err != nil {
+			if errors.Is(err, store.ErrAlreadyExists) {
+				// Resource already exists; on replace we already cleared, so this
+				// shouldn't happen, but handle gracefully.
+				a.logger().Debug("stateful resource already exists in file store", "name", res.Name)
+			} else {
+				a.logger().Warn("failed to write stateful resource to file store",
+					"name", res.Name, "error", err)
+			}
+		}
+	}
+}
+
+// handleImportConfig handles POST /config.
+func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+
+	req, err := a.decodeImportRequest(w, r)
+	if err != nil {
 		return
 	}
 
@@ -243,27 +289,7 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	}
 
 	// Dual-write stateful resources to the file store so they survive restarts.
-	if len(req.Config.StatefulResources) > 0 && a.dataStore != nil {
-		resStore := a.dataStore.StatefulResources()
-		if req.Replace {
-			_ = resStore.DeleteAll(ctx)
-		}
-		for _, res := range req.Config.StatefulResources {
-			if res == nil {
-				continue
-			}
-			if err := resStore.Create(ctx, res); err != nil {
-				if errors.Is(err, store.ErrAlreadyExists) {
-					// Resource already exists; on replace we already cleared, so this
-					// shouldn't happen, but handle gracefully.
-					a.logger().Debug("stateful resource already exists in file store", "name", res.Name)
-				} else {
-					a.logger().Warn("failed to write stateful resource to file store",
-						"name", res.Name, "error", err)
-				}
-			}
-		}
-	}
+	a.persistStatefulResources(ctx, req.Config, req.Replace)
 
 	// Forward to engine for runtime registration (starts gRPC/MQTT servers, registers handlers).
 	if err := engine.ImportConfig(ctx, req.Config, req.Replace); err != nil {

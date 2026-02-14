@@ -88,7 +88,7 @@ func (a *API) handleVerifyMock(w http.ResponseWriter, r *http.Request, engine *e
 
 	var req VerifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 

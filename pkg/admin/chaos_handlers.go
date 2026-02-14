@@ -27,7 +27,7 @@ func (a *API) handleSetChaos(w http.ResponseWriter, r *http.Request, engine *eng
 
 	var config engineclient.ChaosConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", sanitizeJSONError(err, a.logger()))
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
