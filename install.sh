@@ -163,7 +163,7 @@ main() {
         (curl -sSL -X POST "$TELEMETRY_URL" \
             -H "Content-Type: application/json" \
             -d "{\"os\":\"${OS}\",\"arch\":\"${ARCH}\",\"version\":\"${VERSION}\",\"method\":\"script\"}" \
-            --max-time 3 2>/dev/null || true) &
+            --max-time 3 >/dev/null 2>&1 || true) &
     fi
 
     # Verify installation
