@@ -103,3 +103,6 @@ mockd-amd64
 memory_results.json
 startup_results.json
 test-mqtt.json
+
+# Runtime data
+tmp-data/
