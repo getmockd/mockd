@@ -789,10 +789,14 @@ func TestPortConflict_PATCH_DoesNotChangePort(t *testing.T) {
 	// PATCH should succeed
 	assert.Equal(t, http.StatusOK, patchResp.StatusCode)
 
+	// PATCH response wraps the mock in an envelope: {id, action, message, mock: {...}}
+	mockData, ok := patchResult["mock"].(map[string]interface{})
+	require.True(t, ok, "PATCH response should contain a 'mock' envelope field")
+
 	// Name should be updated
-	assert.Equal(t, "Renamed Broker", patchResult["name"])
+	assert.Equal(t, "Renamed Broker", mockData["name"])
 
 	// Port should NOT be changed (PATCH doesn't support protocol-specific fields)
-	mqtt := patchResult["mqtt"].(map[string]interface{})
+	mqtt := mockData["mqtt"].(map[string]interface{})
 	assert.Equal(t, float64(mqttPort), mqtt["port"], "PATCH should not change the port")
 }
