@@ -346,7 +346,11 @@ func TestPortConflict_UpdateMock_KeepsSamePort(t *testing.T) {
 	}
 	status2, data2 := updateMock(t, bundle.AdminPort, mockID, updateData)
 	assert.Equal(t, http.StatusOK, status2)
-	assert.Equal(t, "My Broker Renamed", data2["name"])
+
+	// PUT response wraps the mock in an envelope: {id, action, message, mock: {...}}
+	mockData2, ok := data2["mock"].(map[string]interface{})
+	require.True(t, ok, "PUT response should contain a 'mock' envelope field")
+	assert.Equal(t, "My Broker Renamed", mockData2["name"])
 }
 
 func TestPortConflict_UpdateMock_ToNewUnusedPort(t *testing.T) {
@@ -376,7 +380,11 @@ func TestPortConflict_UpdateMock_ToNewUnusedPort(t *testing.T) {
 	}
 	status2, data2 := updateMock(t, bundle.AdminPort, mockID, updateData)
 	assert.Equal(t, http.StatusOK, status2)
-	assert.NotNil(t, data2["mqtt"])
+
+	// PUT response wraps the mock in an envelope: {id, action, message, mock: {...}}
+	mockData2, ok := data2["mock"].(map[string]interface{})
+	require.True(t, ok, "PUT response should contain a 'mock' envelope field")
+	assert.NotNil(t, mockData2["mqtt"])
 }
 
 func TestPortConflict_HTTPMock_NoConflictCheck(t *testing.T) {
