@@ -22,8 +22,8 @@ What actually happened.
 
 ## Environment
 - **OS**: (e.g., macOS 14, Ubuntu 22.04, Windows 11)
-- **Go Version**: (e.g., 1.24)
-- **mockd Version**: (e.g., v0.2.0)
+- **Go Version**: (e.g., 1.25)
+- **mockd Version**: (e.g., v0.2.8)
 - **Installation Method**: (binary, Docker, source)
 
 ## Configuration
