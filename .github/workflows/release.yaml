@@ -132,8 +132,8 @@ jobs:
           fail_on_unmatched_files: true
 
   # Homebrew formula update:
-  # After a release, manually trigger the formula update in homebrew-mockd:
-  #   gh workflow run update-formula.yaml --repo getmockd/homebrew-mockd -f tag=vX.Y.Z
+  # After a release, manually trigger the formula update in homebrew-tap:
+  #   gh workflow run update-formula.yaml --repo getmockd/homebrew-tap -f tag=vX.Y.Z
   # To automate: add a HOMEBREW_TAP_TOKEN secret (PAT with repo scope) and
   # uncomment the job below.
   #
@@ -145,7 +145,7 @@ jobs:
   #   steps:
   #     - name: Trigger Homebrew formula update
   #       run: |
-  #         gh api repos/getmockd/homebrew-mockd/dispatches \
+  #         gh api repos/getmockd/homebrew-tap/dispatches \
   #           -f event_type=update-formula \
   #           -f "client_payload[tag]=${{ github.ref_name }}"
   #       env:

@@ -30,7 +30,7 @@ curl -sSL https://get.mockd.io | sh
 
 ### Homebrew
 ```bash
-brew install getmockd/mockd/mockd
+brew install getmockd/tap/mockd
 ```
 
 ### Docker
