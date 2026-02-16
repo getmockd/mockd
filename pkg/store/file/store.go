@@ -196,6 +196,11 @@ func (s *FileStore) doSave() error {
 	dataFile := filepath.Join(s.cfg.DataDir, "data.json")
 	tmpFile := dataFile + ".tmp"
 
+	// Ensure data directory exists (may have been removed after Open())
+	if err := os.MkdirAll(s.cfg.DataDir, 0700); err != nil {
+		return err
+	}
+
 	if err := os.WriteFile(tmpFile, data, 0600); err != nil {
 		return err
 	}
