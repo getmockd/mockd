@@ -31,6 +31,7 @@ func RunAdd(args []string) error {
 	// Admin URL and output format
 	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 	jsonOutput := fs.Bool("json", false, "Output in JSON format")
+	allowDuplicate := fs.Bool("allow-duplicate", false, "Create a new mock even if one already exists on the same path")
 
 	// HTTP flags
 	method := fs.String("method", "GET", "HTTP method to match")
@@ -93,10 +94,11 @@ func RunAdd(args []string) error {
 Add a new mock endpoint.
 
 Global Flags:
-  -t, --type          Mock type: http, websocket, graphql, grpc, mqtt, soap (default: http)
-  -n, --name          Mock display name
-      --admin-url     Admin API base URL (default: http://localhost:4290)
-      --json          Output in JSON format
+  -t, --type            Mock type: http, websocket, graphql, grpc, mqtt, soap (default: http)
+  -n, --name            Mock display name
+      --allow-duplicate Create a new mock even if one exists on the same path
+      --admin-url       Admin API base URL (default: http://localhost:4290)
+      --json            Output in JSON format
 
 HTTP Flags (--type http):
   -m, --method        HTTP method to match (default: GET)
@@ -266,8 +268,30 @@ Examples:
 		return err
 	}
 
-	// Create admin client and add mock
+	// Create admin client
 	client := NewAdminClientWithAuth(*adminURL)
+
+	// For HTTP mocks: check for existing mock on same method+path (upsert behavior)
+	if mockTypeEnum == mock.TypeHTTP && !*allowDuplicate && m.HTTP != nil && m.HTTP.Matcher != nil {
+		existingID, err := findExistingHTTPMock(client, m.HTTP.Matcher.Method, m.HTTP.Matcher.Path)
+		if err != nil {
+			// Connection error — fall through to create which will give a better error
+			return fmt.Errorf("%s", FormatConnectionError(err))
+		}
+		if existingID != "" {
+			// Update existing mock instead of creating a duplicate
+			updated, err := client.UpdateMock(existingID, m)
+			if err != nil {
+				return fmt.Errorf("failed to update mock: %s", FormatConnectionError(err))
+			}
+			return outputResult(&CreateMockResult{
+				Mock:   updated,
+				Action: "updated",
+			}, mockTypeEnum, *jsonOutput)
+		}
+	}
+
+	// Create new mock
 	result, err := client.CreateMock(m)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
@@ -275,6 +299,28 @@ Examples:
 
 	// Output result based on mock type and action (created vs merged)
 	return outputResult(result, mockTypeEnum, *jsonOutput)
+}
+
+// findExistingHTTPMock looks for an existing mock with the same method+path.
+// Returns the mock ID if found, empty string if not.
+func findExistingHTTPMock(client AdminClient, method, path string) (string, error) {
+	mocks, err := client.ListMocks()
+	if err != nil {
+		return "", err
+	}
+
+	for _, m := range mocks {
+		if m.Type != mock.TypeHTTP && m.Type != "" {
+			continue
+		}
+		if m.HTTP == nil || m.HTTP.Matcher == nil {
+			continue
+		}
+		if m.HTTP.Matcher.Method == method && m.HTTP.Matcher.Path == path {
+			return m.ID, nil
+		}
+	}
+	return "", nil
 }
 
 // buildHTTPMock creates an HTTP mock configuration.
@@ -801,8 +847,12 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 		return nil
 	}
 
-	// Standard create case
-	fmt.Printf("Created mock: %s\n", created.ID)
+	// Standard create/update case
+	if result.Action == "updated" {
+		fmt.Printf("Updated mock: %s\n", created.ID)
+	} else {
+		fmt.Printf("Created mock: %s\n", created.ID)
+	}
 	fmt.Printf("  Type: %s\n", created.Type)
 
 	switch mockType { //nolint:exhaustive // OAuth not yet supported in CLI add output

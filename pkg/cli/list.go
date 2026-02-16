@@ -23,6 +23,8 @@ func RunList(args []string) error {
 	mockType := fs.String("type", "", "Filter by type: http, websocket, graphql, grpc, mqtt, soap")
 	fs.StringVar(mockType, "t", "", "Filter by type (shorthand)")
 	jsonOutput := fs.Bool("json", false, "Output in JSON format")
+	noTruncate := fs.Bool("no-truncate", false, "Show full IDs and paths without truncation")
+	fs.BoolVar(noTruncate, "w", false, "Show full IDs and paths without truncation (shorthand)")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd list [flags]
@@ -30,14 +32,18 @@ func RunList(args []string) error {
 List all configured mocks.
 
 Flags:
-  -c, --config     List mocks from config file (no server needed)
-  -t, --type       Filter by type: http, websocket, graphql, grpc, mqtt, soap
-      --admin-url  Admin API base URL (default: http://localhost:4290)
-      --json       Output in JSON format
+  -c, --config        List mocks from config file (no server needed)
+  -t, --type          Filter by type: http, websocket, graphql, grpc, mqtt, soap
+  -w, --no-truncate   Show full IDs and paths without truncation
+      --admin-url     Admin API base URL (default: http://localhost:4290)
+      --json          Output in JSON format
 
 Examples:
   # List all mocks from running server
   mockd list
+
+  # List with full IDs (useful for copy-paste into delete)
+  mockd list -w
 
   # List mocks from config file (no server needed)
   mockd list --config mockd.yaml
@@ -98,7 +104,7 @@ Examples:
 		return outputMocksJSON(mocks)
 	}
 
-	return outputMocksTable(mocks)
+	return outputMocksTable(mocks, *noTruncate)
 }
 
 // outputMocksJSON outputs mocks in JSON format.
@@ -131,7 +137,7 @@ func outputMocksJSON(mocks []*mock.Mock) error {
 }
 
 // outputMocksTable outputs mocks in table format.
-func outputMocksTable(mocks []*mock.Mock) error {
+func outputMocksTable(mocks []*mock.Mock, noTruncate bool) error {
 	if len(mocks) == 0 {
 		fmt.Println("No mocks configured")
 		return nil
@@ -143,13 +149,15 @@ func outputMocksTable(mocks []*mock.Mock) error {
 	for _, m := range mocks {
 		path, method, status := extractMockDetails(m)
 
-		// Truncate long IDs and paths
+		// Truncate long IDs and paths unless --no-truncate is set
 		id := m.ID
-		if len(id) > 20 {
-			id = id[:17] + "..."
-		}
-		if len(path) > 25 {
-			path = path[:22] + "..."
+		if !noTruncate {
+			if len(id) > 20 {
+				id = id[:17] + "..."
+			}
+			if len(path) > 25 {
+				path = path[:22] + "..."
+			}
 		}
 
 		// Format status - show "-" for non-HTTP

@@ -367,11 +367,14 @@ func (c *adminClient) UpdateMock(id string, mock *config.MockConfiguration) (*co
 		return nil, c.parseError(resp)
 	}
 
-	var updated config.MockConfiguration
-	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+	// PUT returns an envelope: {id, action, message, mock: {...}}
+	var envelope struct {
+		Mock config.MockConfiguration `json:"mock"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
-	return &updated, nil
+	return &envelope.Mock, nil
 }
 
 // DeleteMock deletes a mock by ID.
