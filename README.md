@@ -23,56 +23,55 @@ A high-performance, multi-protocol mock server with built-in cloud tunneling. Mo
 
 ## Installation
 
+### Quick Install (Recommended)
 ```bash
-# Install with go install
-go install github.com/getmockd/mockd/cmd/mockd@latest
-
-# Or clone and build
-git clone https://github.com/getmockd/mockd.git
-cd mockd
-go build -o mockd ./cmd/mockd
+curl -sSL https://get.mockd.io | sh
 ```
+
+### Homebrew
+```bash
+brew install getmockd/tap/mockd
+```
+
+### Docker
+```bash
+docker run -p 4280:4280 -p 4290:4290 ghcr.io/getmockd/mockd:latest
+```
+
+### Go
+```bash
+go install github.com/getmockd/mockd/cmd/mockd@latest
+```
+
+### Other
+Download pre-built binaries from the [GitHub Releases](https://github.com/getmockd/mockd/releases) page.
 
 ## Quick Start
 
 ```bash
-# Start the mock server
+# Start the server
 mockd start
 
-# Start with custom port and config
-mockd start --port 3000 --config mocks.json
+# Create a mock endpoint
+mockd add --method GET --path /api/hello --body '{"message": "Hello, World!"}'
 
-# Add a mock endpoint
-mockd add --path /api/users --status 200 --body '{"users": []}'
+# Try it
+curl http://localhost:4280/api/hello
+# → {"message": "Hello, World!"}
+```
 
-# Add a mock with headers
-mockd add -m POST --path /api/users -s 201 \
-  -b '{"id": "new-user"}' \
-  -H "Content-Type:application/json"
-
-# List all mocks
-mockd list
-
-# Get mock details
-mockd get <mock-id>
-
-# Delete a mock
-mockd delete <mock-id>
-
-# Export configuration
-mockd export -o mocks.json
-
-# Import configuration
-mockd import mocks.json
-
-# View request logs
-mockd logs
-
-# Show effective configuration
-mockd config
-
-# Generate shell completion
-mockd completion bash > /etc/bash_completion.d/mockd
+For Docker:
+```bash
+docker run -p 4280:4280 -p 4290:4290 ghcr.io/getmockd/mockd:latest
+curl -X POST http://localhost:4290/mocks -H 'Content-Type: application/json' -d '{
+  "type": "http",
+  "name": "hello",
+  "http": {
+    "matcher": {"method": "GET", "path": "/api/hello"},
+    "response": {"statusCode": 200, "body": "{\"message\": \"Hello, World!\"}"}
+  }
+}'
+curl http://localhost:4280/api/hello
 ```
 
 ## Cloud Tunnel
@@ -142,6 +141,44 @@ adminPort: 4290
 maxLogEntries: 500
 ```
 
+## Admin API
+
+Create, update, and delete mocks at runtime:
+
+```bash
+# Create a mock
+curl -X POST http://localhost:4290/mocks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "matcher": {"method": "GET", "path": "/api/health"},
+    "response": {"statusCode": 200, "body": "{\"status\": \"ok\"}"}
+  }'
+
+# List all mocks
+curl http://localhost:4290/mocks
+
+# Delete a mock
+curl -X DELETE http://localhost:4290/mocks/{id}
+```
+
+## Mock Configuration File
+
+Load mocks from a JSON file:
+
+```json
+{
+  "version": "1.0",
+  "name": "My API Mocks",
+  "mocks": [
+    {
+      "id": "get-users",
+      "matcher": {"method": "GET", "path": "/api/users"},
+      "response": {"statusCode": 200, "body": "[]"}
+    }
+  ]
+}
+```
+
 ## Go Library Usage
 
 ```bash
@@ -207,45 +244,9 @@ func main() {
 }
 ```
 
-## Admin API
-
-Create, update, and delete mocks at runtime:
-
-```bash
-# Create a mock
-curl -X POST http://localhost:4290/mocks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "matcher": {"method": "GET", "path": "/api/health"},
-    "response": {"statusCode": 200, "body": "{\"status\": \"ok\"}"}
-  }'
-
-# List all mocks
-curl http://localhost:4290/mocks
-
-# Delete a mock
-curl -X DELETE http://localhost:4290/mocks/{id}
-```
-
-## Mock Configuration File
-
-Load mocks from a JSON file:
-
-```json
-{
-  "version": "1.0",
-  "name": "My API Mocks",
-  "mocks": [
-    {
-      "id": "get-users",
-      "matcher": {"method": "GET", "path": "/api/users"},
-      "response": {"statusCode": 200, "body": "[]"}
-    }
-  ]
-}
-```
-
 ## Documentation
+
+📖 **[Full documentation →](https://mockd.io/quickstart)**
 
 The documentation site is built with [Astro Starlight](https://starlight.astro.build/) and deployed to GitHub Pages.
 
