@@ -45,6 +45,7 @@ teardown_file() {
 
 @test "IMP-002: 1 mock imported" {
   api POST /config -d '{
+    "replace": true,
     "config": {
       "version": "1.0",
       "name": "roundtrip-test",

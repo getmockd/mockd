@@ -56,9 +56,9 @@ setup() {
   [[ "$STATUS" == "404" ]]
 }
 
-@test "S9-CRUD-005: PATCH → 405 (not supported)" {
+@test "S9-CRUD-005: PATCH nonexistent → 404" {
   engine PATCH /api/items/nonexistent -d '{"name":"updated"}'
-  [[ "$STATUS" == "405" ]]
+  [[ "$STATUS" == "404" ]]
 }
 
 @test "S9-CRUD-006: Offset beyond total → empty" {
