@@ -22,17 +22,17 @@ import (
 // Test Helpers
 // ============================================================================
 
-// getFreeMQTTPort returns an available port for MQTT testing
-func getFreeMQTTPort(t *testing.T) int {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := l.Addr().(*net.TCPAddr).Port
-	l.Close()
-	return port
+// getFreeMQTTPort returns 0 to let the OS auto-assign a port.
+// The actual bound port is resolved by the broker after Start() and
+// can be read via broker.Port(). This eliminates TOCTOU port races.
+func getFreeMQTTPort(_ *testing.T) int {
+	return 0
 }
 
-// setupMQTTBroker creates and starts an MQTT broker for testing
-func setupMQTTBroker(t *testing.T, cfg *mqtt.MQTTConfig) *mqtt.Broker {
+// setupMQTTBroker creates and starts an MQTT broker for testing.
+// It returns the broker and the actual bound port (which may differ
+// from the configured port when port 0 is used for OS auto-assign).
+func setupMQTTBroker(t *testing.T, cfg *mqtt.MQTTConfig) (*mqtt.Broker, int) {
 	broker, err := mqtt.NewBroker(cfg)
 	require.NoError(t, err)
 
@@ -46,7 +46,7 @@ func setupMQTTBroker(t *testing.T, cfg *mqtt.MQTTConfig) *mqtt.Broker {
 	// Wait for broker to be ready
 	time.Sleep(100 * time.Millisecond)
 
-	return broker
+	return broker, broker.Port()
 }
 
 // createMQTTClient creates a Paho MQTT client for testing
@@ -76,12 +76,10 @@ func createMQTTClient(t *testing.T, port int, clientID string) mqttclient.Client
 // ============================================================================
 
 func TestMQTT_US1_BrokerStartStop(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-broker",
 		Name:    "Test Broker",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	}
 
@@ -92,6 +90,8 @@ func TestMQTT_US1_BrokerStartStop(t *testing.T) {
 	err = broker.Start(context.Background())
 	require.NoError(t, err)
 	assert.True(t, broker.IsRunning())
+
+	port := broker.Port()
 
 	// Verify port is listening
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("localhost:%d", port), time.Second)
@@ -109,10 +109,9 @@ func TestMQTT_US1_BrokerStartStop(t *testing.T) {
 }
 
 func TestMQTT_US1_BasicPubSub(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-pubsub",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -147,10 +146,9 @@ func TestMQTT_US1_BasicPubSub(t *testing.T) {
 // ============================================================================
 
 func TestMQTT_US2_SingleLevelWildcard(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-wildcard-single",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -193,10 +191,9 @@ drainLoop:
 }
 
 func TestMQTT_US2_MultiLevelWildcard(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-wildcard-multi",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -245,10 +242,9 @@ drainLoop:
 // ============================================================================
 
 func TestMQTT_US3_QoS0(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-qos0",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -272,10 +268,9 @@ func TestMQTT_US3_QoS0(t *testing.T) {
 }
 
 func TestMQTT_US3_QoS1(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-qos1",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -299,10 +294,9 @@ func TestMQTT_US3_QoS1(t *testing.T) {
 }
 
 func TestMQTT_US3_QoS2(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-qos2",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -330,10 +324,9 @@ func TestMQTT_US3_QoS2(t *testing.T) {
 // ============================================================================
 
 func TestMQTT_US4_RetainedMessages(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-retain",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -365,11 +358,9 @@ func TestMQTT_US4_RetainedMessages(t *testing.T) {
 // ============================================================================
 
 func TestMQTT_US5_ConfiguredTopics(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-topics",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 		Topics: []mqtt.TopicConfig{
 			{
@@ -386,7 +377,7 @@ func TestMQTT_US5_ConfiguredTopics(t *testing.T) {
 		},
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 	_ = broker
 
 	client := createMQTTClient(t, port, "sensor-sub")
@@ -425,11 +416,9 @@ drainLoop:
 // ============================================================================
 
 func TestMQTT_US6_OnPublishResponse(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-onpublish",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 		Topics: []mqtt.TopicConfig{
 			{
@@ -443,7 +432,7 @@ func TestMQTT_US6_OnPublishResponse(t *testing.T) {
 		},
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 	_ = broker
 
 	client := createMQTTClient(t, port, "echo-client")
@@ -478,11 +467,9 @@ Loop:
 }
 
 func TestMQTT_US6_OnPublishForward(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-forward",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 		Topics: []mqtt.TopicConfig{
 			{
@@ -494,7 +481,7 @@ func TestMQTT_US6_OnPublishForward(t *testing.T) {
 		},
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 	_ = broker
 
 	client := createMQTTClient(t, port, "forward-client")
@@ -523,11 +510,9 @@ func TestMQTT_US6_OnPublishForward(t *testing.T) {
 // ============================================================================
 
 func TestMQTT_US7_AuthenticationRequired(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-auth",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 		Auth: &mqtt.MQTTAuthConfig{
 			Enabled: true,
@@ -540,7 +525,7 @@ func TestMQTT_US7_AuthenticationRequired(t *testing.T) {
 		},
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 	_ = broker
 
 	// Try connecting without credentials - should fail
@@ -556,11 +541,9 @@ func TestMQTT_US7_AuthenticationRequired(t *testing.T) {
 }
 
 func TestMQTT_US7_AuthenticationSuccess(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-auth-success",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 		Auth: &mqtt.MQTTAuthConfig{
 			Enabled: true,
@@ -573,7 +556,7 @@ func TestMQTT_US7_AuthenticationSuccess(t *testing.T) {
 		},
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 	_ = broker
 
 	// Connect with valid credentials
@@ -597,10 +580,9 @@ func TestMQTT_US7_AuthenticationSuccess(t *testing.T) {
 // ============================================================================
 
 func TestMQTT_US8_MultipleClients(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-multi-client",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -663,7 +645,7 @@ drainLoop:
 // ============================================================================
 
 func TestMQTT_US9_AutoStartFromMock(t *testing.T) {
-	mqttPort := getFreeMQTTPort(t)
+	mqttPort := getFreePort()
 	managementPort := getFreePort()
 
 	// Create server with MQTT mock via ImportConfig
@@ -729,10 +711,9 @@ func TestMQTT_US9_AutoStartFromMock(t *testing.T) {
 // ============================================================================
 
 func TestMQTT_US10_JSONPayloads(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-json",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -776,10 +757,9 @@ func TestMQTT_US10_JSONPayloads(t *testing.T) {
 // ============================================================================
 
 func TestMQTT_US11_BrokerStats(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-stats",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 
@@ -801,11 +781,9 @@ func TestMQTT_US11_BrokerStats(t *testing.T) {
 // ============================================================================
 
 func TestMQTT_US12_TemplatingBasicVariables(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-templating-basic",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 		Topics: []mqtt.TopicConfig{
 			{
@@ -822,7 +800,7 @@ func TestMQTT_US12_TemplatingBasicVariables(t *testing.T) {
 		},
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 	_ = broker
 
 	client := createMQTTClient(t, port, "template-sub")
@@ -867,11 +845,9 @@ drainLoop:
 }
 
 func TestMQTT_US12_TemplatingRandomValues(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-templating-random",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 		Topics: []mqtt.TopicConfig{
 			{
@@ -888,7 +864,7 @@ func TestMQTT_US12_TemplatingRandomValues(t *testing.T) {
 		},
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 	_ = broker
 
 	client := createMQTTClient(t, port, "random-sub")
@@ -933,11 +909,9 @@ drainLoop:
 }
 
 func TestMQTT_US12_TemplatingSequence(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-templating-sequence",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 		Topics: []mqtt.TopicConfig{
 			{
@@ -954,7 +928,7 @@ func TestMQTT_US12_TemplatingSequence(t *testing.T) {
 		},
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 	_ = broker
 
 	client := createMQTTClient(t, port, "sequence-sub")
@@ -997,11 +971,9 @@ drainLoop:
 }
 
 func TestMQTT_US12_TemplatingFaker(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-templating-faker",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 		Topics: []mqtt.TopicConfig{
 			{
@@ -1018,7 +990,7 @@ func TestMQTT_US12_TemplatingFaker(t *testing.T) {
 		},
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 	_ = broker
 
 	client := createMQTTClient(t, port, "faker-sub")
@@ -1096,10 +1068,9 @@ func TestMQTT_US13_QoSLevelsWithVerification(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			port := getFreeMQTTPort(t)
-			broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+			broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 				ID:      fmt.Sprintf("test-qos-%d", tc.publishQoS),
-				Port:    port,
+				Port:    0,
 				Enabled: true,
 			})
 			_ = broker
@@ -1139,10 +1110,9 @@ func TestMQTT_US13_QoSLevelsWithVerification(t *testing.T) {
 
 func TestMQTT_US13_QoSDowngrade(t *testing.T) {
 	// Test that QoS is downgraded when subscribe QoS < publish QoS
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-qos-downgrade",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -1173,10 +1143,9 @@ func TestMQTT_US13_QoSDowngrade(t *testing.T) {
 // ============================================================================
 
 func TestMQTT_US14_RetainedMessageOverwrite(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-retain-overwrite",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -1219,10 +1188,9 @@ func TestMQTT_US14_RetainedMessageOverwrite(t *testing.T) {
 }
 
 func TestMQTT_US14_RetainedMessageClear(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-retain-clear",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -1256,10 +1224,9 @@ func TestMQTT_US14_RetainedMessageClear(t *testing.T) {
 }
 
 func TestMQTT_US14_RetainedMessageMultipleTopics(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-retain-multi",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -1309,10 +1276,9 @@ drainLoop:
 // ============================================================================
 
 func TestMQTT_US15_WillMessageOnDisconnect(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-will-disconnect",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -1359,10 +1325,9 @@ func TestMQTT_US15_WillMessageOnDisconnect(t *testing.T) {
 }
 
 func TestMQTT_US15_WillMessageRetained(t *testing.T) {
-	port := getFreeMQTTPort(t)
-	broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+	broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 		ID:      "test-will-retained",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	})
 	_ = broker
@@ -1419,10 +1384,9 @@ func TestMQTT_US15_WillMessageWithQoS(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			port := getFreeMQTTPort(t)
-			broker := setupMQTTBroker(t, &mqtt.MQTTConfig{
+			broker, port := setupMQTTBroker(t, &mqtt.MQTTConfig{
 				ID:      fmt.Sprintf("test-will-qos%d", tc.willQoS),
-				Port:    port,
+				Port:    0,
 				Enabled: true,
 			})
 			_ = broker
@@ -1453,15 +1417,13 @@ func TestMQTT_US15_WillMessageWithQoS(t *testing.T) {
 // ============================================================================
 
 func TestMQTT_US16_MockResponseWithWildcardTemplating(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-mockresponse-wildcard",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 
 	// Set up a mock response that uses templating
 	// Topic uses {1} directly for wildcard substitution
@@ -1510,15 +1472,13 @@ func TestMQTT_US16_MockResponseWithWildcardTemplating(t *testing.T) {
 }
 
 func TestMQTT_US16_MockResponseWithPayloadAccess(t *testing.T) {
-	port := getFreeMQTTPort(t)
-
 	cfg := &mqtt.MQTTConfig{
 		ID:      "test-mockresponse-payload",
-		Port:    port,
+		Port:    0,
 		Enabled: true,
 	}
 
-	broker := setupMQTTBroker(t, cfg)
+	broker, port := setupMQTTBroker(t, cfg)
 
 	// Set up a mock response that accesses the incoming payload
 	broker.SetMockResponses([]*mqtt.MockResponse{

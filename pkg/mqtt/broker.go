@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -128,7 +130,7 @@ func NewBroker(config *MQTTConfig) (*Broker, error) {
 		return nil, errors.New("config cannot be nil")
 	}
 
-	if config.Port <= 0 {
+	if config.Port < 0 {
 		config.Port = 1883 // Default MQTT port
 	}
 
@@ -219,6 +221,17 @@ func (b *Broker) Start(ctx context.Context) error {
 
 	if err = b.server.AddListener(listener); err != nil {
 		return fmt.Errorf("failed to add listener: %w", err)
+	}
+
+	// If port 0 was used (OS auto-assign), resolve the actual bound port
+	if b.config.Port == 0 {
+		if l, ok := b.server.Listeners.Get(listenerID); ok {
+			if _, portStr, err := net.SplitHostPort(l.Address()); err == nil {
+				if p, err := strconv.Atoi(portStr); err == nil {
+					b.config.Port = p
+				}
+			}
+		}
 	}
 
 	// Start the server
