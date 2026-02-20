@@ -4,6 +4,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -108,11 +109,13 @@ func (h *Handler) handleStatefulCreate(w http.ResponseWriter, r *http.Request, r
 
 	item, err := resource.Create(data, pathParams)
 	if err != nil {
-		if conflictErr, ok := err.(*stateful.ConflictError); ok {
+		var conflictErr *stateful.ConflictError
+		var capErr *stateful.CapacityError
+		if errors.As(err, &conflictErr) {
 			return h.writeStatefulError(w, http.StatusConflict, "resource already exists", resource.Name(), conflictErr.ID)
 		}
-		if capErr, ok := err.(*stateful.CapacityError); ok {
-			return h.writeStatefulErrorWithHint(w, capErr.StatusCode(), capErr.Error(), resource.Name(), "", capErr.Hint())
+		if errors.As(err, &capErr) {
+			return h.writeStatefulErrorWithHint(w, http.StatusInsufficientStorage, capErr.Error(), resource.Name(), "", capErr.Hint())
 		}
 		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), "")
 	}
@@ -156,7 +159,8 @@ func (h *Handler) handleStatefulMutate(w http.ResponseWriter, r *http.Request, r
 
 	item, err := mutate(itemID, data)
 	if err != nil {
-		if _, ok := err.(*stateful.NotFoundError); ok {
+		var notFoundErr *stateful.NotFoundError
+		if errors.As(err, &notFoundErr) {
 			return h.writeStatefulError(w, http.StatusNotFound, "resource not found", resource.Name(), itemID)
 		}
 		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), itemID)
@@ -173,7 +177,8 @@ func (h *Handler) handleStatefulMutate(w http.ResponseWriter, r *http.Request, r
 func (h *Handler) handleStatefulDelete(w http.ResponseWriter, resource *stateful.StatefulResource, itemID string) int {
 	err := resource.Delete(itemID)
 	if err != nil {
-		if _, ok := err.(*stateful.NotFoundError); ok {
+		var notFoundErr *stateful.NotFoundError
+		if errors.As(err, &notFoundErr) {
 			return h.writeStatefulError(w, http.StatusNotFound, "resource not found", resource.Name(), itemID)
 		}
 		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), itemID)

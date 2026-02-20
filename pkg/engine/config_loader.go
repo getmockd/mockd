@@ -87,11 +87,18 @@ func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store
 
 // LoadFromFile loads mock configurations from a file and adds them to the server.
 // If replace is true, existing mocks are cleared first.
+// The config file's directory is set as the handler's baseDir so that relative
+// bodyFile paths resolve correctly.
 func (cl *ConfigLoader) LoadFromFile(path string, replace bool) error {
 	collection, err := config.LoadFromFile(path)
 	if err != nil {
 		return err
 	}
+
+	// Set the handler's base directory to the config file's directory so that
+	// relative bodyFile paths are resolved relative to the config file location.
+	baseDir := config.GetMockFileBaseDir(path)
+	cl.server.handler.SetBaseDir(baseDir)
 
 	return cl.loadCollection(collection, replace)
 }

@@ -359,6 +359,9 @@ func (s *Server) Start() error {
 		}()
 	}
 
+	s.running = true
+	s.startTime = time.Now()
+
 	// Start the control API
 	if s.controlAPI != nil {
 		if err := s.controlAPI.Start(); err != nil {
@@ -366,9 +369,6 @@ func (s *Server) Start() error {
 			// Non-fatal: log but continue
 		}
 	}
-
-	s.running = true
-	s.startTime = time.Now()
 	s.log.Info("engine started", "http_port", s.cfg.HTTPPort, "https_port", s.cfg.HTTPSPort)
 	return nil
 }

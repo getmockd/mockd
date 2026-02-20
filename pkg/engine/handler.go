@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +50,11 @@ type Handler struct {
 	wsManager      *websocket.ConnectionManager
 	templateEngine *template.Engine
 
+	// baseDir is the base directory for resolving relative file paths (e.g., bodyFile).
+	// When set, relative paths in bodyFile are resolved against this directory.
+	// When empty, relative paths are resolved against the process working directory.
+	baseDir string
+
 	// Enterprise feature routing
 	graphqlMu       sync.RWMutex
 	graphqlHandlers map[string]*graphql.Handler
@@ -62,18 +68,22 @@ type Handler struct {
 
 // NewHandler creates a new Handler.
 func NewHandler(store storage.MockStore) *Handler {
-	return &Handler{
+	tmplEngine := template.New()
+	h := &Handler{
 		store:           store,
 		log:             logging.Nop(),          // Default to no-op logger
 		sseHandler:      sse.NewSSEHandler(100), // 100 max SSE connections
 		chunkedHandler:  sse.NewChunkedHandler(),
 		wsManager:       websocket.NewConnectionManager(),
-		templateEngine:  template.New(),
+		templateEngine:  tmplEngine,
 		graphqlHandlers: make(map[string]*graphql.Handler),
 		graphqlSubs:     make(map[string]*graphql.SubscriptionHandler),
 		oauthHandlers:   make(map[string]*oauth.Handler),
 		soapHandlers:    make(map[string]*soap.Handler),
 	}
+	// Wire template engine so SSE responses can use template variables
+	h.sseHandler.SetTemplateEngine(tmplEngine)
+	return h
 }
 
 // SetLogger sets the request logger for the handler.
@@ -98,6 +108,11 @@ func (h *Handler) SetStatefulStore(store *stateful.StateStore) {
 // SetStore sets the mock store for the handler.
 func (h *Handler) SetStore(store storage.MockStore) {
 	h.store = store
+}
+
+// SetBaseDir sets the base directory for resolving relative file paths (e.g., bodyFile).
+func (h *Handler) SetBaseDir(dir string) {
+	h.baseDir = dir
 }
 
 // HasMatch checks if any mock matches the given request without recording metrics.
@@ -353,7 +368,10 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 		}
 	}
 
-	// Set headers (with template expansion)
+	// Set headers (with template expansion).
+	// Track whether the user explicitly set Content-Type so auto-detection
+	// knows whether to override the value.
+	userSetContentType := false
 	for name, value := range resp.Headers {
 		if tmplCtx != nil {
 			if processed, err := h.templateEngine.Process(value, tmplCtx); err == nil {
@@ -361,6 +379,9 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 			}
 		}
 		w.Header().Set(name, value)
+		if strings.EqualFold(name, "Content-Type") {
+			userSetContentType = true
+		}
 	}
 
 	// Determine body content - check inline body first, then file
@@ -380,6 +401,10 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 				_, _ = w.Write(jsonBytes)
 			}
 			return http.StatusBadGateway
+		}
+		// Resolve relative paths against the handler's base directory
+		if !filepath.IsAbs(cleanPath) && h.baseDir != "" {
+			cleanPath = filepath.Join(h.baseDir, cleanPath)
 		}
 		data, err := os.ReadFile(cleanPath)
 		if err != nil {
@@ -406,8 +431,11 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 		// On error, use the original body (graceful degradation)
 	}
 
-	// Set default Content-Type based on body content if not specified
-	if w.Header().Get("Content-Type") == "" {
+	// Set default Content-Type based on body content if not explicitly specified by the user.
+	// Auto-detect when Content-Type is empty or was defaulted to text/plain by Go's HTTP
+	// stack (not explicitly set by the user in mock headers).
+	currentCT := w.Header().Get("Content-Type")
+	if !userSetContentType && (currentCT == "" || currentCT == "text/plain") {
 		switch {
 		case looksLikeJSON(body):
 			w.Header().Set("Content-Type", "application/json")

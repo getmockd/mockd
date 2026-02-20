@@ -145,12 +145,16 @@ func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 	if err != nil {
 		a.logger().Warn("failed to get local engine status", "error", err)
 		// Return a basic entry even if status query fails
+		registeredAt := a.startTime
+		if registeredAt.IsZero() {
+			registeredAt = time.Now()
+		}
 		return &store.Engine{
 			ID:           LocalEngineID,
 			Name:         "Local Engine",
 			Host:         "localhost",
 			Status:       store.EngineStatusOffline,
-			RegisteredAt: a.startTime,
+			RegisteredAt: registeredAt,
 			LastSeen:     time.Now(),
 			Workspaces:   []store.EngineWorkspace{},
 		}

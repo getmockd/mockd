@@ -110,6 +110,7 @@ func NewAPI(port int, opts ...Option) *API {
 		soapRecordingManager:        NewSOAPRecordingManager(),
 		engineRegistry:              store.NewEngineRegistry(),
 		port:                        port,
+		startTime:                   time.Now(),
 		ctx:                         ctx,
 		cancel:                      cancel,
 		registrationTokens:          make(map[string]storedToken),
