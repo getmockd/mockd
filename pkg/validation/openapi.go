@@ -33,8 +33,21 @@ type ValidationConfig struct {
 	Spec             string `json:"spec,omitempty" yaml:"spec,omitempty"` // Inline spec
 	ValidateRequest  bool   `json:"validateRequest" yaml:"validateRequest"`
 	ValidateResponse bool   `json:"validateResponse" yaml:"validateResponse"`
-	FailOnError      bool   `json:"failOnError" yaml:"failOnError"` // Return 400 on validation failure
-	LogWarnings      bool   `json:"logWarnings" yaml:"logWarnings"` // Log warnings but don't fail
+	FailOnError      bool   `json:"failOnError" yaml:"failOnError"`       // Return 400 on validation failure
+	LogWarnings      bool   `json:"logWarnings" yaml:"logWarnings"`       // Log warnings but don't fail
+	Mode             string `json:"mode,omitempty" yaml:"mode,omitempty"` // strict (default), warn, permissive
+}
+
+// GetMode returns the validation mode for the config, defaulting to strict.
+// If Mode is not set, falls back to FailOnError semantics for backward compatibility.
+func (c *ValidationConfig) GetMode() string {
+	if c == nil {
+		return ModeStrict
+	}
+	if c.Mode != "" {
+		return c.Mode
+	}
+	return ModeStrict
 }
 
 // Note: OpenAPI validation now uses the unified Result and FieldError types
@@ -300,6 +313,33 @@ func (v *OpenAPIValidator) parseValidationErrors(err error, result *Result) {
 			}
 		case reqErr.RequestBody != nil:
 			fe.Location = LocationBody
+
+			if reqErr.Err != nil {
+				schemaErrors := extractSchemaErrors(reqErr.Err)
+				if len(schemaErrors) > 0 {
+					for _, schemaErr := range schemaErrors {
+						sfe := &FieldError{
+							Location: LocationBody,
+							Code:     ErrCodeSchema,
+							Message:  schemaErr.Reason,
+						}
+						jsonPath := formatJSONPath(schemaErr.JSONPointer())
+						if jsonPath != "" && jsonPath != "$" {
+							sfe.Field = jsonPath
+						}
+						if sfe.Message == "" {
+							sfe.Message = schemaErr.Error()
+						}
+						result.Errors = append(result.Errors, sfe)
+					}
+					return
+				}
+				// Fallback for non-schema errors
+				fe.Message = reqErr.Err.Error()
+			}
+
+			result.Errors = append(result.Errors, fe)
+			return
 		default:
 			fe.Location = "request"
 		}
@@ -332,17 +372,27 @@ func (v *OpenAPIValidator) parseValidationErrors(err error, result *Result) {
 		}
 
 		if respErr.Err != nil {
-			fe.Message = respErr.Err.Error()
-
-			// Check for schema validation error
-			if schemaErr, ok := respErr.Err.(*openapi3.SchemaError); ok {
-				jsonPath := formatJSONPath(schemaErr.JSONPointer())
-				if jsonPath != "" && jsonPath != "$" {
-					fe.Field = jsonPath
+			schemaErrors := extractSchemaErrors(respErr.Err)
+			if len(schemaErrors) > 0 {
+				for _, schemaErr := range schemaErrors {
+					sfe := &FieldError{
+						Location: "response",
+						Code:     ErrCodeSchema,
+						Message:  schemaErr.Reason,
+					}
+					jsonPath := formatJSONPath(schemaErr.JSONPointer())
+					if jsonPath != "" && jsonPath != "$" {
+						sfe.Field = jsonPath
+					}
+					if sfe.Message == "" {
+						sfe.Message = schemaErr.Error()
+					}
+					result.Errors = append(result.Errors, sfe)
 				}
-				fe.Message = schemaErr.Reason
-				fe.Code = ErrCodeSchema
+				return
 			}
+			// Fallback for non-schema errors
+			fe.Message = respErr.Err.Error()
 		}
 
 		result.Errors = append(result.Errors, fe)
@@ -380,6 +430,20 @@ func (v *OpenAPIValidator) parseValidationErrors(err error, result *Result) {
 		Code:     "openapi_validation",
 		Message:  err.Error(),
 	})
+}
+
+// extractSchemaErrors recursively extracts SchemaError values from error chains
+func extractSchemaErrors(err error) []*openapi3.SchemaError {
+	var result []*openapi3.SchemaError
+	switch e := err.(type) {
+	case openapi3.MultiError:
+		for _, inner := range e {
+			result = append(result, extractSchemaErrors(inner)...)
+		}
+	case *openapi3.SchemaError:
+		result = append(result, e)
+	}
+	return result
 }
 
 // formatJSONPath converts a JSON pointer parts array to a more readable format

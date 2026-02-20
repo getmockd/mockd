@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 )
 
 // Middleware wraps an http.Handler with request validation
@@ -65,6 +66,12 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// In permissive mode, skip validation entirely and pass through
+	if m.config.GetMode() == ModePermissive {
+		m.handler.ServeHTTP(w, r)
+		return
+	}
+
 	// Store original body for re-reading
 	var bodyBytes []byte
 	if r.Body != nil && r.Body != http.NoBody {
@@ -101,7 +108,13 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						"message", err.Message, "location", err.Location)
 				}
 			}
-			if m.config.FailOnError {
+
+			// In warn mode, add warning headers but allow request through
+			if m.config.GetMode() == ModeWarn {
+				w.Header().Set("X-Mockd-Validation-Warnings", "true")
+				w.Header().Set("X-Mockd-Validation-Errors", strconv.Itoa(len(result.Errors)))
+				// Fall through to handler — do not return
+			} else if m.config.FailOnError {
 				m.handleError(w, result)
 				return
 			}
