@@ -167,8 +167,8 @@ main() {
     fi
 
     # Verify installation
-    if command -v mockd >/dev/null 2>&1; then
-        INSTALLED_VERSION=$(mockd version 2>&1 | head -1)
+    if [ -x "${INSTALL_DIR}/${BINARY_NAME}" ]; then
+        INSTALLED_VERSION=$("${INSTALL_DIR}/${BINARY_NAME}" version 2>&1 | head -1)
         success "mockd installed successfully!"
         printf "  %s\n" "$INSTALLED_VERSION"
         printf "\n"
