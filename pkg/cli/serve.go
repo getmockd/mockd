@@ -118,6 +118,15 @@ type serveFlags struct {
 	mcpEnabled     bool
 	mcpPort        int
 	mcpAllowRemote bool
+
+	// CORS flags
+	corsOrigins string
+
+	// Rate limiting flags
+	rateLimit float64
+
+	// Persistence flags
+	noPersist bool
 }
 
 // serveContext holds all runtime state for the serve command.
@@ -326,6 +335,15 @@ func parseServeFlags(args []string) (*serveFlags, error) {
 	fs.IntVar(&f.mcpPort, "mcp-port", 9091, "MCP server port")
 	fs.BoolVar(&f.mcpAllowRemote, "mcp-allow-remote", false, "Allow remote MCP connections (default: localhost only)")
 
+	// CORS flags
+	fs.StringVar(&f.corsOrigins, "cors-origins", "", "Comma-separated CORS allowed origins (e.g., '*' or 'https://app.example.com')")
+
+	// Rate limiting flags
+	fs.Float64Var(&f.rateLimit, "rate-limit", 0, "Rate limit in requests per second (0 = disabled)")
+
+	// Persistence flags
+	fs.BoolVar(&f.noPersist, "no-persist", false, "Disable persistent storage (mocks are lost on restart)")
+
 	fs.Usage = func() {
 		printServeUsage()
 	}
@@ -473,6 +491,20 @@ Examples:
 
 // validateServeFlags validates flag combinations for different operating modes.
 func validateServeFlags(f *serveFlags) error {
+	// Validate port ranges
+	if f.port < 0 || f.port > 65535 {
+		return fmt.Errorf("invalid port %d: must be between 0 and 65535", f.port)
+	}
+	if f.adminPort < 0 || f.adminPort > 65535 {
+		return fmt.Errorf("invalid admin port %d: must be between 0 and 65535", f.adminPort)
+	}
+	if f.httpsPort < 0 || f.httpsPort > 65535 {
+		return fmt.Errorf("invalid HTTPS port %d: must be between 0 and 65535", f.httpsPort)
+	}
+	if f.mcpEnabled && (f.mcpPort < 0 || f.mcpPort > 65535) {
+		return fmt.Errorf("invalid MCP port %d: must be between 0 and 65535", f.mcpPort)
+	}
+
 	if f.register && f.pull != "" {
 		return errors.New("cannot use --register and --pull together")
 	}
@@ -612,6 +644,32 @@ func buildServerConfiguration(f *serveFlags) (*config.ServerConfiguration, error
 		}
 	}
 
+	// Configure CORS if origins specified
+	if f.corsOrigins != "" {
+		origins := strings.Split(f.corsOrigins, ",")
+		for i := range origins {
+			origins[i] = strings.TrimSpace(origins[i])
+		}
+		serverCfg.CORS = &config.CORSConfig{
+			Enabled:      true,
+			AllowOrigins: origins,
+			AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
+			AllowHeaders: []string{"*"},
+		}
+	}
+
+	// Configure rate limiting if specified
+	if f.rateLimit > 0 {
+		serverCfg.RateLimit = &config.RateLimitConfig{
+			Enabled:           true,
+			RequestsPerSecond: f.rateLimit,
+			BurstSize:         int(f.rateLimit * 2),
+		}
+		if serverCfg.RateLimit.BurstSize < 1 {
+			serverCfg.RateLimit.BurstSize = 1
+		}
+	}
+
 	return serverCfg, nil
 }
 
@@ -623,7 +681,8 @@ func initializePersistentStore(sctx *serveContext) error {
 
 	// When --config is provided, the config file IS the source of truth
 	// When no --config, use ~/.local/share/mockd/data.json as the persistent store
-	if f.configFile != "" || f.register || f.pull != "" {
+	// When --no-persist is set, skip persistent storage entirely
+	if f.configFile != "" || f.register || f.pull != "" || f.noPersist {
 		return nil
 	}
 

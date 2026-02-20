@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/getmockd/mockd/pkg/cli"
 )
@@ -176,7 +177,7 @@ func run(args []string) error {
 		command = args[0]
 		cmdArgs = args[1:]
 	default:
-		return fmt.Errorf("unknown command: %s\n\nRun 'mockd --help' for usage", args[0])
+		return unknownCommandError(reg, args[0])
 	}
 
 	cmd, ok := reg.lookup(command)
@@ -222,6 +223,7 @@ func printUsage(reg *Registry) {
 	fmt.Print(`Global Flags:
   -h, --help      Show this help message
   -v, --version   Show version information
+
 
 Examples:
   # Create a starter config and start the server
@@ -276,4 +278,17 @@ Additional Help Topics:
 
 Run 'mockd <command> --help' for more information on a command.
 `)
+}
+
+// unknownCommandError builds a helpful error message listing available commands.
+func unknownCommandError(reg *Registry, name string) error {
+	var names []string
+	for _, cmd := range reg.ordered {
+		if !cmd.Hidden {
+			names = append(names, cmd.Name)
+		}
+	}
+
+	return fmt.Errorf("unknown command %q\n\nAvailable commands:\n  %s\n\nRun 'mockd --help' for usage.",
+		name, strings.Join(names, ", "))
 }

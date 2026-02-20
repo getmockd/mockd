@@ -59,6 +59,17 @@ type AdminClient interface {
 	// GetPortsVerbose returns all ports with optional extended info.
 	GetPortsVerbose(verbose bool) ([]PortInfo, error)
 
+	// GetStateOverview returns an overview of all stateful resources.
+	GetStateOverview() (*StateOverviewResult, error)
+	// ListStatefulItems returns paginated items for a stateful resource.
+	ListStatefulItems(resourceName string, limit, offset int, sort, order string) (*StatefulItemsResult, error)
+	// GetStatefulItem returns a specific item from a stateful resource.
+	GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error)
+	// CreateStatefulItem creates a new item in a stateful resource.
+	CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error)
+	// ResetStatefulResource resets a stateful resource to seed data.
+	ResetStatefulResource(resourceName string) error
+
 	// ListWorkspaces returns all workspaces on the admin server.
 	ListWorkspaces() ([]*WorkspaceDTO, error)
 	// CreateWorkspace creates a new workspace on the admin.
@@ -140,6 +151,38 @@ type BulkCreateResult struct {
 	Created  int          `json:"created"`
 	Mocks    []*mock.Mock `json:"mocks"`
 	Warnings []string     `json:"warnings,omitempty"`
+}
+
+// StateOverviewResult contains the overview of all stateful resources.
+type StateOverviewResult struct {
+	Resources    []StatefulResourceInfo `json:"resources"`
+	Total        int                    `json:"total"`
+	TotalItems   int                    `json:"totalItems"`
+	ResourceList []string               `json:"resourceList"`
+}
+
+// StatefulResourceInfo describes a single stateful resource.
+type StatefulResourceInfo struct {
+	Name        string `json:"name"`
+	BasePath    string `json:"basePath"`
+	ItemCount   int    `json:"itemCount"`
+	SeedCount   int    `json:"seedCount"`
+	IDField     string `json:"idField"`
+	ParentField string `json:"parentField,omitempty"`
+}
+
+// StatefulItemsResult contains paginated items from a stateful resource.
+type StatefulItemsResult struct {
+	Data []map[string]interface{} `json:"data"`
+	Meta StatefulPaginationMeta   `json:"meta"`
+}
+
+// StatefulPaginationMeta contains pagination metadata.
+type StatefulPaginationMeta struct {
+	Total  int `json:"total"`
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+	Count  int `json:"count"`
 }
 
 // APIError represents an error response from the admin API.
@@ -659,6 +702,139 @@ func (c *adminClient) GetPortsVerbose(verbose bool) ([]PortInfo, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	return result.Ports, nil
+}
+
+// GetStateOverview returns an overview of all stateful resources.
+func (c *adminClient) GetStateOverview() (*StateOverviewResult, error) {
+	resp, err := c.get("/state")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result StateOverviewResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// ListStatefulItems returns paginated items for a stateful resource.
+func (c *adminClient) ListStatefulItems(resourceName string, limit, offset int, sort, order string) (*StatefulItemsResult, error) {
+	params := url.Values{}
+	params.Set("limit", strconv.Itoa(limit))
+	params.Set("offset", strconv.Itoa(offset))
+	if sort != "" {
+		params.Set("sort", sort)
+	}
+	if order != "" {
+		params.Set("order", order)
+	}
+
+	resp, err := c.get("/state/resources/" + url.PathEscape(resourceName) + "/items?" + params.Encode())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "stateful resource not found: " + resourceName,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result StatefulItemsResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// GetStatefulItem returns a specific item from a stateful resource.
+func (c *adminClient) GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error) {
+	resp, err := c.get("/state/resources/" + url.PathEscape(resourceName) + "/items/" + url.PathEscape(itemID))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    fmt.Sprintf("item not found: %s in resource %s", itemID, resourceName),
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var item map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&item); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return item, nil
+}
+
+// CreateStatefulItem creates a new item in a stateful resource.
+func (c *adminClient) CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode item data: %w", err)
+	}
+
+	resp, err := c.post("/state/resources/"+url.PathEscape(resourceName)+"/items", body)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "stateful resource not found: " + resourceName,
+		}
+	}
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var item map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&item); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return item, nil
+}
+
+// ResetStatefulResource resets a stateful resource to seed data.
+func (c *adminClient) ResetStatefulResource(resourceName string) error {
+	resp, err := c.post("/state/resources/"+url.PathEscape(resourceName)+"/reset", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "stateful resource not found: " + resourceName,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
 }
 
 // ListWorkspaces lists all workspaces on the admin.

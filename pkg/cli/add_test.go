@@ -165,6 +165,7 @@ func TestBuildHTTPMock(t *testing.T) {
 				tt.matchHeaders,
 				tt.matchQueries,
 				false, nil, 100, "", 1, 0, // SSE defaults: disabled
+				"", "", // bodyContains, pathPattern defaults
 			)
 
 			if tt.expectError {
@@ -213,6 +214,7 @@ func TestBuildHTTPMock_BodyFile(t *testing.T) {
 		0, 0,
 		nil, nil, nil,
 		false, nil, 100, "", 1, 0, // SSE defaults
+		"", "", // bodyContains, pathPattern defaults
 	)
 
 	if err != nil {
@@ -235,6 +237,7 @@ func TestBuildHTTPMock_BodyFileNotFound(t *testing.T) {
 		0, 0,
 		nil, nil, nil,
 		false, nil, 100, "", 1, 0, // SSE defaults
+		"", "", // bodyContains, pathPattern defaults
 	)
 
 	if err == nil {
@@ -739,7 +742,7 @@ func TestOutputJSONResult(t *testing.T) {
 	// the JSON encoding doesn't panic
 
 	t.Run("http mock json output", func(t *testing.T) {
-		cfg, _ := buildHTTPMock("test", "/api/test", "GET", 200, "{}", "", 0, 0, nil, nil, nil, false, nil, 100, "", 1, 0)
+		cfg, _ := buildHTTPMock("test", "/api/test", "GET", 200, "{}", "", 0, 0, nil, nil, nil, false, nil, 100, "", 1, 0, "", "")
 		cfg.ID = "test-id"
 
 		createResult := &CreateMockResult{

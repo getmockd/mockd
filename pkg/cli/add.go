@@ -21,7 +21,7 @@ func RunAdd(args []string) error {
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 
 	// Mock type (new)
-	mockType := fs.String("type", "http", "Mock type (http, websocket, graphql, grpc, mqtt, soap)")
+	mockType := fs.String("type", "http", "Mock type (http, websocket, graphql, grpc, mqtt, soap, oauth)")
 	fs.StringVar(mockType, "t", "http", "Mock type (shorthand)")
 
 	// Common flags
@@ -48,7 +48,9 @@ func RunAdd(args []string) error {
 	var matchHeaders flags.StringSlice
 	fs.Var(&matchHeaders, "match-header", "Required request header (key:value), repeatable")
 	var matchQueries flags.StringSlice
-	fs.Var(&matchQueries, "match-query", "Required query param (key:value), repeatable")
+	fs.Var(&matchQueries, "match-query", "Required query param (key=value or key:value), repeatable")
+	bodyContains := fs.String("match-body-contains", "", "Match requests whose body contains this string")
+	pathPattern := fs.String("path-pattern", "", "Regex path pattern for matching (alternative to --path)")
 	priority := fs.Int("priority", 0, "Mock priority (higher = matched first)")
 	delay := fs.Int("delay", 0, "Response delay in milliseconds")
 
@@ -88,13 +90,20 @@ func RunAdd(args []string) error {
 	// SOAP flags
 	soapAction := fs.String("soap-action", "", "SOAPAction header value")
 
+	// OAuth flags
+	issuer := fs.String("issuer", "", "OAuth issuer URL (default: http://localhost:4280)")
+	clientID := fs.String("client-id", "test-client", "OAuth client ID")
+	clientSecret := fs.String("client-secret", "test-secret", "OAuth client secret")
+	oauthUser := fs.String("oauth-user", "testuser", "OAuth test username")
+	oauthPassword := fs.String("oauth-password", "password", "OAuth test password")
+
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `Usage: mockd add [flags]
 
 Add a new mock endpoint.
 
 Global Flags:
-  -t, --type            Mock type: http, websocket, graphql, grpc, mqtt, soap (default: http)
+  -t, --type            Mock type: http, websocket, graphql, grpc, mqtt, soap, oauth (default: http)
   -n, --name            Mock display name
       --allow-duplicate Create a new mock even if one exists on the same path
       --admin-url       Admin API base URL (default: http://localhost:4290)
@@ -108,7 +117,9 @@ HTTP Flags (--type http):
       --body-file     Read response body from file
   -H, --header        Response header (key:value), repeatable
       --match-header  Required request header (key:value), repeatable
-      --match-query   Required query param (key:value), repeatable
+      --match-query   Required query param (key=value or key:value), repeatable
+      --match-body-contains  Match requests whose body contains this string
+      --path-pattern  Regex path pattern for matching (alternative to --path)
       --priority      Mock priority (higher = matched first)
       --delay         Response delay in milliseconds
 
@@ -159,6 +170,13 @@ SOAP Flags (--type soap):
       --operation     SOAP operation name (required)
       --soap-action   SOAPAction header value
       --response      XML response body
+
+OAuth Flags (--type oauth):
+      --issuer          OAuth issuer URL (default: http://localhost:4280)
+      --client-id       OAuth client ID (default: test-client)
+      --client-secret   OAuth client secret (default: test-secret)
+      --oauth-user      Test username (default: testuser)
+      --oauth-password  Test password (default: password)
 
 Examples:
   # Simple HTTP GET mock
@@ -219,6 +237,15 @@ Examples:
   # SOAP mock
   mockd add --type soap --operation GetWeather --soap-action "http://example.com/GetWeather" \
     --response '<GetWeatherResponse><Temperature>72</Temperature></GetWeatherResponse>'
+
+  # OAuth/OIDC mock (minimal, uses defaults)
+  mockd add --type oauth
+
+  # OAuth mock with custom client and issuer
+  mockd add --type oauth --name "Auth Server" \
+    --issuer http://localhost:4280/auth \
+    --client-id my-app --client-secret s3cret \
+    --oauth-user admin --oauth-password admin123
 `)
 	}
 
@@ -237,21 +264,27 @@ Examples:
 		"grpc":      mock.TypeGRPC,
 		"mqtt":      mock.TypeMQTT,
 		"soap":      mock.TypeSOAP,
+		"oauth":     mock.TypeOAuth,
 	}
 
 	mockTypeEnum, ok := validTypes[mt]
 	if !ok {
-		return fmt.Errorf("invalid mock type: %s\n\nValid types: http, websocket, graphql, grpc, mqtt, soap", *mockType)
+		return fmt.Errorf("invalid mock type: %s\n\nValid types: http, websocket, graphql, grpc, mqtt, soap, oauth", *mockType)
+	}
+
+	// Mutual exclusivity: --path and --path-pattern
+	if *path != "" && *pathPattern != "" {
+		return fmt.Errorf("--path and --path-pattern are mutually exclusive")
 	}
 
 	// Build mock configuration based on type
 	var m *config.MockConfiguration
 	var err error
 
-	switch mockTypeEnum { //nolint:exhaustive // OAuth not yet supported in CLI add
+	switch mockTypeEnum {
 	case mock.TypeHTTP:
 		m, err = buildHTTPMock(*name, *path, *method, *status, *body, *bodyFile, *priority, *delay, headers, matchHeaders, matchQueries,
-			*sse, sseEvents, *sseDelay, *sseTemplate, *sseRepeat, *sseKeepalive)
+			*sse, sseEvents, *sseDelay, *sseTemplate, *sseRepeat, *sseKeepalive, *bodyContains, *pathPattern)
 	case mock.TypeWebSocket:
 		m, err = buildWebSocketMock(*name, *path, *message, *echo)
 	case mock.TypeGraphQL:
@@ -262,6 +295,8 @@ Examples:
 		m, err = buildMQTTMock(*name, *topic, *payload, *qos, *mqttPort)
 	case mock.TypeSOAP:
 		m, err = buildSOAPMock(*name, *path, *operation, *soapAction, *response)
+	case mock.TypeOAuth:
+		m, err = buildOAuthMock(*name, *issuer, *clientID, *clientSecret, *oauthUser, *oauthPassword)
 	}
 
 	if err != nil {
@@ -326,10 +361,11 @@ func findExistingHTTPMock(client AdminClient, method, path string) (string, erro
 // buildHTTPMock creates an HTTP mock configuration.
 func buildHTTPMock(name, path, method string, status int, body, bodyFile string, priority, delay int,
 	headers, matchHeaders, matchQueries flags.StringSlice,
-	sse bool, sseEvents flags.StringSlice, sseDelay int, sseTemplate string, sseRepeat, sseKeepalive int) (*config.MockConfiguration, error) {
+	sse bool, sseEvents flags.StringSlice, sseDelay int, sseTemplate string, sseRepeat, sseKeepalive int,
+	bodyContains, pathPattern string) (*config.MockConfiguration, error) {
 
-	if path == "" {
-		return nil, errors.New(`--path is required for HTTP mocks
+	if path == "" && pathPattern == "" {
+		return nil, errors.New(`--path or --path-pattern is required for HTTP mocks
 
 Usage: mockd add --path /api/endpoint [flags]
 
@@ -366,12 +402,12 @@ Run 'mockd add --help' for more options`)
 		matchHeadersMap[key] = value
 	}
 
-	// Parse match query params
+	// Parse match query params — accept both key=value and key:value
 	matchQueryMap := make(map[string]string)
 	for _, q := range matchQueries {
-		key, value, ok := parse.KeyValue(q, ':')
+		key, value, ok := parse.KeyValue(q, '=', ':')
 		if !ok {
-			return nil, fmt.Errorf("invalid match-query format: %s (expected key:value)", q)
+			return nil, fmt.Errorf("invalid match-query format: %s (expected key=value or key:value)", q)
 		}
 		matchQueryMap[key] = value
 	}
@@ -414,6 +450,12 @@ Run 'mockd add --help' for more options`)
 	}
 	if len(matchQueryMap) > 0 {
 		m.HTTP.Matcher.QueryParams = matchQueryMap
+	}
+	if bodyContains != "" {
+		m.HTTP.Matcher.BodyContains = bodyContains
+	}
+	if pathPattern != "" {
+		m.HTTP.Matcher.PathPattern = pathPattern
 	}
 
 	return m, nil
@@ -803,6 +845,53 @@ Run 'mockd add --help' for more options`)
 	return m, nil
 }
 
+// buildOAuthMock creates an OAuth/OIDC mock configuration.
+func buildOAuthMock(name, issuer, clientID, clientSecret, username, password string) (*config.MockConfiguration, error) {
+	// Default issuer
+	if issuer == "" {
+		issuer = "http://localhost:4280"
+	}
+
+	// Default name
+	if name == "" {
+		name = "OAuth Mock"
+	}
+
+	oauthEnabled := true
+	m := &config.MockConfiguration{
+		Name:    name,
+		Type:    mock.TypeOAuth,
+		Enabled: &oauthEnabled,
+		OAuth: &mock.OAuthSpec{
+			Issuer:        issuer,
+			TokenExpiry:   "1h",
+			RefreshExpiry: "7d",
+			DefaultScopes: []string{"openid", "profile", "email"},
+			Clients: []mock.OAuthClient{
+				{
+					ClientID:     clientID,
+					ClientSecret: clientSecret,
+					RedirectURIs: []string{"http://localhost:3000/callback"},
+					GrantTypes:   []string{"authorization_code", "client_credentials", "refresh_token", "password"},
+				},
+			},
+			Users: []mock.OAuthUser{
+				{
+					Username: username,
+					Password: password,
+					Claims: map[string]string{
+						"sub":   username,
+						"email": username + "@example.com",
+						"name":  username,
+					},
+				},
+			},
+		},
+	}
+
+	return m, nil
+}
+
 // outputResult formats and prints the created or merged mock result.
 func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool) error { //nolint:gocyclo // CLI output handler for all mock types
 	if jsonOutput {
@@ -855,7 +944,7 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 	}
 	fmt.Printf("  Type: %s\n", created.Type)
 
-	switch mockType { //nolint:exhaustive // OAuth not yet supported in CLI add output
+	switch mockType { //nolint:exhaustive // only protocol types with specific output
 	case mock.TypeHTTP:
 		if created.HTTP != nil {
 			if created.HTTP.Matcher != nil {
@@ -904,6 +993,16 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 				}
 			}
 		}
+	case mock.TypeOAuth:
+		if created.OAuth != nil {
+			fmt.Printf("  Issuer: %s\n", created.OAuth.Issuer)
+			if len(created.OAuth.Clients) > 0 {
+				fmt.Printf("  Client ID: %s\n", created.OAuth.Clients[0].ClientID)
+			}
+			if len(created.OAuth.Users) > 0 {
+				fmt.Printf("  User: %s\n", created.OAuth.Users[0].Username)
+			}
+		}
 	}
 
 	return nil
@@ -948,7 +1047,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 	}
 
 	// Standard create output
-	switch mockType { //nolint:exhaustive // OAuth not yet supported in CLI JSON output
+	switch mockType { //nolint:exhaustive // only protocol types with specific JSON output
 	case mock.TypeHTTP:
 		createdMethod := ""
 		createdPath := ""
@@ -1095,6 +1194,35 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 			Path:        soapPath,
 			Operations:  operations,
 			SOAPActions: soapActions,
+		})
+
+	case mock.TypeOAuth:
+		oauthIssuer := ""
+		oauthClientID := ""
+		oauthUsername := ""
+		if created.OAuth != nil {
+			oauthIssuer = created.OAuth.Issuer
+			if len(created.OAuth.Clients) > 0 {
+				oauthClientID = created.OAuth.Clients[0].ClientID
+			}
+			if len(created.OAuth.Users) > 0 {
+				oauthUsername = created.OAuth.Users[0].Username
+			}
+		}
+		return output.JSON(struct {
+			ID       string `json:"id"`
+			Type     string `json:"type"`
+			Action   string `json:"action"`
+			Issuer   string `json:"issuer"`
+			ClientID string `json:"clientId,omitempty"`
+			Username string `json:"username,omitempty"`
+		}{
+			ID:       created.ID,
+			Type:     string(created.Type),
+			Action:   result.Action,
+			Issuer:   oauthIssuer,
+			ClientID: oauthClientID,
+			Username: oauthUsername,
 		})
 	}
 
