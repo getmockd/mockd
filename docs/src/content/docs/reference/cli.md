@@ -39,6 +39,26 @@ mockd serve [flags]
 | `--max-log-entries` | | Maximum request log entries | `1000` |
 | `--auto-cert` | | Auto-generate TLS certificate | `true` |
 
+**CORS Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--cors-origins` | Comma-separated CORS allowed origins (e.g., `'*'` or `'https://app.example.com'`) | |
+
+**Rate Limiting Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--rate-limit` | Rate limit in requests per second (0 = disabled) | `0` |
+
+**Persistence Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--no-persist` | Disable persistent storage (mocks are lost on restart) | `false` |
+
+**Watch Flags:**
+
 **TLS Flags:**
 
 | Flag | Description |
@@ -168,6 +188,22 @@ mockd serve --audit-enabled --audit-file audit.log --audit-level debug
 
   # Send logs to Loki for aggregation
   mockd serve --loki-endpoint http://localhost:3100/loki/api/v1/push
+
+# Allow CORS from any origin
+mockd serve --cors-origins '*'
+
+# Allow CORS from specific origins
+mockd serve --cors-origins 'https://app.example.com,https://admin.example.com'
+
+# Rate limit to 100 requests per second
+mockd serve --rate-limit 100
+
+# Ephemeral mode — mocks are lost on restart
+mockd serve --no-persist
+
+# Watch config file for changes and auto-reload
+# Combine: ephemeral server with CORS and rate limiting
+mockd serve --no-persist --cors-origins '*' --rate-limit 50 --config mocks.yaml
 ```
 
 ---
@@ -188,7 +224,6 @@ mockd start [flags]
 | `--admin-port` | `-a` | Admin API port | `4290` |
 | `--config` | `-c` | Path to mock configuration file | |
 | `--load` | | Load mocks from directory | |
-| `--watch` | | Watch for file changes (with --load) | |
 | `--validate` | | Validate files before serving (with --load) | |
 | `--https-port` | | HTTPS server port (0 = disabled) | `0` |
 | `--read-timeout` | | Read timeout in seconds | `30` |
@@ -212,9 +247,6 @@ mockd start --https-port 8443
 
 # Load mocks from directory
 mockd start --load ./mocks/
-
-# Load with hot reload
-mockd start --load ./mocks/ --watch
 
 # Validate mocks before serving
 mockd start --load ./mocks/ --validate
@@ -399,7 +431,7 @@ mockd init --force
 
 ### mockd add
 
-Add a new mock endpoint.
+Add or update a mock endpoint. By default, if a mock already exists with the same method and path, it is **updated in place** (upsert behavior). The command prints "Updated mock: ..." when an existing mock is modified and "Created mock: ..." when a new mock is created.
 
 ```bash
 mockd add [flags]
@@ -409,10 +441,15 @@ mockd add [flags]
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
-| `--type` | `-t` | Mock type: http, websocket, graphql, grpc, mqtt, soap | `http` |
+| `--type` | `-t` | Mock type: http, websocket, graphql, grpc, mqtt, soap, oauth | `http` |
 | `--name` | `-n` | Mock display name | |
+| `--allow-duplicate` | | Create a second mock even if one already exists on the same method+path | `false` |
 | `--admin-url` | | Admin API base URL | `http://localhost:4290` |
 | `--json` | | Output in JSON format | |
+
+:::note[Upsert by Default]
+Running `mockd add` with the same method and path as an existing mock will **update** that mock rather than creating a duplicate. This prevents accidental mock duplication when iterating on configurations. Use `--allow-duplicate` if you intentionally need multiple mocks on the same route (e.g., with different matchers like headers or query parameters).
+:::
 
 **HTTP Flags (`--type http`):**
 
@@ -425,7 +462,9 @@ mockd add [flags]
 | `--body-file` | | Read response body from file | |
 | `--header` | `-H` | Response header (key:value), repeatable | |
 | `--match-header` | | Required request header (key:value), repeatable | |
-| `--match-query` | | Required query param (key:value), repeatable | |
+| `--match-query` | | Required query param (key=value or key:value), repeatable | |
+| `--match-body-contains` | | Match requests whose body contains this string | |
+| `--path-pattern` | | Regex path pattern for matching (alternative to `--path`, mutually exclusive) | |
 | `--priority` | | Mock priority (higher = matched first) | |
 | `--delay` | | Response delay in milliseconds | |
 
@@ -486,11 +525,34 @@ mockd add [flags]
 | `--soap-action` | SOAPAction header value | |
 | `--response` | XML response body | |
 
+**OAuth Flags (`--type oauth`):**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--issuer` | OAuth issuer URL | `http://localhost:4280` |
+| `--client-id` | OAuth client ID | `test-client` |
+| `--client-secret` | OAuth client secret | `test-secret` |
+| `--oauth-user` | Test username | `testuser` |
+| `--oauth-password` | Test password | `password` |
+
+:::note[OAuth Mock]
+The `--type oauth` option creates a full OAuth/OIDC mock server with standard endpoints including `/.well-known/openid-configuration`, `/token`, `/authorize`, `/userinfo`, and `/jwks`. This is useful for testing applications that integrate with OAuth providers without needing a real identity server.
+:::
+
 **Examples:**
 
 ```bash
-# Simple HTTP GET mock
+# Simple HTTP GET mock (creates new)
 mockd add --path /api/users --status 200 --body '[]'
+# Output: Created mock: http_abc123
+
+# Run the same command again — updates the existing mock (upsert)
+mockd add --path /api/users --status 200 --body '[{"id":1}]'
+# Output: Updated mock: http_abc123
+
+# Force a duplicate mock on the same path
+mockd add --path /api/users --status 200 --body '[]' --allow-duplicate
+# Output: Created mock: http_def456
 
 # HTTP POST with JSON response
 mockd add -m POST --path /api/users -s 201 \
@@ -536,6 +598,28 @@ mockd add -m POST --path /v1/chat/completions --sse --sse-template openai-chat
 # SSE with infinite keepalive ping
 mockd add --path /stream --sse \
   --sse-event 'ping:{}' --sse-delay 1000 --sse-repeat 0
+
+# Match requests by body content
+mockd add -m POST --path /api/webhooks -s 200 \
+  --match-body-contains '"event":"payment.completed"' \
+  -b '{"received": true}'
+
+# Use regex path pattern instead of exact path
+mockd add --path-pattern '/api/users/[0-9]+' --status 200 \
+  -b '{"id": 1, "name": "Alice"}'
+
+# Match query params (both formats work)
+mockd add --path /api/search --match-query 'q=test' -b '{"results": []}'
+mockd add --path /api/search --match-query 'q:test' -b '{"results": []}'
+
+# OAuth/OIDC mock with defaults
+mockd add --type oauth
+
+# OAuth mock with custom configuration
+mockd add --type oauth --name "Auth Server" \
+  --issuer http://localhost:4280/auth \
+  --client-id my-app --client-secret s3cret \
+  --oauth-user admin --oauth-password admin123
 ```
 
 ---
@@ -595,7 +679,8 @@ mockd list [flags]
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
 | `--config` | `-c` | List mocks from config file (no server needed) | |
-| `--type` | `-t` | Filter by type: http, websocket, graphql, grpc, mqtt, soap | |
+| `--type` | `-t` | Filter by type: http, websocket, graphql, grpc, mqtt, soap, oauth | |
+| `--no-truncate` | `-w` | Show full IDs and paths without truncation | `false` |
 | `--admin-url` | | Admin API base URL | `http://localhost:4290` |
 | `--json` | | Output in JSON format | |
 
@@ -610,6 +695,9 @@ mockd list --config mockd.yaml
 
 # List only WebSocket mocks
 mockd list --type websocket
+
+# Show full IDs and paths (useful for copy-pasting IDs into delete commands)
+mockd list --no-truncate
 
 # List as JSON
 mockd list --json
@@ -655,29 +743,71 @@ mockd get abc123 --json
 
 ### mockd delete
 
-Delete a mock by ID.
+Delete mocks by ID, ID prefix, or path. Also available as `mockd remove` and `mockd rm`.
 
 ```bash
-mockd delete <mock-id> [flags]
+mockd delete [<mock-id>] [flags]
 ```
 
 **Arguments:**
 
 | Argument | Description |
 |----------|-------------|
-| `mock-id` | ID of the mock to delete (required) |
+| `mock-id` | Full or prefix of the mock ID. Supports prefix matching — if the prefix uniquely identifies one mock, it is deleted. If the prefix matches multiple mocks, all matches are shown and you are asked to be more specific. |
 
 **Flags:**
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--admin-url` | Admin API base URL | `http://localhost:4290` |
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--path` | | Delete mocks matching a URL path | |
+| `--method` | `-m` | Filter by HTTP method (used with `--path`) | |
+| `--yes` | `-y` | Skip confirmation when multiple mocks match | `false` |
+| `--admin-url` | | Admin API base URL | `http://localhost:4290` |
 
 **Examples:**
 
 ```bash
-mockd delete abc123
+# Delete by exact ID
+mockd delete http_abc123def456
+
+# Delete by ID prefix (must uniquely match one mock)
+mockd delete http_abc
+# Output: Deleted mock: http_abc123def456
+
+# If prefix is ambiguous, shows matches and asks for more specificity
+mockd delete http_a
+# Output:
+#   Multiple mocks match prefix "http_a":
+#     http_abc123def456  GET  /api/users
+#     http_aef789012345  POST /api/users
+#   Please provide a more specific prefix.
+
+# Delete all mocks on a path
+mockd delete --path /api/users
+
+# Delete only GET mocks on a path
+mockd delete --path /api/users --method GET
+
+# Skip confirmation when deleting multiple mocks
+mockd delete --path /api/users -y
+
+# Using aliases
+mockd remove http_abc123
+mockd rm http_abc123
 ```
+
+---
+
+### mockd remove / mockd rm
+
+Hidden aliases for `mockd delete`. All flags and arguments are identical.
+
+```bash
+mockd remove [<mock-id>] [flags]
+mockd rm [<mock-id>] [flags]
+```
+
+See [mockd delete](#mockd-delete) for full documentation.
 
 ---
 

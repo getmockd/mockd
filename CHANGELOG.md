@@ -7,6 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--cors-origins` flag on `serve` command
+- `--rate-limit` flag on `serve` command
+- `--no-persist` flag on `serve` command
+- `--watch` flag on `serve` command
+- `--match-body-contains` flag on `add` command
+- `--path-pattern` flag on `add` command
+- `--type oauth` for `add` command with `--issuer`, `--client-id`, `--client-secret`, `--oauth-user`, `--oauth-password`
+- `{{random.string(N)}}` template function
+- `{{mtls.san.ip}}` and `{{mtls.san.uri}}` template variables
+- `{{sequence("name", start)}}` works in all contexts (not just MQTT)
+- MCP stateful tools now work through admin API
+- Stateful item-level CRUD admin endpoints
+- 20+ new tests (chaos, template, mTLS)
+
+### Fixed
+
+- SSE template expressions now resolve (was returning literal strings)
+- OpenAPI body validation errors now include field paths
+- Health endpoint zero timestamp in Docker (startTime race condition)
+- Install script version display uses installed binary instead of PATH lookup
+- Content-Type auto-detection: JSON bodies get `application/json` instead of `text/plain`
+- `bodyFile` relative path resolution (resolves relative to config file directory)
+- Validation mode "warn" now adds warning headers instead of blocking
+- Validation mode "permissive" now skips validation entirely
+- Stateful capacity error returns 507 instead of 500
+- Chaos probability values clamped to [0.0, 1.0]
+- Chaos per-path rules now properly preempt global rules
+- SSE rate limit headers now sent when configured
+- Unknown CLI command now shows helpful error with available commands
+- Port range validation (0-65535) prevents misleading OS errors
+- `--match-query` now accepts both `key=value` and `key:value` formats
+- `{{default}}` template function now properly resolves context values
+
+### Changed
+
+- Template engine `New()` always initializes a SequenceStore
+
+## [0.2.9] - 2026-02-19
+
+### Added
+
+- CLI UX improvements: `mockd add` upserts by method+path, `mockd list -w`, `mockd delete --path/--method/--yes`, `mockd rm` alias
+- README overhauled
+
+### Changed
+
+- Homebrew tap renamed to `getmockd/homebrew-tap`
+- Helm chart bumped
+
+## [0.2.8] - 2026-02-15
+
+### Fixed
+
+- 5 test fixes (envelope unwrapping, SOAP WSDL, E2E import)
+
+### Notes
+
+- 53 commits pushed to origin, all CI green
+- First public push
+
+## [0.2.7] - 2026-02-12
+
+### Fixed
+
+- Validation body double-read elimination (halves peak memory)
+- 9 P3 cosmetic fixes: MCP version wiring, timestamps, seed IDs, export options, variable shadow, log IDs, modulo bias, Insomnia export
+
+### Added
+
+- Protocol interface documentation
+- Template engine boundary documentation
+
+## [0.2.6] - 2026-02-12
+
+### Added
+
+- 59 recording tests (WebSocket, SOAP handler, SOAP converter)
+- 39 tests across various subsystems
+
+### Fixed
+
+- 12 P3/cosmetic fixes and dead code cleanup
+
+### Notes
+
+- Marketing audit on mockd-ui
+
+## [0.2.5] - 2026-02-12
+
+### Fixed
+
+- 22 bug fixes across admin, portability, CLI, MCP, tracing, stateful
+
+### Added
+
+- 67 new tests (chaos, portability, stateful, CLI config)
+
 ## [0.2.4] - 2026-02-04
 
 ### Added
@@ -105,7 +204,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial public release (pre-1.0)
 - Licensed under Apache 2.0
 
-[Unreleased]: https://github.com/getmockd/mockd/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/getmockd/mockd/compare/v0.2.9...HEAD
+[0.2.9]: https://github.com/getmockd/mockd/compare/v0.2.8...v0.2.9
+[0.2.8]: https://github.com/getmockd/mockd/compare/v0.2.7...v0.2.8
+[0.2.7]: https://github.com/getmockd/mockd/compare/v0.2.6...v0.2.7
+[0.2.6]: https://github.com/getmockd/mockd/compare/v0.2.5...v0.2.6
+[0.2.5]: https://github.com/getmockd/mockd/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/getmockd/mockd/compare/v0.2.0...v0.2.4
 [0.2.0]: https://github.com/getmockd/mockd/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/getmockd/mockd/releases/tag/v0.1.0

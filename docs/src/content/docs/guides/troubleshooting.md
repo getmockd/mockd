@@ -21,8 +21,14 @@ Common reasons why your mock might not be matching:
 # Check what mocks are loaded
 mockd list
 
+# Show full IDs and paths without truncation
+mockd list --no-truncate
+
 # View request logs to see what's being received
 mockd logs
+
+# Delete a problematic mock by path
+mockd delete --path /api/users --method GET
 
 # Use doctor to diagnose issues
 mockd doctor
@@ -123,6 +129,9 @@ If mockd is running slowly:
 ```bash
 # Check current mock count
 mockd list | wc -l
+
+# Show full mock IDs and paths for debugging
+mockd list --no-truncate
 
 # Enable metrics for monitoring
 mockd start --metrics
