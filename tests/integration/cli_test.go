@@ -32,7 +32,8 @@ func TestCLIStartCommand(t *testing.T) {
 	defer exec.Command("rm", "-f", "../../mockd_test").Run()
 
 	// Start the server in background with isolated data directory
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Use 120s timeout to allow for slow CI environments with -race builds
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "./mockd_test", "start",
@@ -53,7 +54,7 @@ func TestCLIStartCommand(t *testing.T) {
 
 	// Wait for server to be ready
 	adminURL := fmt.Sprintf("http://localhost:%d", adminPort)
-	if !waitForServer(adminURL+"/health", 30*time.Second) {
+	if !waitForServer(adminURL+"/health", 60*time.Second) {
 		cmd.Process.Kill()
 		t.Fatalf("Server did not become ready in time\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
 	}
@@ -109,9 +110,9 @@ func TestCLIMockCRUDCommands(t *testing.T) {
 	defer exec.Command("rm", "-f", "../../mockd_test").Run()
 
 	// Start the server in background with isolated data directory
-	// Use 60s timeout to allow for slow CI environments where server startup
-	// can take 20-25s, leaving enough time for the actual test operations.
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// Use 120s timeout to allow for slow CI environments (GitHub shared runners)
+	// where server startup with -race can take 30-40s.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	serverCmd := exec.CommandContext(ctx, "./mockd_test", "start",
@@ -128,7 +129,7 @@ func TestCLIMockCRUDCommands(t *testing.T) {
 
 	// Wait for server to be ready
 	adminURL := fmt.Sprintf("http://localhost:%d", adminPort)
-	if !waitForServer(adminURL+"/health", 30*time.Second) {
+	if !waitForServer(adminURL+"/health", 60*time.Second) {
 		t.Fatal("Server did not become ready in time")
 	}
 
@@ -253,9 +254,9 @@ func TestCLIImportExportCommands(t *testing.T) {
 	defer exec.Command("rm", "-f", "../../mockd_test").Run()
 
 	// Start the server with isolated data directory
-	// Use 60s timeout to allow for slow CI environments where server startup
-	// can take 20-25s, leaving enough time for the actual test operations.
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// Use 120s timeout to allow for slow CI environments (GitHub shared runners)
+	// where server startup with -race can take 30-40s.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	serverCmd := exec.CommandContext(ctx, "./mockd_test", "start",
@@ -271,7 +272,7 @@ func TestCLIImportExportCommands(t *testing.T) {
 	defer serverCmd.Process.Kill()
 
 	adminURL := fmt.Sprintf("http://localhost:%d", adminPort)
-	if !waitForServer(adminURL+"/health", 30*time.Second) {
+	if !waitForServer(adminURL+"/health", 60*time.Second) {
 		t.Fatal("Server did not become ready in time")
 	}
 
