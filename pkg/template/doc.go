@@ -10,6 +10,13 @@
 // Random values:
 //   - {{uuid}} - Random UUID v4
 //   - {{random}} - Random 8-character hex string
+//   - {{random.string}} - Random 10-character alphanumeric string
+//   - {{random.string(N)}} - Random N-character alphanumeric string
+//   - {{random.int}} - Random integer 0-100
+//   - {{random.int(min, max)}} - Random integer in range [min, max]
+//   - {{random.float}} - Random float 0.0-1.0
+//   - {{random.float(min, max)}} - Random float in range
+//   - {{random.float(min, max, precision)}} - Random float with decimal precision
 //
 // # Request Variables
 //
@@ -36,9 +43,32 @@
 //   - {{mtls.notAfter}} - Certificate validity end (RFC3339)
 //   - {{mtls.san.dns}} - First DNS Subject Alternative Name
 //   - {{mtls.san.email}} - First email Subject Alternative Name
+//   - {{mtls.san.ip}} - First IP address Subject Alternative Name
+//   - {{mtls.san.uri}} - First URI Subject Alternative Name
 //   - {{mtls.verified}} - "true" or "false" if certificate was verified
 //
 // If no mTLS identity is present, all mtls.* variables return empty strings.
+//
+// # Functions
+//
+// Transform or provide fallback values:
+//   - {{upper(value)}} or {{upper value}} - Convert to uppercase
+//   - {{lower(value)}} or {{lower value}} - Convert to lowercase
+//   - {{default(value, "fallback")}} or {{default value "fallback"}} - Use fallback if value is empty
+//
+// The default function resolves its first argument as a context path
+// (request.*, mtls.*, payload.*, topic, uuid, etc.) and returns the
+// fallback string if the resolved value is empty.
+//
+// # Sequences
+//
+// Auto-incrementing counters available in all contexts (HTTP, GraphQL,
+// SSE, SOAP, WebSocket, MQTT):
+//   - {{sequence("name")}} - Auto-incrementing counter starting at 1
+//   - {{sequence("name", start)}} - Auto-incrementing counter starting at start
+//
+// Each named sequence is independent and persists for the lifetime of the
+// engine instance.
 //
 // # Template Engine Boundary
 //

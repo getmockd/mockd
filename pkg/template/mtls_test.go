@@ -27,6 +27,8 @@ func TestMTLSTemplateVariables(t *testing.T) {
 		SANs: mtls.SubjectAltNames{
 			DNSNames:       []string{"client.example.com", "backup.example.com"},
 			EmailAddresses: []string{"client@example.com", "alt@example.com"},
+			IPAddresses:    []string{"192.168.1.100", "10.0.0.1"},
+			URIs:           []string{"spiffe://example.org/client"},
 		},
 		Verified: true,
 	}
@@ -90,6 +92,16 @@ func TestMTLSTemplateVariables(t *testing.T) {
 			name:     "mtls.san.email",
 			template: "{{mtls.san.email}}",
 			expected: "client@example.com",
+		},
+		{
+			name:     "mtls.san.ip",
+			template: "{{mtls.san.ip}}",
+			expected: "192.168.1.100",
+		},
+		{
+			name:     "mtls.san.uri",
+			template: "{{mtls.san.uri}}",
+			expected: "spiffe://example.org/client",
 		},
 		{
 			name:     "mtls.verified",
@@ -212,6 +224,16 @@ func TestMTLSTemplateVariables_PartialIdentity(t *testing.T) {
 		{
 			name:     "mtls.san.email empty when no email SANs",
 			template: "{{mtls.san.email}}",
+			expected: "",
+		},
+		{
+			name:     "mtls.san.ip empty when no IP SANs",
+			template: "{{mtls.san.ip}}",
+			expected: "",
+		},
+		{
+			name:     "mtls.san.uri empty when no URI SANs",
+			template: "{{mtls.san.uri}}",
 			expected: "",
 		},
 		{

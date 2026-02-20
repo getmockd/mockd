@@ -60,6 +60,10 @@ type MTLSContext struct {
 	SANDNS string
 	// SANEmail is the first email Subject Alternative Name
 	SANEmail string
+	// SANIP is the first IP address Subject Alternative Name
+	SANIP string
+	// SANURI is the first URI Subject Alternative Name
+	SANURI string
 	// Verified indicates whether the certificate was verified
 	Verified bool
 	// Present indicates whether mTLS identity is available
@@ -193,5 +197,15 @@ func (c *Context) SetMTLSFromIdentity(identity *mtls.ClientIdentity) {
 	// Get first email SAN if available
 	if len(identity.SANs.EmailAddresses) > 0 {
 		c.MTLS.SANEmail = identity.SANs.EmailAddresses[0]
+	}
+
+	// Get first IP SAN if available
+	if len(identity.SANs.IPAddresses) > 0 {
+		c.MTLS.SANIP = identity.SANs.IPAddresses[0]
+	}
+
+	// Get first URI SAN if available
+	if len(identity.SANs.URIs) > 0 {
+		c.MTLS.SANURI = identity.SANs.URIs[0]
 	}
 }

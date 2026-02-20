@@ -22,9 +22,11 @@ type Engine struct {
 	sequences *SequenceStore
 }
 
-// New creates a new template engine without sequence support.
+// New creates a new template engine with a default sequence store.
+// Sequences like {{sequence("counter")}} work in all contexts (HTTP,
+// GraphQL, SSE, SOAP, WebSocket, MQTT).
 func New() *Engine {
-	return &Engine{}
+	return &Engine{sequences: NewSequenceStore()}
 }
 
 // NewWithSequences creates a template engine with sequence support.
@@ -42,6 +44,8 @@ var (
 	randomIntPattern = regexp.MustCompile(`^random\.int(?:\((\d+),\s*(\d+)\))?$`)
 	// random.float or random.float(min, max) or random.float(min, max, precision)
 	randomFloatPattern = regexp.MustCompile(`^random\.float(?:\(([0-9.]+),\s*([0-9.]+)(?:,\s*(\d+))?\))?$`)
+	// random.string or random.string(length)
+	randomStringPattern = regexp.MustCompile(`^random\.string(?:\((\d+)\))?$`)
 	// sequence("name") or sequence("name", start)
 	sequencePattern = regexp.MustCompile(`^sequence\("([^"]+)"(?:,\s*(\d+))?\)$`)
 	// {1}, {2} for wildcard substitution
@@ -103,6 +107,9 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 	case "random.int":
 		// No-arg form: random int 0-100
 		return funcRandomInt(0, 100)
+	case "random.string":
+		// No-arg form: random alphanumeric string of length 10
+		return funcRandomString(10)
 	}
 
 	// Handle MQTT context variables
@@ -174,6 +181,17 @@ func (e *Engine) evaluateParenthesized(expr string, ctx *Context) (string, bool)
 			return funcRandomFloatRange(matches[1], matches[2], matches[3]), true
 		}
 		return "", false // no parens
+	}
+
+	// random.string(length)
+	if matches := randomStringPattern.FindStringSubmatch(expr); matches != nil {
+		length := 10 // default
+		if matches[1] != "" {
+			if n, err := strconv.Atoi(matches[1]); err == nil && n > 0 {
+				length = n
+			}
+		}
+		return funcRandomString(length), true
 	}
 
 	// sequence("name") or sequence("name", start)
@@ -256,16 +274,30 @@ func (e *Engine) evaluateSpaceSeparated(expr string, ctx *Context) (string, bool
 }
 
 // resolveValue resolves a value reference.
-// If it looks like a context path (e.g., request.body.name), it evaluates it.
-// Otherwise, it returns the literal value.
+// If it looks like a context path (e.g., request.body.name, payload.field,
+// topic, uuid, etc.), it evaluates it through the main evaluator.
+// Quoted strings are returned as literals with quotes removed.
 func (e *Engine) resolveValue(ref string, ctx *Context) string {
 	ref = strings.TrimSpace(ref)
-	if strings.HasPrefix(ref, "request.") {
-		return e.evaluateRequest(ref[8:], ctx)
+
+	// Quoted strings are always literals
+	if len(ref) >= 2 {
+		if (ref[0] == '"' && ref[len(ref)-1] == '"') || (ref[0] == '\'' && ref[len(ref)-1] == '\'') {
+			return ref[1 : len(ref)-1]
+		}
 	}
-	if strings.HasPrefix(ref, "mtls.") {
-		return e.evaluateMTLS(ref[5:], ctx)
+
+	// Known context prefixes and built-in names are evaluated as expressions
+	if strings.HasPrefix(ref, "request.") ||
+		strings.HasPrefix(ref, "mtls.") ||
+		strings.HasPrefix(ref, "payload.") ||
+		ref == "topic" || ref == "clientId" || ref == "device_id" ||
+		ref == "uuid" || ref == "uuid.short" ||
+		ref == "now" || ref == "timestamp" ||
+		strings.HasPrefix(ref, "timestamp.") {
+		return e.evaluate(ref, ctx)
 	}
+
 	return parseStringArg(ref)
 }
 
@@ -476,6 +508,10 @@ func (e *Engine) evaluateMTLS(expr string, ctx *Context) string {
 				return ctx.MTLS.SANDNS
 			case "email":
 				return ctx.MTLS.SANEmail
+			case "ip":
+				return ctx.MTLS.SANIP
+			case "uri":
+				return ctx.MTLS.SANURI
 			}
 		}
 		return ""

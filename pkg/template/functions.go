@@ -74,6 +74,16 @@ func funcRandomFloatRange(minStr, maxStr, precisionStr string) string {
 	return strconv.FormatFloat(val, 'f', -1, 64)
 }
 
+// funcRandomString returns a random alphanumeric string of the given length.
+func funcRandomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.IntN(len(charset))]
+	}
+	return string(b)
+}
+
 // String functions
 
 // funcUpper converts a string to uppercase

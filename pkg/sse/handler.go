@@ -15,6 +15,7 @@ import (
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/requestlog"
+	"github.com/getmockd/mockd/pkg/template"
 	"github.com/getmockd/mockd/pkg/util"
 )
 
@@ -28,6 +29,7 @@ type SSEHandler struct {
 	buffersMu            sync.RWMutex            // mutex for thread-safe buffers access
 	buffers              map[string]*EventBuffer // buffers by mock ID
 	templates            *TemplateRegistry
+	templateEngine       *template.Engine // template engine for processing expressions like {{uuid}}, {{now}}
 	nextConnID           atomic.Int64
 	recordingHookFactory SSERecordingHookFactory // factory to create per-connection hooks
 	id                   string                  // handler ID for protocol.Handler interface
@@ -38,10 +40,11 @@ type SSEHandler struct {
 // NewSSEHandler creates a new SSE handler.
 func NewSSEHandler(maxConnections int) *SSEHandler {
 	return &SSEHandler{
-		encoder:   NewEncoder(),
-		manager:   NewConnectionManager(maxConnections),
-		buffers:   make(map[string]*EventBuffer),
-		templates: NewTemplateRegistry(),
+		encoder:        NewEncoder(),
+		manager:        NewConnectionManager(maxConnections),
+		buffers:        make(map[string]*EventBuffer),
+		templates:      NewTemplateRegistry(),
+		templateEngine: template.New(),
 	}
 }
 
@@ -69,6 +72,11 @@ func (h *SSEHandler) GetRequestLogger() requestlog.Logger {
 	h.requestLoggerMu.RLock()
 	defer h.requestLoggerMu.RUnlock()
 	return h.requestLogger
+}
+
+// SetTemplateEngine sets the template engine for processing response templates.
+func (h *SSEHandler) SetTemplateEngine(engine *template.Engine) {
+	h.templateEngine = engine
 }
 
 // logConnection logs an SSE connection open or close event.
@@ -196,6 +204,19 @@ func (h *SSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, m *config
 	// Set SSE headers
 	h.setSSEHeaders(w)
 
+	// Build internal SSE config from mock
+	sseConfig := h.configFromMock(m.HTTP.SSE)
+
+	// Write rate limit headers if configured
+	if sseConfig.RateLimit != nil && sseConfig.RateLimit.EventsPerSecond > 0 && sseConfig.RateLimit.Headers {
+		limiter := NewRateLimiter(sseConfig.RateLimit)
+		if headers := limiter.RateLimitHeaders(); headers != nil {
+			for k, v := range headers {
+				w.Header().Set(k, v)
+			}
+		}
+	}
+
 	// Create stream context
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -212,7 +233,7 @@ func (h *SSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, m *config
 		cancel:    cancel,
 		writer:    w,
 		flusher:   flusher,
-		config:    h.configFromMock(m.HTTP.SSE),
+		config:    sseConfig,
 	}
 
 	// Check for Last-Event-ID header for resumption
@@ -729,6 +750,11 @@ func (h *SSEHandler) sendEvent(stream *SSEStream, event *SSEEventDef, eventIndex
 	// Assign ID if not set and resume is enabled
 	if event.ID == "" && stream.config.Resume.Enabled {
 		event.ID = strconv.FormatInt(eventIndex+1, 10)
+	}
+
+	// Process template expressions in event data
+	if h.templateEngine != nil {
+		event.Data = h.templateEngine.ProcessInterface(event.Data, nil)
 	}
 
 	// Format the event

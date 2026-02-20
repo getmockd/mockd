@@ -140,6 +140,161 @@ func TestParenthesizedDefault(t *testing.T) {
 }
 
 // =============================================================================
+// Random String Tests
+// =============================================================================
+
+func TestRandomStringParenthesized(t *testing.T) {
+	engine := New()
+
+	t.Run("default length 10", func(t *testing.T) {
+		result, err := engine.Process("{{random.string}}", nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if len(result) != 10 {
+			t.Errorf("random.string should return 10 chars, got %d: %q", len(result), result)
+		}
+		matched, _ := regexp.MatchString(`^[a-zA-Z0-9]+$`, result)
+		if !matched {
+			t.Errorf("random.string should be alphanumeric, got %q", result)
+		}
+	})
+
+	t.Run("custom length", func(t *testing.T) {
+		result, err := engine.Process("{{random.string(20)}}", nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if len(result) != 20 {
+			t.Errorf("random.string(20) should return 20 chars, got %d: %q", len(result), result)
+		}
+		matched, _ := regexp.MatchString(`^[a-zA-Z0-9]+$`, result)
+		if !matched {
+			t.Errorf("random.string(20) should be alphanumeric, got %q", result)
+		}
+	})
+
+	t.Run("length 1", func(t *testing.T) {
+		result, err := engine.Process("{{random.string(1)}}", nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if len(result) != 1 {
+			t.Errorf("random.string(1) should return 1 char, got %d: %q", len(result), result)
+		}
+	})
+
+	t.Run("large length", func(t *testing.T) {
+		result, err := engine.Process("{{random.string(100)}}", nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if len(result) != 100 {
+			t.Errorf("random.string(100) should return 100 chars, got %d", len(result))
+		}
+	})
+
+	t.Run("with spaces", func(t *testing.T) {
+		result, err := engine.Process("{{ random.string(5) }}", nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if len(result) != 5 {
+			t.Errorf("random.string(5) with spaces should return 5 chars, got %d: %q", len(result), result)
+		}
+	})
+
+	t.Run("produces different values", func(t *testing.T) {
+		results := make(map[string]bool)
+		for i := 0; i < 20; i++ {
+			result, _ := engine.Process("{{random.string(10)}}", nil)
+			results[result] = true
+		}
+		// With 62^10 possibilities, 20 calls should produce at least 2 unique values
+		if len(results) < 2 {
+			t.Error("random.string should produce different values across calls")
+		}
+	})
+}
+
+// =============================================================================
+// Default Function Extended Tests
+// =============================================================================
+
+func TestDefaultWithPayloadFallback(t *testing.T) {
+	engine := New()
+
+	t.Run("default with missing payload uses fallback", func(t *testing.T) {
+		ctx := NewMQTTContext("test/topic", "client-1", nil, nil)
+		result, err := engine.Process(`{{default(payload.missing, "N/A")}}`, ctx)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result != "N/A" {
+			t.Errorf("Process() = %q, want %q", result, "N/A")
+		}
+	})
+
+	t.Run("default with present payload uses value", func(t *testing.T) {
+		payload := map[string]any{"temp": "72.5"}
+		ctx := NewMQTTContext("test/topic", "client-1", payload, nil)
+		result, err := engine.Process(`{{default(payload.temp, "N/A")}}`, ctx)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result != "72.5" {
+			t.Errorf("Process() = %q, want %q", result, "72.5")
+		}
+	})
+
+	t.Run("default with missing header uses fallback parenthesized", func(t *testing.T) {
+		result, err := engine.Process(`{{default(request.header.X-Custom, "fallback-value")}}`, nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result != "fallback-value" {
+			t.Errorf("Process() = %q, want %q", result, "fallback-value")
+		}
+	})
+
+	t.Run("default resolves topic as value", func(t *testing.T) {
+		ctx := NewMQTTContext("sensors/temp", "client-1", nil, nil)
+		result, err := engine.Process(`{{default(topic, "no-topic")}}`, ctx)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result != "sensors/temp" {
+			t.Errorf("Process() = %q, want %q", result, "sensors/temp")
+		}
+	})
+}
+
+// =============================================================================
+// Sequence with Default Engine Tests
+// =============================================================================
+
+func TestSequenceWithDefaultEngine(t *testing.T) {
+	t.Run("sequence works in HTTP context", func(t *testing.T) {
+		engine := New()
+		result1, _ := engine.Process(`{{sequence("http_counter")}}`, nil)
+		result2, _ := engine.Process(`{{sequence("http_counter")}}`, nil)
+		result3, _ := engine.Process(`{{sequence("http_counter")}}`, nil)
+		if result1 != "1" || result2 != "2" || result3 != "3" {
+			t.Errorf("sequence should auto-increment: got %q, %q, %q", result1, result2, result3)
+		}
+	})
+
+	t.Run("sequence with custom start in HTTP context", func(t *testing.T) {
+		engine := New()
+		result1, _ := engine.Process(`{{sequence("counter", 100)}}`, nil)
+		result2, _ := engine.Process(`{{sequence("counter", 100)}}`, nil)
+		if result1 != "100" || result2 != "101" {
+			t.Errorf("sequence with start=100 should give 100, 101: got %q, %q", result1, result2)
+		}
+	})
+}
+
+// =============================================================================
 // Sequence Tests
 // =============================================================================
 
@@ -197,14 +352,21 @@ func TestSequenceBasic(t *testing.T) {
 		}
 	})
 
-	t.Run("no store returns empty", func(t *testing.T) {
+	t.Run("default engine has sequences", func(t *testing.T) {
 		eng := New()
 		result, err := eng.Process(`{{sequence("test")}}`, nil)
 		if err != nil {
 			t.Fatalf("Process() error = %v", err)
 		}
-		if result != "" {
-			t.Errorf("sequence without store should be empty, got %q", result)
+		if result != "1" {
+			t.Errorf("sequence with default engine should start at 1, got %q", result)
+		}
+		result, err = eng.Process(`{{sequence("test")}}`, nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result != "2" {
+			t.Errorf("second call should return 2, got %q", result)
 		}
 	})
 }
