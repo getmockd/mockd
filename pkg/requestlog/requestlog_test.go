@@ -895,15 +895,11 @@ func TestSubscribableStore_UnsubscribeStopsDelivery(t *testing.T) {
 
 	store.Log(&Entry{ID: "after-unsub"})
 
-	// Drain any buffered entries.
+	// Drain any buffered entries — an entry may squeeze through before
+	// unsubscribe takes effect, but the channel should not keep delivering.
 	select {
-	case _, ok := <-sub:
-		if ok {
-			// It's possible an entry squeezed through before unsub took effect.
-			// But the channel should be closed, so further reads return zero value.
-		}
+	case <-sub:
 	case <-time.After(100 * time.Millisecond):
-		// Expected: nothing received after unsubscribe.
 	}
 }
 

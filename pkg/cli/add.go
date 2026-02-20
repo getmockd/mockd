@@ -274,7 +274,7 @@ Examples:
 
 	// Mutual exclusivity: --path and --path-pattern
 	if *path != "" && *pathPattern != "" {
-		return fmt.Errorf("--path and --path-pattern are mutually exclusive")
+		return errors.New("--path and --path-pattern are mutually exclusive")
 	}
 
 	// Build mock configuration based on type
@@ -296,7 +296,7 @@ Examples:
 	case mock.TypeSOAP:
 		m, err = buildSOAPMock(*name, *path, *operation, *soapAction, *response)
 	case mock.TypeOAuth:
-		m, err = buildOAuthMock(*name, *issuer, *clientID, *clientSecret, *oauthUser, *oauthPassword)
+		m = buildOAuthMock(*name, *issuer, *clientID, *clientSecret, *oauthUser, *oauthPassword)
 	}
 
 	if err != nil {
@@ -846,7 +846,7 @@ Run 'mockd add --help' for more options`)
 }
 
 // buildOAuthMock creates an OAuth/OIDC mock configuration.
-func buildOAuthMock(name, issuer, clientID, clientSecret, username, password string) (*config.MockConfiguration, error) {
+func buildOAuthMock(name, issuer, clientID, clientSecret, username, password string) *config.MockConfiguration {
 	// Default issuer
 	if issuer == "" {
 		issuer = "http://localhost:4280"
@@ -889,7 +889,7 @@ func buildOAuthMock(name, issuer, clientID, clientSecret, username, password str
 		},
 	}
 
-	return m, nil
+	return m
 }
 
 // outputResult formats and prints the created or merged mock result.

@@ -315,26 +315,9 @@ func (v *OpenAPIValidator) parseValidationErrors(err error, result *Result) {
 			fe.Location = LocationBody
 
 			if reqErr.Err != nil {
-				schemaErrors := extractSchemaErrors(reqErr.Err)
-				if len(schemaErrors) > 0 {
-					for _, schemaErr := range schemaErrors {
-						sfe := &FieldError{
-							Location: LocationBody,
-							Code:     ErrCodeSchema,
-							Message:  schemaErr.Reason,
-						}
-						jsonPath := formatJSONPath(schemaErr.JSONPointer())
-						if jsonPath != "" && jsonPath != "$" {
-							sfe.Field = jsonPath
-						}
-						if sfe.Message == "" {
-							sfe.Message = schemaErr.Error()
-						}
-						result.Errors = append(result.Errors, sfe)
-					}
+				if appendSchemaFieldErrors(reqErr.Err, LocationBody, result) {
 					return
 				}
-				// Fallback for non-schema errors
 				fe.Message = reqErr.Err.Error()
 			}
 
@@ -372,26 +355,9 @@ func (v *OpenAPIValidator) parseValidationErrors(err error, result *Result) {
 		}
 
 		if respErr.Err != nil {
-			schemaErrors := extractSchemaErrors(respErr.Err)
-			if len(schemaErrors) > 0 {
-				for _, schemaErr := range schemaErrors {
-					sfe := &FieldError{
-						Location: "response",
-						Code:     ErrCodeSchema,
-						Message:  schemaErr.Reason,
-					}
-					jsonPath := formatJSONPath(schemaErr.JSONPointer())
-					if jsonPath != "" && jsonPath != "$" {
-						sfe.Field = jsonPath
-					}
-					if sfe.Message == "" {
-						sfe.Message = schemaErr.Error()
-					}
-					result.Errors = append(result.Errors, sfe)
-				}
+			if appendSchemaFieldErrors(respErr.Err, "response", result) {
 				return
 			}
-			// Fallback for non-schema errors
 			fe.Message = respErr.Err.Error()
 		}
 
@@ -430,6 +396,31 @@ func (v *OpenAPIValidator) parseValidationErrors(err error, result *Result) {
 		Code:     "openapi_validation",
 		Message:  err.Error(),
 	})
+}
+
+// appendSchemaFieldErrors converts extracted schema errors into FieldErrors and appends them to result.
+// Returns true if any schema errors were found and appended.
+func appendSchemaFieldErrors(err error, location string, result *Result) bool {
+	schemaErrors := extractSchemaErrors(err)
+	if len(schemaErrors) == 0 {
+		return false
+	}
+	for _, schemaErr := range schemaErrors {
+		sfe := &FieldError{
+			Location: location,
+			Code:     ErrCodeSchema,
+			Message:  schemaErr.Reason,
+		}
+		jsonPath := formatJSONPath(schemaErr.JSONPointer())
+		if jsonPath != "" && jsonPath != "$" {
+			sfe.Field = jsonPath
+		}
+		if sfe.Message == "" {
+			sfe.Message = schemaErr.Error()
+		}
+		result.Errors = append(result.Errors, sfe)
+	}
+	return true
 }
 
 // extractSchemaErrors recursively extracts SchemaError values from error chains

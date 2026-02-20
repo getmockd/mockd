@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -69,12 +70,7 @@ Examples:
 
 	// ID-based delete (positional arg)
 	if fs.NArg() < 1 {
-		return fmt.Errorf(`mock ID or --path is required
-
-Usage: mockd delete <mock-id>
-       mockd delete --path /api/hello
-
-Run 'mockd delete --help' for more options`)
+		return errors.New("mock ID or --path is required\n\nUsage: mockd delete <mock-id>\n       mockd delete --path /api/hello\n\nRun 'mockd delete --help' for more options")
 	}
 
 	return deleteByID(client, fs.Arg(0))

@@ -289,6 +289,6 @@ func unknownCommandError(reg *Registry, name string) error {
 		}
 	}
 
-	return fmt.Errorf("unknown command %q\n\nAvailable commands:\n  %s\n\nRun 'mockd --help' for usage.",
+	return fmt.Errorf("unknown command %q\n\nAvailable commands:\n  %s\n\nRun 'mockd --help' for usage",
 		name, strings.Join(names, ", "))
 }

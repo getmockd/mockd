@@ -22,13 +22,6 @@ import (
 // Test Helpers
 // ============================================================================
 
-// getFreeMQTTPort returns 0 to let the OS auto-assign a port.
-// The actual bound port is resolved by the broker after Start() and
-// can be read via broker.Port(). This eliminates TOCTOU port races.
-func getFreeMQTTPort(_ *testing.T) int {
-	return 0
-}
-
 // setupMQTTBroker creates and starts an MQTT broker for testing.
 // It returns the broker and the actual bound port (which may differ
 // from the configured port when port 0 is used for OS auto-assign).
