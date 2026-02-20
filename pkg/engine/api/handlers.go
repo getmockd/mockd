@@ -445,6 +445,72 @@ func (s *Server) handleClearStateResource(w http.ResponseWriter, r *http.Request
 	})
 }
 
+// Stateful item handlers
+
+func (s *Server) handleListStatefulItems(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	offset := 0
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	sort := r.URL.Query().Get("sort")
+	if sort == "" {
+		sort = "createdAt"
+	}
+	order := r.URL.Query().Get("order")
+	if order == "" {
+		order = "desc"
+	}
+
+	resp, err := s.engine.ListStatefulItems(name, limit, offset, sort, order)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "resource not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleGetStatefulItem(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	id := r.PathValue("id")
+
+	item, err := s.engine.GetStatefulItem(name, id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	limitedBody(w, r)
+
+	var data map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON in request body")
+		return
+	}
+
+	item, err := s.engine.CreateStatefulItem(name, data)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "create_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
 // Protocol handler handlers
 
 func (s *Server) handleListHandlers(w http.ResponseWriter, r *http.Request) {

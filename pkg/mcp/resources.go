@@ -8,20 +8,17 @@ import (
 	"github.com/getmockd/mockd/pkg/cli"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/mock"
-	"github.com/getmockd/mockd/pkg/stateful"
 )
 
 // ResourceProvider provides MCP resources from the mock engine.
 type ResourceProvider struct {
-	adminClient   cli.AdminClient
-	statefulStore *stateful.StateStore
+	adminClient cli.AdminClient
 }
 
 // NewResourceProvider creates a new resource provider.
-func NewResourceProvider(client cli.AdminClient, store *stateful.StateStore) *ResourceProvider {
+func NewResourceProvider(client cli.AdminClient) *ResourceProvider {
 	return &ResourceProvider{
-		adminClient:   client,
-		statefulStore: store,
+		adminClient: client,
 	}
 }
 
@@ -34,8 +31,7 @@ func (p *ResourceProvider) WithClient(client cli.AdminClient) *ResourceProvider 
 		return p
 	}
 	return &ResourceProvider{
-		adminClient:   client,
-		statefulStore: p.statefulStore,
+		adminClient: client,
 	}
 }
 
@@ -62,27 +58,21 @@ func (p *ResourceProvider) List() []ResourceDefinition {
 		}
 	}
 
-	// Add stateful resources
-	if p.statefulStore != nil {
-		for _, name := range p.statefulStore.List() {
-			resource := p.statefulStore.Get(name)
-			if resource == nil {
-				continue
-			}
+	// Add stateful resources (via admin API so it works in all modes)
+	if p.adminClient != nil {
+		overview, err := p.adminClient.GetStateOverview()
+		if err == nil && overview != nil {
+			for _, res := range overview.Resources {
+				uri := "mock://stateful/" + res.Name
+				description := "CRUD operations on " + res.Name + " (" + strconv.Itoa(res.ItemCount) + " items)"
 
-			info := resource.Info()
-			uri := "mock://stateful/" + name
-			description := "Stateful resource: " + name
-			if info != nil {
-				description = "CRUD operations on " + name + " (" + strconv.Itoa(info.ItemCount) + " items)"
+				resources = append(resources, ResourceDefinition{
+					URI:         uri,
+					Name:        "Stateful: " + res.Name,
+					Description: description,
+					MimeType:    "application/json",
+				})
 			}
-
-			resources = append(resources, ResourceDefinition{
-				URI:         uri,
-				Name:        "Stateful: " + name,
-				Description: description,
-				MimeType:    "application/json",
-			})
 		}
 	}
 
@@ -203,29 +193,43 @@ func (p *ResourceProvider) readMockResource(requestedURI string) ([]ResourceCont
 	return nil, ResourceNotFoundError(requestedURI)
 }
 
-// readStatefulResource reads a stateful resource.
+// readStatefulResource reads a stateful resource via admin API.
 func (p *ResourceProvider) readStatefulResource(name string) ([]ResourceContent, *JSONRPCError) {
-	if p.statefulStore == nil {
+	if p.adminClient == nil {
 		return nil, InternalError(nil)
 	}
 
-	resource := p.statefulStore.Get(name)
-	if resource == nil {
+	overview, err := p.adminClient.GetStateOverview()
+	if err != nil {
+		return nil, InternalError(err)
+	}
+
+	// Find the specific resource in the overview
+	var found *cli.StatefulResourceInfo
+	if overview != nil {
+		for i := range overview.Resources {
+			if overview.Resources[i].Name == name {
+				found = &overview.Resources[i]
+				break
+			}
+		}
+	}
+
+	if found == nil {
 		return nil, ResourceNotFoundError("mock://stateful/" + name)
 	}
 
-	info := resource.Info()
 	content := map[string]interface{}{
-		"name":          name,
-		"basePath":      info.BasePath,
-		"idField":       info.IDField,
-		"itemCount":     info.ItemCount,
-		"hasSeedData":   info.SeedCount > 0,
-		"seedDataCount": info.SeedCount,
+		"name":          found.Name,
+		"basePath":      found.BasePath,
+		"idField":       found.IDField,
+		"itemCount":     found.ItemCount,
+		"hasSeedData":   found.SeedCount > 0,
+		"seedDataCount": found.SeedCount,
 	}
 
-	if info.ParentField != "" {
-		content["parentField"] = info.ParentField
+	if found.ParentField != "" {
+		content["parentField"] = found.ParentField
 	}
 
 	text, _ := json.Marshal(content)
@@ -302,8 +306,11 @@ func (p *ResourceProvider) readConfigResource() ([]ResourceContent, *JSONRPCErro
 		}
 	}
 
-	if p.statefulStore != nil {
-		content["statefulResourceCount"] = len(p.statefulStore.List())
+	if p.adminClient != nil {
+		overview, err := p.adminClient.GetStateOverview()
+		if err == nil && overview != nil {
+			content["statefulResourceCount"] = overview.Total
+		}
 	}
 
 	text, _ := json.Marshal(content)

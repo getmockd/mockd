@@ -26,19 +26,20 @@ type (
 	ProtocolStatus   = types.ProtocolStatus
 	MockListResponse = types.MockListResponse
 	// RequestFilter is kept for backward compatibility; use requestlog.Filter directly.
-	RequestFilter       = types.RequestLogFilter
-	RequestLogEntry     = types.RequestLogEntry
-	RequestListResponse = types.RequestListResponse
-	ErrorResponse       = types.ErrorResponse
-	ChaosConfig         = types.ChaosConfig
-	LatencyConfig       = types.LatencyConfig
-	ErrorRateConfig     = types.ErrorRateConfig
-	BandwidthConfig     = types.BandwidthConfig
-	ChaosRuleConfig     = types.ChaosRuleConfig
-	ChaosStats          = types.ChaosStats
-	StatefulResource    = types.StatefulResource
-	StateOverview       = types.StateOverview
-	ProtocolHandler     = types.ProtocolHandler
-	SSEConnection       = types.SSEConnection
-	SSEStats            = types.SSEStats
+	RequestFilter         = types.RequestLogFilter
+	RequestLogEntry       = types.RequestLogEntry
+	RequestListResponse   = types.RequestListResponse
+	ErrorResponse         = types.ErrorResponse
+	ChaosConfig           = types.ChaosConfig
+	LatencyConfig         = types.LatencyConfig
+	ErrorRateConfig       = types.ErrorRateConfig
+	BandwidthConfig       = types.BandwidthConfig
+	ChaosRuleConfig       = types.ChaosRuleConfig
+	ChaosStats            = types.ChaosStats
+	StatefulResource      = types.StatefulResource
+	StatefulItemsResponse = types.StatefulItemsResponse
+	StateOverview         = types.StateOverview
+	ProtocolHandler       = types.ProtocolHandler
+	SSEConnection         = types.SSEConnection
+	SSEStats              = types.SSEStats
 )

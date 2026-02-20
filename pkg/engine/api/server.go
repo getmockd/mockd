@@ -59,6 +59,9 @@ type EngineController interface {
 	ClearStateResource(name string) (int, error)
 	ResetState(resourceName string) (*ResetStateResponse, error)
 	RegisterStatefulResource(cfg *config.StatefulResourceConfig) error
+	ListStatefulItems(name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error)
+	GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error)
+	CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error)
 
 	// Protocol handlers
 	ListProtocolHandlers() []*ProtocolHandler
@@ -178,6 +181,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /state/reset", s.handleResetState)
 	mux.HandleFunc("GET /state/resources/{name}", s.handleGetStateResource)
 	mux.HandleFunc("DELETE /state/resources/{name}", s.handleClearStateResource)
+	mux.HandleFunc("GET /state/resources/{name}/items", s.handleListStatefulItems)
+	mux.HandleFunc("GET /state/resources/{name}/items/{id}", s.handleGetStatefulItem)
+	mux.HandleFunc("POST /state/resources/{name}/items", s.handleCreateStatefulItem)
 
 	// Protocol handlers
 	mux.HandleFunc("GET /handlers", s.handleListHandlers)

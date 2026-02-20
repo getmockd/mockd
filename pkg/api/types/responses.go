@@ -276,6 +276,12 @@ type ResetStateResponse struct {
 	Message   string   `json:"message"`
 }
 
+// StatefulItemsResponse is the paginated response for listing items in a stateful resource.
+type StatefulItemsResponse struct {
+	Data []map[string]interface{} `json:"data"`
+	Meta PaginationMeta           `json:"meta"`
+}
+
 // --- Protocol Handlers ---
 
 // ProtocolHandler represents a running protocol handler.

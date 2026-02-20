@@ -192,6 +192,20 @@ func (m *mockEngine) RegisterStatefulResource(cfg *config.StatefulResourceConfig
 	return nil // No-op for mock
 }
 
+func (m *mockEngine) ListStatefulItems(name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error) {
+	return &StatefulItemsResponse{
+		Data: []map[string]interface{}{},
+	}, nil
+}
+
+func (m *mockEngine) GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error) {
+	return nil, errors.New("item not found")
+}
+
+func (m *mockEngine) CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
+	return data, nil
+}
+
 func (m *mockEngine) ListProtocolHandlers() []*ProtocolHandler {
 	return m.handlers
 }

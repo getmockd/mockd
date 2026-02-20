@@ -1,8 +1,10 @@
 package admin
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 )
@@ -108,4 +110,105 @@ func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, e
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"cleared": true})
+}
+
+// handleListStatefulItems returns paginated items for a stateful resource.
+func (a *API) handleListStatefulItems(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
+		return
+	}
+
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	offset := 0
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	sort := r.URL.Query().Get("sort")
+	if sort == "" {
+		sort = "createdAt"
+	}
+	order := r.URL.Query().Get("order")
+	if order == "" {
+		order = "desc"
+	}
+
+	result, err := engine.ListStatefulItems(ctx, name, limit, offset, sort, order)
+	if err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Resource not found")
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list stateful items"))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// handleGetStatefulItem returns a specific item from a stateful resource.
+func (a *API) handleGetStatefulItem(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing_id", "Item ID is required")
+		return
+	}
+
+	item, err := engine.GetStatefulItem(ctx, name, id)
+	if err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Item not found")
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get stateful item"))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, item)
+}
+
+// handleCreateStatefulItem creates a new item in a stateful resource.
+func (a *API) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
+		return
+	}
+
+	var data map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "Invalid JSON in request body")
+		return
+	}
+
+	item, err := engine.CreateStatefulItem(ctx, name, data)
+	if err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Resource not found")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "create_failed", sanitizeEngineError(err, a.logger(), "create stateful item"))
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, item)
 }

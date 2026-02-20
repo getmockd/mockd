@@ -77,10 +77,9 @@ Flags:
 	mcpCfg.AdminURL = adminURL
 
 	// Create MCP server (provides dispatch/tools/resources, not HTTP).
-	// Provide a real stateful store so stateful CRUD tools work in stdio mode.
-	stateStore := stateful.NewStateStore()
+	// Stateful tools go through the admin API (no local store needed).
 	mcp.SetServerVersion(Version)
-	server := mcp.NewServer(mcpCfg, adminClient, stateStore)
+	server := mcp.NewServer(mcpCfg, adminClient, nil)
 
 	// Seed sessions with resolved context so tools know which server they're talking to.
 	server.SetInitialContext(contextName, adminURL, workspace)

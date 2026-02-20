@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 
+	types "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/chaos"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine/api"
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/requestlog"
+	"github.com/getmockd/mockd/pkg/stateful"
 )
 
 // Errors returned by the control API adapter.
@@ -239,6 +241,9 @@ func (a *ControlAPIAdapter) SetChaosConfig(cfg *api.ChaosConfig) error {
 		chaosCfg.Rules = append(chaosCfg.Rules, cr)
 	}
 
+	// Clamp probability/rate values to [0.0, 1.0] before validating
+	chaosCfg.Clamp()
+
 	// Validate configuration before creating injector
 	if err := chaosCfg.Validate(); err != nil {
 		return err
@@ -377,6 +382,79 @@ func (a *ControlAPIAdapter) RegisterStatefulResource(cfg *config.StatefulResourc
 		return errors.New("config cannot be nil")
 	}
 	return a.server.registerStatefulResource(cfg)
+}
+
+// ListStatefulItems implements api.EngineController.
+func (a *ControlAPIAdapter) ListStatefulItems(name string, limit, offset int, sort, order string) (*api.StatefulItemsResponse, error) {
+	store := a.server.StatefulStore()
+	if store == nil {
+		return nil, ErrStatefulStoreNotInitialized
+	}
+
+	resource := store.Get(name)
+	if resource == nil {
+		return nil, errors.New("stateful resource not found: " + name)
+	}
+
+	filter := &stateful.QueryFilter{
+		Limit:   limit,
+		Offset:  offset,
+		Sort:    sort,
+		Order:   order,
+		Filters: make(map[string]string),
+	}
+
+	result := resource.List(filter)
+
+	return &api.StatefulItemsResponse{
+		Data: result.Data,
+		Meta: types.PaginationMeta{
+			Total:  result.Meta.Total,
+			Limit:  result.Meta.Limit,
+			Offset: result.Meta.Offset,
+			Count:  result.Meta.Count,
+		},
+	}, nil
+}
+
+// GetStatefulItem implements api.EngineController.
+func (a *ControlAPIAdapter) GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error) {
+	store := a.server.StatefulStore()
+	if store == nil {
+		return nil, ErrStatefulStoreNotInitialized
+	}
+
+	resource := store.Get(resourceName)
+	if resource == nil {
+		return nil, errors.New("stateful resource not found: " + resourceName)
+	}
+
+	item := resource.Get(itemID)
+	if item == nil {
+		return nil, errors.New("item not found: " + itemID + " in resource " + resourceName)
+	}
+
+	return item.ToJSON(), nil
+}
+
+// CreateStatefulItem implements api.EngineController.
+func (a *ControlAPIAdapter) CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
+	store := a.server.StatefulStore()
+	if store == nil {
+		return nil, ErrStatefulStoreNotInitialized
+	}
+
+	resource := store.Get(resourceName)
+	if resource == nil {
+		return nil, errors.New("stateful resource not found: " + resourceName)
+	}
+
+	item, err := resource.Create(data, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return item.ToJSON(), nil
 }
 
 // ListProtocolHandlers implements api.EngineController.

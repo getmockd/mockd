@@ -86,7 +86,7 @@ func NewServer(cfg *Config, adminClient cli.AdminClient, statefulStore *stateful
 	s.tools = NewToolRegistry(s)
 
 	// Initialize resource provider
-	s.resources = NewResourceProvider(adminClient, statefulStore)
+	s.resources = NewResourceProvider(adminClient)
 
 	return s
 }

@@ -29,6 +29,7 @@ type (
 	ChaosFaultConfig                = types.ChaosFaultConfig
 	ChaosStats                      = types.ChaosStats
 	StatefulResource                = types.StatefulResource
+	StatefulItemsResponse           = types.StatefulItemsResponse
 	StateOverview                   = types.StateOverview
 	ResetStateRequest               = types.ResetStateRequest
 	ResetStateResponse              = types.ResetStateResponse

@@ -2,26 +2,19 @@ package mcp
 
 import (
 	"fmt"
-
-	"github.com/getmockd/mockd/pkg/stateful"
 )
 
 // =============================================================================
 // Stateful Resource Handlers
 // =============================================================================
-
-// requireStatefulStore returns an error result if stateful store is not available.
-func requireStatefulStore(server *Server) *ToolResult {
-	if server.statefulStore == nil {
-		return ToolResultError("stateful store not available")
-	}
-	return nil
-}
+// All stateful tools go through the admin API (HTTP) so they work in both
+// stdio mode (MCP → admin → engine) and embedded mode.
 
 // handleListStatefulItems lists items in a stateful resource with pagination.
 func handleListStatefulItems(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
-	if err := requireStatefulStore(server); err != nil {
-		return err, nil
+	client := session.GetAdminClient()
+	if client == nil {
+		return ToolResultError("admin client not available"), nil
 	}
 
 	resourceName := getString(args, "resource", "")
@@ -31,38 +24,33 @@ func handleListStatefulItems(args map[string]interface{}, session *MCPSession, s
 
 	limit := getInt(args, "limit", 100)
 	offset := getInt(args, "offset", 0)
+	sort := getString(args, "sort", "createdAt")
+	order := getString(args, "order", "desc")
 
-	resource := server.statefulStore.Get(resourceName)
-	if resource == nil {
-		return ToolResultError("stateful resource not found: " + resourceName), nil
+	result, err := client.ListStatefulItems(resourceName, limit, offset, sort, order)
+	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+		return ToolResultError("failed to list stateful items: " + adminError(err, session.GetAdminURL())), nil
 	}
 
-	filter := &stateful.QueryFilter{
-		Limit:  limit,
-		Offset: offset,
-		Sort:   getString(args, "sort", "createdAt"),
-		Order:  getString(args, "order", "desc"),
-	}
-
-	response := resource.List(filter)
-
-	result := StatefulListResult{
-		Data: response.Data,
+	listResult := StatefulListResult{
+		Data: result.Data,
 		Meta: PaginationMeta{
-			Total:  response.Meta.Total,
-			Limit:  response.Meta.Limit,
-			Offset: response.Meta.Offset,
-			Count:  response.Meta.Count,
+			Total:  result.Meta.Total,
+			Limit:  result.Meta.Limit,
+			Offset: result.Meta.Offset,
+			Count:  result.Meta.Count,
 		},
 	}
 
-	return ToolResultJSON(result)
+	return ToolResultJSON(listResult)
 }
 
 // handleGetStatefulItem retrieves a specific item from a stateful resource.
 func handleGetStatefulItem(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
-	if err := requireStatefulStore(server); err != nil {
-		return err, nil
+	client := session.GetAdminClient()
+	if client == nil {
+		return ToolResultError("admin client not available"), nil
 	}
 
 	resourceName := getString(args, "resource", "")
@@ -75,13 +63,9 @@ func handleGetStatefulItem(args map[string]interface{}, session *MCPSession, ser
 		return ToolResultError("id is required"), nil
 	}
 
-	resource := server.statefulStore.Get(resourceName)
-	if resource == nil {
-		return ToolResultError("stateful resource not found: " + resourceName), nil
-	}
-
-	item := resource.Get(id)
-	if item == nil {
+	item, err := client.GetStatefulItem(resourceName, id)
+	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError(fmt.Sprintf("item not found: %s in resource %s", id, resourceName)), nil
 	}
 
@@ -90,8 +74,9 @@ func handleGetStatefulItem(args map[string]interface{}, session *MCPSession, ser
 
 // handleCreateStatefulItem creates a new item in a stateful resource.
 func handleCreateStatefulItem(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
-	if err := requireStatefulStore(server); err != nil {
-		return err, nil
+	client := session.GetAdminClient()
+	if client == nil {
+		return ToolResultError("admin client not available"), nil
 	}
 
 	resourceName := getString(args, "resource", "")
@@ -104,15 +89,10 @@ func handleCreateStatefulItem(args map[string]interface{}, session *MCPSession, 
 		return ToolResultError("data is required"), nil
 	}
 
-	resource := server.statefulStore.Get(resourceName)
-	if resource == nil {
-		return ToolResultError("stateful resource not found: " + resourceName), nil
-	}
-
-	item, err := resource.Create(data, nil) // no path params for MCP
+	item, err := client.CreateStatefulItem(resourceName, data)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to create item: " + err.Error()), nil
+		return ToolResultError("failed to create item: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	return ToolResultJSON(item)
@@ -121,8 +101,9 @@ func handleCreateStatefulItem(args map[string]interface{}, session *MCPSession, 
 // handleResetStatefulData resets a stateful resource to its seed data.
 // Resource is required — no accidental full resets.
 func handleResetStatefulData(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
-	if err := requireStatefulStore(server); err != nil {
-		return err, nil
+	client := session.GetAdminClient()
+	if client == nil {
+		return ToolResultError("admin client not available"), nil
 	}
 
 	resourceName := getString(args, "resource", "")
@@ -130,11 +111,15 @@ func handleResetStatefulData(args map[string]interface{}, session *MCPSession, s
 		return ToolResultError("resource is required — specify which resource to reset"), nil
 	}
 
-	response, err := server.statefulStore.Reset(resourceName)
+	err := client.ResetStatefulResource(resourceName)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError("failed to reset: " + err.Error()), nil
+		return ToolResultError("failed to reset: " + adminError(err, session.GetAdminURL())), nil
 	}
 
-	return ToolResultJSON(response)
+	return ToolResultJSON(map[string]interface{}{
+		"reset":    true,
+		"resource": resourceName,
+		"message":  "resource reset to seed data",
+	})
 }

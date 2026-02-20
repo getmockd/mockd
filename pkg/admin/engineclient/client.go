@@ -607,6 +607,82 @@ func (c *Client) ClearStateResource(ctx context.Context, name string) error {
 	return nil
 }
 
+// ListStatefulItems returns items in a stateful resource with pagination.
+func (c *Client) ListStatefulItems(ctx context.Context, name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error) {
+	params := url.Values{}
+	params.Set("limit", strconv.Itoa(limit))
+	params.Set("offset", strconv.Itoa(offset))
+	if sort != "" {
+		params.Set("sort", sort)
+	}
+	if order != "" {
+		params.Set("order", order)
+	}
+
+	resp, err := c.get(ctx, "/state/resources/"+url.PathEscape(name)+"/items?"+params.Encode())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result StatefulItemsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode stateful items: %w", err)
+	}
+	return &result, nil
+}
+
+// GetStatefulItem returns a specific item from a stateful resource.
+func (c *Client) GetStatefulItem(ctx context.Context, resourceName, itemID string) (map[string]interface{}, error) {
+	resp, err := c.get(ctx, "/state/resources/"+url.PathEscape(resourceName)+"/items/"+url.PathEscape(itemID))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var item map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&item); err != nil {
+		return nil, fmt.Errorf("failed to decode stateful item: %w", err)
+	}
+	return item, nil
+}
+
+// CreateStatefulItem creates a new item in a stateful resource.
+func (c *Client) CreateStatefulItem(ctx context.Context, resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
+	resp, err := c.post(ctx, "/state/resources/"+url.PathEscape(resourceName)+"/items", data)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var item map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&item); err != nil {
+		return nil, fmt.Errorf("failed to decode created item: %w", err)
+	}
+	return item, nil
+}
+
 // ListHandlers returns all protocol handlers.
 func (c *Client) ListHandlers(ctx context.Context) ([]*ProtocolHandler, error) {
 	resp, err := c.get(ctx, "/handlers")
