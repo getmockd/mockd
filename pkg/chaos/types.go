@@ -117,6 +117,55 @@ func NewChaosStats() *ChaosStats {
 	}
 }
 
+// clampProbability clamps a float64 value to the [0.0, 1.0] range.
+func clampProbability(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+// Clamp clamps all probability and rate fields in the ChaosConfig to [0.0, 1.0].
+// This is a lenient alternative to Validate — it silently fixes out-of-range values
+// instead of returning an error.
+func (c *ChaosConfig) Clamp() {
+	for i := range c.Rules {
+		c.Rules[i].Clamp()
+	}
+	if c.GlobalRules != nil {
+		c.GlobalRules.Clamp()
+	}
+}
+
+// Clamp clamps probability and fault values in a ChaosRule.
+func (r *ChaosRule) Clamp() {
+	r.Probability = clampProbability(r.Probability)
+	for i := range r.Faults {
+		r.Faults[i].Clamp()
+	}
+}
+
+// Clamp clamps the probability field in a FaultConfig.
+func (f *FaultConfig) Clamp() {
+	f.Probability = clampProbability(f.Probability)
+}
+
+// Clamp clamps probability fields in GlobalChaosRules.
+func (g *GlobalChaosRules) Clamp() {
+	if g.Latency != nil {
+		g.Latency.Probability = clampProbability(g.Latency.Probability)
+	}
+	if g.ErrorRate != nil {
+		g.ErrorRate.Probability = clampProbability(g.ErrorRate.Probability)
+	}
+	if g.Bandwidth != nil {
+		g.Bandwidth.Probability = clampProbability(g.Bandwidth.Probability)
+	}
+}
+
 // validateProbability checks that a probability value is in the valid range [0.0, 1.0].
 func validateProbability(value float64, fieldName string) error {
 	if value < 0.0 || value > 1.0 {

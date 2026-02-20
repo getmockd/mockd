@@ -33,6 +33,9 @@ func NewInjector(config *ChaosConfig) (*Injector, error) {
 		return nil, errors.New("chaos config is required")
 	}
 
+	// Clamp probability/rate values to [0.0, 1.0]
+	config.Clamp()
+
 	i := &Injector{
 		config: config,
 		rng:    rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -93,6 +96,7 @@ func (i *Injector) ShouldInject(r *http.Request) []FaultConfig {
 	i.stats.TotalRequests++
 
 	var faults []FaultConfig
+	pathRuleMatched := false
 
 	// Check path-specific rules first
 	for _, rule := range i.rules {
@@ -104,6 +108,11 @@ func (i *Injector) ShouldInject(r *http.Request) []FaultConfig {
 		if len(rule.methods) > 0 && !rule.methods[r.Method] {
 			continue
 		}
+
+		// A per-path rule matched this request. Even if the probability
+		// roll below fails, we must NOT fall back to global rules —
+		// the per-path rule preempts global config for matching requests.
+		pathRuleMatched = true
 
 		// Check rule probability
 		if i.rng.Float64() > rule.prob {
@@ -120,8 +129,10 @@ func (i *Injector) ShouldInject(r *http.Request) []FaultConfig {
 		}
 	}
 
-	// Apply global rules if no path-specific faults triggered
-	if len(faults) == 0 && i.config.GlobalRules != nil {
+	// Apply global rules ONLY when no path-specific rule matched.
+	// If a per-path rule matched but its probability roll failed,
+	// we intentionally skip global rules — the per-path rule takes precedence.
+	if !pathRuleMatched && i.config.GlobalRules != nil {
 		faults = i.applyGlobalRules()
 	}
 
@@ -368,6 +379,9 @@ func (i *Injector) UpdateConfig(config *ChaosConfig) error {
 	if config == nil {
 		return errors.New("chaos config is required")
 	}
+
+	// Clamp probability/rate values to [0.0, 1.0]
+	config.Clamp()
 
 	// Compile new rules
 	var newRules []*compiledRule

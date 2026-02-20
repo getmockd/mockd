@@ -1053,3 +1053,319 @@ func TestMiddleware_ConnectionReset_NonHijackable(t *testing.T) {
 		t.Errorf("Expected empty body (connection reset no-op), got %q", body)
 	}
 }
+
+// =============================================================================
+// Probability clamping tests
+// =============================================================================
+
+func TestChaosConfig_Clamp(t *testing.T) {
+	cfg := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: "/api/.*",
+				Probability: 1.5, // Over 1.0
+				Faults: []FaultConfig{
+					{Type: FaultError, Probability: 2.0},    // Over 1.0
+					{Type: FaultLatency, Probability: -0.5}, // Below 0.0
+				},
+			},
+			{
+				PathPattern: "/health",
+				Probability: -1.0, // Below 0.0
+				Faults: []FaultConfig{
+					{Type: FaultTimeout, Probability: 0.5}, // Valid, should be unchanged
+				},
+			},
+		},
+		GlobalRules: &GlobalChaosRules{
+			Latency: &LatencyFault{
+				Min:         "10ms",
+				Max:         "100ms",
+				Probability: 3.0, // Over 1.0
+			},
+			ErrorRate: &ErrorRateFault{
+				Probability: -0.1, // Below 0.0
+				StatusCodes: []int{500},
+			},
+			Bandwidth: &BandwidthFault{
+				BytesPerSecond: 1024,
+				Probability:    1.1, // Over 1.0
+			},
+		},
+	}
+
+	cfg.Clamp()
+
+	// Rule 0
+	if cfg.Rules[0].Probability != 1.0 {
+		t.Errorf("Rules[0].Probability = %v, want 1.0", cfg.Rules[0].Probability)
+	}
+	if cfg.Rules[0].Faults[0].Probability != 1.0 {
+		t.Errorf("Rules[0].Faults[0].Probability = %v, want 1.0", cfg.Rules[0].Faults[0].Probability)
+	}
+	if cfg.Rules[0].Faults[1].Probability != 0.0 {
+		t.Errorf("Rules[0].Faults[1].Probability = %v, want 0.0", cfg.Rules[0].Faults[1].Probability)
+	}
+
+	// Rule 1
+	if cfg.Rules[1].Probability != 0.0 {
+		t.Errorf("Rules[1].Probability = %v, want 0.0", cfg.Rules[1].Probability)
+	}
+	if cfg.Rules[1].Faults[0].Probability != 0.5 {
+		t.Errorf("Rules[1].Faults[0].Probability = %v, want 0.5", cfg.Rules[1].Faults[0].Probability)
+	}
+
+	// Global rules
+	if cfg.GlobalRules.Latency.Probability != 1.0 {
+		t.Errorf("GlobalRules.Latency.Probability = %v, want 1.0", cfg.GlobalRules.Latency.Probability)
+	}
+	if cfg.GlobalRules.ErrorRate.Probability != 0.0 {
+		t.Errorf("GlobalRules.ErrorRate.Probability = %v, want 0.0", cfg.GlobalRules.ErrorRate.Probability)
+	}
+	if cfg.GlobalRules.Bandwidth.Probability != 1.0 {
+		t.Errorf("GlobalRules.Bandwidth.Probability = %v, want 1.0", cfg.GlobalRules.Bandwidth.Probability)
+	}
+}
+
+func TestChaosConfig_Clamp_NilGlobal(t *testing.T) {
+	cfg := &ChaosConfig{
+		Enabled:     true,
+		GlobalRules: nil, // Should not panic
+	}
+	cfg.Clamp() // Should not panic
+}
+
+func TestNewInjector_ClampsProbabilities(t *testing.T) {
+	// Probability > 1.0 should be clamped, not rejected
+	config := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: "/api/.*",
+				Probability: 1.5,
+				Faults: []FaultConfig{
+					{Type: FaultError, Probability: 2.0},
+				},
+			},
+		},
+	}
+
+	inj, err := NewInjector(config)
+	if err != nil {
+		t.Fatalf("NewInjector() should not error after clamping, got: %v", err)
+	}
+
+	// The clamped config should always inject (probability clamped to 1.0)
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	faults := inj.ShouldInject(req)
+	if len(faults) != 1 {
+		t.Errorf("Expected 1 fault (clamped probability 1.0), got %d", len(faults))
+	}
+}
+
+func TestUpdateConfig_ClampsProbabilities(t *testing.T) {
+	config := &ChaosConfig{Enabled: true}
+	inj, err := NewInjector(config)
+	if err != nil {
+		t.Fatalf("NewInjector() error = %v", err)
+	}
+
+	// Probability > 1.0 on faults should be clamped to 1.0
+	newConfig := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: ".*",
+				Probability: 1.5, // Over 1.0, should be clamped to 1.0
+				Faults: []FaultConfig{
+					{Type: FaultError, Probability: 5.0}, // Over 1.0, should be clamped to 1.0
+				},
+			},
+		},
+	}
+
+	err = inj.UpdateConfig(newConfig)
+	if err != nil {
+		t.Fatalf("UpdateConfig() should not error after clamping, got: %v", err)
+	}
+
+	// Probability was clamped to 1.0, so rule should always fire
+	req := httptest.NewRequest("GET", "/test", nil)
+	faults := inj.ShouldInject(req)
+	if len(faults) != 1 {
+		t.Fatalf("Expected 1 fault (clamped probability 1.0), got %d", len(faults))
+	}
+
+	// Negative fault probability should be clamped to 0 (never fires)
+	newConfig2 := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: ".*",
+				Probability: 1.0,
+				Faults: []FaultConfig{
+					{Type: FaultError, Probability: -0.5}, // Below 0, clamped to 0
+				},
+			},
+		},
+	}
+
+	err = inj.UpdateConfig(newConfig2)
+	if err != nil {
+		t.Fatalf("UpdateConfig() should not error after clamping, got: %v", err)
+	}
+
+	for i := 0; i < 100; i++ {
+		req := httptest.NewRequest("GET", "/test", nil)
+		faults := inj.ShouldInject(req)
+		if len(faults) > 0 {
+			t.Fatal("Fault with clamped probability 0 should never inject")
+		}
+	}
+}
+
+// =============================================================================
+// Per-path rule preemption tests
+// =============================================================================
+
+func TestInjector_PerPathRulesPreemptGlobal(t *testing.T) {
+	// When a per-path rule matches a request (path + method), global rules
+	// should NOT apply — even if the per-path fault probability is 0.
+	// The per-path rule "claims" the request, preempting global config.
+	config := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: "/api/.*",
+				Probability: 1.0, // Rule always fires
+				Faults: []FaultConfig{
+					{Type: FaultError, Probability: 0.0}, // Fault never triggers
+				},
+			},
+		},
+		GlobalRules: &GlobalChaosRules{
+			Latency: &LatencyFault{
+				Min:         "1ms",
+				Max:         "2ms",
+				Probability: 1.0, // Global always fires
+			},
+		},
+	}
+
+	inj, err := NewInjector(config)
+	if err != nil {
+		t.Fatalf("NewInjector() error = %v", err)
+	}
+
+	// Request matching per-path rule: global should be preempted.
+	// Even though the per-path fault has prob=0 (never triggers),
+	// the path match itself should block global rules.
+	for i := 0; i < 50; i++ {
+		req := httptest.NewRequest("GET", "/api/data", nil)
+		faults := inj.ShouldInject(req)
+		for _, f := range faults {
+			if f.Type == FaultLatency {
+				t.Fatal("Global latency fault should not apply when per-path rule matches")
+			}
+		}
+		if len(faults) > 0 {
+			t.Fatalf("Per-path rule with fault prob=0 should produce 0 faults, got %d", len(faults))
+		}
+	}
+
+	// Request NOT matching per-path rule: global should apply
+	req := httptest.NewRequest("GET", "/health", nil)
+	faults := inj.ShouldInject(req)
+	if len(faults) == 0 {
+		t.Error("No per-path rule matched /health; global rules should apply but returned 0 faults")
+	}
+}
+
+func TestInjector_PerPathRuleMethodMismatch_FallsBackToGlobal(t *testing.T) {
+	// If the path matches but method does NOT match, the rule does NOT
+	// count as matched, so global should apply.
+	config := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: "/api/.*",
+				Methods:     []string{"POST"}, // Only POST
+				Probability: 1.0,
+				Faults: []FaultConfig{
+					{Type: FaultError, Probability: 1.0},
+				},
+			},
+		},
+		GlobalRules: &GlobalChaosRules{
+			Latency: &LatencyFault{
+				Min:         "1ms",
+				Max:         "2ms",
+				Probability: 1.0,
+			},
+		},
+	}
+
+	inj, err := NewInjector(config)
+	if err != nil {
+		t.Fatalf("NewInjector() error = %v", err)
+	}
+
+	// GET /api/data — path matches but method doesn't, so global should apply
+	req := httptest.NewRequest("GET", "/api/data", nil)
+	faults := inj.ShouldInject(req)
+	if len(faults) == 0 {
+		t.Error("Method mismatch should NOT count as a path-rule match; global rules should apply")
+	}
+
+	foundLatency := false
+	for _, f := range faults {
+		if f.Type == FaultLatency {
+			foundLatency = true
+		}
+	}
+	if !foundLatency {
+		t.Error("Expected global latency fault to apply when method doesn't match per-path rule")
+	}
+}
+
+func TestInjector_PerPathRulePartialProbability_NoGlobalFallback(t *testing.T) {
+	// Per-path rule has prob=0.5. When it matches but the probability roll
+	// fails, global rules should still NOT apply.
+	config := &ChaosConfig{
+		Enabled: true,
+		Rules: []ChaosRule{
+			{
+				PathPattern: "/api/.*",
+				Probability: 0.5, // Fires ~50% of the time
+				Faults: []FaultConfig{
+					{Type: FaultError, Probability: 1.0},
+				},
+			},
+		},
+		GlobalRules: &GlobalChaosRules{
+			Latency: &LatencyFault{
+				Min:         "1ms",
+				Max:         "2ms",
+				Probability: 1.0,
+			},
+		},
+	}
+
+	inj, err := NewInjector(config)
+	if err != nil {
+		t.Fatalf("NewInjector() error = %v", err)
+	}
+
+	// Run many times. We should NEVER see a latency fault (from global rules)
+	// for requests that match the per-path pattern.
+	for i := 0; i < 500; i++ {
+		req := httptest.NewRequest("GET", "/api/data", nil)
+		faults := inj.ShouldInject(req)
+		for _, f := range faults {
+			if f.Type == FaultLatency {
+				t.Fatal("Global latency fault should never apply when per-path rule matches the request")
+			}
+		}
+	}
+}
