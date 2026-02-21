@@ -31,6 +31,14 @@ func RunWebSocket(args []string) error {
 	subArgs := args[1:]
 
 	switch subcommand {
+	case "add":
+		return RunAdd(append([]string{"websocket"}, subArgs...))
+	case "list":
+		return RunList(append([]string{"--type", "websocket"}, subArgs...))
+	case "get":
+		return RunGet(subArgs)
+	case "delete", "rm", "remove":
+		return RunDelete(subArgs)
 	case "connect":
 		return runWebSocketConnect(subArgs)
 	case "send":
@@ -53,6 +61,10 @@ func printWebSocketUsage() {
 Interact with WebSocket endpoints for testing.
 
 Subcommands:
+  add       Add a new WebSocket mock endpoint
+  list      List WebSocket mocks
+  get       Get details of a WebSocket mock
+  delete    Delete a WebSocket mock
   connect   Interactive WebSocket client (REPL mode)
   send      Send a single message and exit
   listen    Stream incoming messages

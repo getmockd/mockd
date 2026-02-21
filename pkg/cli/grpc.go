@@ -24,8 +24,18 @@ func RunGRPC(args []string) error {
 	subArgs := args[1:]
 
 	switch subcommand {
+	case "add":
+		return RunAdd(append([]string{"grpc"}, subArgs...))
 	case "list":
+		// Delegate generic mock listing flag when requested vs internal grpc-specific list
+		if len(subArgs) > 0 && subArgs[0] == "--mocks" {
+		    return RunList(append([]string{"--type", "grpc"}, subArgs[1:]...))
+		}
 		return runGRPCList(subArgs)
+	case "get":
+		return RunGet(subArgs)
+	case "delete", "rm", "remove":
+		return RunDelete(subArgs)
 	case "call":
 		return runGRPCCall(subArgs)
 	case "help", "--help", "-h":
@@ -42,7 +52,10 @@ func printGRPCUsage() {
 Manage and test gRPC endpoints.
 
 Subcommands:
-  list    List services and methods from a proto file
+  add     Add a new gRPC mock endpoint
+  list    List services and methods from a proto file (use --mocks to list gRPC mocks)
+  get     Get details of a gRPC mock
+  delete  Delete a gRPC mock
   call    Call a gRPC method
 
 Run 'mockd grpc <subcommand> --help' for more information.

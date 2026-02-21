@@ -26,6 +26,14 @@ func RunMQTT(args []string) error {
 	subArgs := args[1:]
 
 	switch subcommand {
+	case "add":
+		return RunAdd(append([]string{"mqtt"}, subArgs...))
+	case "list":
+		return RunList(append([]string{"--type", "mqtt"}, subArgs...))
+	case "get":
+		return RunGet(subArgs)
+	case "delete", "rm", "remove":
+		return RunDelete(subArgs)
 	case "publish":
 		return runMQTTPublish(subArgs)
 	case "subscribe":
@@ -46,6 +54,10 @@ func printMQTTUsage() {
 Publish and subscribe to MQTT messages for testing.
 
 Subcommands:
+  add        Add a new MQTT mock endpoint
+  list       List MQTT mocks
+  get        Get details of an MQTT mock
+  delete     Delete an MQTT mock
   publish    Publish a message to a topic
   subscribe  Subscribe to a topic and print messages
   status     Show MQTT broker status

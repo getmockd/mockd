@@ -25,6 +25,14 @@ func RunGraphQL(args []string) error {
 	subArgs := args[1:]
 
 	switch subcommand {
+	case "add":
+		return RunAdd(append([]string{"graphql"}, subArgs...))
+	case "list":
+		return RunList(append([]string{"--type", "graphql"}, subArgs...))
+	case "get":
+		return RunGet(subArgs)
+	case "delete", "rm", "remove":
+		return RunDelete(subArgs)
 	case "validate":
 		return runGraphQLValidate(subArgs)
 	case "query":
@@ -43,6 +51,10 @@ func printGraphQLUsage() {
 Manage and test GraphQL endpoints.
 
 Subcommands:
+  add       Add a new GraphQL mock endpoint
+  list      List GraphQL mocks
+  get       Get details of a GraphQL mock
+  delete    Delete a GraphQL mock
   validate  Validate a GraphQL schema file
   query     Execute a query against a GraphQL endpoint
 

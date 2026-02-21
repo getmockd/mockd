@@ -29,6 +29,12 @@ func RunSOAP(args []string) error {
 	case "add":
 		// Forward to the main add command but enforce the soap protocol
 		return RunAdd(append([]string{"soap"}, subArgs...))
+	case "list":
+		return RunList(append([]string{"--type", "soap"}, subArgs...))
+	case "get":
+		return RunGet(subArgs)
+	case "delete", "rm", "remove":
+		return RunDelete(subArgs)
 	case "validate":
 		return runSOAPValidate(subArgs)
 	case "call":
@@ -48,6 +54,9 @@ Manage and test SOAP web services.
 
 Subcommands:
   add       Add a new SOAP mock endpoint
+  list      List SOAP mocks
+  get       Get details of a SOAP mock
+  delete    Delete a SOAP mock
   validate  Validate a WSDL file
   call      Call a SOAP operation
 
