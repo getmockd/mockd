@@ -9,8 +9,24 @@ import (
 )
 
 func RunDown(args []string) error {
-	downCmd.SetArgs(args)
-	return downCmd.Execute()
+	downPidFile = ""
+	downTimeout = 0
+	jsonOutput = false
+	
+	if f := rootCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := downCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := rootCmd.Flags().Lookup("json"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	rootCmd.SetArgs(append([]string{"down"}, args...))
+	return rootCmd.Execute()
 }
 
 func TestRunDown_HelpFlag(t *testing.T) {

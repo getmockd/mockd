@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,7 @@ func runConfigShowTest(args []string) (string, error) {
 	configShowFiles = nil
 	configShowService = ""
 
-	// Reset Cobra help flags which persist across test executions
+	// Reset Cobra flags which persist across test executions
 	if f := rootCmd.Flags().Lookup("help"); f != nil {
 		f.Changed = false
 		f.Value.Set("false")
@@ -26,16 +27,43 @@ func runConfigShowTest(args []string) (string, error) {
 		f.Changed = false
 		f.Value.Set("false")
 	}
+	if f := configShowCmd.Flags().Lookup("config"); f != nil {
+		f.Changed = false
+	}
+	
+	if f := rootCmd.Flags().Lookup("json"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
 
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	
+	oldStderr := os.Stderr
+	rErr, wErr, _ := os.Pipe()
+	os.Stderr = wErr
 
 	rootCmd.SetArgs(append([]string{"config", "show"}, args...))
 	err := rootCmd.Execute()
 
-	rootCmd.SetOut(nil)
-	rootCmd.SetErr(nil)
+	w.Close()
+	os.Stdout = oldStdout
+	
+	wErr.Close()
+	os.Stderr = oldStderr
+
+	rootCmd.SetArgs(nil)
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	
+	// Print any stderr that might have occurred during the test for debug visibility
+	var errBuf bytes.Buffer
+	errBuf.ReadFrom(rErr)
+	if errBuf.Len() > 0 {
+		fmt.Fprintf(os.Stderr, "STDERR: %s\n", errBuf.String())
+	}
 
 	return buf.String(), err
 }

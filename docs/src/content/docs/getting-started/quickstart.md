@@ -250,11 +250,11 @@ You can also add mocks at runtime without editing config files:
 mockd start
 
 # Add a mock from the CLI
-mockd add --path /api/hello --body '{"message": "Hello!"}'
+mockd http add --path /api/hello --body '{"message": "Hello!"}'
 # Output: Created mock: http_abc123
 
 # Update the same mock by running add again (upsert by default)
-mockd add --path /api/hello --body '{"message": "Hello, updated!"}'
+mockd http add --path /api/hello --body '{"message": "Hello, updated!"}'
 # Output: Updated mock: http_abc123
 
 # List mocks (use -w to show full IDs for copy-pasting)
@@ -267,7 +267,7 @@ mockd delete http_abc
 ```
 
 :::tip
-`mockd add` uses **upsert behavior** — if a mock already exists with the same method and path, it updates the existing mock instead of creating a duplicate. Use `--allow-duplicate` if you need multiple mocks on the same route.
+`mockd http add` uses **upsert behavior** — if a mock already exists with the same method and path, it updates the existing mock instead of creating a duplicate. Use `--allow-duplicate` if you need multiple mocks on the same route.
 :::
 
 ## What's Next?

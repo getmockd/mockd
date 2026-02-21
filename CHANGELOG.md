@@ -13,9 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--rate-limit` flag on `serve` command
 - `--no-persist` flag on `serve` command
 - `--watch` flag on `serve` command
-- `--match-body-contains` flag on `add` command
-- `--path-pattern` flag on `add` command
-- `--type oauth` for `add` command with `--issuer`, `--client-id`, `--client-secret`, `--oauth-user`, `--oauth-password`
+- `--match-body-contains` flag on `mockd http add` command
+- `--path-pattern` flag on `mockd http add` command
+- `mockd oauth add` command with `--issuer`, `--client-id`, `--client-secret`, `--oauth-user`, `--oauth-password`
+- Protocol utility commands: `grpc call`, `soap call`, `soap validate`, `mqtt publish`, `mqtt subscribe`, `mqtt status`, `graphql query`, `graphql validate`
 - `{{random.string(N)}}` template function
 - `{{mtls.san.ip}}` and `{{mtls.san.uri}}` template variables
 - `{{sequence("name", start)}}` works in all contexts (not just MQTT)
@@ -50,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- CLI UX improvements: `mockd add` upserts by method+path, `mockd list -w`, `mockd delete --path/--method/--yes`, `mockd rm` alias
+- CLI UX improvements: `mockd <protocol> add` upserts by method+path, `mockd list -w`, `mockd delete --path/--method/--yes`, `mockd rm` alias
 - README overhauled
 
 ### Changed

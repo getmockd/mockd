@@ -79,6 +79,7 @@ func TestAPIIntegration(t *testing.T) {
 	}
 	t.Run("Folders", func(t *testing.T) {
 		resp := apiReq("GET", "/folders", nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 
 		resp = apiReq("POST", "/folders", []byte(`{"name": "Test Folder"}`))
@@ -86,26 +87,32 @@ func TestAPIIntegration(t *testing.T) {
 		
 		var folder struct { ID string `json:"id"` }
 		json.NewDecoder(resp.Body).Decode(&folder)
+		resp.Body.Close()
 		
 		resp = apiReq("GET", "/folders/"+folder.ID, nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		
 		resp = apiReq("DELETE", "/folders/"+folder.ID, nil)
+		resp.Body.Close()
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
 	t.Run("Negative", func(t *testing.T) {
 		resp := apiReq("POST", "/mocks", []byte(`not json`))
+		resp.Body.Close()
 		assert.Equal(t, 400, resp.StatusCode)
 
 		resp = apiReq("GET", "/mocks/nonexistent", nil)
+		resp.Body.Close()
 		assert.Equal(t, 404, resp.StatusCode)
 	})
 
 	t.Run("HTTP Core Execution", func(t *testing.T) {
-		apiReq("DELETE", "/mocks", nil)
+		respD := apiReq("DELETE", "/mocks", nil)
+		respD.Body.Close()
 
-		apiReq("POST", "/mocks", []byte(`{
+		respM := apiReq("POST", "/mocks", []byte(`{
 			"type": "http",
 			"name": "Body Matcher",
 			"http": {
@@ -113,18 +120,22 @@ func TestAPIIntegration(t *testing.T) {
 			  "response": {"statusCode": 200, "body": "{\"echoed\": true}"}
 			}
 		}`))
+		respM.Body.Close()
 
 		resp := engineReq("POST", "/api/echo", []byte(`hello world`))
 		assert.Equal(t, 200, resp.StatusCode)
 		b, _ := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
 		assert.Contains(t, string(b), "echoed")
 		
 		resp = engineReq("GET", "/api/no-such-endpoint", nil)
+		resp.Body.Close()
 		assert.Equal(t, 404, resp.StatusCode)
 	})
 
 	t.Run("Mock Operations", func(t *testing.T) {
-		apiReq("DELETE", "/mocks", nil)
+		respD := apiReq("DELETE", "/mocks", nil)
+		respD.Body.Close()
 		
 		resp := apiReq("POST", "/mocks/bulk", []byte(`[
 			{
@@ -136,37 +147,46 @@ func TestAPIIntegration(t *testing.T) {
 			  }
 			}
 		]`))
+		resp.Body.Close()
 		assert.True(t, resp.StatusCode == 200 || resp.StatusCode == 201)
 
 		resp = engineReq("GET", "/api/bulk1", nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 	
 	t.Run("Proxy Contexts", func(t *testing.T) {
 		resp := apiReq("GET", "/proxy/status", nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		resp = apiReq("GET", "/proxy/filters", nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("State Management", func(t *testing.T) {
 		resp := apiReq("GET", "/state", nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		resp = apiReq("GET", "/state/resources", nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("Workspaces", func(t *testing.T) {
 		resp := apiReq("POST", "/workspaces", []byte(`{"name": "test-ws"}`))
+		resp.Body.Close()
 		assert.Equal(t, 201, resp.StatusCode)
 		
 		var ws struct { ID string `json:"id"` }
 		json.NewDecoder(resp.Body).Decode(&ws)
 
 		resp = apiReq("GET", "/workspaces/"+ws.ID, nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		
 		resp = apiReq("DELETE", "/workspaces/"+ws.ID, nil)
+		resp.Body.Close()
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
@@ -174,6 +194,7 @@ func TestAPIIntegration(t *testing.T) {
 		endpoints := []string{"/formats", "/templates", "/openapi.json", "/openapi.yaml", "/insomnia.json", "/insomnia.yaml", "/grpc", "/mqtt", "/soap"}
 		for _, ep := range endpoints {
 			resp := apiReq("GET", ep, nil)
+			resp.Body.Close()
 			require.Equal(t, 200, resp.StatusCode, "Endpoint %s failed", ep)
 		}
 	})

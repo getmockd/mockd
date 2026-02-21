@@ -47,6 +47,7 @@ func sanitizeContextsForJSON(contexts map[string]*cliconfig.Context) map[string]
 var contextCmd = &cobra.Command{
 	Use:   "context",
 	Short: "Manage contexts (admin server + workspace pairs)",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runContextShow()
 	},

@@ -9,8 +9,23 @@ import (
 )
 
 func RunPs(args []string) error {
-	psCmd.SetArgs(args)
-	return psCmd.Execute()
+	psPidFile = ""
+	jsonOutput = false
+	
+	if f := rootCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := psCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := rootCmd.Flags().Lookup("json"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	rootCmd.SetArgs(append([]string{"ps"}, args...))
+	return rootCmd.Execute()
 }
 
 func TestRunPs_HelpFlag(t *testing.T) {

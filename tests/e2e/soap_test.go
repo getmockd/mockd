@@ -102,6 +102,7 @@ func TestSOAPProtocolIntegration(t *testing.T) {
 	}`)
 
 	resp := apiReq("POST", "/mocks", mockReqBody)
+	resp.Body.Close()
 	require.Equal(t, 201, resp.StatusCode, "Failed to create SOAP mock")
 
 	t.Run("Create Extra SOAP Mock", func(t *testing.T) {
@@ -117,21 +118,26 @@ func TestSOAPProtocolIntegration(t *testing.T) {
 
 		var mock struct{ ID string `json:"id"` }
 		json.NewDecoder(resp.Body).Decode(&mock)
+		resp.Body.Close()
 
 		resp = apiReq("DELETE", "/mocks/"+mock.ID, nil)
+		resp.Body.Close()
 		require.Equal(t, 204, resp.StatusCode)
 	})
 
 	t.Run("SOAP GetUser request returns 200", func(t *testing.T) {
 		bodyXML := []byte(`<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetUser><userId>123</userId></GetUser></soap:Body></soap:Envelope>`)
 		resp, body := engineSOAPReq("/soap/user", "http://example.com/GetUser", bodyXML)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Contains(t, body, "John Doe")
 	})
 
 	t.Run("WSDL endpoint responds", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", mockTargetURL+"/soap/user?wsdl", nil)
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
 		// It might be unimplemented depending on mockd state, we just ensure it doesn't crash
 		assert.True(t, resp.StatusCode == 200 || resp.StatusCode == 404 || resp.StatusCode == 501)
 	})
@@ -139,6 +145,7 @@ func TestSOAPProtocolIntegration(t *testing.T) {
 	t.Run("CreateUser operation returns response", func(t *testing.T) {
 		bodyXML := []byte(`<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><CreateUser><name>Jane</name><email>jane@example.com</email></CreateUser></soap:Body></soap:Envelope>`)
 		resp, body := engineSOAPReq("/soap/user", "http://example.com/CreateUser", bodyXML)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Contains(t, body, "new-001")
 		assert.Contains(t, body, "created")

@@ -122,7 +122,7 @@ lt --port 4280
 
 ```bash
 # Add a mock
-mockd add --path /api/users --body '{"users": [{"id": 1, "name": "Alice"}]}'
+mockd http add --path /api/users --body '{"users": [{"id": 1, "name": "Alice"}]}'
 
 # Test via tunnel (note the bypass header)
 curl -H "bypass-tunnel-reminder: true" https://random-name.loca.lt/api/users
@@ -282,7 +282,7 @@ Some tunnel providers have idle timeouts. Enable keepalive:
 
 ```bash
 # In your WebSocket mock config
-mockd add --type websocket --path /ws --keepalive 30
+mockd websocket add --path /ws --keepalive 30
 ```
 
 ### SSE stream cuts off

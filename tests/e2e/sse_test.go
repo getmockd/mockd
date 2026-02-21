@@ -76,7 +76,7 @@ func TestSSEProtocolIntegration(t *testing.T) {
 	}
 
 	// Setup: Create SSE Mock
-	apiReq("POST", "/mocks", []byte(`{
+	resp1 := apiReq("POST", "/mocks", []byte(`{
 		"type": "http",
 		"name": "SSE Event Stream",
 		"http": {
@@ -91,9 +91,10 @@ func TestSSEProtocolIntegration(t *testing.T) {
 		  }
 		}
 	}`))
+	resp1.Body.Close()
 
 	// Create a typed-events SSE mock
-	apiReq("POST", "/mocks", []byte(`{
+	resp2 := apiReq("POST", "/mocks", []byte(`{
 		"type": "http",
 		"name": "SSE Typed Events",
 		"http": {
@@ -108,6 +109,7 @@ func TestSSEProtocolIntegration(t *testing.T) {
 		  }
 		}
 	}`))
+	resp2.Body.Close()
 
 	t.Run("Create SSE mock returns 201", func(t *testing.T) {
 		resp := apiReq("POST", "/mocks", []byte(`{
@@ -122,8 +124,10 @@ func TestSSEProtocolIntegration(t *testing.T) {
 
 		var mock struct{ ID string `json:"id"` }
 		json.NewDecoder(resp.Body).Decode(&mock)
+		resp.Body.Close()
 
-		apiReq("DELETE", "/mocks/"+mock.ID, nil)
+		respD := apiReq("DELETE", "/mocks/"+mock.ID, nil)
+		respD.Body.Close()
 	})
 
 	// Helper to consume SSE stream
@@ -201,11 +205,13 @@ func TestSSEProtocolIntegration(t *testing.T) {
 
 	t.Run("Admin API test /sse/connections returns 200", func(t *testing.T) {
 		resp := apiReq("GET", "/sse/connections", nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("Admin API test /sse/stats returns 200", func(t *testing.T) {
 		resp := apiReq("GET", "/sse/stats", nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 }

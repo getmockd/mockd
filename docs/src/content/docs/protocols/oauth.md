@@ -25,10 +25,10 @@ Add an OAuth mock with a single command:
 
 ```bash
 # OAuth/OIDC mock with sensible defaults
-mockd add --type oauth
+mockd oauth add
 
 # Custom issuer, client, and user
-mockd add --type oauth --name "Auth Server" \
+mockd oauth add --name "Auth Server" \
   --issuer http://localhost:4280/auth \
   --client-id my-app --client-secret s3cret \
   --oauth-user admin --oauth-password admin123

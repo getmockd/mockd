@@ -39,9 +39,7 @@ func TestGRPCProtocolE2E(t *testing.T) {
 
 	server := engine.NewServer(cfg)
 	go func() {
-		if err := server.Start(); err != nil {
-			// Expected on teardown
-		}
+		_ = server.Start()
 	}()
 	defer server.Stop()
 

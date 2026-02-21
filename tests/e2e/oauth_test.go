@@ -136,10 +136,12 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 	}`)
 
 	resp := apiReq("POST", "/mocks", mockReqBody)
+	resp.Body.Close()
 	require.Equal(t, 201, resp.StatusCode, "Failed to create OAuth mock")
 
 	t.Run("Create Extra OAuth Mock", func(t *testing.T) {
 		resp := apiReq("POST", "/mocks", []byte(`{
+  resp.Body.Close()
 			"type": "oauth",
 			"name": "OAuth Verify",
 			"oauth": {
@@ -151,13 +153,16 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 
 		var mock struct{ ID string `json:"id"` }
 		json.NewDecoder(resp.Body).Decode(&mock)
+		resp.Body.Close()
 
 		resp = apiReq("DELETE", "/mocks/"+mock.ID, nil)
+		resp.Body.Close()
 		require.Equal(t, 204, resp.StatusCode)
 	})
 
 	t.Run("OIDC discovery endpoint returns 200", func(t *testing.T) {
 		resp, body := engineReq("GET", "/oauth/.well-known/openid-configuration", nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Contains(t, body, "token_endpoint")
 		assert.Contains(t, body, "introspection_endpoint")
@@ -166,12 +171,14 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 
 	t.Run("JWKS endpoint returns 200", func(t *testing.T) {
 		resp, body := engineReq("GET", "/oauth/.well-known/jwks.json", nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Contains(t, body, "keys")
 	})
 
 	t.Run("Client credentials grant", func(t *testing.T) {
 		resp, body := engineForm("/oauth/token", "grant_type=client_credentials&client_id=test-app&client_secret=test-secret&scope=openid")
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Contains(t, body, "access_token")
 
@@ -185,12 +192,14 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 
 	t.Run("Password grant", func(t *testing.T) {
 		resp, body := engineForm("/oauth/token", "grant_type=password&client_id=test-app&client_secret=test-secret&username=testuser&password=testpass&scope=openid+profile")
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Contains(t, body, "access_token")
 	})
 
 	t.Run("Invalid credentials rejected", func(t *testing.T) {
 		resp, _ := engineForm("/oauth/token", "grant_type=client_credentials&client_id=wrong&client_secret=wrong")
+  resp.Body.Close()
 		assert.True(t, resp.StatusCode == 400 || resp.StatusCode == 401)
 	})
 
@@ -200,6 +209,7 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		req, _ := http.NewRequest("GET", authURL, nil)
 		resp, err := noRedirectClient.Do(req)
 		require.NoError(t, err)
+		defer resp.Body.Close()
 
 		assert.Equal(t, 302, resp.StatusCode)
 		location := resp.Header.Get("Location")
@@ -214,6 +224,7 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 
 		// Step 2: Exchange code for tokens
 		resp2, body2 := engineForm("/oauth/token", "grant_type=authorization_code&code="+code+"&redirect_uri=http://localhost:3000/callback&client_id=test-app&client_secret=test-secret")
+		resp2.Body.Close()
 		assert.Equal(t, 200, resp2.StatusCode)
 		assert.Contains(t, body2, "access_token")
 		assert.Contains(t, body2, "refresh_token")
@@ -228,6 +239,7 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		req, _ := http.NewRequest("GET", authURL, nil)
 		resp, err := noRedirectClient.Do(req)
 		require.NoError(t, err)
+		defer resp.Body.Close()
 		assert.Equal(t, 302, resp.StatusCode)
 
 		parsedURL, _ := url.Parse(resp.Header.Get("Location"))
@@ -235,6 +247,7 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		require.NotEmpty(t, code)
 
 		resp2, body2 := engineForm("/oauth/token", "grant_type=authorization_code&code="+code+"&redirect_uri=http://localhost:3000/callback&client_id=test-app&client_secret=test-secret&code_verifier="+codeVerifier)
+		resp2.Body.Close()
 		assert.Equal(t, 200, resp2.StatusCode)
 		assert.Contains(t, body2, "access_token")
 	})
@@ -246,34 +259,40 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		req, _ := http.NewRequest("GET", authURL, nil)
 		resp, err := noRedirectClient.Do(req)
 		require.NoError(t, err)
+		defer resp.Body.Close()
 
 		parsedURL, _ := url.Parse(resp.Header.Get("Location"))
 		code := parsedURL.Query().Get("code")
 
 		resp2, body2 := engineForm("/oauth/token", "grant_type=authorization_code&code="+code+"&redirect_uri=http://localhost:3000/callback&client_id=test-app&client_secret=test-secret&code_verifier=wrong-verifier-completely-different")
+		resp2.Body.Close()
 		assert.Equal(t, 400, resp2.StatusCode)
 		assert.Contains(t, body2, "invalid_grant")
 	})
 
 	t.Run("Refresh token grant", func(t *testing.T) {
-		_, body := engineForm("/oauth/token", "grant_type=password&client_id=test-app&client_secret=test-secret&username=testuser&password=testpass&scope=openid")
+		resp, body := engineForm("/oauth/token", "grant_type=password&client_id=test-app&client_secret=test-secret&username=testuser&password=testpass&scope=openid")
+		resp.Body.Close()
 
 		var tokenResp struct{ RefreshToken string `json:"refresh_token"` }
 		json.Unmarshal([]byte(body), &tokenResp)
 		require.NotEmpty(t, tokenResp.RefreshToken)
 
 		resp2, body2 := engineForm("/oauth/token", "grant_type=refresh_token&refresh_token="+tokenResp.RefreshToken+"&client_id=test-app&client_secret=test-secret")
+		resp2.Body.Close()
 		assert.Equal(t, 200, resp2.StatusCode)
 		assert.Contains(t, body2, "access_token")
 	})
 
 	t.Run("Token Introspection returns active=true", func(t *testing.T) {
-		_, body := engineForm("/oauth/token", "grant_type=client_credentials&client_id=test-app&client_secret=test-secret&scope=openid")
+		resp, body := engineForm("/oauth/token", "grant_type=client_credentials&client_id=test-app&client_secret=test-secret&scope=openid")
+		resp.Body.Close()
 
 		var tokenResp struct{ AccessToken string `json:"access_token"` }
 		json.Unmarshal([]byte(body), &tokenResp)
 
 		resp2, body2 := engineForm("/oauth/introspect", "token="+tokenResp.AccessToken+"&client_id=test-app&client_secret=test-secret")
+		resp2.Body.Close()
 		assert.Equal(t, 200, resp2.StatusCode)
 
 		var introResp struct{ Active bool `json:"active"` }
@@ -282,29 +301,35 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 	})
 
 	t.Run("Revoke token then introspect returns active=false", func(t *testing.T) {
-		_, body := engineForm("/oauth/token", "grant_type=client_credentials&client_id=test-app&client_secret=test-secret&scope=openid")
+		resp, body := engineForm("/oauth/token", "grant_type=client_credentials&client_id=test-app&client_secret=test-secret&scope=openid")
+		resp.Body.Close()
 
 		var tokenResp struct{ AccessToken string `json:"access_token"` }
 		json.Unmarshal([]byte(body), &tokenResp)
 
 		resp2, _ := engineForm("/oauth/revoke", "token="+tokenResp.AccessToken+"&client_id=test-app&client_secret=test-secret")
+  resp2.Body.Close()
 		assert.Equal(t, 200, resp2.StatusCode)
 
-		_, body3 := engineForm("/oauth/introspect", "token="+tokenResp.AccessToken+"&client_id=test-app&client_secret=test-secret")
+		resp3, body3 := engineForm("/oauth/introspect", "token="+tokenResp.AccessToken+"&client_id=test-app&client_secret=test-secret")
+		resp3.Body.Close()
 		var introResp struct{ Active bool `json:"active"` }
 		json.Unmarshal([]byte(body3), &introResp)
 		assert.False(t, introResp.Active)
 	})
 
 	t.Run("Userinfo endpoint returns user claims", func(t *testing.T) {
-		_, body := engineForm("/oauth/token", "grant_type=password&client_id=test-app&client_secret=test-secret&username=testuser&password=testpass&scope=openid+profile+email")
+		resp, body := engineForm("/oauth/token", "grant_type=password&client_id=test-app&client_secret=test-secret&username=testuser&password=testpass&scope=openid+profile+email")
+		resp.Body.Close()
 
 		var tokenResp struct{ AccessToken string `json:"access_token"` }
 		json.Unmarshal([]byte(body), &tokenResp)
 
 		req, _ := http.NewRequest("GET", mockTargetURL+"/oauth/userinfo", nil)
 		req.Header.Set("Authorization", "Bearer "+tokenResp.AccessToken)
-		resp2, _ := client.Do(req)
+		resp2, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp2.Body.Close()
 		
 		assert.Equal(t, 200, resp2.StatusCode)
 		body2, _ := ioutil.ReadAll(resp2.Body)

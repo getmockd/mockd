@@ -105,6 +105,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 	
 	var createdMock struct { ID string `json:"id"` }
 	json.NewDecoder(resp.Body).Decode(&createdMock)
+	resp.Body.Close()
 	mockID := createdMock.ID
 
 	// Wait for the MQTT broker to spin up
@@ -133,6 +134,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 
 	t.Run("Create MQTT mock returns 201", func(t *testing.T) {
 		resp := apiReq("GET", "/mocks/"+mockID, nil)
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
@@ -272,6 +274,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		
 		var authMock struct { ID string `json:"id"` }
 		json.NewDecoder(resp.Body).Decode(&authMock)
+		resp.Body.Close()
 
 		time.Sleep(500 * time.Millisecond)
 
@@ -282,22 +285,26 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		require.NoError(t, err)
 		c.Disconnect(250)
 
-		apiReq("DELETE", "/mocks/"+authMock.ID, nil)
+		respD := apiReq("DELETE", "/mocks/"+authMock.ID, nil)
+		respD.Body.Close()
 	})
 
 	t.Run("Toggle mock disabled stops broker", func(t *testing.T) {
-		apiReq("POST", "/mocks/"+mockID+"/toggle", []byte(`{"enabled": false}`))
+		resp1 := apiReq("POST", "/mocks/"+mockID+"/toggle", []byte(`{"enabled": false}`))
+		resp1.Body.Close()
 		time.Sleep(500 * time.Millisecond)
 		
 		_, err := connectMQTT("test-disabled", mqttPort, "", "")
 		require.Error(t, err, "Broker should be unreachable when disabled")
 		
-		apiReq("POST", "/mocks/"+mockID+"/toggle", []byte(`{"enabled": true}`))
+		resp2 := apiReq("POST", "/mocks/"+mockID+"/toggle", []byte(`{"enabled": true}`))
+		resp2.Body.Close()
 		time.Sleep(500 * time.Millisecond)
 	})
 
 	t.Run("Delete MQTT mock shuts down broker", func(t *testing.T) {
-		apiReq("DELETE", "/mocks/"+mockID, nil)
+		respD2 := apiReq("DELETE", "/mocks/"+mockID, nil)
+		respD2.Body.Close()
 		time.Sleep(500 * time.Millisecond)
 		
 		_, err := connectMQTT("test-deleted", mqttPort, "", "")

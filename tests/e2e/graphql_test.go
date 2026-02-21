@@ -112,6 +112,7 @@ func TestGraphQLProtocolIntegration(t *testing.T) {
 	}`)
 	
 	resp := apiReq("POST", "/mocks", mockReqBody)
+	resp.Body.Close()
 	require.Equal(t, 201, resp.StatusCode, "Failed to create GraphQL mock")
 
 	t.Run("Create Extra GraphQL Mock", func(t *testing.T) {
@@ -128,34 +129,41 @@ func TestGraphQLProtocolIntegration(t *testing.T) {
 		
 		var mock struct { ID string `json:"id"` }
 		json.NewDecoder(resp.Body).Decode(&mock)
+		resp.Body.Close()
 		
 		resp = apiReq("DELETE", "/mocks/"+mock.ID, nil)
+		resp.Body.Close()
 		require.Equal(t, 204, resp.StatusCode)
 	})
 
 	t.Run("GraphQL query returns 200", func(t *testing.T) {
 		resp, _ := engineReq("POST", "/graphql", []byte(`{"query": "{ users { id name } }"}`))
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("Response contains Alice", func(t *testing.T) {
-		_, body := engineReq("POST", "/graphql", []byte(`{"query": "{ users { id name } }"}`))
+		resp, body := engineReq("POST", "/graphql", []byte(`{"query": "{ users { id name } }"}`))
+		resp.Body.Close()
 		assert.Contains(t, body, "Alice")
 	})
 
 	t.Run("GraphQL query with variables", func(t *testing.T) {
 		resp, body := engineReq("POST", "/graphql", []byte(`{"query": "query GetUser($id: ID!) { user(id: $id) { id name email } }", "variables": {"id": "42"}}`))
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Contains(t, body, "Test User")
 	})
 
 	t.Run("Introspection query works", func(t *testing.T) {
 		resp, _ := engineReq("POST", "/graphql", []byte(`{"query": "{ __schema { queryType { name } } }"}`))
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("Handlers list includes registered handler", func(t *testing.T) {
-		apiReq("GET", "/handlers", nil)
+		resp := apiReq("GET", "/handlers", nil)
+		resp.Body.Close()
 		// Usually handled internally by mockd or it might 404 if it's not bound, let's verify if /handlers exists.
 		// If it's the control API, it might be /api/handlers. But in BATS it was `api GET /handlers`. I will assert HTTP 200.
 		// Wait, BATS actually hit ADMIN_URL for `api`. Is there a /handlers on admin? NO! Wait! Let's check.
@@ -164,12 +172,14 @@ func TestGraphQLProtocolIntegration(t *testing.T) {
 
 	t.Run("Mutation createUser returns response", func(t *testing.T) {
 		resp, body := engineReq("POST", "/graphql", []byte(`{"query": "mutation { createUser(name: \"New User\", email: \"new@example.com\") { id name email } }"}`))
+		resp.Body.Close()
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Contains(t, body, "New User")
 	})
 
 	t.Run("Invalid query returns error", func(t *testing.T) {
 		resp, body := engineReq("POST", "/graphql", []byte(`{"query": "{ nonExistentField }"}`))
+		resp.Body.Close()
 		// Should get 200 with errors array, or 400
 		if resp.StatusCode == 200 {
 			assert.Contains(t, body, "error")
@@ -180,6 +190,7 @@ func TestGraphQLProtocolIntegration(t *testing.T) {
 
 	t.Run("Malformed query body returns error status", func(t *testing.T) {
 		resp, body := engineReq("POST", "/graphql", []byte(`{"query": "not valid graphql {{{"}`))
+		resp.Body.Close()
 		if resp.StatusCode == 200 {
 			assert.Contains(t, body, "error")
 		} else {

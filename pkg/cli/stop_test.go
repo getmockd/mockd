@@ -8,8 +8,26 @@ import (
 )
 
 func RunStop(args []string) error {
-	stopCmd.SetArgs(args)
-	return stopCmd.Execute()
+	stopPidFile = ""
+	stopForce = false
+	stopTimeout = 0
+	stopAdminURL = ""
+	jsonOutput = false
+	
+	if f := rootCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := stopCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := rootCmd.Flags().Lookup("json"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	rootCmd.SetArgs(append([]string{"stop"}, args...))
+	return rootCmd.Execute()
 }
 
 func TestRunStop_NoServer(t *testing.T) {

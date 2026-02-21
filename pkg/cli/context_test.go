@@ -10,8 +10,28 @@ import (
 )
 
 func RunContext(args []string) error {
-	contextCmd.SetArgs(args)
-	return contextCmd.Execute()
+	contextAddAdminURL = ""
+	contextAddWorkspace = ""
+	contextAddDescription = ""
+	contextAddToken = ""
+	contextAddTLSInsecure = false
+	contextAddUseCurrent = false
+	jsonOutput = false
+	
+	if f := rootCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := contextCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := rootCmd.Flags().Lookup("json"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	rootCmd.SetArgs(append([]string{"context"}, args...))
+	return rootCmd.Execute()
 }
 
 func setupTestContextConfig(t *testing.T) (cleanup func()) {
