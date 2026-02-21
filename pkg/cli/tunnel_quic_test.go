@@ -60,7 +60,7 @@ func TestMQTTFlag_Set(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var f mqttFlag
+			var f mqttPortFlag
 			err := f.Set(tt.input)
 
 			if tt.wantErr {
@@ -92,7 +92,7 @@ func TestMQTTFlag_Set(t *testing.T) {
 }
 
 func TestMQTTFlag_Multiple(t *testing.T) {
-	var f mqttFlag
+	var f mqttPortFlag
 
 	if err := f.Set("1883:sensors"); err != nil {
 		t.Fatalf("first Set: %v", err)
@@ -121,7 +121,7 @@ func TestMQTTFlag_Multiple(t *testing.T) {
 }
 
 func TestMQTTFlag_String(t *testing.T) {
-	var f mqttFlag
+	var f mqttPortFlag
 	_ = f.Set("1883:sensors")
 	_ = f.Set("1884")
 

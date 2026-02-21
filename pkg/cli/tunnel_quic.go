@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,13 +19,14 @@ import (
 
 	"github.com/getmockd/mockd/pkg/tunnel/protocol"
 	quicclient "github.com/getmockd/mockd/pkg/tunnel/quic"
+	"github.com/spf13/cobra"
 )
 
-// mqttFlag implements flag.Value for repeatable --mqtt flags.
+// mqttPortFlag implements pflag.Value for repeatable --mqtt flags.
 // Accepts "PORT" or "PORT:NAME" format (e.g., "1883" or "1883:sensors").
-type mqttFlag []protocol.ProtocolPort
+type mqttPortFlag []protocol.ProtocolPort
 
-func (f *mqttFlag) String() string {
+func (f *mqttPortFlag) String() string {
 	if f == nil {
 		return ""
 	}
@@ -41,7 +41,7 @@ func (f *mqttFlag) String() string {
 	return strings.Join(parts, ", ")
 }
 
-func (f *mqttFlag) Set(s string) error {
+func (f *mqttPortFlag) Set(s string) error {
 	parts := strings.SplitN(s, ":", 2)
 
 	port, err := strconv.Atoi(parts[0])
@@ -67,36 +67,29 @@ func (f *mqttFlag) Set(s string) error {
 	return nil
 }
 
-// RunTunnelQUIC handles the tunnel-quic command.
-func RunTunnelQUIC(args []string) error {
-	fs := flag.NewFlagSet("tunnel-quic", flag.ContinueOnError)
+func (f *mqttPortFlag) Type() string {
+	return "mqtt-port"
+}
 
-	// Relay configuration
-	relayAddr := fs.String("relay", "relay.mockd.io", "Relay server address (host or host:port)")
-	token := fs.String("token", os.Getenv("MOCKD_TOKEN"), "Authentication token")
+// tunnel-quic flag variables (package-level for Cobra binding)
+var (
+	tqRelayAddr  string
+	tqToken      string
+	tqLocalPort  int
+	tqLocalHost  string
+	tqAuthToken  string
+	tqAuthBasic  string
+	tqAllowIPs   string
+	tqAuthHeader string
+	tqMQTTPorts  mqttPortFlag
+	tqInsecure   bool
+)
 
-	// Local service configuration
-	localPort := fs.Int("port", 4280, "Local port to tunnel")
-	fs.IntVar(localPort, "p", 4280, "Local port to tunnel (shorthand)")
-	localHost := fs.String("local-host", "localhost", "Local host to forward to")
-
-	// Tunnel auth (incoming request protection)
-	authToken := fs.String("auth-token", "", "Require this token from callers (via X-Tunnel-Token header or ?token= param)")
-	authBasic := fs.String("auth-basic", "", "Require HTTP Basic auth from callers (format: user:pass)")
-	allowIPs := fs.String("allow-ips", "", "Restrict access to these IPs/CIDRs (comma-separated, e.g. 10.0.0.0/8,192.168.1.50)")
-	authHeader := fs.String("auth-header", "", "Custom header name for token auth (default: X-Tunnel-Token)")
-
-	// MQTT broker ports (repeatable)
-	var mqttPorts mqttFlag
-	fs.Var(&mqttPorts, "mqtt", "MQTT broker port (repeatable, format: PORT or PORT:NAME)")
-
-	// TLS options
-	tlsInsecure := fs.Bool("insecure", false, "Skip TLS certificate verification (for testing)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd tunnel-quic [flags]
-
-Expose a local service via QUIC tunnel to the relay server.
+// tunnelQUICCmd is the Cobra command for "mockd tunnel-quic".
+var tunnelQUICCmd = &cobra.Command{
+	Use:   "tunnel-quic",
+	Short: "Expose a local service via QUIC tunnel",
+	Long: `Expose a local service via QUIC tunnel to the relay server.
 
 This is a lightweight tunnel that forwards traffic to a local port.
 Unlike 'mockd tunnel', this doesn't start a mock server - it just
@@ -104,20 +97,6 @@ forwards requests to an existing local service.
 
 All protocols (HTTP, gRPC, WebSocket, SSE, MQTT) are tunneled through
 a single port (443) using ALPN-based routing.
-
-Flags:
-      --relay        Relay server address (default: relay.mockd.io)
-      --token        Authentication token (or set MOCKD_TOKEN)
-  -p, --port         Local HTTP/gRPC/WebSocket port (default: 4280)
-      --mqtt         Local MQTT broker port (repeatable, format: PORT or PORT:NAME)
-      --local-host   Local host to forward to (default: localhost)
-      --insecure     Skip TLS verification (for testing)
-
-Tunnel Auth (protect your tunnel URL from unauthorized callers):
-      --auth-token   Require token from callers (X-Tunnel-Token header or ?token= param)
-      --auth-basic   Require HTTP Basic auth (format: user:pass)
-      --allow-ips    Restrict to IPs/CIDRs (comma-separated, e.g. 10.0.0.0/8,192.168.1.50)
-      --auth-header  Custom header name for token auth (default: X-Tunnel-Token)
 
 Examples:
   # Tunnel local port 4280 (HTTP, gRPC, WebSocket all work automatically)
@@ -128,47 +107,67 @@ Examples:
 
   # Multiple named MQTT brokers (each gets a subdomain)
   mockd tunnel-quic --port 4280 --mqtt 1883:sensors --mqtt 1884:alerts
-  # sensors.abc123.tunnel.mockd.io:443 (ALPN: mqtt) → localhost:1883
-  # alerts.abc123.tunnel.mockd.io:443  (ALPN: mqtt) → localhost:1884
 
   # Protect tunnel URL with token auth
   mockd tunnel-quic --auth-token SECRET123
-  # curl -H "X-Tunnel-Token: SECRET123" https://abc123.tunnel.mockd.io
 
   # For local testing with self-signed certs
   mockd tunnel-quic --relay localhost:4443 --insecure
 
-MQTT clients connect with ALPN negotiation:
-  mosquitto_pub -h abc123.tunnel.mockd.io -p 443 --alpn mqtt \
-    --capath /etc/ssl/certs -t sensors/temp -m '{"val":22}'
-
 Environment Variables:
-  MOCKD_TOKEN       Authentication token (alternative to --token flag)
-`)
-	}
+  MOCKD_TOKEN    Authentication token (alternative to --token flag)`,
+	RunE: runTunnelQUIC,
+}
 
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
+func init() {
+	f := tunnelQUICCmd.Flags()
+
+	// Relay configuration
+	f.StringVar(&tqRelayAddr, "relay", "relay.mockd.io", "Relay server address (host or host:port)")
+	tokenDefault := os.Getenv("MOCKD_TOKEN")
+	f.StringVar(&tqToken, "token", tokenDefault, "Authentication token (or set MOCKD_TOKEN)")
+
+	// Local service configuration
+	f.IntVarP(&tqLocalPort, "port", "p", 4280, "Local port to tunnel")
+	f.StringVar(&tqLocalHost, "local-host", "localhost", "Local host to forward to")
+
+	// Tunnel auth (incoming request protection)
+	f.StringVar(&tqAuthToken, "auth-token", "", "Require token from callers (X-Tunnel-Token header or ?token= param)")
+	f.StringVar(&tqAuthBasic, "auth-basic", "", "Require HTTP Basic auth (format: user:pass)")
+	f.StringVar(&tqAllowIPs, "allow-ips", "", "Restrict to IPs/CIDRs (comma-separated)")
+	f.StringVar(&tqAuthHeader, "auth-header", "", "Custom header name for token auth (default: X-Tunnel-Token)")
+
+	// MQTT broker ports (repeatable)
+	f.Var(&tqMQTTPorts, "mqtt", "MQTT broker port (repeatable, format: PORT or PORT:NAME)")
+
+	// TLS options
+	f.BoolVar(&tqInsecure, "insecure", false, "Skip TLS certificate verification (for testing)")
+
+	rootCmd.AddCommand(tunnelQUICCmd)
+}
+
+func runTunnelQUIC(cmd *cobra.Command, args []string) error {
+	relayAddr := tqRelayAddr
+	token := tqToken
 
 	// Default to port 443 if no port specified
-	if !strings.Contains(*relayAddr, ":") {
-		*relayAddr += ":443"
+	if !strings.Contains(relayAddr, ":") {
+		relayAddr += ":443"
 	}
 
 	// Auto-fetch anonymous JWT if no token provided
-	if *token == "" {
+	if token == "" {
 		fmt.Println("No token provided, fetching anonymous tunnel token...")
 		anonymousToken, err := fetchAnonymousToken()
 		if err != nil {
 			return fmt.Errorf("failed to fetch anonymous token: %w", err)
 		}
-		*token = anonymousToken
+		token = anonymousToken
 		fmt.Println("Anonymous token acquired (2h session, 100MB bandwidth)")
 	}
 
 	// Build local target URL
-	targetURL := fmt.Sprintf("http://%s:%d", *localHost, *localPort)
+	targetURL := fmt.Sprintf("http://%s:%d", tqLocalHost, tqLocalPort)
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		return fmt.Errorf("invalid target URL: %w", err)
@@ -189,14 +188,14 @@ Environment Variables:
 	// Build tunnel auth config from flags
 	var tunnelAuth *protocol.TunnelAuth
 	switch {
-	case *authToken != "":
+	case tqAuthToken != "":
 		tunnelAuth = &protocol.TunnelAuth{
 			Type:        "token",
-			Token:       *authToken,
-			TokenHeader: *authHeader,
+			Token:       tqAuthToken,
+			TokenHeader: tqAuthHeader,
 		}
-	case *authBasic != "":
-		parts := strings.SplitN(*authBasic, ":", 2)
+	case tqAuthBasic != "":
+		parts := strings.SplitN(tqAuthBasic, ":", 2)
 		if len(parts) != 2 {
 			return errors.New("--auth-basic must be in format user:pass")
 		}
@@ -205,8 +204,8 @@ Environment Variables:
 			Username: parts[0],
 			Password: parts[1],
 		}
-	case *allowIPs != "":
-		cidrs := strings.Split(*allowIPs, ",")
+	case tqAllowIPs != "":
+		cidrs := strings.Split(tqAllowIPs, ",")
 		for i := range cidrs {
 			cidrs[i] = strings.TrimSpace(cidrs[i])
 		}
@@ -217,20 +216,21 @@ Environment Variables:
 	}
 
 	// Build protocol list from flags
+	mqttPorts := tqMQTTPorts
 	protocols := make([]protocol.ProtocolPort, 0, 1+len(mqttPorts))
 	protocols = append(protocols, protocol.ProtocolPort{
 		Type: "http",
-		Port: *localPort,
+		Port: tqLocalPort,
 	})
 	protocols = append(protocols, mqttPorts...)
 
 	// Create QUIC client
 	client := quicclient.NewClient(&quicclient.ClientConfig{
-		RelayAddr:   *relayAddr,
-		Token:       *token,
-		LocalPort:   *localPort,
+		RelayAddr:   relayAddr,
+		Token:       token,
+		LocalPort:   tqLocalPort,
 		Handler:     proxy,
-		TLSInsecure: *tlsInsecure,
+		TLSInsecure: tqInsecure,
 		TunnelAuth:  tunnelAuth,
 		Protocols:   protocols,
 		Logger:      logger,
@@ -242,7 +242,6 @@ Environment Variables:
 
 		// Show MQTT endpoints
 		for _, p := range mqttPorts {
-			// Extract the hostname from the public URL for MQTT display
 			mqttHost := strings.TrimPrefix(publicURL, "https://")
 			mqttHost = strings.TrimPrefix(mqttHost, "http://")
 			if p.Name != "" {
@@ -285,7 +284,7 @@ Environment Variables:
 	defer cancel()
 
 	// Connect tunnel
-	fmt.Printf("Connecting to relay at %s (QUIC)...\n", *relayAddr)
+	fmt.Printf("Connecting to relay at %s (QUIC)...\n", relayAddr)
 	if err := client.Connect(ctx); err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
