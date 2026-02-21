@@ -559,7 +559,7 @@ func TestWS_AdminAPI_ListConnections(t *testing.T) {
 
 	// Close the connection
 	conn.Close(ws.StatusNormalClosure, "")
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow connection to deregister
 
 	// Should be gone
 	infos = manager.ListConnectionInfos("", "")
@@ -573,7 +573,7 @@ func TestWS_AdminAPI_SendMessage(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/test"
 	conn := connectWS(t, wsURL)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow connection to register
 
 	manager := getWSManager(t, ts)
 	infos := manager.ListConnectionInfos("", "")
@@ -604,7 +604,7 @@ func TestWS_AdminAPI_Disconnect(t *testing.T) {
 	}
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow connection to register
 
 	manager := getWSManager(t, ts)
 	infos := manager.ListConnectionInfos("", "")
@@ -632,7 +632,7 @@ func TestWS_AdminAPI_Broadcast(t *testing.T) {
 	// Connect two clients
 	conn1 := connectWS(t, wsURL)
 	conn2 := connectWS(t, wsURL)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow connections to register
 
 	manager := getWSManager(t, ts)
 
@@ -660,7 +660,7 @@ func TestWS_AdminAPI_Stats(t *testing.T) {
 	sendText(t, conn, "two")
 	readText(t, conn)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow stats to update
 
 	manager := getWSManager(t, ts)
 	stats := manager.WebSocketStats()

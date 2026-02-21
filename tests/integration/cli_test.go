@@ -565,7 +565,7 @@ func waitForServer(url string, timeout time.Duration) bool {
 			resp.Body.Close()
 			return true
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) // Polling interval
 	}
 	return false
 }

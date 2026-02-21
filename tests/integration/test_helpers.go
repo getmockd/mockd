@@ -55,7 +55,7 @@ func waitForReady(t *testing.T, port int) {
 				return
 			}
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond) // Polling interval
 	}
 	t.Fatalf("server on port %d never became ready (waited 5s)", port)
 }
@@ -73,7 +73,7 @@ func waitForTCPReady(t *testing.T, port int) {
 			conn.Close()
 			return
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond) // Polling interval
 	}
 	t.Fatalf("TCP port %d never became ready (waited 5s)", port)
 }

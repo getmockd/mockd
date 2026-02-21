@@ -28,7 +28,7 @@ func waitForServer(t *testing.T, url string) {
 				return
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) // Polling interval
 	}
 	t.Fatalf("server at %s never became healthy", url)
 }

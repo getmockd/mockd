@@ -1341,7 +1341,7 @@ func TestOAuth_MultipleProviders(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow mock registration
 
 	t.Run("both providers are accessible", func(t *testing.T) {
 		// Provider 1

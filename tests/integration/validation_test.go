@@ -359,7 +359,7 @@ func TestBinaryE2E_ValidationErrorResponse(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow mock registration
 
 	// Test invalid JSON - should get structured error response
 	resp, err = http.Post(proc.mockURL()+"/api/error-test-users", "application/json", bytes.NewReader([]byte(`{not valid json`)))
@@ -415,7 +415,7 @@ func TestBinaryE2E_StatefulCRUDWithValidation(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow mock registration
 
 	// CREATE
 	t.Run("Create", func(t *testing.T) {
@@ -557,7 +557,7 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow mock registration
 
 	// Create comment on article
 	commentBody := map[string]interface{}{
@@ -632,7 +632,7 @@ func TestBinaryE2E_LargeBodyRejection(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow mock registration
 
 	// Create a very large body (over 1MB)
 	largeData := make([]byte, 2*1024*1024) // 2MB

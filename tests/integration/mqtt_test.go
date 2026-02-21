@@ -160,11 +160,11 @@ func TestMQTT_US2_SingleLevelWildcard(t *testing.T) {
 	client.Publish("sensors/room2/temperature", 1, false, "26").Wait()
 	client.Publish("sensors/room1/humidity", 1, false, "60").Wait() // Should not match
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond) // Allow messages to propagate through broker
 
 	// Disconnect client before draining channel to prevent race
 	client.Disconnect(100)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow disconnect to complete
 
 	// Verify only matching messages received using non-blocking drain
 	topics := []string{}
@@ -206,11 +206,11 @@ func TestMQTT_US2_MultiLevelWildcard(t *testing.T) {
 	client.Publish("home/kitchen/appliances/oven", 1, false, "off").Wait()
 	client.Publish("office/temp", 1, false, "21").Wait() // Should not match
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond) // Allow messages to propagate through broker
 
 	// Disconnect client before draining channel to prevent race
 	client.Disconnect(100)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow disconnect to complete
 
 	// Drain using non-blocking read
 	topics := []string{}
@@ -329,7 +329,7 @@ func TestMQTT_US4_RetainedMessages(t *testing.T) {
 	publisher.Publish("retain/test", 1, true, "retained value").Wait()
 	publisher.Disconnect(250)
 
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond) // Allow retained message to persist in broker
 
 	// New client subscribes and should receive retained message
 	received := make(chan string, 1)
@@ -381,7 +381,7 @@ func TestMQTT_US5_ConfiguredTopics(t *testing.T) {
 	}).Wait()
 
 	// Wait for auto-published messages
-	time.Sleep(350 * time.Millisecond)
+	time.Sleep(350 * time.Millisecond) // Collect ~3 messages at 100ms interval
 
 	// Disconnect client before draining channel to prevent race
 	client.Disconnect(100)
@@ -485,7 +485,7 @@ func TestMQTT_US6_OnPublishForward(t *testing.T) {
 		received <- string(msg.Payload())
 	}).Wait()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow subscription to register
 
 	// Publish to input topic
 	client.Publish("input/data", 1, false, "forwarded message").Wait()
@@ -601,13 +601,13 @@ func TestMQTT_US8_MultipleClients(t *testing.T) {
 		}(i)
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond) // Allow all clients to connect and subscribe
 
 	// Publish a message
 	publisher := createMQTTClient(t, port, "broadcaster")
 	publisher.Publish("broadcast", 1, false, "hello all").Wait()
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond) // Allow broadcast to reach all clients
 
 	// Disconnect all clients before draining channel to prevent race
 	for _, client := range clients {
@@ -679,7 +679,7 @@ func TestMQTT_US9_AutoStartFromMock(t *testing.T) {
 		server.Stop()
 	})
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond) // Allow engine and MQTT broker to start
 
 	// Verify MQTT broker is running
 	client := createMQTTClient(t, mqttPort, "auto-test")
@@ -761,7 +761,7 @@ func TestMQTT_US11_BrokerStats(t *testing.T) {
 	client.Subscribe("stats/test", 1, nil).Wait()
 	client.Publish("stats/test", 1, false, "test").Wait()
 
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond) // Allow stats counters to update
 
 	stats := broker.GetStats()
 	assert.Equal(t, port, stats.Port)
@@ -804,11 +804,11 @@ func TestMQTT_US12_TemplatingBasicVariables(t *testing.T) {
 	}).Wait()
 
 	// Wait for auto-published messages
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(250 * time.Millisecond) // Collect ~2 messages at 100ms interval
 
 	// Disconnect client before draining channel to prevent race
 	client.Disconnect(100)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow disconnect to complete
 
 	// Drain and verify messages
 	count := 0
@@ -868,10 +868,10 @@ func TestMQTT_US12_TemplatingRandomValues(t *testing.T) {
 	}).Wait()
 
 	// Wait for auto-published messages
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(250 * time.Millisecond) // Collect ~2 messages at 100ms interval
 
 	client.Disconnect(100)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow disconnect to complete
 
 	// Drain and verify messages have random values within expected range
 	count := 0
@@ -932,10 +932,10 @@ func TestMQTT_US12_TemplatingSequence(t *testing.T) {
 	}).Wait()
 
 	// Wait for several auto-published messages
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond) // Collect ~4 messages at 50ms interval
 
 	client.Disconnect(100)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow disconnect to complete
 
 	// Collect sequence values and verify they are incrementing
 	var eventIds []int64
@@ -994,10 +994,10 @@ func TestMQTT_US12_TemplatingFaker(t *testing.T) {
 	}).Wait()
 
 	// Wait for auto-published messages
-	time.Sleep(150 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond) // Collect ~1-2 messages at 100ms interval
 
 	client.Disconnect(100)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow disconnect to complete
 
 	// Verify messages have faker-generated values
 	count := 0
@@ -1148,14 +1148,14 @@ func TestMQTT_US14_RetainedMessageOverwrite(t *testing.T) {
 	publisher.Publish("retain/overwrite", 1, true, "first value").Wait()
 	publisher.Disconnect(250)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow retained message to persist
 
 	// Publish second retained message (should overwrite)
 	publisher2 := createMQTTClient(t, port, "publisher2")
 	publisher2.Publish("retain/overwrite", 1, true, "second value").Wait()
 	publisher2.Disconnect(250)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow retained message to overwrite
 
 	// New subscriber should receive only the latest retained message
 	received := make(chan string, 5)
@@ -1192,13 +1192,13 @@ func TestMQTT_US14_RetainedMessageClear(t *testing.T) {
 	publisher := createMQTTClient(t, port, "publisher")
 	publisher.Publish("retain/clear", 1, true, "retained value").Wait()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow retained message to persist
 
 	// Clear retained message by publishing empty payload with retain flag
 	publisher.Publish("retain/clear", 1, true, "").Wait()
 	publisher.Disconnect(250)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow retained message clear to take effect
 
 	// New subscriber should not receive any retained message
 	received := make(chan string, 1)
@@ -1231,7 +1231,7 @@ func TestMQTT_US14_RetainedMessageMultipleTopics(t *testing.T) {
 	publisher.Publish("retain/topic3", 1, true, "value3").Wait()
 	publisher.Disconnect(250)
 
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond) // Allow retained messages to persist
 
 	// New subscriber using wildcard should receive all retained messages
 	received := make(chan string, 10)
@@ -1241,10 +1241,10 @@ func TestMQTT_US14_RetainedMessageMultipleTopics(t *testing.T) {
 	}).Wait()
 
 	// Wait for retained messages
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond) // Allow all retained messages to be delivered
 
 	subscriber.Disconnect(100)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // Allow disconnect to complete
 
 	// Collect all received messages
 	messages := []string{}
@@ -1284,7 +1284,7 @@ func TestMQTT_US15_WillMessageOnDisconnect(t *testing.T) {
 		received <- string(msg.Payload())
 	}).Wait()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow subscription to register
 
 	// Create client with will message
 	opts := mqttclient.NewClientOptions()
@@ -1330,7 +1330,7 @@ func TestMQTT_US15_WillMessageRetained(t *testing.T) {
 	onlineClient.Publish("device/status", 1, true, "online").Wait()
 	onlineClient.Disconnect(250)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow retained message to persist
 
 	// Create client with retained will message (will overwrite on ungraceful disconnect)
 	opts := mqttclient.NewClientOptions()
@@ -1440,7 +1440,7 @@ func TestMQTT_US16_MockResponseWithWildcardTemplating(t *testing.T) {
 		received <- string(msg.Payload())
 	}).Wait()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow subscription to register
 
 	// Publish command to a specific device
 	client.Publish("devices/sensor-001/command", 1, false, `{"action": "restart"}`).Wait()
@@ -1493,7 +1493,7 @@ func TestMQTT_US16_MockResponseWithPayloadAccess(t *testing.T) {
 		received <- string(msg.Payload())
 	}).Wait()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Allow subscription to register
 
 	// Publish request with action field
 	client.Publish("echo/request", 1, false, `{"action": "test-action-123"}`).Wait()

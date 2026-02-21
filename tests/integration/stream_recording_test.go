@@ -66,7 +66,7 @@ func TestStreamRecordingFullWorkflow(t *testing.T) {
 			if err := hook.OnFrame(frame); err != nil {
 				t.Fatalf("failed to record frame %d: %v", i, err)
 			}
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond) // Spacing between frames for timing fidelity
 		}
 
 		hook.OnClose(1000, "")
@@ -146,7 +146,7 @@ func TestStreamRecordingFullWorkflow(t *testing.T) {
 			if err := hook.OnFrame(event); err != nil {
 				t.Fatalf("failed to record event %d: %v", i, err)
 			}
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond) // Spacing between frames for timing fidelity
 		}
 
 		hook.OnStreamEnd()
@@ -240,7 +240,7 @@ func TestStreamRecordingFullWorkflow(t *testing.T) {
 				[]byte(`{"seq":`+string(rune('0'+i))+`}`),
 			)
 			hook.OnFrame(frame)
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond) // Spacing between frames for timing fidelity
 		}
 		hook.OnComplete()
 
@@ -417,7 +417,7 @@ func TestSSEReplay(t *testing.T) {
 			nil,
 		)
 		hook.OnFrame(event)
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond) // Spacing between frames for timing fidelity
 	}
 
 	hook.OnStreamEnd()

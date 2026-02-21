@@ -282,7 +282,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		json.NewDecoder(resp.Body).Decode(&authMock)
 		resp.Body.Close()
 
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond) // Allow broker to settle
 
 		_, err := connectMQTT("auth-fail", authPort, "sensor", "wrongpass")
 		require.Error(t, err)
@@ -298,20 +298,20 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 	t.Run("Toggle mock disabled stops broker", func(t *testing.T) {
 		resp1 := apiReq("POST", "/mocks/"+mockID+"/toggle", []byte(`{"enabled": false}`))
 		resp1.Body.Close()
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond) // Allow broker to shut down
 
 		_, err := connectMQTT("test-disabled", mqttPort, "", "")
 		require.Error(t, err, "Broker should be unreachable when disabled")
 
 		resp2 := apiReq("POST", "/mocks/"+mockID+"/toggle", []byte(`{"enabled": true}`))
 		resp2.Body.Close()
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond) // Allow broker to restart
 	})
 
 	t.Run("Delete MQTT mock shuts down broker", func(t *testing.T) {
 		respD2 := apiReq("DELETE", "/mocks/"+mockID, nil)
 		respD2.Body.Close()
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond) // Allow broker to shut down
 
 		_, err := connectMQTT("test-deleted", mqttPort, "", "")
 		require.Error(t, err, "Broker should be unreachable after deletion")
