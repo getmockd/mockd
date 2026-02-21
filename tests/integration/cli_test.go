@@ -269,16 +269,20 @@ func TestCLIImportExportCommands(t *testing.T) {
 	serverCmd.Stdout = &stdout
 	serverCmd.Stderr = &stderr
 	serverCmd.Dir = "../.."
+	fmt.Println("Starting server...")
 	if err := serverCmd.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
 	defer serverCmd.Process.Kill()
 
 	adminURL := fmt.Sprintf("http://localhost:%d", adminPort)
+	fmt.Println("Waiting for server ready...")
 	if !waitForServer(adminURL+"/health", 60*time.Second) {
 		t.Fatalf("Server did not become ready in time\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
 	}
+	fmt.Println("Server ready!")
 
+	fmt.Println("Adding mock...")
 	// Add a mock first
 	addCmd := exec.Command("./mockd_test", "add",
 		"--path", "/api/export-test",
@@ -289,6 +293,7 @@ func TestCLIImportExportCommands(t *testing.T) {
 	if out, err := addCmd.CombinedOutput(); err != nil {
 		t.Fatalf("Add command failed: %v\n%s", err, out)
 	}
+	fmt.Println("Mock added!")
 
 	// Test export command
 	t.Run("export", func(t *testing.T) {
@@ -546,18 +551,9 @@ func TestCLIHelpOutput(t *testing.T) {
 	}
 }
 
-// findAvailablePort finds an available TCP port starting from the given port.
+// findAvailablePort finds an available TCP port safely, ignoring the start range.
 func findAvailablePort(t *testing.T, start int) int {
-	for port := start; port < start+100; port++ {
-		resp, err := http.Get(fmt.Sprintf("http://localhost:%d", port))
-		if err != nil {
-			// Port is likely available
-			return port
-		}
-		resp.Body.Close()
-	}
-	t.Fatalf("Could not find available port starting from %d", start)
-	return 0
+	return GetFreePortSafe()
 }
 
 // waitForServer waits for a server to become available.

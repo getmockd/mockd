@@ -745,6 +745,7 @@ func TestWS_FullServer_WithMiddleware(t *testing.T) {
 	require.Greater(t, port, 0, "failed to get free port")
 	cfg := config.DefaultServerConfiguration()
 	cfg.HTTPPort = port
+	cfg.ManagementPort = getFreePort()
 
 	srv := engine.NewServer(cfg)
 
