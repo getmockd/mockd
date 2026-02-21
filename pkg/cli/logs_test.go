@@ -7,6 +7,37 @@ import (
 	"time"
 )
 
+func RunLogs(args []string) error {
+	logsFollow = false
+	logsLines = 0
+	logsLogDir = ""
+	logsRequests = false
+	logsProtocol = ""
+	logsMethod = ""
+	logsPath = ""
+	logsMatched = false
+	logsUnmatched = false
+	logsVerbose = false
+	logsClear = false
+	logsAdminURL = ""
+	jsonOutput = false
+	
+	if f := rootCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := logsCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := rootCmd.Flags().Lookup("json"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	rootCmd.SetArgs(append([]string{"logs"}, args...))
+	return rootCmd.Execute()
+}
+
 func TestRunLogs_HelpFlag(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {

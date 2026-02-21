@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,45 +15,24 @@ import (
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/portability"
+	"github.com/spf13/cobra"
 )
 
-// RunGenerate handles the generate command for AI-powered mock generation.
-func RunGenerate(args []string) error {
-	fs := flag.NewFlagSet("generate", flag.ContinueOnError)
+var (
+	generateInput    string
+	generatePrompt   string
+	generateOutput   string
+	generateAIFlag   bool
+	generateProvider string
+	generateModel    string
+	generateDryRun   bool
+	generateAdminURL string
+)
 
-	// Input flags
-	input := fs.String("input", "", "Input OpenAPI spec file")
-	fs.StringVar(input, "i", "", "Input OpenAPI spec file (shorthand)")
-	prompt := fs.String("prompt", "", "Natural language description for generation")
-	fs.StringVar(prompt, "p", "", "Natural language description (shorthand)")
-
-	// Output flags
-	output := fs.String("output", "", "Output file (default: stdout)")
-	fs.StringVar(output, "o", "", "Output file (shorthand)")
-
-	// AI flags
-	aiFlag := fs.Bool("ai", false, "Enable AI-powered data generation")
-	provider := fs.String("provider", "", "AI provider (openai, anthropic, ollama, openrouter)")
-	model := fs.String("model", "", "AI model to use")
-
-	// Other flags
-	dryRun := fs.Bool("dry-run", false, "Preview generation without saving")
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd generate [flags]
-
-Generate mock configurations using AI.
-
-Flags:
-  -i, --input        Input OpenAPI spec file
-  -p, --prompt       Natural language description for generation
-  -o, --output       Output file (default: stdout)
-      --ai           Enable AI-powered data generation
-      --provider     AI provider (openai, anthropic, ollama, openrouter)
-      --model        AI model to use
-      --dry-run      Preview generation without saving
-      --admin-url    Admin API base URL (default: http://localhost:4290)
+var generateCmd = &cobra.Command{
+	Use:   "generate",
+	Short: "Generate mock configurations using AI",
+	Long: `Generate mock configurations using AI.
 
 Environment Variables:
   MOCKD_AI_PROVIDER  Default AI provider
@@ -73,42 +51,43 @@ Examples:
   mockd generate --ai --provider openai --prompt "payment processing API"
 
   # Preview what would be generated
-  mockd generate --ai --prompt "blog API" --dry-run
-`)
-	}
+  mockd generate --ai --prompt "blog API" --dry-run`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		input := &generateInput
+		prompt := &generatePrompt
+		outputFile := &generateOutput
+		aiFlag := &generateAIFlag
+		provider := &generateProvider
+		model := &generateModel
+		dryRun := &generateDryRun
+		adminURL := &generateAdminURL
 
-	// Reorder args so flags come before positional arguments
-	reorderedArgs := reorderArgs(args, []string{"admin-url", "input", "i", "output", "o", "prompt", "p", "provider", "model"})
-
-	if err := fs.Parse(reorderedArgs); err != nil {
-		return err
-	}
-
-	// Validate input
-	if *input == "" && *prompt == "" {
-		return errors.New(`either --input or --prompt is required
+		// Validate input
+		if *input == "" && *prompt == "" {
+			return errors.New(`either --input or --prompt is required
 
 Usage: mockd generate --ai --input openapi.yaml
        mockd generate --ai --prompt "API description"
 
 Run 'mockd generate --help' for more options`)
-	}
-
-	// Check AI configuration
-	if *aiFlag {
-		cfg := buildAIConfig(*provider, *model)
-		if err := cfg.Validate(); err != nil {
-			return formatAIConfigError(err)
 		}
-	}
 
-	// Handle OpenAPI input
-	if *input != "" {
-		return generateFromOpenAPI(*input, *output, *aiFlag, *provider, *model, *dryRun, *adminURL)
-	}
+		// Check AI configuration
+		if *aiFlag {
+			cfg := buildAIConfig(*provider, *model)
+			if err := cfg.Validate(); err != nil {
+				return formatAIConfigError(err)
+			}
+		}
 
-	// Handle prompt-based generation
-	return generateFromPrompt(*prompt, *output, *provider, *model, *dryRun, *adminURL)
+		// Handle OpenAPI input
+		if *input != "" {
+			return generateFromOpenAPI(*input, *outputFile, *aiFlag, *provider, *model, *dryRun, *adminURL)
+		}
+
+		// Handle prompt-based generation
+		return generateFromPrompt(*prompt, *outputFile, *provider, *model, *dryRun, *adminURL)
+	},
 }
 
 func buildAIConfig(providerName, model string) *ai.Config {
@@ -311,26 +290,17 @@ func outputMocks(collection *config.MockCollection, outputFile string, dryRun bo
 	return nil
 }
 
-// RunEnhance handles the enhance command for improving existing mocks with AI.
-func RunEnhance(args []string) error {
-	fs := flag.NewFlagSet("enhance", flag.ContinueOnError)
+var (
+	enhanceAIFlag   bool
+	enhanceProvider string
+	enhanceModel    string
+	enhanceAdminURL string
+)
 
-	// Flags
-	aiFlag := fs.Bool("ai", false, "Enable AI-powered enhancement")
-	providerFlag := fs.String("provider", "", "AI provider (openai, anthropic, ollama, openrouter)")
-	modelFlag := fs.String("model", "", "AI model to use")
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd enhance [flags]
-
-Enhance existing mocks with AI-generated response data.
-
-Flags:
-      --ai           Enable AI-powered enhancement (required)
-      --provider     AI provider (openai, anthropic, ollama, openrouter)
-      --model        AI model to use
-      --admin-url    Admin API base URL (default: http://localhost:4290)
+var enhanceCmd = &cobra.Command{
+	Use:   "enhance",
+	Short: "Enhance existing mocks with AI-generated response data",
+	Long: `Enhance existing mocks with AI-generated response data.
 
 Environment Variables:
   MOCKD_AI_PROVIDER  Default AI provider
@@ -343,82 +313,100 @@ Examples:
   mockd enhance --ai
 
   # Use specific provider
-  mockd enhance --ai --provider anthropic
-`)
-	}
+  mockd enhance --ai --provider anthropic`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		aiFlag := &enhanceAIFlag
+		providerFlag := &enhanceProvider
+		modelFlag := &enhanceModel
+		adminURL := &enhanceAdminURL
 
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if !*aiFlag {
-		return errors.New(`--ai flag is required
+		if !*aiFlag {
+			return errors.New(`--ai flag is required
 
 Usage: mockd enhance --ai
 
 Run 'mockd enhance --help' for more options`)
-	}
+		}
 
-	// Check AI configuration
-	cfg := buildAIConfig(*providerFlag, *modelFlag)
-	if err := cfg.Validate(); err != nil {
-		return formatAIConfigError(err)
-	}
+		// Check AI configuration
+		cfg := buildAIConfig(*providerFlag, *modelFlag)
+		if err := cfg.Validate(); err != nil {
+			return formatAIConfigError(err)
+		}
 
-	// Create AI provider
-	aiProvider, err := ai.NewProvider(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to create AI provider: %w", err)
-	}
+		// Create AI provider
+		aiProvider, err := ai.NewProvider(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to create AI provider: %w", err)
+		}
 
-	gen := generator.New(aiProvider)
+		gen := generator.New(aiProvider)
 
-	// Get existing mocks from server
-	client := NewAdminClientWithAuth(*adminURL)
-	mocks, err := client.ListMocks()
-	if err != nil {
-		return fmt.Errorf("%s", FormatConnectionError(err))
-	}
+		// Get existing mocks from server
+		client := NewAdminClientWithAuth(*adminURL)
+		mocks, err := client.ListMocks()
+		if err != nil {
+			return fmt.Errorf("%s", FormatConnectionError(err))
+		}
 
-	if len(mocks) == 0 {
-		fmt.Println("No mocks found to enhance")
+		if len(mocks) == 0 {
+			fmt.Println("No mocks found to enhance")
+			return nil
+		}
+
+		fmt.Printf("Found %d mocks, enhancing with AI (%s/%s)...\n", len(mocks), cfg.Provider, cfg.Model)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		enhanced := 0
+		for _, mock := range mocks {
+			if err := gen.EnhanceMock(ctx, mock); err != nil {
+				output.Warn("failed to enhance %s: %v", mock.Name, err)
+				continue
+			}
+
+			// Update the mock on the server
+			// Note: This would require an UpdateMock method on the client
+			// For now, we'll delete and recreate
+			if err := client.DeleteMock(mock.ID); err != nil {
+				output.Warn("failed to update %s: %v", mock.Name, err)
+				continue
+			}
+			if _, err := client.CreateMock(mock); err != nil {
+				output.Warn("failed to recreate %s: %v", mock.Name, err)
+				continue
+			}
+
+			enhanced++
+			mockMethod := ""
+			mockPath := ""
+			if mock.HTTP != nil && mock.HTTP.Matcher != nil {
+				mockMethod = mock.HTTP.Matcher.Method
+				mockPath = mock.HTTP.Matcher.Path
+			}
+			fmt.Printf("  Enhanced: %s %s\n", mockMethod, mockPath)
+		}
+
+		fmt.Printf("Enhanced %d/%d mocks\n", enhanced, len(mocks))
 		return nil
-	}
+	},
+}
 
-	fmt.Printf("Found %d mocks, enhancing with AI (%s/%s)...\n", len(mocks), cfg.Provider, cfg.Model)
+func init() {
+	rootCmd.AddCommand(generateCmd)
+	generateCmd.Flags().StringVarP(&generateInput, "input", "i", "", "Input OpenAPI spec file")
+	generateCmd.Flags().StringVarP(&generatePrompt, "prompt", "p", "", "Natural language description for generation")
+	generateCmd.Flags().StringVarP(&generateOutput, "output", "o", "", "Output file (default: stdout)")
+	generateCmd.Flags().BoolVar(&generateAIFlag, "ai", false, "Enable AI-powered data generation")
+	generateCmd.Flags().StringVar(&generateProvider, "provider", "", "AI provider (openai, anthropic, ollama, openrouter)")
+	generateCmd.Flags().StringVar(&generateModel, "model", "", "AI model to use")
+	generateCmd.Flags().BoolVar(&generateDryRun, "dry-run", false, "Preview generation without saving")
+	generateCmd.Flags().StringVar(&generateAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	enhanced := 0
-	for _, mock := range mocks {
-		if err := gen.EnhanceMock(ctx, mock); err != nil {
-			output.Warn("failed to enhance %s: %v", mock.Name, err)
-			continue
-		}
-
-		// Update the mock on the server
-		// Note: This would require an UpdateMock method on the client
-		// For now, we'll delete and recreate
-		if err := client.DeleteMock(mock.ID); err != nil {
-			output.Warn("failed to update %s: %v", mock.Name, err)
-			continue
-		}
-		if _, err := client.CreateMock(mock); err != nil {
-			output.Warn("failed to recreate %s: %v", mock.Name, err)
-			continue
-		}
-
-		enhanced++
-		mockMethod := ""
-		mockPath := ""
-		if mock.HTTP != nil && mock.HTTP.Matcher != nil {
-			mockMethod = mock.HTTP.Matcher.Method
-			mockPath = mock.HTTP.Matcher.Path
-		}
-		fmt.Printf("  Enhanced: %s %s\n", mockMethod, mockPath)
-	}
-
-	fmt.Printf("Enhanced %d/%d mocks\n", enhanced, len(mocks))
-	return nil
+	rootCmd.AddCommand(enhanceCmd)
+	enhanceCmd.Flags().BoolVar(&enhanceAIFlag, "ai", false, "Enable AI-powered enhancement")
+	enhanceCmd.Flags().StringVar(&enhanceProvider, "provider", "", "AI provider (openai, anthropic, ollama, openrouter)")
+	enhanceCmd.Flags().StringVar(&enhanceModel, "model", "", "AI model to use")
+	enhanceCmd.Flags().StringVar(&enhanceAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 }

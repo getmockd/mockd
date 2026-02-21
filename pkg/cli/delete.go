@@ -3,41 +3,25 @@ package cli
 import (
 	"bufio"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/spf13/cobra"
 )
 
-// RunDelete handles the delete command.
-func RunDelete(args []string) error {
-	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
+var (
+	deletePath   string
+	deleteMethod string
+	deleteYes    bool
+)
 
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-	path := fs.String("path", "", "Delete mocks matching this URL path")
-	method := fs.String("method", "", "HTTP method to match (used with --path, default: all methods)")
-	yes := fs.Bool("yes", false, "Skip confirmation prompt")
-	fs.BoolVar(yes, "y", false, "Skip confirmation prompt (shorthand)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd delete [<mock-id>] [flags]
-
-Delete mocks by ID, ID prefix, or path.
-
-Arguments:
-  mock-id    Full or partial mock ID (prefix match)
-
-Flags:
-      --path       Delete mocks matching this URL path
-      --method     HTTP method filter (used with --path, default: all methods)
-  -y, --yes        Skip confirmation prompt
-      --admin-url  Admin API base URL (default: http://localhost:4290)
-
-Examples:
-  # Delete by full ID
+var deleteCmd = &cobra.Command{
+	Use:   "delete [<mock-id>]",
+	Short: "Delete mocks by ID, ID prefix, or path",
+	Long:  `Delete mocks by ID, ID prefix, or path.`,
+	Example: `  # Delete by full ID
   mockd delete http_abc123def456
 
   # Delete by ID prefix (must be unambiguous)
@@ -50,30 +34,35 @@ Examples:
   mockd delete --path /api/hello --method POST
 
   # Skip confirmation when multiple mocks match
-  mockd delete --path /api/hello --yes
-`)
-	}
+  mockd delete --path /api/hello --yes`,
+	RunE: runDelete,
+}
 
-	// Reorder args so flags come before positional arguments
-	reorderedArgs := reorderArgs(args, []string{"admin-url", "path", "method"})
+func init() {
+	rootCmd.AddCommand(deleteCmd)
+	deleteCmd.Flags().StringVar(&deletePath, "path", "", "Delete mocks matching this URL path")
+	deleteCmd.Flags().StringVar(&deleteMethod, "method", "", "HTTP method to match (used with --path, default: all methods)")
+	deleteCmd.Flags().BoolVarP(&deleteYes, "yes", "y", false, "Skip confirmation prompt")
+}
 
-	if err := fs.Parse(reorderedArgs); err != nil {
-		return err
-	}
+func runDelete(cmd *cobra.Command, args []string) error {
+	path := deletePath
+	method := deleteMethod
+	yes := deleteYes
 
-	client := NewAdminClientWithAuth(*adminURL)
+	client := NewAdminClientWithAuth(adminURL)
 
 	// Determine mode: path-based or ID-based
-	if *path != "" {
-		return deleteByPath(client, *path, *method, *yes)
+	if path != "" {
+		return deleteByPath(client, path, method, yes)
 	}
 
 	// ID-based delete (positional arg)
-	if fs.NArg() < 1 {
+	if len(args) < 1 {
 		return errors.New("mock ID or --path is required\n\nUsage: mockd delete <mock-id>\n       mockd delete --path /api/hello\n\nRun 'mockd delete --help' for more options")
 	}
 
-	return deleteByID(client, fs.Arg(0))
+	return deleteByID(client, args[0])
 }
 
 // deleteByID deletes a mock by full ID or prefix match.

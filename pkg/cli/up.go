@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -22,6 +21,7 @@ import (
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/tunnel"
+	"github.com/spf13/cobra"
 )
 
 // upContext holds runtime state for the up command.
@@ -48,126 +48,97 @@ type upContext struct {
 	workspaceIDs map[string]string
 }
 
-// RunUp starts local admins and engines defined in the config file.
-func RunUp(args []string) error {
-	fs := flag.NewFlagSet("up", flag.ContinueOnError)
+var (
+	upConfigFiles []string
+	upDetach      bool
+	upLogLevel    string
+)
 
-	var configFiles stringSliceFlag
-	fs.Var(&configFiles, "config", "Config file path (can be specified multiple times)")
-	fs.Var(&configFiles, "f", "Config file path (shorthand)")
-
-	detach := fs.Bool("detach", false, "Run in background (daemon mode)")
-	fs.BoolVar(detach, "d", false, "Run in background (shorthand)")
-
-	logLevel := fs.String("log-level", "info", "Log level (debug, info, warn, error)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd up [flags]
-
-Start local admins and engines defined in mockd.yaml.
+var upCmd = &cobra.Command{
+	Use:   "up",
+	Short: "Start local admins and engines defined in mockd.yaml",
+	Long: `Start local admins and engines defined in mockd.yaml.
 
 This command:
   1. Loads and validates the config
   2. Starts local admin servers (those without 'url' field)
   3. Starts local engine servers  
   4. Applies workspaces and mocks to local admins
-  5. Runs in foreground (or background with -d)
-
-Flags:
-  -f, --config <path>    Config file path (can be specified multiple times)
-                         If not specified, discovers mockd.yaml in current directory
-  -d, --detach           Run in background (daemon mode)
-      --log-level        Log level (debug, info, warn, error)
-
-Environment Variables:
-  MOCKD_CONFIG           Default config file path (if -f not specified)
-
-Examples:
-  # Start with config in current directory
-  mockd up
-
-  # Start with specific config
-  mockd up -f ./mockd.yaml
-
-  # Start in background
-  mockd up -d
-
-  # Merge multiple configs
-  mockd up -f base.yaml -f production.yaml
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
+  5. Runs in foreground (or background with -d)`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Load config
+		cfg, configPath, err := loadProjectConfig(upConfigFiles)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	// Load config
-	cfg, configPath, err := loadProjectConfig(configFiles)
-	if err != nil {
-		return err
-	}
-
-	// Validate config
-	result := config.ValidateProjectConfig(cfg)
-	if !result.IsValid() {
-		fmt.Fprintln(os.Stderr, "Configuration validation failed:")
-		for _, e := range result.Errors {
-			fmt.Fprintf(os.Stderr, "  - %s\n", e.Error())
+		// Validate config
+		result := config.ValidateProjectConfig(cfg)
+		if !result.IsValid() {
+			fmt.Fprintln(os.Stderr, "Configuration validation failed:")
+			for _, e := range result.Errors {
+				fmt.Fprintf(os.Stderr, "  - %s\n", e.Error())
+			}
+			return errors.New("invalid configuration")
 		}
-		return errors.New("invalid configuration")
-	}
 
-	// Check port conflicts in config
-	portResult := config.ValidatePortConflicts(cfg)
-	if !portResult.IsValid() {
-		fmt.Fprintln(os.Stderr, "Port conflicts in config:")
-		for _, e := range portResult.Errors {
-			fmt.Fprintf(os.Stderr, "  - %s\n", e.Error())
+		// Check port conflicts in config
+		portResult := config.ValidatePortConflicts(cfg)
+		if !portResult.IsValid() {
+			fmt.Fprintln(os.Stderr, "Port conflicts in config:")
+			for _, e := range portResult.Errors {
+				fmt.Fprintf(os.Stderr, "  - %s\n", e.Error())
+			}
+			return errors.New("port conflicts")
 		}
-		return errors.New("port conflicts")
-	}
 
-	// Check actual port availability
-	if err := checkProjectPorts(cfg); err != nil {
-		return err
-	}
+		// Check actual port availability
+		if err := checkProjectPorts(cfg); err != nil {
+			return err
+		}
 
-	// Create context
-	ctx, cancel := context.WithCancel(context.Background())
+		// Create context
+		ctx, cancel := context.WithCancel(context.Background())
 
-	uctx := &upContext{
-		cfg:          cfg,
-		configPath:   configPath,
-		detach:       *detach,
-		ctx:          ctx,
-		cancel:       cancel,
-		admins:       make(map[string]*admin.API),
-		engines:      make(map[string]*engine.Server),
-		tunnels:      make(map[string]*tunnel.TunnelManager),
-		adminClients: make(map[string]AdminClient),
-		engineIDs:    make(map[string]string),
-		workspaceIDs: make(map[string]string),
-	}
+		uctx := &upContext{
+			cfg:          cfg,
+			configPath:   configPath,
+			detach:       upDetach,
+			ctx:          ctx,
+			cancel:       cancel,
+			admins:       make(map[string]*admin.API),
+			engines:      make(map[string]*engine.Server),
+			tunnels:      make(map[string]*tunnel.TunnelManager),
+			adminClients: make(map[string]AdminClient),
+			engineIDs:    make(map[string]string),
+			workspaceIDs: make(map[string]string),
+		}
 
-	// Initialize logger
-	uctx.log = logging.New(logging.Config{
-		Level:  logging.ParseLevel(*logLevel),
-		Format: logging.FormatText,
-	})
+		// Initialize logger
+		uctx.log = logging.New(logging.Config{
+			Level:  logging.ParseLevel(upLogLevel),
+			Format: logging.FormatText,
+		})
 
-	// Print startup info
-	fmt.Printf("Starting mockd from %s\n", configPath)
-	printUpSummary(cfg)
+		// Print startup info
+		fmt.Printf("Starting mockd from %s\n", configPath)
+		printUpSummary(cfg)
 
-	if *detach {
-		// TODO: Implement proper daemonization
-		fmt.Println("Detached mode not yet fully implemented. Running in foreground...")
-	}
+		if upDetach {
+			// TODO: Implement proper daemonization
+			fmt.Println("Detached mode not yet fully implemented. Running in foreground...")
+		}
 
-	return uctx.run()
+		return uctx.run()
+	},
+}
+
+func init() {
+	upCmd.Flags().StringSliceVarP(&upConfigFiles, "config", "f", nil, "Config file path (can be specified multiple times)")
+	upCmd.Flags().BoolVarP(&upDetach, "detach", "d", false, "Run in background (daemon mode)")
+	upCmd.Flags().StringVar(&upLogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	rootCmd.AddCommand(upCmd)
 }
 
 func loadProjectConfig(configFiles []string) (*config.ProjectConfig, string, error) {

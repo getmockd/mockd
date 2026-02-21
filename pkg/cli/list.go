@@ -1,45 +1,27 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/spf13/cobra"
 )
 
-// RunList handles the list command.
-func RunList(args []string) error {
-	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+var (
+	listConfigFile string
+	listMockType   string
+	listNoTruncate bool
+)
 
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-	configFile := fs.String("config", "", "List mocks from config file (no server needed)")
-	fs.StringVar(configFile, "c", "", "List mocks from config file (shorthand)")
-	mockType := fs.String("type", "", "Filter by type: http, websocket, graphql, grpc, mqtt, soap")
-	fs.StringVar(mockType, "t", "", "Filter by type (shorthand)")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-	noTruncate := fs.Bool("no-truncate", false, "Show full IDs and paths without truncation")
-	fs.BoolVar(noTruncate, "w", false, "Show full IDs and paths without truncation (shorthand)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd list [flags]
-
-List all configured mocks.
-
-Flags:
-  -c, --config        List mocks from config file (no server needed)
-  -t, --type          Filter by type: http, websocket, graphql, grpc, mqtt, soap
-  -w, --no-truncate   Show full IDs and paths without truncation
-      --admin-url     Admin API base URL (default: http://localhost:4290)
-      --json          Output in JSON format
-
-Examples:
-  # List all mocks from running server
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all configured mocks",
+	Long:  `List all configured mocks.`,
+	Example: `  # List all mocks from running server
   mockd list
 
   # List with full IDs (useful for copy-paste into delete)
@@ -55,31 +37,39 @@ Examples:
   mockd list --json
 
   # List from remote server
-  mockd list --admin-url http://remote:4290
-`)
+  mockd list --admin-url http://remote:4290`,
+	RunE: runList,
+}
+
+func init() {
+	rootCmd.AddCommand(listCmd)
+	listCmd.Flags().StringVarP(&listConfigFile, "config", "c", "", "List mocks from config file (no server needed)")
+	listCmd.Flags().StringVarP(&listMockType, "type", "t", "", "Filter by type: http, websocket, graphql, grpc, mqtt, soap")
+	listCmd.Flags().BoolVarP(&listNoTruncate, "no-truncate", "w", false, "Show full IDs and paths without truncation")
+}
+
+func runList(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("unexpected arguments: %v", args)
 	}
 
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %v", fs.Args())
-	}
+	configFile := listConfigFile
+	mockType := listMockType
+	noTruncate := listNoTruncate
 
 	var mocks []*mock.Mock
 
 	// Load mocks from config file or admin API
-	if *configFile != "" {
+	if configFile != "" {
 		// Load from config file directly (no server needed)
-		collection, err := config.LoadFromFile(*configFile)
+		collection, err := config.LoadFromFile(configFile)
 		if err != nil {
 			return fmt.Errorf("failed to load config file: %w", err)
 		}
 		mocks = collection.Mocks
 	} else {
 		// Query running server via admin API
-		client := NewAdminClientWithAuth(*adminURL)
+		client := NewAdminClientWithAuth(adminURL)
 		var err error
 		mocks, err = client.ListMocks()
 		if err != nil {
@@ -88,8 +78,8 @@ Examples:
 	}
 
 	// Filter by type if specified
-	if *mockType != "" {
-		filterType := mock.Type(strings.ToLower(*mockType))
+	if mockType != "" {
+		filterType := mock.Type(strings.ToLower(mockType))
 		filtered := make([]*mock.Mock, 0)
 		for _, m := range mocks {
 			if m.Type == filterType {
@@ -100,11 +90,11 @@ Examples:
 	}
 
 	// Output result
-	if *jsonOutput {
+	if jsonOutput {
 		return outputMocksJSON(mocks)
 	}
 
-	return outputMocksTable(mocks, *noTruncate)
+	return outputMocksTable(mocks, noTruncate)
 }
 
 // outputMocksJSON outputs mocks in JSON format.

@@ -9,6 +9,31 @@ import (
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
+func RunContext(args []string) error {
+	contextAddAdminURL = ""
+	contextAddWorkspace = ""
+	contextAddDescription = ""
+	contextAddToken = ""
+	contextAddTLSInsecure = false
+	contextAddUseCurrent = false
+	jsonOutput = false
+	
+	if f := rootCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := contextCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := rootCmd.Flags().Lookup("json"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	rootCmd.SetArgs(append([]string{"context"}, args...))
+	return rootCmd.Execute()
+}
+
 func setupTestContextConfig(t *testing.T) (cleanup func()) {
 	t.Helper()
 

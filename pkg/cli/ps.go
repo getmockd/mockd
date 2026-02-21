@@ -1,72 +1,49 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/spf13/cobra"
 )
 
-// RunPs shows status of running mockd services.
-func RunPs(args []string) error {
-	fs := flag.NewFlagSet("ps", flag.ContinueOnError)
+var psPidFile string
 
-	pidFile := fs.String("pid-file", defaultUpPIDPath(), "Path to PID file")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd ps [flags]
-
-Show status of running mockd services.
-
-Flags:
-      --pid-file <path>  Path to PID file (default: ~/.mockd/mockd.pid)
-      --json             Output in JSON format
-
-Examples:
-  # Show running services
-  mockd ps
-
-  # JSON output
-  mockd ps --json
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
-		}
-		return err
-	}
-
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %v", fs.Args())
-	}
-
-	// Read PID file
-	pidInfo, err := readUpPIDFile(*pidFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			if *jsonOutput {
-				fmt.Println(`{"running":false,"services":[]}`)
-			} else {
-				fmt.Println("No running mockd services.")
+var psCmd = &cobra.Command{
+	Use:   "ps",
+	Short: "Show status of running mockd services",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Read PID file
+		pidInfo, err := readUpPIDFile(psPidFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				if jsonOutput {
+					fmt.Println(`{"running":false,"services":[]}`)
+				} else {
+					fmt.Println("No running mockd services.")
+				}
+				return nil
 			}
-			return nil
+			return fmt.Errorf("reading PID file: %w", err)
 		}
-		return fmt.Errorf("reading PID file: %w", err)
-	}
 
-	// Check if main process is running
-	running := processExists(pidInfo.PID)
+		// Check if main process is running
+		running := processExists(pidInfo.PID)
 
-	if *jsonOutput {
-		return printPsJSON(pidInfo, running)
-	}
+		if jsonOutput {
+			return printPsJSON(pidInfo, running)
+		}
 
-	return printPsTable(pidInfo, running)
+		return printPsTable(pidInfo, running)
+	},
+}
+
+func init() {
+	psCmd.Flags().StringVar(&psPidFile, "pid-file", defaultUpPIDPath(), "Path to PID file")
+	rootCmd.AddCommand(psCmd)
 }
 
 func printPsJSON(pidInfo *config.PIDFile, running bool) error {

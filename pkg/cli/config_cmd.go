@@ -1,92 +1,59 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
-// RunConfigShow displays the resolved project configuration.
-func RunConfigShow(args []string) error {
-	fs := flag.NewFlagSet("config show", flag.ContinueOnError)
+var (
+	configShowFiles   []string
+	configShowService string
+)
 
-	var configFiles stringSliceFlag
-	fs.Var(&configFiles, "config", "Config file path (can be specified multiple times)")
-	fs.Var(&configFiles, "f", "Config file path (shorthand)")
-
-	serviceName := fs.String("service", "", "Show config for a specific service (admin or engine name)")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd config show [flags]
-
-Display resolved configuration with environment variables expanded.
-
-This command loads the project configuration (mockd.yaml) and displays
-the effective configuration after all environment variable substitutions
-have been applied.
-
-Flags:
-  -f, --config <path>    Config file path (can be specified multiple times)
-      --service <name>   Show config for a specific service (admin or engine)
-      --json             Output in JSON format (default: YAML)
-
-Examples:
-  # Show full resolved config
-  mockd config show
-
-  # Show config for a specific engine
-  mockd config show --service default
-
-  # Output as JSON
-  mockd config show --json
-
-  # Show config from specific file
-  mockd config show -f ./production.yaml
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
+var configShowCmd = &cobra.Command{
+	Use:   "show",
+	Short: "Show resolved project config (env vars expanded)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Load config
+		cfg, configPath, err := loadProjectConfig(configShowFiles)
+		if err != nil {
+			return err
 		}
-		return err
-	}
 
-	// Load config
-	cfg, configPath, err := loadProjectConfig(configFiles)
-	if err != nil {
-		return err
-	}
+		// If --service is specified, filter to just that service
+		if configShowService != "" {
+			return printServiceConfig(cfg, configShowService, configPath, jsonOutput)
+		}
 
-	// If --service is specified, filter to just that service
-	if *serviceName != "" {
-		return printServiceConfig(cfg, *serviceName, configPath, *jsonOutput)
-	}
+		// Print full config
+		return printFullConfig(cfg, configPath, jsonOutput)
+	},
+}
 
-	// Print full config
-	return printFullConfig(cfg, configPath, *jsonOutput)
+func init() {
+	configShowCmd.Flags().StringSliceVarP(&configShowFiles, "config", "f", []string{}, "Config file path (can be specified multiple times)")
+	configShowCmd.Flags().StringVar(&configShowService, "service", "", "Show config for a specific service (admin or engine name)")
+	configCmd.AddCommand(configShowCmd)
 }
 
 // printFullConfig outputs the full resolved configuration.
-func printFullConfig(cfg *config.ProjectConfig, configPath string, jsonOutput bool) error {
-	if jsonOutput {
+func printFullConfig(cfg *config.ProjectConfig, configPath string, isJSON bool) error {
+	if isJSON {
 		return printConfigAsJSON(cfg)
 	}
 	return printConfigAsYAML(cfg, configPath)
 }
 
 // printServiceConfig outputs configuration for a specific service.
-func printServiceConfig(cfg *config.ProjectConfig, serviceName, configPath string, jsonOutput bool) error {
+func printServiceConfig(cfg *config.ProjectConfig, serviceName, configPath string, isJSON bool) error {
 	// Try to find the service in admins
 	for _, admin := range cfg.Admins {
 		if admin.Name == serviceName {
-			if jsonOutput {
+			if isJSON {
 				return printAsJSON(admin)
 			}
 			return printServiceAsYAML("admin", admin, configPath)
@@ -96,7 +63,7 @@ func printServiceConfig(cfg *config.ProjectConfig, serviceName, configPath strin
 	// Try to find the service in engines
 	for _, engine := range cfg.Engines {
 		if engine.Name == serviceName {
-			if jsonOutput {
+			if isJSON {
 				return printAsJSON(engine)
 			}
 			return printServiceAsYAML("engine", engine, configPath)
@@ -148,23 +115,4 @@ func printServiceAsYAML(serviceType string, service interface{}, configPath stri
 
 	fmt.Print(string(data))
 	return nil
-}
-
-// configSubcommands maps config subcommand names to their handlers.
-var configSubcommands = map[string]func([]string) error{
-	"show": RunConfigShow,
-}
-
-// runConfigSubcommand routes to the appropriate config subcommand.
-func runConfigSubcommand(args []string) (bool, error) {
-	if len(args) == 0 {
-		return false, nil
-	}
-
-	subCmd := strings.ToLower(args[0])
-	if handler, ok := configSubcommands[subCmd]; ok {
-		return true, handler(args[1:])
-	}
-
-	return false, nil
 }

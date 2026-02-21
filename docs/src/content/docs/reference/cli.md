@@ -13,6 +13,44 @@ These flags apply to all commands:
 |------|-------------|
 | `-h, --help` | Show help message |
 | `-v, --version` | Show version information |
+| `--admin-url` | Admin API base URL (default: http://localhost:4290) |
+| `--json` | Output command results in JSON format |
+
+---
+
+## Autocomplete
+
+mockd leverages Cobra to generate autocomplete scripts for popular shells.
+
+### mockd completion
+
+Generate the autocompletion script for the specified shell.
+
+```bash
+mockd completion [command]
+```
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `bash` | Generate the autocompletion script for bash |
+| `fish` | Generate the autocompletion script for fish |
+| `powershell` | Generate the autocompletion script for powershell |
+| `zsh` | Generate the autocompletion script for zsh |
+
+**Examples:**
+
+```bash
+# Load bash completion in the current shell
+source <(mockd completion bash)
+
+# Load zsh completion in the current shell
+source <(mockd completion zsh)
+
+# Configure bash completion permanently (Linux)
+mockd completion bash > /etc/bash_completion.d/mockd
+```
 
 ---
 
@@ -36,7 +74,9 @@ mockd serve [flags]
 | `--https-port` | | HTTPS server port (0 = disabled) | `0` |
 | `--read-timeout` | | Read timeout in seconds | `30` |
 | `--write-timeout` | | Write timeout in seconds | `30` |
+| `--request-timeout` | | Request timeout in seconds (sets both read and write timeout) | `0` |
 | `--max-log-entries` | | Maximum request log entries | `1000` |
+| `--max-connections` | | Maximum concurrent HTTP connections (0 = unlimited) | `0` |
 | `--auto-cert` | | Auto-generate TLS certificate | `true` |
 
 **CORS Flags:**
@@ -57,7 +97,12 @@ mockd serve [flags]
 |------|-------------|---------|
 | `--no-persist` | Disable persistent storage (mocks are lost on restart) | `false` |
 
-**Watch Flags:**
+**Storage Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--data-dir` | Data directory for persistent storage | `~/.local/share/mockd` |
+| `--no-auth` | Disable API key authentication on admin API | `false` |
 
 **TLS Flags:**
 
@@ -123,6 +168,14 @@ mockd serve [flags]
 | `--chaos-enabled` | Enable chaos injection |
 | `--chaos-latency` | Add random latency (e.g., "10ms-100ms") |
 | `--chaos-error-rate` | Error rate (0.0-1.0) |
+
+**MCP Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--mcp` | Enable MCP (Model Context Protocol) HTTP server | `false` |
+| `--mcp-port` | MCP server port | `9091` |
+| `--mcp-allow-remote` | Allow remote MCP connections (default: localhost only) | `false` |
 
 **Validation Flags:**
 
@@ -225,13 +278,20 @@ mockd start [flags]
 | `--config` | `-c` | Path to mock configuration file | |
 | `--load` | | Load mocks from directory | |
 | `--validate` | | Validate files before serving (with --load) | |
+| `--watch` | | Watch for file changes and auto-reload (with --load) | `false` |
+| `--engine-name` | | Name for this engine when registering with admin | |
+| `--admin-url` | | Admin server URL to register with (enables engine mode) | |
 | `--https-port` | | HTTPS server port (0 = disabled) | `0` |
 | `--read-timeout` | | Read timeout in seconds | `30` |
 | `--write-timeout` | | Write timeout in seconds | `30` |
 | `--max-log-entries` | | Maximum request log entries | `1000` |
 | `--auto-cert` | | Auto-generate TLS certificate | `true` |
+| `--detach` | `-d` | Run server in background (daemon mode) | `false` |
+| `--pid-file` | | Path to PID file | `~/.mockd/mockd.pid` |
+| `--log-level` | | Log level (debug, info, warn, error) | `info` |
+| `--log-format` | | Log format (text, json) | `text` |
 
-Also supports all TLS, mTLS, Audit, GraphQL, gRPC, OAuth, MQTT, Chaos, and Validation flags from `serve`.
+Also supports all TLS, mTLS, Audit, GraphQL, gRPC, OAuth, MQTT, Chaos, Validation, and Storage flags from `serve`.
 
 **Examples:**
 
@@ -321,6 +381,48 @@ mockd status --json
 # Use custom PID file
 mockd status --pid-file /tmp/mockd.pid
 ```
+
+---
+
+### mockd up
+
+Start local admins and engines defined in `mockd.yaml`. Validates the project configuration, starts servers, and bootstraps workspaces seamlessly.
+
+```bash
+mockd up [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--config` | `-f` | Config file path (can be specified multiple times) | |
+| `--detach` | `-d` | Run in background (daemon mode) | `false` |
+| `--log-level` | | Log level (debug, info, warn, error) | `info` |
+
+**Examples:**
+
+```bash
+mockd up
+mockd up -f custom-mockd.yaml -d
+```
+
+---
+
+### mockd down
+
+Stop all services started by a previous `mockd up` command.
+
+```bash
+mockd down [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--pid-file` | Path to PID file | `~/.mockd/mockd.pid` |
+| `--timeout` | Shutdown timeout duration | `30s` |
 
 ---
 
@@ -427,31 +529,42 @@ mockd init --force
 
 ---
 
-## Mock Management Commands
+## Mock Creation Commands
 
-### mockd add
+The `mockd` CLI organizes mock creation by protocol. Each protocol has its own `<protocol> add` subcommand.
 
-Add or update a mock endpoint. By default, if a mock already exists with the same method and path, it is **updated in place** (upsert behavior). The command prints "Updated mock: ..." when an existing mock is modified and "Created mock: ..." when a new mock is created.
+By default, if a mock already exists with the same method and path (or equivalent identifiers), it is **updated in place** (upsert behavior). The command prints "Updated mock: ..." when an existing mock is modified and "Created mock: ..." when a new mock is created.
 
-```bash
-mockd add [flags]
-```
+:::note[Upsert by Default]
+Use `--allow-duplicate` if you intentionally need multiple mocks on the same route (e.g., with different matchers like headers or query parameters).
+:::
 
-**Global Flags:**
+:::tip[Interactive Forms]
+If you omit **required flags** for complex mock types (like `mockd grpc add` without a `--proto`), mockd will gracefully fall back to an interactive terminal form using `charmbracelet/huh` to walk you through the configuration step-by-step!
+:::
+
+### Global Add Flags
+
+The following flags apply to **all** `<protocol> add` commands:
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
-| `--type` | `-t` | Mock type: http, websocket, graphql, grpc, mqtt, soap, oauth | `http` |
 | `--name` | `-n` | Mock display name | |
-| `--allow-duplicate` | | Create a second mock even if one already exists on the same method+path | `false` |
+| `--allow-duplicate` | | Create a second mock even if one already exists on the same route | `false` |
 | `--admin-url` | | Admin API base URL | `http://localhost:4290` |
 | `--json` | | Output in JSON format | |
 
-:::note[Upsert by Default]
-Running `mockd add` with the same method and path as an existing mock will **update** that mock rather than creating a duplicate. This prevents accidental mock duplication when iterating on configurations. Use `--allow-duplicate` if you intentionally need multiple mocks on the same route (e.g., with different matchers like headers or query parameters).
-:::
+---
 
-**HTTP Flags (`--type http`):**
+### mockd http add
+
+Add or update an HTTP or SSE mock endpoint.
+
+```bash
+mockd http add [flags]
+```
+
+**HTTP Flags:**
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
@@ -464,11 +577,11 @@ Running `mockd add` with the same method and path as an existing mock will **upd
 | `--match-header` | | Required request header (key:value), repeatable | |
 | `--match-query` | | Required query param (key=value or key:value), repeatable | |
 | `--match-body-contains` | | Match requests whose body contains this string | |
-| `--path-pattern` | | Regex path pattern for matching (alternative to `--path`, mutually exclusive) | |
+| `--path-pattern` | | Regex path pattern for matching (alternative to `--path`) | |
 | `--priority` | | Mock priority (higher = matched first) | |
 | `--delay` | | Response delay in milliseconds | |
 
-**SSE Flags (HTTP with streaming):**
+**SSE Flags (for streaming):**
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -479,7 +592,24 @@ Running `mockd add` with the same method and path as an existing mock will **upd
 | `--sse-repeat` | Repeat events N times (0 = infinite) | `1` |
 | `--sse-keepalive` | Keepalive interval in milliseconds (0 = disabled) | `0` |
 
-**WebSocket Flags (`--type websocket`):**
+**Examples:**
+```bash
+mockd http add --path /api/users --status 200 --body '[{"id":1}]'
+mockd http add -m POST --path /api/users -s 201 -b '{"created": true}'
+mockd http add --path /events --sse --sse-event 'connected:{"status":"ok"}'
+```
+
+---
+
+### mockd websocket add
+
+Add or update a WebSocket mock endpoint.
+
+```bash
+mockd websocket add [flags]
+```
+
+**WebSocket Flags:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -487,7 +617,23 @@ Running `mockd add` with the same method and path as an existing mock will **upd
 | `--message` | Default response message (JSON) | |
 | `--echo` | Enable echo mode | |
 
-**GraphQL Flags (`--type graphql`):**
+**Examples:**
+```bash
+mockd websocket add --path /ws/chat --echo
+mockd websocket add --path /ws/events --message '{"type": "connected"}'
+```
+
+---
+
+### mockd graphql add
+
+Add or update a GraphQL mock endpoint.
+
+```bash
+mockd graphql add [flags]
+```
+
+**GraphQL Flags:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -496,7 +642,54 @@ Running `mockd add` with the same method and path as an existing mock will **upd
 | `--op-type` | Operation type: query or mutation | `query` |
 | `--response` | JSON response data | |
 
-**gRPC Flags (`--type grpc`):**
+**Examples:**
+```bash
+mockd graphql add --operation getUser --response '{"data": {"user": {"id": "1"}}}'
+```
+
+---
+
+### mockd graphql validate
+
+Validate a GraphQL schema file.
+
+```bash
+mockd graphql validate <schema-file>
+```
+
+---
+
+### mockd graphql query
+
+Execute a query against a GraphQL endpoint.
+
+```bash
+mockd graphql query <endpoint> <query> [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--header` | `-H` | Additional headers (key:value,key2:value2) | |
+| `--pretty` | | Pretty print output | `true` |
+
+**Examples:**
+```bash
+mockd graphql query http://localhost:4280/graphql 'query { getUser { id name } }'
+```
+
+---
+
+### mockd grpc add
+
+Add or update a gRPC mock endpoint.
+
+```bash
+mockd grpc add [flags]
+```
+
+**gRPC Flags:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -507,7 +700,45 @@ Running `mockd add` with the same method and path as an existing mock will **upd
 | `--response` | JSON response data | |
 | `--grpc-port` | gRPC server port | `50051` |
 
-**MQTT Flags (`--type mqtt`):**
+**Examples:**
+```bash
+mockd grpc add --proto ./user.proto --service myapp.UserService --rpc-method GetUser --response '{"id": "1"}'
+```
+
+---
+
+### mockd grpc call
+
+Call a gRPC endpoint directly from the CLI.
+
+```bash
+mockd grpc call <endpoint> <service/method> <json-body> [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--metadata` | `-m` | gRPC metadata (key:value) | |
+| `--plaintext` | | Use plaintext connection | `true` |
+| `--pretty` | | Pretty print JSON output | `true` |
+
+**Examples:**
+```bash
+mockd grpc call localhost:50051 myapp.UserService/GetUser '{"id": "1"}'
+```
+
+---
+
+### mockd mqtt add
+
+Add or update an MQTT mock endpoint.
+
+```bash
+mockd mqtt add [flags]
+```
+
+**MQTT Flags:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -516,7 +747,76 @@ Running `mockd add` with the same method and path as an existing mock will **upd
 | `--qos` | QoS level: 0, 1, or 2 | `0` |
 | `--mqtt-port` | MQTT broker port (required) | |
 
-**SOAP Flags (`--type soap`):**
+**Examples:**
+```bash
+mockd mqtt add --topic sensors/temperature --payload '{"temp": 72.5}' --qos 1
+```
+
+---
+
+### mockd mqtt publish
+
+Publish a message to an MQTT topic.
+
+```bash
+mockd mqtt publish <broker> <topic> <message> [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--qos` | `-q` | QoS level (0, 1, 2) | `0` |
+| `--retain` | `-r` | Retain message | `false` |
+| `--username` | `-u` | MQTT username | |
+| `--password` | `-p` | MQTT password | |
+
+---
+
+### mockd mqtt subscribe
+
+Subscribe to an MQTT topic and print messages to the console.
+
+```bash
+mockd mqtt subscribe <broker> <topic> [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--qos` | `-q` | QoS level (0, 1, 2) | `0` |
+| `--username` | `-u` | MQTT username | |
+| `--password` | `-p` | MQTT password | |
+| `--count` | `-c` | Number of messages to receive before exiting (0 = infinite) | `0` |
+
+---
+
+### mockd mqtt status
+
+Show the current mockd MQTT broker status.
+
+```bash
+mockd mqtt status [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--admin-url` | Admin API base URL | `http://localhost:4290` |
+
+---
+
+### mockd soap add
+
+Add or update a SOAP mock endpoint.
+
+```bash
+mockd soap add [flags]
+```
+
+**SOAP Flags:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -525,7 +825,54 @@ Running `mockd add` with the same method and path as an existing mock will **upd
 | `--soap-action` | SOAPAction header value | |
 | `--response` | XML response body | |
 
-**OAuth Flags (`--type oauth`):**
+**Examples:**
+```bash
+mockd soap add --operation GetWeather --soap-action "http://example.com/GetWeather" --response '<GetWeatherResponse><Temperature>72</Temperature></GetWeatherResponse>'
+```
+
+---
+
+### mockd soap validate
+
+Validate a WSDL file against standard schema rules.
+
+```bash
+mockd soap validate <wsdl-file>
+```
+
+---
+
+### mockd soap call
+
+Execute a SOAP call against an endpoint.
+
+```bash
+mockd soap call <endpoint> <action> <body> [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--header` | `-H` | Additional headers (key:value,key2:value2) | |
+| `--pretty` | | Pretty print output | `true` |
+
+**Examples:**
+```bash
+mockd soap call http://localhost:4280/soap "http://example.com/GetWeather" '<soapenv:Envelope>...</soapenv:Envelope>'
+```
+
+---
+
+### mockd oauth add
+
+Add or update an OAuth/OIDC mock provider. This creates a full OAuth/OIDC mock server with standard endpoints including `/.well-known/openid-configuration`, `/token`, `/authorize`, `/userinfo`, and `/jwks`.
+
+```bash
+mockd oauth add [flags]
+```
+
+**OAuth Flags:**
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -535,91 +882,10 @@ Running `mockd add` with the same method and path as an existing mock will **upd
 | `--oauth-user` | Test username | `testuser` |
 | `--oauth-password` | Test password | `password` |
 
-:::note[OAuth Mock]
-The `--type oauth` option creates a full OAuth/OIDC mock server with standard endpoints including `/.well-known/openid-configuration`, `/token`, `/authorize`, `/userinfo`, and `/jwks`. This is useful for testing applications that integrate with OAuth providers without needing a real identity server.
-:::
-
 **Examples:**
-
 ```bash
-# Simple HTTP GET mock (creates new)
-mockd add --path /api/users --status 200 --body '[]'
-# Output: Created mock: http_abc123
-
-# Run the same command again — updates the existing mock (upsert)
-mockd add --path /api/users --status 200 --body '[{"id":1}]'
-# Output: Updated mock: http_abc123
-
-# Force a duplicate mock on the same path
-mockd add --path /api/users --status 200 --body '[]' --allow-duplicate
-# Output: Created mock: http_def456
-
-# HTTP POST with JSON response
-mockd add -m POST --path /api/users -s 201 \
-  -b '{"id": "new-id", "created": true}' \
-  -H "Content-Type:application/json"
-
-# WebSocket mock with echo mode
-mockd add --type websocket --path /ws/chat --echo
-
-# WebSocket mock with default response
-mockd add --type websocket --path /ws/events \
-  --message '{"type": "connected", "status": "ok"}'
-
-# GraphQL query mock
-mockd add --type graphql --operation getUser \
-  --response '{"data": {"user": {"id": "1", "name": "Alice"}}}'
-
-# GraphQL mutation mock
-mockd add --type graphql --operation createUser --op-type mutation \
-  --response '{"data": {"createUser": {"id": "new-id"}}}'
-
-# gRPC mock
-mockd add --type grpc --service greeter.Greeter --rpc-method SayHello \
-  --response '{"message": "Hello, World!"}'
-
-# MQTT mock
-mockd add --type mqtt --topic sensors/temperature --payload '{"temp": 72.5}' --qos 1
-
-# SOAP mock
-mockd add --type soap --operation GetWeather --soap-action "http://example.com/GetWeather" \
-  --response '<GetWeatherResponse><Temperature>72</Temperature></GetWeatherResponse>'
-
-# SSE streaming mock with custom events
-mockd add --path /events --sse \
-  --sse-event 'connected:{"status":"ok"}' \
-  --sse-event 'update:{"count":1}' \
-  --sse-event 'update:{"count":2}' \
-  --sse-delay 500
-
-# SSE with OpenAI-compatible streaming template
-mockd add -m POST --path /v1/chat/completions --sse --sse-template openai-chat
-
-# SSE with infinite keepalive ping
-mockd add --path /stream --sse \
-  --sse-event 'ping:{}' --sse-delay 1000 --sse-repeat 0
-
-# Match requests by body content
-mockd add -m POST --path /api/webhooks -s 200 \
-  --match-body-contains '"event":"payment.completed"' \
-  -b '{"received": true}'
-
-# Use regex path pattern instead of exact path
-mockd add --path-pattern '/api/users/[0-9]+' --status 200 \
-  -b '{"id": 1, "name": "Alice"}'
-
-# Match query params (both formats work)
-mockd add --path /api/search --match-query 'q=test' -b '{"results": []}'
-mockd add --path /api/search --match-query 'q:test' -b '{"results": []}'
-
-# OAuth/OIDC mock with defaults
-mockd add --type oauth
-
-# OAuth mock with custom configuration
-mockd add --type oauth --name "Auth Server" \
-  --issuer http://localhost:4280/auth \
-  --client-id my-app --client-secret s3cret \
-  --oauth-user admin --oauth-password admin123
+mockd oauth add
+mockd oauth add --name "Auth Server" --issuer http://localhost:4280/auth --client-id my-app --client-secret s3cret --oauth-user admin --oauth-password admin123
 ```
 
 ---
@@ -725,7 +991,7 @@ mockd get <mock-id> [flags]
 **Flags:**
 
 | Flag | Description | Default |
-|------|-------------|---------|
+|------|-------|-------------|---------|
 | `--admin-url` | Admin API base URL | `http://localhost:4290` |
 | `--json` | Output in JSON format | |
 
@@ -760,7 +1026,7 @@ mockd delete [<mock-id>] [flags]
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
 | `--path` | | Delete mocks matching a URL path | |
-| `--method` | `-m` | Filter by HTTP method (used with `--path`) | |
+| `--method` | | Filter by HTTP method (used with `--path`) | |
 | `--yes` | `-y` | Skip confirmation when multiple mocks match | `false` |
 | `--admin-url` | | Admin API base URL | `http://localhost:4290` |
 
@@ -918,6 +1184,53 @@ mockd export -n "My API Mocks" -o mocks.yaml
 
 ---
 
+### mockd convert
+
+Convert recorded API traffic directly into `mockd` mock configurations.
+Reads recordings from disk (written by `mockd proxy start`) and outputs mock configurations that can be piped or imported with `mockd import`.
+
+```bash
+mockd convert [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--session` | `-s` | Session name or directory | `latest` |
+| `--file` | `-f` | Path to a specific recording file or directory | |
+| `--recordings-dir` | | Base recordings directory override | |
+| `--include-hosts` | | Comma-separated host patterns to include (e.g. `api.*.com`) | |
+| `--path-filter` | | Glob pattern to filter paths (e.g., `/api/*`) | |
+| `--method` | | Comma-separated HTTP methods (e.g., `GET,POST`) | |
+| `--status` | | Status code filter (e.g., `2xx`, `200,201`) | |
+| `--smart-match` | | Convert dynamic path segments like `/users/123` to `/users/{id}` | `false` |
+| `--duplicates` | | Duplicate handling strategy: `first`, `last`, `all` | `first` |
+| `--include-headers` | | Include request headers in mock matchers | `false` |
+| `--check-sensitive` | | Check for sensitive data in recordings and show warnings | `true` |
+| `--output` | `-o` | Output file path (default is stdout) | |
+
+**Examples:**
+
+```bash
+# Convert the latest proxy recording session into mocks
+mockd convert
+
+# Convert a named session with smart path parameter matching
+mockd convert --session stripe-api --smart-match
+
+# Convert only specific host traffic, targeting only GET/POST methods
+mockd convert --include-hosts "api.stripe.com" --method GET,POST
+
+# Convert a specific recording JSON file
+mockd convert --file ./my-recordings/rec_abc123.json
+
+# Pipe converted JSON directly into the server using 'mockd import'
+mockd convert --session my-api --smart-match | mockd import "curl -X POST -d @-"
+```
+
+---
+
 ## Logging Commands
 
 ### mockd logs
@@ -1008,7 +1321,7 @@ mockd doctor [flags]
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
-| `--config` | `-c` | Path to config file to validate | |
+| `--config` | | Path to config file to validate | |
 | `--port` | `-p` | Mock server port to check | `4280` |
 | `--admin-port` | `-a` | Admin API port to check | `4290` |
 
@@ -1493,17 +1806,33 @@ mockd recordings <subcommand> [flags]
 
 **Subcommands:**
 
-- `list` - List all recordings
-- `convert` - Convert recordings to mock definitions
+- `sessions` - List all recording sessions
+- `list` - List requests from a session
 - `export` - Export recordings to JSON
 - `import` - Import recordings from JSON
 - `clear` - Clear all recordings
 
 ---
 
+#### mockd recordings sessions
+
+List all recording sessions.
+
+```bash
+mockd recordings sessions [flags]
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--recordings-dir` | Base recordings directory override |
+
+---
+
 #### mockd recordings list
 
-List all recorded API requests.
+List all recorded API requests in a session.
 
 ```bash
 mockd recordings list [flags]
@@ -1511,18 +1840,20 @@ mockd recordings list [flags]
 
 **Flags:**
 
-| Flag | Description |
-|------|-------------|
-| `--session` | Filter by session ID |
-| `--method` | Filter by HTTP method |
-| `--path` | Filter by request path |
-| `--json` | Output as JSON |
-| `--limit` | Maximum number of recordings to show |
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--session` | `-s` | Session name or directory | `latest` |
+| `--recordings-dir` | | Base recordings directory override | |
+| `--method` | | Filter by HTTP method | |
+| `--host` | | Filter by request host | |
+| `--limit` | | Maximum number of recordings to show | `0` (all) |
+
+Also supports the global `--json` flag to output as JSON.
 
 **Examples:**
 
 ```bash
-# List all recordings
+# List all recordings from latest session
 mockd recordings list
 
 # List only GET requests
@@ -1530,38 +1861,6 @@ mockd recordings list --method GET
 
 # List as JSON
 mockd recordings list --json
-```
-
----
-
-#### mockd recordings convert
-
-Convert recordings to mock definitions.
-
-```bash
-mockd recordings convert [flags]
-```
-
-**Flags:**
-
-| Flag | Short | Description | Default |
-|------|-------|-------------|---------|
-| `--session` | | Filter by session ID | |
-| `--deduplicate` | | Remove duplicate request patterns | `true` |
-| `--include-headers` | | Include request headers in matchers | |
-| `--output` | `-o` | Output file path | stdout |
-
-**Examples:**
-
-```bash
-# Convert all recordings to mocks
-mockd recordings convert
-
-# Convert specific session with deduplication
-mockd recordings convert --session my-session --deduplicate
-
-# Save to file
-mockd recordings convert -o mocks.json
 ```
 
 ---

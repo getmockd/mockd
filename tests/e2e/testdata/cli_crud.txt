@@ -1,0 +1,82 @@
+-- cli_crud.txt --
+# ============================================================================
+# CLI Core CRUD — add, list, get, delete via mockd CLI binary
+# ============================================================================
+
+# Setup: Add initial mocks
+exec mockd add --path /cli/hello --body '{"cli":"hello"}' --name 'CLI Hello' --admin-url $ADMIN_URL
+exec mockd add --method POST --path /cli/users --status 201 --body '{"id":"u1","created":true}' --name 'CLI Create User' --header 'X-Custom:cli-test' --delay 50 --admin-url $ADMIN_URL
+exec mockd add --path /cli/authed --body '{"authed":true}' --match-header 'Authorization:Bearer test' --name 'CLI Auth Mock' --admin-url $ADMIN_URL
+exec mockd add --path /cli/search --body '{"results":[]}' --match-query 'q:hello' --name 'CLI Search' --admin-url $ADMIN_URL
+exec mockd add --path /cli/priority --body '{"level":"low"}' --priority 1 --name 'Low' --admin-url $ADMIN_URL
+exec mockd add --path /cli/priority --body '{"level":"high"}' --priority 100 --name 'High' --admin-url $ADMIN_URL
+
+# ─── Add ─────────────────────────────────────────────────────────────────────
+
+# CLI-ADD-001: mockd add exits 0 and says Created
+exec mockd add --path /cli/add-test --body '{"test":true}' --name 'Add Test' --admin-url $ADMIN_URL
+stdout 'Created mock Add Test'
+
+# CLI-ADD-002: CLI-created mock responds 200 with correct body (verified via curl)
+exec curl -s $ENGINE_URL/cli/hello
+stdout '{"cli":"hello"}'
+
+# CLI-ADD-003: POST mock responds 201
+exec curl -s -X POST $ENGINE_URL/cli/users -d '{"name":"test"}' -w '%{http_code}'
+stdout '201'
+
+# CLI-ADD-004: Match header mock responds to matching header
+exec curl -s -H 'Authorization: Bearer test' $ENGINE_URL/cli/authed -w '%{http_code}'
+stdout '200'
+
+# CLI-ADD-005: Query param mock responds to matching query
+exec curl -s $ENGINE_URL/cli/search?q=hello -w '%{http_code}'
+stdout '200'
+
+# CLI-ADD-006: Higher priority wins
+exec curl -s $ENGINE_URL/cli/priority
+stdout '{"level":"high"}'
+
+# CLI-ADD-007: mockd add --json outputs JSON with action and path
+exec mockd add --path /cli/json-out --body '{"j":true}' --name 'JSON Out' --json --admin-url $ADMIN_URL
+stdout '"action":\s*"created"'
+stdout '"path":\s*"/cli/json-out"'
+
+# ─── List ────────────────────────────────────────────────────────────────────
+
+# CLI-LIST-001: mockd list exits 0 and shows mocks
+exec mockd list --admin-url $ADMIN_URL
+stdout '/cli/hello'
+stdout 'http'
+
+# CLI-LIST-002: mockd list --json returns valid JSON array
+exec mockd list --json --admin-url $ADMIN_URL
+stdout '\['
+stdout '\]'
+
+# CLI-LIST-003: mockd list --type http filters correctly
+exec mockd list --type http --admin-url $ADMIN_URL
+stdout '/cli/hello'
+
+# ─── Get & Delete ────────────────────────────────────────────────────────────
+
+# Create a mock specifically for get/delete to extract its ID
+exec mockd add --path /cli/get-delete-test --body '{"forDelete":true}' --name 'Get Delete Test' --json --admin-url $ADMIN_URL
+stdout '"id":\s*"([^"]+)"'
+env TARGET_ID=$1
+
+# CLI-GET-001: mockd get shows mock details
+exec mockd get $TARGET_ID --admin-url $ADMIN_URL
+stdout 'Name:\s+Get Delete Test'
+stdout 'Path:\s+/cli/get-delete-test'
+
+# CLI-GET-002: mockd get --json returns correct ID
+exec mockd get $TARGET_ID --json --admin-url $ADMIN_URL
+stdout '"id":\s*"'$TARGET_ID'"'
+
+# CLI-DEL-001: mockd delete removes mock
+exec mockd delete $TARGET_ID --admin-url $ADMIN_URL
+stdout 'Deleted mock '$TARGET_ID
+
+# Verify deletion
+! exec mockd get $TARGET_ID --admin-url $ADMIN_URL

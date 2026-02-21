@@ -1,0 +1,49 @@
+-- cli_body.json --
+{"from":"file","ok":true}
+-- cli_protocols.txt --
+# ============================================================================
+# CLI Protocol-Specific Adds — SSE, GraphQL, WebSocket, SOAP, body-file
+# ============================================================================
+
+# Initial Clean Slate
+exec mockd delete --all --admin-url $ADMIN_URL
+
+# CLI-SSE-001: mockd add sse creates SSE mock
+# New protocol paths use Cobra command routing
+exec mockd sse add --path /cli/events --sse-event "message:hello from CLI" --sse-event "update:world" --sse-delay 50 --name "CLI SSE" --admin-url $ADMIN_URL
+stdout 'Created mock'
+
+# CLI-SSE-002: SSE stream delivers events
+exec curl -s -N --max-time 1 -H 'Accept: text/event-stream' $ENGINE_URL/cli/events
+stdout 'hello from CLI'
+
+# CLI-GQL-001: mockd add graphql creates GraphQL mock
+exec mockd graphql add --path /cli/graphql --operation getUser --op-type query --response '{"id":"1","name":"CLI User"}' --name "CLI GraphQL" --admin-url $ADMIN_URL
+stdout 'Created mock'
+
+# CLI-GQL-002: GraphQL mock responds with data
+exec curl -s -X POST $ENGINE_URL/cli/graphql -d '{"query":"{ getUser { id name } }"}'
+stdout '"id":"1"'
+
+# CLI-WS-PROTO-001: mockd add websocket creates WebSocket mock
+exec mockd websocket add --path /cli/ws --echo --name "CLI WebSocket" --admin-url $ADMIN_URL
+stdout 'Created mock'
+
+# CLI-WS-PROTO-002: WebSocket handler registered
+exec curl -s $ADMIN_URL/handlers
+stdout '/cli/ws'
+
+# CLI-SOAP-001: mockd add soap creates SOAP mock
+exec mockd soap add --path /cli/soap --operation GetProduct --soap-action 'http://example.com/GetProduct' --response '<GetProductResponse><id>42</id><name>Widget</name></GetProductResponse>' --name "CLI SOAP" --admin-url $ADMIN_URL
+stdout 'Created mock'
+
+# CLI-SOAP-002: SOAP mock responds with data
+exec curl -s -X POST $ENGINE_URL/cli/soap -H 'Content-Type: text/xml' -H 'SOAPAction: http://example.com/GetProduct' -d '<?xml version="1.0"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetProduct/></soap:Body></soap:Envelope>'
+stdout 'Widget'
+
+# CLI-FILE-001: mockd http add --body-file creates mock from file
+exec mockd http add --path /cli/from-file --body-file cli_body.json --name "Body From File" --admin-url $ADMIN_URL
+stdout 'Created mock'
+
+exec curl -s $ENGINE_URL/cli/from-file
+stdout '"from":"file"'

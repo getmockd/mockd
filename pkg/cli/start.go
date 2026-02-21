@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -17,100 +16,31 @@ import (
 	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/store/file"
+	"github.com/spf13/cobra"
 )
 
-// RunStart handles the start command.
-func RunStart(args []string) error { //nolint:gocyclo // CLI command handler with many configuration options
-	fs := flag.NewFlagSet("start", flag.ContinueOnError)
+var (
+	startLoadDir     string
+	startWatch       bool
+	startValidate    bool
+	startEngineName  string
+	startAdminURL    string
+	startLogLevel    string
+	startLogFormat   string
+	startDetach      bool
+	startPidFile     string
+	startServerFlags ServerFlags
+)
 
-	// Use shared server flags
-	var sf ServerFlags
-	RegisterServerFlags(fs, &sf)
+// startCmd represents the start command
+var startCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Start the mock server",
+	Long: `Start the mock server.
 
-	// Start-specific flags
-	loadDir := fs.String("load", "", "Load mocks from directory")
-	watch := fs.Bool("watch", false, "Watch for file changes (with --load)")
-	validate := fs.Bool("validate", false, "Validate files before serving (with --load)")
-
-	// Engine mode flags
-	engineName := fs.String("engine-name", "", "Name for this engine when registering with admin")
-	adminURL := fs.String("admin-url", "", "Admin server URL to register with (enables engine mode)")
-
-	// Logging flags (shared with serve)
-	logLevel := fs.String("log-level", "info", "Log level (debug, info, warn, error)")
-	logFormat := fs.String("log-format", "text", "Log format (text, json)")
-
-	// Daemon/detach flags (shared with serve)
-	detach := fs.Bool("detach", false, "Run server in background (daemon mode)")
-	fs.BoolVar(detach, "d", false, "Run server in background (shorthand)")
-	pidFile := fs.String("pid-file", DefaultPIDPath(), "Path to PID file")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd start [flags]
-
-Start the mock server.
-
-Flags:
-  -p, --port          HTTP server port (default: 4280)
-  -a, --admin-port    Admin API port (default: 4290)
-  -c, --config        Path to mock configuration file
-      --load          Load mocks from directory
-      --watch         Watch for file changes (with --load)
-      --validate      Validate files before serving (with --load)
-      --https-port    HTTPS server port (0 = disabled)
-      --read-timeout  Read timeout in seconds (default: 30)
-      --write-timeout Write timeout in seconds (default: 30)
-      --max-log-entries Maximum request log entries (default: 1000)
-      --auto-cert     Auto-generate TLS certificate (default: true)
-
-TLS flags:
-      --tls-cert      Path to TLS certificate file
-      --tls-key       Path to TLS private key file
-      --tls-auto      Auto-generate self-signed certificate
-
-mTLS flags:
-      --mtls-enabled  Enable mTLS client certificate validation
-      --mtls-client-auth Client auth mode (none, request, require, verify-if-given, require-and-verify)
-      --mtls-ca       Path to CA certificate for client validation
-      --mtls-allowed-cns Comma-separated list of allowed Common Names
-
-Audit flags:
-      --audit-enabled Enable audit logging
-      --audit-file    Path to audit log file
-      --audit-level   Log level (debug, info, warn, error)
-
-GraphQL flags:
-      --graphql-schema Path to GraphQL schema file
-      --graphql-path   GraphQL endpoint path (default: /graphql)
-
-OAuth flags:
-      --oauth-enabled   Enable OAuth provider
-      --oauth-issuer    OAuth issuer URL
-      --oauth-port      OAuth server port
-
-Chaos flags:
-      --chaos-enabled   Enable chaos injection
-      --chaos-latency   Add random latency (e.g., "10ms-100ms")
-      --chaos-error-rate Error rate (0.0-1.0)
-
-Validation flags:
-      --validate-spec   Path to OpenAPI spec for request validation
-      --validate-fail   Fail on validation error (default: false)
-
-Storage flags:
-      --data-dir      Data directory for persistent storage (default: ~/.local/share/mockd)
-      --no-auth       Disable API key authentication on admin API
-
-Daemon flags:
-  -d, --detach      Run server in background (daemon mode)
-      --pid-file    Path to PID file (default: ~/.mockd/mockd.pid)
-
-Logging flags:
-      --log-level     Log level (debug, info, warn, error) (default: info)
-      --log-format    Log format (text, json) (default: text)
-
-Examples:
-  # Start with defaults
+By default, the server starts on port 4280 and the admin API on port 4290.
+You can configure the server using flags, environment variables, or a config file.`,
+	Example: `  # Start with defaults
   mockd start
 
   # Start with config file on custom port
@@ -138,28 +68,94 @@ Examples:
   mockd start --mtls-enabled --mtls-ca ca.crt --tls-cert server.crt --tls-key server.key
 
   # Start with audit logging
-  mockd start --audit-enabled --audit-file audit.log --audit-level debug
-`)
-	}
+  mockd start --audit-enabled --audit-file audit.log --audit-level debug`,
+	RunE: runStart,
+}
 
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
+func init() {
+	rootCmd.AddCommand(startCmd)
+
+	// Since RegisterServerFlags takes a flag.FlagSet, we'll manually bind them for now,
+	// or create a helper for Cobra flags. For speed, mapping directly here:
+	// Server Flags
+	startCmd.Flags().IntVarP(&startServerFlags.Port, "port", "p", 4280, "HTTP server port")
+	startCmd.Flags().IntVarP(&startServerFlags.AdminPort, "admin-port", "a", 4290, "Admin API port")
+	startCmd.Flags().StringVarP(&startServerFlags.ConfigFile, "config", "c", "", "Path to mock configuration file")
+	startCmd.Flags().IntVar(&startServerFlags.HTTPSPort, "https-port", 0, "HTTPS server port (0 = disabled)")
+	startCmd.Flags().IntVar(&startServerFlags.ReadTimeout, "read-timeout", 30, "Read timeout in seconds")
+	startCmd.Flags().IntVar(&startServerFlags.WriteTimeout, "write-timeout", 30, "Write timeout in seconds")
+	startCmd.Flags().IntVar(&startServerFlags.MaxLogEntries, "max-log-entries", 1000, "Maximum request log entries")
+	startCmd.Flags().BoolVar(&startServerFlags.AutoCert, "auto-cert", true, "Auto-generate TLS certificate")
+
+	// TLS flags
+	startCmd.Flags().StringVar(&startServerFlags.TLSCert, "tls-cert", "", "Path to TLS certificate file")
+	startCmd.Flags().StringVar(&startServerFlags.TLSKey, "tls-key", "", "Path to TLS private key file")
+	startCmd.Flags().BoolVar(&startServerFlags.TLSAuto, "tls-auto", false, "Auto-generate self-signed certificate")
+
+	// mTLS flags
+	startCmd.Flags().BoolVar(&startServerFlags.MTLSEnabled, "mtls-enabled", false, "Enable mTLS client certificate validation")
+	startCmd.Flags().StringVar(&startServerFlags.MTLSClientAuth, "mtls-client-auth", "require-and-verify", "Client auth mode (none, request, require, verify-if-given, require-and-verify)")
+	startCmd.Flags().StringVar(&startServerFlags.MTLSCA, "mtls-ca", "", "Path to CA certificate for client validation")
+	// (Note: custom StringSlice variable for allowed CNs is string typed in the struct, so use string directly)
+	startCmd.Flags().StringVar(&startServerFlags.MTLSAllowedCNs, "mtls-allowed-cns", "", "Comma-separated list of allowed Common Names")
+
+	// Audit flags
+	startCmd.Flags().BoolVar(&startServerFlags.AuditEnabled, "audit-enabled", false, "Enable audit logging")
+	startCmd.Flags().StringVar(&startServerFlags.AuditFile, "audit-file", "", "Path to audit log file")
+	startCmd.Flags().StringVar(&startServerFlags.AuditLevel, "audit-level", "info", "Audit log level")
+
+	// GraphQL flags
+	startCmd.Flags().StringVar(&startServerFlags.GraphQLSchema, "graphql-schema", "", "Path to GraphQL schema file")
+	startCmd.Flags().StringVar(&startServerFlags.GraphQLPath, "graphql-path", "/graphql", "GraphQL endpoint path")
+
+	// OAuth flags
+	startCmd.Flags().BoolVar(&startServerFlags.OAuthEnabled, "oauth-enabled", false, "Enable OAuth provider")
+	startCmd.Flags().StringVar(&startServerFlags.OAuthIssuer, "oauth-issuer", "", "OAuth issuer URL")
+	startCmd.Flags().IntVar(&startServerFlags.OAuthPort, "oauth-port", 0, "OAuth server port")
+
+	// Chaos flags
+	startCmd.Flags().BoolVar(&startServerFlags.ChaosEnabled, "chaos-enabled", false, "Enable chaos injection")
+	startCmd.Flags().StringVar(&startServerFlags.ChaosLatency, "chaos-latency", "", "Add random latency (e.g., '10ms-100ms')")
+	startCmd.Flags().Float64Var(&startServerFlags.ChaosErrorRate, "chaos-error-rate", 0, "Error rate (0.0-1.0)")
+
+	// Validation flags
+	startCmd.Flags().StringVar(&startServerFlags.ValidateSpec, "validate-spec", "", "Path to OpenAPI spec for request validation")
+	startCmd.Flags().BoolVar(&startServerFlags.ValidateFail, "validate-fail", false, "Fail on validation error")
+
+	// Storage flags
+	startCmd.Flags().StringVar(&startServerFlags.DataDir, "data-dir", "", "Data directory for persistent storage (default: ~/.local/share/mockd)")
+	startCmd.Flags().BoolVar(&startServerFlags.NoAuth, "no-auth", false, "Disable API key authentication on admin API")
+
+	// Start-specific flags
+	startCmd.Flags().StringVar(&startLoadDir, "load", "", "Load mocks from directory")
+	startCmd.Flags().BoolVar(&startWatch, "watch", false, "Watch for file changes (with --load)")
+	startCmd.Flags().BoolVar(&startValidate, "validate", false, "Validate files before serving (with --load)")
+	startCmd.Flags().StringVar(&startEngineName, "engine-name", "", "Name for this engine when registering with admin")
+	startCmd.Flags().StringVar(&startAdminURL, "admin-url", "", "Admin server URL to register with (enables engine mode)")
+	startCmd.Flags().StringVar(&startLogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	startCmd.Flags().StringVar(&startLogFormat, "log-format", "text", "Log format (text, json)")
+	startCmd.Flags().BoolVarP(&startDetach, "detach", "d", false, "Run server in background (daemon mode)")
+	startCmd.Flags().StringVar(&startPidFile, "pid-file", DefaultPIDPath(), "Path to PID file")
+}
+
+//nolint:gocyclo
+func runStart(cmd *cobra.Command, args []string) error {
+	sf := startServerFlags
 
 	// Handle detach mode (daemon) - re-exec as child and exit
-	if *detach && os.Getenv("MOCKD_CHILD") == "" {
-		return daemonize(args, *pidFile, sf.Port, sf.AdminPort)
+	if startDetach && os.Getenv("MOCKD_CHILD") == "" {
+		return daemonize(args, startPidFile, sf.Port, sf.AdminPort)
 	}
 
 	// Validate --watch requires --load
-	if *watch && *loadDir == "" {
+	if startWatch && startLoadDir == "" {
 		return errors.New("--watch requires --load to be specified")
 	}
 
 	// Initialize structured logger
 	log := logging.New(logging.Config{
-		Level:  logging.ParseLevel(*logLevel),
-		Format: logging.ParseFormat(*logFormat),
+		Level:  logging.ParseLevel(startLogLevel),
+		Format: logging.ParseFormat(startLogFormat),
 	})
 	_ = log // used by engine/admin below
 
@@ -235,11 +231,11 @@ Examples:
 
 	// Load mocks from directory if specified
 	var dirLoader *config.DirectoryLoader
-	if *loadDir != "" {
-		dirLoader = config.NewDirectoryLoader(*loadDir)
+	if startLoadDir != "" {
+		dirLoader = config.NewDirectoryLoader(startLoadDir)
 
 		// Validate files if requested
-		if *validate {
+		if startValidate {
 			errors, err := dirLoader.Validate()
 			if err != nil {
 				return fmt.Errorf("failed to validate directory: %w", err)
@@ -274,11 +270,11 @@ Examples:
 			}
 		}
 
-		fmt.Printf("Loaded %d mocks from %d files in %s\n", len(result.Collection.Mocks), result.FileCount, *loadDir)
+		fmt.Printf("Loaded %d mocks from %d files in %s\n", len(result.Collection.Mocks), result.FileCount, startLoadDir)
 	}
 
 	// Start file watcher if requested
-	if *watch && dirLoader != nil {
+	if startWatch && dirLoader != nil {
 		watcher := config.NewWatcher(dirLoader)
 		eventCh := watcher.Start()
 		go handleWatchEvents(eventCh, dirLoader, engClient)
@@ -303,8 +299,8 @@ Examples:
 	}
 
 	// Register with remote admin if engine mode is enabled
-	if *adminURL != "" {
-		name := *engineName
+	if startAdminURL != "" {
+		name := startEngineName
 		if name == "" {
 			hostname, _ := os.Hostname()
 			name = "engine-" + hostname
@@ -315,7 +311,7 @@ Examples:
 
 		// Create engine client to communicate with admin
 		engineClient := engine.NewEngineClient(&engine.EngineClientConfig{
-			AdminURL:     *adminURL,
+			AdminURL:     startAdminURL,
 			EngineName:   name,
 			LocalPort:    sf.Port,
 			PollInterval: 10 * time.Second,
@@ -331,16 +327,16 @@ Examples:
 		defer engineClient.Stop()
 		defer func() { _ = wsManager.StopAll() }()
 
-		fmt.Printf("Engine mode: connected to admin at %s\n", *adminURL)
+		fmt.Printf("Engine mode: connected to admin at %s\n", startAdminURL)
 	}
 
 	// Write PID file for process management
-	if *pidFile != "" {
-		if err := writePIDFileForServe(*pidFile, "dev", sf.Port, sf.HTTPSPort, sf.AdminPort, sf.ConfigFile, 0); err != nil {
+	if startPidFile != "" {
+		if err := writePIDFileForServe(startPidFile, "dev", sf.Port, sf.HTTPSPort, sf.AdminPort, sf.ConfigFile, 0); err != nil {
 			output.Warn("failed to write PID file: %v", err)
 		}
 		defer func() {
-			if err := RemovePIDFile(*pidFile); err != nil {
+			if err := RemovePIDFile(startPidFile); err != nil {
 				output.Warn("failed to remove PID file: %v", err)
 			}
 		}()

@@ -1,0 +1,84 @@
+-- cli_operations.txt --
+# ============================================================================
+# CLI Operations — request logs, chaos injection, ports
+# ============================================================================
+
+# Initial Clean Slate
+exec mockd delete --all --admin-url $ADMIN_URL
+exec mockd logs --requests --clear --admin-url $ADMIN_URL
+
+# ─── Request Logs ────────────────────────────────────────────────────────────
+
+# CLI-LOG-001: mockd logs --requests shows request paths
+exec mockd add --path /cli/log-target --body '{"logged":true}' --name "Log Target" --admin-url $ADMIN_URL
+exec curl -s $ENGINE_URL/cli/log-target
+exec curl -s $ENGINE_URL/cli/log-target
+exec curl -s $ENGINE_URL/cli/log-target
+
+exec mockd logs --requests --admin-url $ADMIN_URL
+stdout '/cli/log-target'
+
+# CLI-LOG-002: mockd logs --requests --json returns valid JSON
+exec mockd logs --requests --json --admin-url $ADMIN_URL
+stdout '\['
+stdout '\]'
+
+# CLI-LOG-003: mockd logs --requests --method GET filters by method
+exec mockd logs --requests --method GET --admin-url $ADMIN_URL
+stdout '"method":\s*"GET"'
+
+# CLI-LOG-004: mockd logs --requests --path filters by path
+exec mockd logs --requests --path /cli/log-target --admin-url $ADMIN_URL
+stdout '"path":\s*"/cli/log-target"'
+
+# CLI-LOG-005: mockd logs --requests --clear clears logs
+exec mockd logs --requests --clear --admin-url $ADMIN_URL
+stdout 'Cleared'
+
+# CLI-LOG-006: Logs cleared successfully
+exec mockd logs --requests --json --admin-url $ADMIN_URL
+stdout '\[\]'
+
+# ─── Chaos Injection ────────────────────────────────────────────────────────
+
+# CLI-CHAOS-001: mockd chaos status shows disabled
+exec mockd chaos status --admin-url $ADMIN_URL
+stdout 'disabled'
+
+# CLI-CHAOS-002: mockd chaos status --json returns valid JSON
+exec mockd chaos status --json --admin-url $ADMIN_URL
+stdout '"enabled":\s*false'
+
+# CLI-CHAOS-003: mockd chaos enable with latency
+exec mockd chaos enable --latency "10ms-50ms" --admin-url $ADMIN_URL
+stdout 'enabled'
+
+# CLI-CHAOS-004: Chaos now enabled after enable
+exec mockd chaos status --admin-url $ADMIN_URL
+stdout 'enabled'
+
+# CLI-CHAOS-005: mockd chaos enable with error rate
+exec mockd chaos enable --error-rate 0.5 --error-code 503 --admin-url $ADMIN_URL
+stdout 'enabled'
+
+# CLI-CHAOS-006: mockd chaos enable with path pattern
+exec mockd chaos enable --latency "1ms-5ms" --path "/api/.*" --admin-url $ADMIN_URL
+stdout 'enabled'
+
+# CLI-CHAOS-007: mockd chaos disable
+exec mockd chaos disable --admin-url $ADMIN_URL
+stdout 'disabled'
+
+# CLI-CHAOS-008: Chaos confirmed disabled
+exec mockd chaos status --admin-url $ADMIN_URL
+stdout 'disabled'
+
+# ─── Ports ───────────────────────────────────────────────────────────────────
+
+# CLI-PORTS-001: mockd ports shows engine and admin ports
+exec mockd ports --admin-url $ADMIN_URL
+stdout '[0-9]{4,5}'
+
+# CLI-PORTS-002: mockd ports --json returns valid JSON
+exec mockd ports --json --admin-url $ADMIN_URL
+stdout '"http":\s*[0-9]{4,5}'

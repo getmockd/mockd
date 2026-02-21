@@ -8,6 +8,27 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 )
 
+func RunDown(args []string) error {
+	downPidFile = ""
+	downTimeout = 0
+	jsonOutput = false
+	
+	if f := rootCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := downCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := rootCmd.Flags().Lookup("json"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	rootCmd.SetArgs(append([]string{"down"}, args...))
+	return rootCmd.Execute()
+}
+
 func TestRunDown_HelpFlag(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {

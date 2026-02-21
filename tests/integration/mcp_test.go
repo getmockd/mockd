@@ -27,7 +27,8 @@ func testServer(t *testing.T) (*mcp.Server, *engine.Server, func()) {
 
 	// Create mock engine with control API on random port
 	engineCfg := config.DefaultServerConfiguration()
-	engineCfg.ManagementPort = getFreePort()
+	engineCfg.HTTPPort = GetFreePortSafe()
+	engineCfg.ManagementPort = GetFreePortSafe()
 	eng := engine.NewServer(engineCfg)
 
 	// Start the engine (starts control API)

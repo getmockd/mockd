@@ -1,12 +1,41 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/getmockd/mockd/pkg/config"
 )
+
+func RunUp(args []string) error {
+	upConfigFiles = nil
+	upDetach = false
+	upLogLevel = ""
+	jsonOutput = false
+	
+	if f := rootCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := upCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := upCmd.Flags().Lookup("config"); f != nil {
+		f.Changed = false
+	}
+	if f := rootCmd.Flags().Lookup("json"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	rootCmd.SetArgs(append([]string{"up"}, args...))
+	fmt.Printf("DEBUG BEFORE: args=%v, upConfigFiles=%v\n", args, upConfigFiles)
+	err := rootCmd.Execute()
+	fmt.Printf("DEBUG AFTER: upConfigFiles=%v\n", upConfigFiles)
+	return err
+}
 
 func TestRunUp_HelpFlag(t *testing.T) {
 	// --help should not panic or return error

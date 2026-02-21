@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
+	"github.com/spf13/cobra"
 )
 
 // WorkspaceDTO matches the API response format.
@@ -35,74 +35,29 @@ type WorkspaceDTO struct {
 	UpdatedAt    string `json:"updatedAt,omitempty"`
 }
 
-// RunWorkspace handles the workspace command and its subcommands.
-func RunWorkspace(args []string) error {
-	if len(args) == 0 {
-		// No subcommand: show current workspace
+var workspaceCmd = &cobra.Command{
+	Use:   "workspace",
+	Short: "Manage workspaces within the current context",
+	RunE: func(cmd *cobra.Command, args []string) error {
 		return runWorkspaceShow()
-	}
-
-	subcommand := args[0]
-	subArgs := args[1:]
-
-	switch subcommand {
-	case "use":
-		return runWorkspaceUse(subArgs)
-	case "list", "ls":
-		return runWorkspaceList(subArgs)
-	case "create":
-		return runWorkspaceCreate(subArgs)
-	case "delete", "rm", "remove":
-		return runWorkspaceDelete(subArgs)
-	case "show":
-		return runWorkspaceShow()
-	case "clear":
-		return runWorkspaceClear(subArgs)
-	case "--help", "-h", "help":
-		printWorkspaceUsage()
-		return nil
-	default:
-		return fmt.Errorf("unknown workspace subcommand: %s\n\nRun 'mockd workspace --help' for usage", subcommand)
-	}
+	},
 }
 
-func printWorkspaceUsage() {
-	fmt.Print(`Usage: mockd workspace [command]
+func init() {
+	rootCmd.AddCommand(workspaceCmd)
+}
 
-Manage workspaces within the current context.
+var workspaceShowCmd = &cobra.Command{
+	Use:   "show",
+	Short: "Show current workspace",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runWorkspaceShow()
+	},
+}
 
-Commands:
-  (no command)  Show current workspace
-  show          Show current workspace (same as no command)
-  use <id>      Switch to a different workspace
-  list          List all workspaces on the server
-  create        Create a new workspace
-  delete <id>   Delete a workspace
-  clear         Clear workspace selection (use default)
-
-Examples:
-  # Show current workspace
-  mockd workspace
-
-  # List available workspaces
-  mockd workspace list
-
-  # Switch to a workspace
-  mockd workspace use ws_abc123
-
-  # Create a new workspace
-  mockd workspace create --name "My Project"
-
-  # Delete a workspace
-  mockd workspace delete ws_abc123
-
-  # Clear workspace selection
-  mockd workspace clear
-
-Notes:
-  Workspace selection is stored in the current context.
-  Use 'mockd context' to manage contexts.
-`)
+func init() {
+	workspaceCmd.AddCommand(workspaceShowCmd)
+	// Add other workspace subcommands here
 }
 
 // runWorkspaceShow displays the current workspace.
@@ -144,400 +99,317 @@ func runWorkspaceShow() error {
 	return nil
 }
 
-// runWorkspaceUse switches to a different workspace.
-func runWorkspaceUse(args []string) error {
-	fs := flag.NewFlagSet("workspace use", flag.ContinueOnError)
-	adminURL := fs.String("admin-url", "", "Admin API base URL (overrides context)")
-	fs.StringVar(adminURL, "u", "", "Admin API base URL (shorthand)")
+var workspaceUseAdminURL string
 
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd workspace use <id>
+var workspaceUseCmd = &cobra.Command{
+	Use:   "use <id>",
+	Short: "Switch to a different workspace in the current context",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		workspaceID := args[0]
 
-Switch to a different workspace in the current context.
-
-Flags:
-  -u, --admin-url  Admin API base URL (overrides context)
-
-Examples:
-  mockd workspace use ws_abc123
-  mockd workspace use local
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
+		cfg, err := cliconfig.LoadContextConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load context config: %w", err)
 		}
-		return err
-	}
 
-	if fs.NArg() != 1 {
-		fs.Usage()
-		return errors.New("workspace ID required")
-	}
-
-	workspaceID := fs.Arg(0)
-
-	cfg, err := cliconfig.LoadContextConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load context config: %w", err)
-	}
-
-	ctx := cfg.GetCurrentContext()
-	if ctx == nil {
-		return errors.New("no current context set; run 'mockd context add <name>' first")
-	}
-
-	// Determine admin URL
-	targetURL := cliconfig.ResolveAdminURL(*adminURL)
-
-	// Verify workspace exists on server
-	client := NewWorkspaceClient(targetURL, &WorkspaceClientOptions{
-		AuthToken:   ctx.AuthToken,
-		TLSInsecure: ctx.TLSInsecure,
-	})
-	ws, err := client.GetWorkspace(workspaceID)
-	if err != nil {
-		return fmt.Errorf("failed to verify workspace: %w", err)
-	}
-
-	// Update context
-	ctx.Workspace = workspaceID
-	if err := cliconfig.SaveContextConfig(cfg); err != nil {
-		return fmt.Errorf("failed to save context config: %w", err)
-	}
-
-	fmt.Printf("Switched to workspace %q\n", workspaceID)
-	if ws != nil {
-		fmt.Printf("  Name: %s\n", ws.Name)
-	}
-
-	return nil
-}
-
-// runWorkspaceList lists all workspaces.
-func runWorkspaceList(args []string) error {
-	fs := flag.NewFlagSet("workspace list", flag.ContinueOnError)
-	adminURL := fs.String("admin-url", "", "Admin API base URL (overrides context)")
-	fs.StringVar(adminURL, "u", "", "Admin API base URL (shorthand)")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd workspace list [flags]
-
-List all workspaces on the server.
-
-Flags:
-  -u, --admin-url  Admin API base URL (overrides context)
-      --json       Output in JSON format
-
-Examples:
-  mockd workspace list
-  mockd workspace list --json
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
+		ctx := cfg.GetCurrentContext()
+		if ctx == nil {
+			return errors.New("no current context set; run 'mockd context add <name>' first")
 		}
-		return err
-	}
 
-	targetURL := cliconfig.ResolveAdminURL(*adminURL)
+		// Determine admin URL
+		targetURL := cliconfig.ResolveAdminURL(workspaceUseAdminURL)
 
-	// Get client options from context
-	var opts *WorkspaceClientOptions
-	if cfg, err := cliconfig.LoadContextConfig(); err == nil {
-		if ctx := cfg.GetCurrentContext(); ctx != nil {
-			opts = &WorkspaceClientOptions{
-				AuthToken:   ctx.AuthToken,
-				TLSInsecure: ctx.TLSInsecure,
-			}
+		// Verify workspace exists on server
+		client := NewWorkspaceClient(targetURL, &WorkspaceClientOptions{
+			AuthToken:   ctx.AuthToken,
+			TLSInsecure: ctx.TLSInsecure,
+		})
+		ws, err := client.GetWorkspace(workspaceID)
+		if err != nil {
+			return fmt.Errorf("failed to verify workspace: %w", err)
 		}
-	}
 
-	client := NewWorkspaceClient(targetURL, opts)
-	workspaces, err := client.ListWorkspaces()
-	if err != nil {
-		return fmt.Errorf("%s", FormatConnectionError(err))
-	}
-
-	// Get current workspace for marking
-	currentWorkspace := cliconfig.GetWorkspaceFromContext()
-
-	if *jsonOutput {
-		result := struct {
-			CurrentWorkspace string          `json:"currentWorkspace"`
-			Workspaces       []*WorkspaceDTO `json:"workspaces"`
-			Count            int             `json:"count"`
-		}{
-			CurrentWorkspace: currentWorkspace,
-			Workspaces:       workspaces,
-			Count:            len(workspaces),
+		// Update context
+		ctx.Workspace = workspaceID
+		if err := cliconfig.SaveContextConfig(cfg); err != nil {
+			return fmt.Errorf("failed to save context config: %w", err)
 		}
-		return output.JSON(result)
-	}
 
-	if len(workspaces) == 0 {
-		fmt.Println("No workspaces found")
+		fmt.Printf("Switched to workspace %q\n", workspaceID)
+		if ws != nil {
+			fmt.Printf("  Name: %s\n", ws.Name)
+		}
+
 		return nil
-	}
-
-	w := output.Table()
-	_, _ = fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tDESCRIPTION")
-
-	for _, ws := range workspaces {
-		current := ""
-		if ws.ID == currentWorkspace {
-			current = "*"
-		}
-
-		description := ws.Description
-		if len(description) > 30 {
-			description = description[:27] + "..."
-		}
-		if description == "" {
-			description = "-"
-		}
-
-		id := ws.ID
-		if len(id) > 20 {
-			id = id[:17] + "..."
-		}
-
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, id, ws.Name, ws.Type, description)
-	}
-
-	return w.Flush()
+	},
 }
 
-// runWorkspaceCreate creates a new workspace.
-func runWorkspaceCreate(args []string) error {
-	fs := flag.NewFlagSet("workspace create", flag.ContinueOnError)
-	adminURL := fs.String("admin-url", "", "Admin API base URL (overrides context)")
-	fs.StringVar(adminURL, "u", "", "Admin API base URL (shorthand)")
-	name := fs.String("name", "", "Workspace name (required)")
-	fs.StringVar(name, "n", "", "Workspace name (shorthand)")
-	description := fs.String("description", "", "Workspace description")
-	fs.StringVar(description, "d", "", "Workspace description (shorthand)")
-	wsType := fs.String("type", "local", "Workspace type (local)")
-	useCurrent := fs.Bool("use", false, "Switch to this workspace after creating")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
+func init() {
+	workspaceUseCmd.Flags().StringVarP(&workspaceUseAdminURL, "admin-url", "u", "", "Admin API base URL (overrides context)")
+	workspaceCmd.AddCommand(workspaceUseCmd)
+}
 
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd workspace create [flags]
+var workspaceListAdminURL string
 
-Create a new workspace.
+var workspaceListCmd = &cobra.Command{
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List all workspaces on the server",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		targetURL := cliconfig.ResolveAdminURL(workspaceListAdminURL)
 
-Flags:
-  -n, --name         Workspace name (required)
-  -d, --description  Workspace description
-      --type         Workspace type (default: local)
-      --use          Switch to this workspace after creating
-  -u, --admin-url    Admin API base URL (overrides context)
-      --json         Output in JSON format
-
-Examples:
-  mockd workspace create --name "My Project"
-  mockd workspace create --name "API Tests" --description "Mocks for API testing" --use
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
-		}
-		return err
-	}
-
-	if *name == "" {
-		fs.Usage()
-		return errors.New("workspace name required (--name)")
-	}
-
-	targetURL := cliconfig.ResolveAdminURL(*adminURL)
-
-	// Get client options from context
-	var opts *WorkspaceClientOptions
-	if cfg, err := cliconfig.LoadContextConfig(); err == nil {
-		if ctx := cfg.GetCurrentContext(); ctx != nil {
-			opts = &WorkspaceClientOptions{
-				AuthToken:   ctx.AuthToken,
-				TLSInsecure: ctx.TLSInsecure,
+		// Get client options from context
+		var opts *WorkspaceClientOptions
+		if cfg, err := cliconfig.LoadContextConfig(); err == nil {
+			if ctx := cfg.GetCurrentContext(); ctx != nil {
+				opts = &WorkspaceClientOptions{
+					AuthToken:   ctx.AuthToken,
+					TLSInsecure: ctx.TLSInsecure,
+				}
 			}
 		}
-	}
 
-	client := NewWorkspaceClient(targetURL, opts)
-	ws, err := client.CreateWorkspace(*name, *wsType, *description)
-	if err != nil {
-		return fmt.Errorf("failed to create workspace: %w", err)
-	}
+		client := NewWorkspaceClient(targetURL, opts)
+		workspaces, err := client.ListWorkspaces()
+		if err != nil {
+			return fmt.Errorf("%s", FormatConnectionError(err))
+		}
 
-	// Optionally switch to this workspace
-	if *useCurrent {
+		// Get current workspace for marking
+		currentWorkspace := cliconfig.GetWorkspaceFromContext()
+
+		if jsonOutput {
+			result := struct {
+				CurrentWorkspace string          `json:"currentWorkspace"`
+				Workspaces       []*WorkspaceDTO `json:"workspaces"`
+				Count            int             `json:"count"`
+			}{
+				CurrentWorkspace: currentWorkspace,
+				Workspaces:       workspaces,
+				Count:            len(workspaces),
+			}
+			return output.JSON(result)
+		}
+
+		if len(workspaces) == 0 {
+			fmt.Println("No workspaces found")
+			return nil
+		}
+
+		w := output.Table()
+		_, _ = fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tDESCRIPTION")
+
+		for _, ws := range workspaces {
+			current := ""
+			if ws.ID == currentWorkspace {
+				current = "*"
+			}
+
+			description := ws.Description
+			if len(description) > 30 {
+				description = description[:27] + "..."
+			}
+			if description == "" {
+				description = "-"
+			}
+
+			id := ws.ID
+			if len(id) > 20 {
+				id = id[:17] + "..."
+			}
+
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, id, ws.Name, ws.Type, description)
+		}
+
+		return w.Flush()
+	},
+}
+
+func init() {
+	workspaceListCmd.Flags().StringVarP(&workspaceListAdminURL, "admin-url", "u", "", "Admin API base URL (overrides context)")
+	workspaceCmd.AddCommand(workspaceListCmd)
+}
+
+var (
+	workspaceCreateAdminURL   string
+	workspaceCreateName       string
+	workspaceCreateDesc       string
+	workspaceCreateType       string
+	workspaceCreateUseCurrent bool
+)
+
+var workspaceCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new workspace",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if workspaceCreateName == "" {
+			return errors.New("workspace name required (--name)")
+		}
+
+		targetURL := cliconfig.ResolveAdminURL(workspaceCreateAdminURL)
+
+		// Get client options from context
+		var opts *WorkspaceClientOptions
+		if cfg, err := cliconfig.LoadContextConfig(); err == nil {
+			if ctx := cfg.GetCurrentContext(); ctx != nil {
+				opts = &WorkspaceClientOptions{
+					AuthToken:   ctx.AuthToken,
+					TLSInsecure: ctx.TLSInsecure,
+				}
+			}
+		}
+
+		client := NewWorkspaceClient(targetURL, opts)
+		ws, err := client.CreateWorkspace(workspaceCreateName, workspaceCreateType, workspaceCreateDesc)
+		if err != nil {
+			return fmt.Errorf("failed to create workspace: %w", err)
+		}
+
+		// Optionally switch to this workspace
+		if workspaceCreateUseCurrent {
+			cfg, err := cliconfig.LoadContextConfig()
+			if err == nil {
+				ctx := cfg.GetCurrentContext()
+				if ctx != nil {
+					ctx.Workspace = ws.ID
+					_ = cliconfig.SaveContextConfig(cfg)
+				}
+			}
+		}
+
+		if jsonOutput {
+			return output.JSON(ws)
+		}
+
+		fmt.Printf("Created workspace %q (ID: %s)\n", ws.Name, ws.ID)
+		if workspaceCreateUseCurrent {
+			fmt.Printf("Switched to workspace %q\n", ws.ID)
+		}
+
+		return nil
+	},
+}
+
+func init() {
+	workspaceCreateCmd.Flags().StringVarP(&workspaceCreateAdminURL, "admin-url", "u", "", "Admin API base URL (overrides context)")
+	workspaceCreateCmd.Flags().StringVarP(&workspaceCreateName, "name", "n", "", "Workspace name (required)")
+	workspaceCreateCmd.Flags().StringVarP(&workspaceCreateDesc, "description", "d", "", "Workspace description")
+	workspaceCreateCmd.Flags().StringVar(&workspaceCreateType, "type", "local", "Workspace type")
+	workspaceCreateCmd.Flags().BoolVar(&workspaceCreateUseCurrent, "use", false, "Switch to this workspace after creating")
+	workspaceCmd.AddCommand(workspaceCreateCmd)
+}
+
+var (
+	workspaceDeleteAdminURL string
+	workspaceDeleteForce    bool
+)
+
+var workspaceDeleteCmd = &cobra.Command{
+	Use:     "delete <id>",
+	Aliases: []string{"rm", "remove"},
+	Short:   "Delete a workspace",
+	Args:    cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		workspaceID := args[0]
+		targetURL := cliconfig.ResolveAdminURL(workspaceDeleteAdminURL)
+
+		// Get client options from context
+		var opts *WorkspaceClientOptions
+		if cfg, err := cliconfig.LoadContextConfig(); err == nil {
+			if ctx := cfg.GetCurrentContext(); ctx != nil {
+				opts = &WorkspaceClientOptions{
+					AuthToken:   ctx.AuthToken,
+					TLSInsecure: ctx.TLSInsecure,
+				}
+			}
+		}
+
+		client := NewWorkspaceClient(targetURL, opts)
+
+		// Get workspace details first
+		ws, err := client.GetWorkspace(workspaceID)
+		if err != nil {
+			return fmt.Errorf("failed to get workspace: %w", err)
+		}
+
+		// Confirm unless forced
+		if !workspaceDeleteForce {
+			fmt.Printf("Delete workspace %q?\n", ws.Name)
+			fmt.Printf("  ID: %s\n", ws.ID)
+			fmt.Print("Type 'yes' to confirm: ")
+
+			reader := bufio.NewReader(os.Stdin)
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("failed to read input: %w", err)
+			}
+			if strings.TrimSpace(input) != "yes" {
+				fmt.Println("Aborted")
+				return nil
+			}
+		}
+
+		if err := client.DeleteWorkspace(workspaceID); err != nil {
+			return fmt.Errorf("failed to delete workspace: %w", err)
+		}
+
+		// Clear from context if it was the current workspace
 		cfg, err := cliconfig.LoadContextConfig()
 		if err == nil {
 			ctx := cfg.GetCurrentContext()
-			if ctx != nil {
-				ctx.Workspace = ws.ID
+			if ctx != nil && ctx.Workspace == workspaceID {
+				ctx.Workspace = ""
 				_ = cliconfig.SaveContextConfig(cfg)
+				fmt.Println("Cleared workspace from current context")
 			}
 		}
-	}
 
-	if *jsonOutput {
-		return output.JSON(ws)
-	}
-
-	fmt.Printf("Created workspace %q (ID: %s)\n", ws.Name, ws.ID)
-	if *useCurrent {
-		fmt.Printf("Switched to workspace %q\n", ws.ID)
-	}
-
-	return nil
-}
-
-// runWorkspaceDelete deletes a workspace.
-func runWorkspaceDelete(args []string) error {
-	fs := flag.NewFlagSet("workspace delete", flag.ContinueOnError)
-	adminURL := fs.String("admin-url", "", "Admin API base URL (overrides context)")
-	fs.StringVar(adminURL, "u", "", "Admin API base URL (shorthand)")
-	force := fs.Bool("force", false, "Force deletion without confirmation")
-	fs.BoolVar(force, "f", false, "Force deletion (shorthand)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd workspace delete <id> [flags]
-
-Delete a workspace.
-
-Flags:
-  -f, --force      Force deletion without confirmation
-  -u, --admin-url  Admin API base URL (overrides context)
-
-Examples:
-  mockd workspace delete ws_abc123
-  mockd workspace delete ws_abc123 --force
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
-		}
-		return err
-	}
-
-	if fs.NArg() != 1 {
-		fs.Usage()
-		return errors.New("workspace ID required")
-	}
-
-	workspaceID := fs.Arg(0)
-	targetURL := cliconfig.ResolveAdminURL(*adminURL)
-
-	// Get client options from context
-	var opts *WorkspaceClientOptions
-	if cfg, err := cliconfig.LoadContextConfig(); err == nil {
-		if ctx := cfg.GetCurrentContext(); ctx != nil {
-			opts = &WorkspaceClientOptions{
-				AuthToken:   ctx.AuthToken,
-				TLSInsecure: ctx.TLSInsecure,
-			}
-		}
-	}
-
-	client := NewWorkspaceClient(targetURL, opts)
-
-	// Get workspace details first
-	ws, err := client.GetWorkspace(workspaceID)
-	if err != nil {
-		return fmt.Errorf("failed to get workspace: %w", err)
-	}
-
-	// Confirm unless forced
-	if !*force {
-		fmt.Printf("Delete workspace %q?\n", ws.Name)
-		fmt.Printf("  ID: %s\n", ws.ID)
-		fmt.Print("Type 'yes' to confirm: ")
-
-		reader := bufio.NewReader(os.Stdin)
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("failed to read input: %w", err)
-		}
-		if strings.TrimSpace(input) != "yes" {
-			fmt.Println("Aborted")
-			return nil
-		}
-	}
-
-	if err := client.DeleteWorkspace(workspaceID); err != nil {
-		return fmt.Errorf("failed to delete workspace: %w", err)
-	}
-
-	// Clear from context if it was the current workspace
-	cfg, err := cliconfig.LoadContextConfig()
-	if err == nil {
-		ctx := cfg.GetCurrentContext()
-		if ctx != nil && ctx.Workspace == workspaceID {
-			ctx.Workspace = ""
-			_ = cliconfig.SaveContextConfig(cfg)
-			fmt.Println("Cleared workspace from current context")
-		}
-	}
-
-	fmt.Printf("Deleted workspace %q\n", workspaceID)
-	return nil
-}
-
-// runWorkspaceClear clears the workspace selection.
-func runWorkspaceClear(args []string) error {
-	fs := flag.NewFlagSet("workspace clear", flag.ContinueOnError)
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd workspace clear
-
-Clear workspace selection in the current context.
-This will use the default workspace.
-
-Examples:
-  mockd workspace clear
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
-		}
-		return err
-	}
-
-	cfg, err := cliconfig.LoadContextConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load context config: %w", err)
-	}
-
-	ctx := cfg.GetCurrentContext()
-	if ctx == nil {
-		return errors.New("no current context set")
-	}
-
-	if ctx.Workspace == "" {
-		fmt.Println("No workspace was selected")
+		fmt.Printf("Deleted workspace %q\n", workspaceID)
 		return nil
-	}
+	},
+}
 
-	oldWorkspace := ctx.Workspace
-	ctx.Workspace = ""
+func init() {
+	workspaceDeleteCmd.Flags().StringVarP(&workspaceDeleteAdminURL, "admin-url", "u", "", "Admin API base URL (overrides context)")
+	workspaceDeleteCmd.Flags().BoolVarP(&workspaceDeleteForce, "force", "f", false, "Force deletion without confirmation")
+	workspaceCmd.AddCommand(workspaceDeleteCmd)
+}
 
-	if err := cliconfig.SaveContextConfig(cfg); err != nil {
-		return fmt.Errorf("failed to save context config: %w", err)
-	}
+var workspaceClearCmd = &cobra.Command{
+	Use:   "clear",
+	Short: "Clear workspace selection (use default)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := cliconfig.LoadContextConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load context config: %w", err)
+		}
 
-	fmt.Printf("Cleared workspace selection (was: %s)\n", oldWorkspace)
-	return nil
+		ctx := cfg.GetCurrentContext()
+		if ctx == nil {
+			return errors.New("no current context set")
+		}
+
+		if ctx.Workspace == "" {
+			fmt.Println("No workspace was selected")
+			return nil
+		}
+
+		oldWorkspace := ctx.Workspace
+		ctx.Workspace = ""
+
+		if err := cliconfig.SaveContextConfig(cfg); err != nil {
+			return fmt.Errorf("failed to save context config: %w", err)
+		}
+
+		fmt.Printf("Cleared workspace selection (was: %s)\n", oldWorkspace)
+		return nil
+	},
+}
+
+func init() {
+	workspaceCmd.AddCommand(workspaceClearCmd)
 }
 
 // WorkspaceClient provides methods for workspace API calls.

@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -11,250 +10,126 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/flags"
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/spf13/cobra"
 )
 
-// RunAdd handles the add command.
-func RunAdd(args []string) error {
-	fs := flag.NewFlagSet("add", flag.ContinueOnError)
+var (
+	addMockType       string
+	addName           string
+	addAllowDuplicate bool
 
-	// Mock type (new)
-	mockType := fs.String("type", "http", "Mock type (http, websocket, graphql, grpc, mqtt, soap, oauth)")
-	fs.StringVar(mockType, "t", "http", "Mock type (shorthand)")
+	addMethod       string
+	addPath         string
+	addStatus       int
+	addBody         string
+	addBodyFile     string
+	addHeaders      flags.StringSlice
+	addMatchHeaders flags.StringSlice
+	addMatchQueries flags.StringSlice
+	addBodyContains string
+	addPathPattern  string
+	addPriority     int
+	addDelay        int
 
-	// Common flags
-	name := fs.String("name", "", "Mock display name")
-	fs.StringVar(name, "n", "", "Mock display name (shorthand)")
+	addSSE          bool
+	addSSEEvents    flags.StringSlice
+	addSSEDelay     int
+	addSSETemplate  string
+	addSSERepeat    int
+	addSSEKeepalive int
 
-	// Admin URL and output format
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-	allowDuplicate := fs.Bool("allow-duplicate", false, "Create a new mock even if one already exists on the same path")
+	addMessage string
+	addEcho    bool
 
-	// HTTP flags
-	method := fs.String("method", "GET", "HTTP method to match")
-	fs.StringVar(method, "m", "GET", "HTTP method to match (shorthand)")
-	path := fs.String("path", "", "URL path to match (required for http, websocket, graphql, soap)")
-	status := fs.Int("status", 200, "Response status code")
-	fs.IntVar(status, "s", 200, "Response status code (shorthand)")
-	body := fs.String("body", "", "Response body")
-	fs.StringVar(body, "b", "", "Response body (shorthand)")
-	bodyFile := fs.String("body-file", "", "Read response body from file")
-	var headers flags.StringSlice
-	fs.Var(&headers, "header", "Response header (key:value), repeatable")
-	fs.Var(&headers, "H", "Response header (key:value), repeatable (shorthand)")
-	var matchHeaders flags.StringSlice
-	fs.Var(&matchHeaders, "match-header", "Required request header (key:value), repeatable")
-	var matchQueries flags.StringSlice
-	fs.Var(&matchQueries, "match-query", "Required query param (key=value or key:value), repeatable")
-	bodyContains := fs.String("match-body-contains", "", "Match requests whose body contains this string")
-	pathPattern := fs.String("path-pattern", "", "Regex path pattern for matching (alternative to --path)")
-	priority := fs.Int("priority", 0, "Mock priority (higher = matched first)")
-	delay := fs.Int("delay", 0, "Response delay in milliseconds")
+	addOperation string
+	addOpType    string
+	addResponse  string
 
-	// SSE flags (for HTTP mocks with SSE streaming)
-	sse := fs.Bool("sse", false, "Enable Server-Sent Events streaming")
-	var sseEvents flags.StringSlice
-	fs.Var(&sseEvents, "sse-event", "SSE event (type:data or just data), repeatable")
-	sseDelay := fs.Int("sse-delay", 100, "Delay between SSE events in milliseconds")
-	sseTemplate := fs.String("sse-template", "", "SSE template: openai, notification")
-	sseRepeat := fs.Int("sse-repeat", 1, "Number of times to repeat SSE events (0 = infinite)")
-	sseKeepalive := fs.Int("sse-keepalive", 0, "SSE keepalive interval in milliseconds (0 = disabled)")
+	addService    string
+	addRPCMethod  string
+	addGRPCPort   int
+	addProtoFiles flags.StringSlice
+	addProtoPaths flags.StringSlice
 
-	// WebSocket flags
-	message := fs.String("message", "", "Default response message (JSON) for WebSocket")
-	echo := fs.Bool("echo", false, "Enable echo mode for WebSocket")
+	addTopic    string
+	addPayload  string
+	addQoS      int
+	addMQTTPort int
 
-	// GraphQL flags
-	operation := fs.String("operation", "", "Operation name (required for graphql, soap)")
-	opType := fs.String("op-type", "query", "GraphQL operation type (query/mutation)")
-	response := fs.String("response", "", "JSON response data (for graphql, grpc)")
+	addSoapAction string
 
-	// gRPC flags
-	service := fs.String("service", "", "gRPC service name (e.g., greeter.Greeter)")
-	rpcMethod := fs.String("rpc-method", "", "gRPC method name")
-	grpcPort := fs.Int("grpc-port", 50051, "gRPC server port")
-	var protoFiles flags.StringSlice
-	fs.Var(&protoFiles, "proto", "Path to .proto file (required for gRPC, repeatable)")
-	var protoPaths flags.StringSlice
-	fs.Var(&protoPaths, "proto-path", "Import path for proto dependencies (repeatable)")
+	addIssuer        string
+	addClientID      string
+	addClientSecret  string
+	addOAuthUser     string
+	addOAuthPassword string
+)
 
-	// MQTT flags
-	topic := fs.String("topic", "", "MQTT topic pattern")
-	payload := fs.String("payload", "", "MQTT response payload")
-	qos := fs.Int("qos", 0, "MQTT QoS level (0, 1, 2)")
-	mqttPort := fs.Int("mqtt-port", 1883, "MQTT broker port")
+var addCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Add a new mock endpoint",
+	RunE:  runAdd,
+}
 
-	// SOAP flags
-	soapAction := fs.String("soap-action", "", "SOAPAction header value")
+func init() {
+	rootCmd.AddCommand(addCmd)
 
-	// OAuth flags
-	issuer := fs.String("issuer", "", "OAuth issuer URL (default: http://localhost:4280)")
-	clientID := fs.String("client-id", "test-client", "OAuth client ID")
-	clientSecret := fs.String("client-secret", "test-secret", "OAuth client secret")
-	oauthUser := fs.String("oauth-user", "testuser", "OAuth test username")
-	oauthPassword := fs.String("oauth-password", "password", "OAuth test password")
+	addCmd.Flags().StringVarP(&addMockType, "type", "t", "http", "Mock type (http, websocket, graphql, grpc, mqtt, soap, oauth)")
+	addCmd.Flags().StringVarP(&addName, "name", "n", "", "Mock display name")
+	addCmd.Flags().BoolVar(&addAllowDuplicate, "allow-duplicate", false, "Create a new mock even if one already exists on the same path")
 
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd add [flags]
+	addCmd.Flags().StringVarP(&addMethod, "method", "m", "GET", "HTTP method to match")
+	addCmd.Flags().StringVar(&addPath, "path", "", "URL path to match (required for http, websocket, graphql, soap)")
+	addCmd.Flags().IntVarP(&addStatus, "status", "s", 200, "Response status code")
+	addCmd.Flags().StringVarP(&addBody, "body", "b", "", "Response body")
+	addCmd.Flags().StringVar(&addBodyFile, "body-file", "", "Read response body from file")
+	addCmd.Flags().VarP(&addHeaders, "header", "H", "Response header (key:value), repeatable")
+	addCmd.Flags().Var(&addMatchHeaders, "match-header", "Required request header (key:value), repeatable")
+	addCmd.Flags().Var(&addMatchQueries, "match-query", "Required query param (key=value or key:value), repeatable")
+	addCmd.Flags().StringVar(&addBodyContains, "match-body-contains", "", "Match requests whose body contains this string")
+	addCmd.Flags().StringVar(&addPathPattern, "path-pattern", "", "Regex path pattern for matching (alternative to --path)")
+	addCmd.Flags().IntVar(&addPriority, "priority", 0, "Mock priority (higher = matched first)")
+	addCmd.Flags().IntVar(&addDelay, "delay", 0, "Response delay in milliseconds")
 
-Add a new mock endpoint.
+	addCmd.Flags().BoolVar(&addSSE, "sse", false, "Enable Server-Sent Events streaming")
+	addCmd.Flags().Var(&addSSEEvents, "sse-event", "SSE event (type:data or just data), repeatable")
+	addCmd.Flags().IntVar(&addSSEDelay, "sse-delay", 100, "Delay between SSE events in milliseconds")
+	addCmd.Flags().StringVar(&addSSETemplate, "sse-template", "", "SSE template: openai, notification")
+	addCmd.Flags().IntVar(&addSSERepeat, "sse-repeat", 1, "Number of times to repeat SSE events (0 = infinite)")
+	addCmd.Flags().IntVar(&addSSEKeepalive, "sse-keepalive", 0, "SSE keepalive interval in milliseconds (0 = disabled)")
 
-Global Flags:
-  -t, --type            Mock type: http, websocket, graphql, grpc, mqtt, soap, oauth (default: http)
-  -n, --name            Mock display name
-      --allow-duplicate Create a new mock even if one exists on the same path
-      --admin-url       Admin API base URL (default: http://localhost:4290)
-      --json            Output in JSON format
+	addCmd.Flags().StringVar(&addMessage, "message", "", "Default response message (JSON) for WebSocket")
+	addCmd.Flags().BoolVar(&addEcho, "echo", false, "Enable echo mode for WebSocket")
 
-HTTP Flags (--type http):
-  -m, --method        HTTP method to match (default: GET)
-      --path          URL path to match (required)
-  -s, --status        Response status code (default: 200)
-  -b, --body          Response body
-      --body-file     Read response body from file
-  -H, --header        Response header (key:value), repeatable
-      --match-header  Required request header (key:value), repeatable
-      --match-query   Required query param (key=value or key:value), repeatable
-      --match-body-contains  Match requests whose body contains this string
-      --path-pattern  Regex path pattern for matching (alternative to --path)
-      --priority      Mock priority (higher = matched first)
-      --delay         Response delay in milliseconds
+	addCmd.Flags().StringVar(&addOperation, "operation", "", "Operation name (required for graphql, soap)")
+	addCmd.Flags().StringVar(&addOpType, "op-type", "query", "GraphQL operation type (query/mutation)")
+	addCmd.Flags().StringVar(&addResponse, "response", "", "JSON response data (for graphql, grpc)")
 
-SSE Flags (Server-Sent Events, use with --type http):
-      --sse           Enable SSE streaming response
-      --sse-event     SSE event (type:data), repeatable. Examples:
-                        --sse-event 'message:hello'
-                        --sse-event 'update:{"count":1}'
-      --sse-delay     Delay between events in ms (default: 100)
-      --sse-template  Use built-in template: openai-chat, notification-stream
-      --sse-repeat    Repeat events N times (0 = infinite, default: 1)
-      --sse-keepalive Keepalive interval in ms (0 = disabled)
+	addCmd.Flags().StringVar(&addService, "service", "", "gRPC service name (e.g., greeter.Greeter)")
+	addCmd.Flags().StringVar(&addRPCMethod, "rpc-method", "", "gRPC method name")
+	addCmd.Flags().IntVar(&addGRPCPort, "grpc-port", 50051, "gRPC server port")
+	addCmd.Flags().Var(&addProtoFiles, "proto", "Path to .proto file (required for gRPC, repeatable)")
+	addCmd.Flags().Var(&addProtoPaths, "proto-path", "Import path for proto dependencies (repeatable)")
 
-WebSocket Flags (--type websocket):
-      --path          WebSocket path (required)
-      --message       Default response message (JSON)
-      --echo          Enable echo mode
+	addCmd.Flags().StringVar(&addTopic, "topic", "", "MQTT topic pattern")
+	addCmd.Flags().StringVar(&addPayload, "payload", "", "MQTT response payload")
+	addCmd.Flags().IntVar(&addQoS, "qos", 0, "MQTT QoS level (0, 1, 2)")
+	addCmd.Flags().IntVar(&addMQTTPort, "mqtt-port", 1883, "MQTT broker port")
 
-GraphQL Flags (--type graphql):
-      --path          GraphQL endpoint path (default: /graphql)
-      --operation     Operation name (required)
-      --op-type       Operation type: query or mutation (default: query)
-      --response      JSON response data
-  NOTE: For full GraphQL with schema validation, use YAML config file.
+	addCmd.Flags().StringVar(&addSoapAction, "soap-action", "", "SOAPAction header value")
 
-gRPC Flags (--type grpc):
-      --proto         Path to .proto file (required, repeatable for multiple files)
-      --proto-path    Import path for proto dependencies (repeatable)
-      --service       Service name, e.g., myapp.UserService (required)
-      --rpc-method    RPC method name (required)
-      --response      JSON response data
-      --grpc-port     gRPC server port (default: 50051)
-                      If a gRPC mock already exists on this port, the new
-                      service/method is merged into it automatically.
-                      For multiple services, use YAML config with services array.
+	addCmd.Flags().StringVar(&addIssuer, "issuer", "", "OAuth issuer URL (default: http://localhost:4280)")
+	addCmd.Flags().StringVar(&addClientID, "client-id", "test-client", "OAuth client ID")
+	addCmd.Flags().StringVar(&addClientSecret, "client-secret", "test-secret", "OAuth client secret")
+	addCmd.Flags().StringVar(&addOAuthUser, "oauth-user", "testuser", "OAuth test username")
+	addCmd.Flags().StringVar(&addOAuthPassword, "oauth-password", "password", "OAuth test password")
+}
 
-MQTT Flags (--type mqtt):
-      --topic         Topic pattern (required)
-      --payload       Response payload
-      --qos           QoS level: 0, 1, or 2 (default: 0)
-      --mqtt-port     MQTT broker port (default: 1883)
-                      If an MQTT mock already exists on this port, the new
-                      topic is merged into it automatically.
-                      For multiple topics, use YAML config with topics array.
-
-SOAP Flags (--type soap):
-      --path          SOAP endpoint path (default: /soap)
-      --operation     SOAP operation name (required)
-      --soap-action   SOAPAction header value
-      --response      XML response body
-
-OAuth Flags (--type oauth):
-      --issuer          OAuth issuer URL (default: http://localhost:4280)
-      --client-id       OAuth client ID (default: test-client)
-      --client-secret   OAuth client secret (default: test-secret)
-      --oauth-user      Test username (default: testuser)
-      --oauth-password  Test password (default: password)
-
-Examples:
-  # Simple HTTP GET mock
-  mockd add --path /api/users --status 200 --body '[]'
-
-  # HTTP POST with JSON response
-  mockd add -m POST --path /api/users -s 201 \
-    -b '{"id": "new-id", "created": true}' \
-    -H "Content-Type:application/json"
-
-  # SSE endpoint with custom events
-  mockd add --path /events --sse \
-    --sse-event 'connected:{"status":"ok"}' \
-    --sse-event 'update:{"count":1}' \
-    --sse-event 'update:{"count":2}' \
-    --sse-delay 500
-
-  # SSE with OpenAI-style streaming (for LLM mock)
-  mockd add --path /v1/chat/completions --sse --sse-template openai-chat
-
-  # Infinite SSE stream (heartbeat style)
-  mockd add --path /stream --sse \
-    --sse-event 'ping:{}' --sse-delay 1000 --sse-repeat 0
-
-  # WebSocket mock with echo mode
-  mockd add --type websocket --path /ws/chat --echo
-
-  # WebSocket mock with default response
-  mockd add --type websocket --path /ws/events \
-    --message '{"type": "connected", "status": "ok"}'
-
-  # GraphQL query mock
-  mockd add --type graphql --operation getUser \
-    --response '{"data": {"user": {"id": "1", "name": "Alice"}}}'
-
-  # GraphQL mutation mock
-  mockd add --type graphql --operation createUser --op-type mutation \
-    --response '{"data": {"createUser": {"id": "new-id"}}}'
-
-  # gRPC mock (proto file required)
-  mockd add --type grpc \
-    --proto ./service.proto \
-    --service myapp.UserService \
-    --rpc-method GetUser \
-    --response '{"id": "1", "name": "Alice"}'
-
-  # gRPC with import paths for proto dependencies
-  mockd add --type grpc \
-    --proto ./api/v1/service.proto \
-    --proto-path ./api \
-    --service myapp.v1.UserService \
-    --rpc-method GetUser \
-    --response '{"id": "1", "name": "Alice"}'
-
-  # MQTT mock
-  mockd add --type mqtt --topic sensors/temperature --payload '{"temp": 72.5}' --qos 1
-
-  # SOAP mock
-  mockd add --type soap --operation GetWeather --soap-action "http://example.com/GetWeather" \
-    --response '<GetWeatherResponse><Temperature>72</Temperature></GetWeatherResponse>'
-
-  # OAuth/OIDC mock (minimal, uses defaults)
-  mockd add --type oauth
-
-  # OAuth mock with custom client and issuer
-  mockd add --type oauth --name "Auth Server" \
-    --issuer http://localhost:4280/auth \
-    --client-id my-app --client-secret s3cret \
-    --oauth-user admin --oauth-password admin123
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
+func runAdd(cmd *cobra.Command, args []string) error {
 	// Normalize mock type
-	mt := strings.ToLower(*mockType)
+	mt := strings.ToLower(addMockType)
 
 	// Validate mock type
 	validTypes := map[string]mock.Type{
@@ -269,11 +144,11 @@ Examples:
 
 	mockTypeEnum, ok := validTypes[mt]
 	if !ok {
-		return fmt.Errorf("invalid mock type: %s\n\nValid types: http, websocket, graphql, grpc, mqtt, soap, oauth", *mockType)
+		return fmt.Errorf("invalid mock type: %s\n\nValid types: http, websocket, graphql, grpc, mqtt, soap, oauth", addMockType)
 	}
 
 	// Mutual exclusivity: --path and --path-pattern
-	if *path != "" && *pathPattern != "" {
+	if addPath != "" && addPathPattern != "" {
 		return errors.New("--path and --path-pattern are mutually exclusive")
 	}
 
@@ -283,20 +158,20 @@ Examples:
 
 	switch mockTypeEnum {
 	case mock.TypeHTTP:
-		m, err = buildHTTPMock(*name, *path, *method, *status, *body, *bodyFile, *priority, *delay, headers, matchHeaders, matchQueries,
-			*sse, sseEvents, *sseDelay, *sseTemplate, *sseRepeat, *sseKeepalive, *bodyContains, *pathPattern)
+		m, err = buildHTTPMock(addName, addPath, addMethod, addStatus, addBody, addBodyFile, addPriority, addDelay, addHeaders, addMatchHeaders, addMatchQueries,
+			addSSE, addSSEEvents, addSSEDelay, addSSETemplate, addSSERepeat, addSSEKeepalive, addBodyContains, addPathPattern)
 	case mock.TypeWebSocket:
-		m, err = buildWebSocketMock(*name, *path, *message, *echo)
+		m, err = buildWebSocketMock(addName, addPath, addMessage, addEcho)
 	case mock.TypeGraphQL:
-		m, err = buildGraphQLMock(*name, *path, *operation, *opType, *response)
+		m, err = buildGraphQLMock(addName, addPath, addOperation, addOpType, addResponse)
 	case mock.TypeGRPC:
-		m, err = buildGRPCMock(*name, *service, *rpcMethod, *response, *grpcPort, protoFiles, protoPaths)
+		m, err = buildGRPCMock(addName, addService, addRPCMethod, addResponse, addGRPCPort, addProtoFiles, addProtoPaths)
 	case mock.TypeMQTT:
-		m, err = buildMQTTMock(*name, *topic, *payload, *qos, *mqttPort)
+		m, err = buildMQTTMock(addName, addTopic, addPayload, addQoS, addMQTTPort)
 	case mock.TypeSOAP:
-		m, err = buildSOAPMock(*name, *path, *operation, *soapAction, *response)
+		m, err = buildSOAPMock(addName, addPath, addOperation, addSoapAction, addResponse)
 	case mock.TypeOAuth:
-		m = buildOAuthMock(*name, *issuer, *clientID, *clientSecret, *oauthUser, *oauthPassword)
+		m = buildOAuthMock(addName, addIssuer, addClientID, addClientSecret, addOAuthUser, addOAuthPassword)
 	}
 
 	if err != nil {
@@ -304,10 +179,10 @@ Examples:
 	}
 
 	// Create admin client
-	client := NewAdminClientWithAuth(*adminURL)
+	client := NewAdminClientWithAuth(adminURL)
 
 	// For HTTP mocks: check for existing mock on same method+path (upsert behavior)
-	if mockTypeEnum == mock.TypeHTTP && !*allowDuplicate && m.HTTP != nil && m.HTTP.Matcher != nil {
+	if mockTypeEnum == mock.TypeHTTP && !addAllowDuplicate && m.HTTP != nil && m.HTTP.Matcher != nil {
 		existingID, err := findExistingHTTPMock(client, m.HTTP.Matcher.Method, m.HTTP.Matcher.Path)
 		if err != nil {
 			// Connection error — fall through to create which will give a better error
@@ -322,7 +197,7 @@ Examples:
 			return outputResult(&CreateMockResult{
 				Mock:   updated,
 				Action: "updated",
-			}, mockTypeEnum, *jsonOutput)
+			}, mockTypeEnum, jsonOutput)
 		}
 	}
 
@@ -333,7 +208,7 @@ Examples:
 	}
 
 	// Output result based on mock type and action (created vs merged)
-	return outputResult(result, mockTypeEnum, *jsonOutput)
+	return outputResult(result, mockTypeEnum, jsonOutput)
 }
 
 // findExistingHTTPMock looks for an existing mock with the same method+path.
@@ -1229,3 +1104,4 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 	// Fallback for unknown types
 	return output.JSON(created)
 }
+

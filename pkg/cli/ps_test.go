@@ -8,6 +8,26 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 )
 
+func RunPs(args []string) error {
+	psPidFile = ""
+	jsonOutput = false
+	
+	if f := rootCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := psCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := rootCmd.Flags().Lookup("json"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	rootCmd.SetArgs(append([]string{"ps"}, args...))
+	return rootCmd.Execute()
+}
+
 func TestRunPs_HelpFlag(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {

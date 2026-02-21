@@ -1,154 +1,117 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/spf13/cobra"
 )
 
-// RunValidate validates a mockd configuration file without starting any services.
-func RunValidate(args []string) error {
-	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
+var (
+	validateConfigFiles  []string
+	validateVerbose      bool
+	validateShowResolved bool
+)
 
-	var configFiles stringSliceFlag
-	fs.Var(&configFiles, "config", "Config file path (can be specified multiple times)")
-	fs.Var(&configFiles, "f", "Config file path (shorthand)")
-
-	verbose := fs.Bool("verbose", false, "Show detailed validation information")
-	showResolved := fs.Bool("show-resolved", false, "Show resolved config after env var expansion")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd validate [flags]
-
-Validate a mockd configuration file without starting any services.
+var validateCmd = &cobra.Command{
+	Use:   "validate",
+	Short: "Validate a mockd configuration file without starting any services",
+	Long: `Validate a mockd configuration file without starting any services.
 
 This command checks:
   - YAML syntax
   - Schema validation (required fields, valid values)
   - Reference integrity (engines reference valid admins, etc.)
-  - Port conflicts between services
+  - Port conflicts between services`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		configFiles := validateConfigFiles
+		verbose := &validateVerbose
+		showResolved := &validateShowResolved
 
-Flags:
-  -f, --config <path>    Config file path (can be specified multiple times)
-                         If not specified, discovers mockd.yaml in current directory
-  --verbose              Show detailed validation information
-  --show-resolved        Show resolved config after env var expansion
+		// Load config(s)
+		var cfg *config.ProjectConfig
+		var err error
+		var configPath string
 
-Environment Variables:
-  MOCKD_CONFIG           Default config file path (if -f not specified)
-
-Examples:
-  # Validate config in current directory
-  mockd validate
-
-  # Validate a specific config file
-  mockd validate -f ./mockd.yaml
-
-  # Validate multiple config files (merged in order)
-  mockd validate -f base.yaml -f production.yaml
-
-  # Show resolved config with env vars expanded
-  mockd validate --show-resolved
-
-  # Verbose output with all checks
-  mockd validate --verbose
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
+		switch {
+		case len(configFiles) == 0:
+			// Discover config
+			configPath, err = config.DiscoverProjectConfig()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				return err
+			}
+			cfg, err = config.LoadProjectConfig(configPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", configPath, err)
+				return err
+			}
+			if *verbose {
+				fmt.Printf("Discovered config: %s\n", configPath)
+			}
+		case len(configFiles) == 1:
+			configPath = configFiles[0]
+			cfg, err = config.LoadProjectConfig(configPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", configPath, err)
+				return err
+			}
+		default:
+			// Multiple configs - load and merge
+			cfg, err = config.LoadAndMergeProjectConfigs(configFiles)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading configs: %v\n", err)
+				return err
+			}
+			if *verbose {
+				fmt.Printf("Merged %d config files\n", len(configFiles))
+			}
 		}
-		return err
-	}
 
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %v", fs.Args())
-	}
+		// Run validation
+		result := config.ValidateProjectConfig(cfg)
 
-	// Load config(s)
-	var cfg *config.ProjectConfig
-	var err error
-	var configPath string
+		// Also check port conflicts
+		portResult := config.ValidatePortConflicts(cfg)
 
-	switch {
-	case len(configFiles) == 0:
-		// Discover config
-		configPath, err = config.DiscoverProjectConfig()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			return err
+		// Combine results
+		allErrors := make([]config.SchemaValidationError, 0, len(result.Errors)+len(portResult.Errors))
+		allErrors = append(allErrors, result.Errors...)
+		allErrors = append(allErrors, portResult.Errors...)
+		hasErrors := len(allErrors) > 0
+
+		// Print results
+		switch {
+		case *verbose:
+			printVerboseValidation(cfg, allErrors)
+		case hasErrors:
+			fmt.Println("Validation failed:")
+			for _, e := range allErrors {
+				fmt.Printf("  - %s\n", e.Error())
+			}
+		default:
+			fmt.Println("Configuration is valid.")
 		}
-		cfg, err = config.LoadProjectConfig(configPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", configPath, err)
-			return err
+
+		if *showResolved {
+			fmt.Println("\nResolved configuration:")
+			printResolvedConfig(cfg)
 		}
+
+		if hasErrors {
+			return fmt.Errorf("validation failed with %d error(s)", len(allErrors))
+		}
+
+		// Print summary if verbose
 		if *verbose {
-			fmt.Printf("Discovered config: %s\n", configPath)
+			printConfigSummary(cfg)
 		}
-	case len(configFiles) == 1:
-		configPath = configFiles[0]
-		cfg, err = config.LoadProjectConfig(configPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", configPath, err)
-			return err
-		}
-	default:
-		// Multiple configs - load and merge
-		cfg, err = config.LoadAndMergeProjectConfigs(configFiles)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading configs: %v\n", err)
-			return err
-		}
-		if *verbose {
-			fmt.Printf("Merged %d config files\n", len(configFiles))
-		}
-	}
 
-	// Run validation
-	result := config.ValidateProjectConfig(cfg)
-
-	// Also check port conflicts
-	portResult := config.ValidatePortConflicts(cfg)
-
-	// Combine results
-	allErrors := make([]config.SchemaValidationError, 0, len(result.Errors)+len(portResult.Errors))
-	allErrors = append(allErrors, result.Errors...)
-	allErrors = append(allErrors, portResult.Errors...)
-	hasErrors := len(allErrors) > 0
-
-	// Print results
-	switch {
-	case *verbose:
-		printVerboseValidation(cfg, allErrors)
-	case hasErrors:
-		fmt.Println("Validation failed:")
-		for _, e := range allErrors {
-			fmt.Printf("  - %s\n", e.Error())
-		}
-	default:
-		fmt.Println("Configuration is valid.")
-	}
-
-	if *showResolved {
-		fmt.Println("\nResolved configuration:")
-		printResolvedConfig(cfg)
-	}
-
-	if hasErrors {
-		return fmt.Errorf("validation failed with %d error(s)", len(allErrors))
-	}
-
-	// Print summary if verbose
-	if *verbose {
-		printConfigSummary(cfg)
-	}
-
-	return nil
+		return nil
+	},
 }
 
 func printVerboseValidation(cfg *config.ProjectConfig, errors []config.SchemaValidationError) {
@@ -285,14 +248,9 @@ func printResolvedConfig(cfg *config.ProjectConfig) {
 	}
 }
 
-// stringSliceFlag implements flag.Value for accumulating multiple string values.
-type stringSliceFlag []string
-
-func (s *stringSliceFlag) String() string {
-	return strings.Join(*s, ", ")
-}
-
-func (s *stringSliceFlag) Set(value string) error {
-	*s = append(*s, value)
-	return nil
+func init() {
+	validateCmd.Flags().StringSliceVarP(&validateConfigFiles, "config", "f", nil, "Config file path (can be specified multiple times)")
+	validateCmd.Flags().BoolVar(&validateVerbose, "verbose", false, "Show detailed validation information")
+	validateCmd.Flags().BoolVar(&validateShowResolved, "show-resolved", false, "Show resolved config after env var expansion")
+	rootCmd.AddCommand(validateCmd)
 }

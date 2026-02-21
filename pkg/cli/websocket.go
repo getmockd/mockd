@@ -53,6 +53,10 @@ func printWebSocketUsage() {
 Interact with WebSocket endpoints for testing.
 
 Subcommands:
+  add       Add a new WebSocket mock endpoint
+  list      List WebSocket mocks
+  get       Get details of a WebSocket mock
+  delete    Delete a WebSocket mock
   connect   Interactive WebSocket client (REPL mode)
   send      Send a single message and exit
   listen    Stream incoming messages

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,124 +18,82 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/requestlog"
+	"github.com/spf13/cobra"
 )
 
-// RunLogs handles the logs command for viewing daemon logs when running in detached mode.
-func RunLogs(args []string) error {
-	fs := flag.NewFlagSet("logs", flag.ContinueOnError)
+var (
+	logsFollow    bool
+	logsLines     int
+	logsLogDir    string
+	logsRequests  bool
+	logsProtocol  string
+	logsMethod    string
+	logsPath      string
+	logsMatched   bool
+	logsUnmatched bool
+	logsVerbose   bool
+	logsClear     bool
+	logsAdminURL  string
+)
 
-	// Daemon logs flags
-	follow := fs.Bool("follow", false, "Follow log output in real-time (like tail -f)")
-	fs.BoolVar(follow, "f", false, "Follow log output in real-time (shorthand)")
-	lines := fs.Int("lines", 100, "Number of lines to show")
-	fs.IntVar(lines, "n", 100, "Number of lines to show (shorthand)")
-	logDir := fs.String("log-dir", defaultLogsPath(), "Path to logs directory")
-
-	// Request logs flags (for --requests mode)
-	requests := fs.Bool("requests", false, "Show request logs from admin API instead of daemon logs")
-	protocol := fs.String("protocol", "", "Filter by protocol (http, grpc, mqtt, soap, graphql, websocket, sse) [requests mode]")
-	method := fs.String("method", "", "Filter by HTTP method [requests mode]")
-	fs.StringVar(method, "m", "", "Filter by HTTP method (shorthand)")
-	path := fs.String("path", "", "Filter by path (substring match) [requests mode]")
-	fs.StringVar(path, "p", "", "Filter by path (shorthand)")
-	matched := fs.Bool("matched", false, "Show only matched requests [requests mode]")
-	unmatched := fs.Bool("unmatched", false, "Show only unmatched requests [requests mode]")
-	verbose := fs.Bool("verbose", false, "Show headers and body [requests mode]")
-	clear := fs.Bool("clear", false, "Clear all logs [requests mode]")
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL [requests mode]")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd logs [service-name] [flags]
-
-View logs from mockd services running in detached mode.
+var logsCmd = &cobra.Command{
+	Use:   "logs [service-name]",
+	Short: "View logs from mockd services running in detached mode",
+	Long: `View logs from mockd services running in detached mode.
 
 By default, shows daemon logs from ~/.mockd/logs/. Use --requests to show
-request logs from the admin API instead.
-
-Arguments:
-  service-name      Optional service name filter (admin/local, engine/default, etc.)
-
-Flags:
-  -f, --follow      Follow log output in real-time (like tail -f)
-  -n, --lines       Number of lines to show (default: 100)
-      --log-dir     Path to logs directory (default: ~/.mockd/logs/)
-      --json        Output in JSON format
-
-Request Logs Mode (--requests):
-      --requests    Show request logs from admin API
-      --protocol    Filter by protocol (http, grpc, mqtt, soap, graphql, websocket, sse)
-  -m, --method      Filter by HTTP method
-  -p, --path        Filter by path (substring match)
-      --matched     Show only matched requests
-      --unmatched   Show only unmatched requests
-      --verbose     Show headers and body
-      --clear       Clear all logs
-      --admin-url   Admin API base URL (default: http://localhost:4290)
-
-Examples:
-  # Show recent daemon logs (last 100 lines)
-  mockd logs
-
-  # Show last 50 lines
-  mockd logs -n 50
-
-  # Follow logs in real-time
-  mockd logs -f
-
-  # Show logs for a specific service
-  mockd logs admin/local
-  mockd logs engine/default
-
-  # Show request logs from admin API
-  mockd logs --requests
-
-  # Follow request logs in real-time
-  mockd logs --requests -f
-
-  # Filter request logs by method
-  mockd logs --requests -m POST
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
+request logs from the admin API instead.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		serviceName := ""
+		if len(args) > 0 {
+			serviceName = args[0]
 		}
-		return err
-	}
 
-	// Get optional service name from positional args
-	serviceName := ""
-	if fs.NArg() > 0 {
-		serviceName = fs.Arg(0)
-	}
+		if logsRequests {
+			return runRequestLogs(runRequestLogsOptions{
+				protocol:   logsProtocol,
+				method:     logsMethod,
+				path:       logsPath,
+				matched:    logsMatched,
+				unmatched:  logsUnmatched,
+				limit:      logsLines,
+				verbose:    logsVerbose,
+				clear:      logsClear,
+				follow:     logsFollow,
+				adminURL:   cliconfig.ResolveAdminURL(logsAdminURL),
+				jsonOutput: jsonOutput,
+			})
+		}
 
-	// If --requests flag is set, show request logs from admin API
-	if *requests {
-		return runRequestLogs(runRequestLogsOptions{
-			protocol:   *protocol,
-			method:     *method,
-			path:       *path,
-			matched:    *matched,
-			unmatched:  *unmatched,
-			limit:      *lines,
-			verbose:    *verbose,
-			clear:      *clear,
-			follow:     *follow,
-			adminURL:   *adminURL,
-			jsonOutput: *jsonOutput,
+		return runDaemonLogs(runDaemonLogsOptions{
+			logDir:      logsLogDir,
+			serviceName: serviceName,
+			lines:       logsLines,
+			follow:      logsFollow,
+			jsonOutput:  jsonOutput,
 		})
-	}
+	},
+}
 
-	// Show daemon logs from files
-	return runDaemonLogs(runDaemonLogsOptions{
-		logDir:      *logDir,
-		serviceName: serviceName,
-		lines:       *lines,
-		follow:      *follow,
-		jsonOutput:  *jsonOutput,
-	})
+func init() {
+	// Daemon logs flags
+	logsCmd.Flags().BoolVarP(&logsFollow, "follow", "f", false, "Follow log output in real-time (like tail -f)")
+	logsCmd.Flags().IntVarP(&logsLines, "lines", "n", 100, "Number of lines to show")
+	logsCmd.Flags().StringVar(&logsLogDir, "log-dir", defaultLogsPath(), "Path to logs directory")
+
+	// Request logs flags
+	logsCmd.Flags().BoolVar(&logsRequests, "requests", false, "Show request logs from admin API instead of daemon logs")
+	logsCmd.Flags().StringVar(&logsProtocol, "protocol", "", "Filter by protocol (http, grpc, mqtt, soap, graphql, websocket, sse) [requests mode]")
+	logsCmd.Flags().StringVarP(&logsMethod, "method", "m", "", "Filter by HTTP method [requests mode]")
+	logsCmd.Flags().StringVarP(&logsPath, "path", "p", "", "Filter by path (substring match) [requests mode]")
+	logsCmd.Flags().BoolVar(&logsMatched, "matched", false, "Show only matched requests [requests mode]")
+	logsCmd.Flags().BoolVar(&logsUnmatched, "unmatched", false, "Show only unmatched requests [requests mode]")
+	logsCmd.Flags().BoolVar(&logsVerbose, "verbose", false, "Show headers and body [requests mode]")
+	logsCmd.Flags().BoolVar(&logsClear, "clear", false, "Clear all logs [requests mode]")
+	logsCmd.Flags().StringVar(&logsAdminURL, "admin-url", "", "Admin API base URL [requests mode]")
+
+	rootCmd.AddCommand(logsCmd)
 }
 
 // defaultLogsPath returns the default path for daemon logs.

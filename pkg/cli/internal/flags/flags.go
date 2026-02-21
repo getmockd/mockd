@@ -17,3 +17,8 @@ func (s *StringSlice) Set(value string) error {
 	*s = append(*s, value)
 	return nil
 }
+
+// Type specifies the type label for Cobra flags.
+func (s *StringSlice) Type() string {
+	return "stringSlice"
+}

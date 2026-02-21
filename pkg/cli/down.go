@@ -2,100 +2,78 @@ package cli
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"syscall"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/spf13/cobra"
 )
 
-// RunDown stops services started by 'mockd up'.
-func RunDown(args []string) error {
-	fs := flag.NewFlagSet("down", flag.ContinueOnError)
+var (
+	downPidFile string
+	downTimeout time.Duration
+)
 
-	pidFile := fs.String("pid-file", defaultUpPIDPath(), "Path to PID file")
-	timeout := fs.Duration("timeout", 30*time.Second, "Shutdown timeout")
+var downCmd = &cobra.Command{
+	Use:   "down",
+	Short: "Stop services started by 'mockd up'",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		pidFile := &downPidFile
+		timeout := &downTimeout
 
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd down [flags]
-
-Stop services started by 'mockd up'.
-
-Flags:
-      --pid-file <path>  Path to PID file (default: ~/.mockd/mockd.pid)
-      --timeout          Shutdown timeout (default: 30s)
-
-Examples:
-  # Stop services
-  mockd down
-
-  # Stop with custom timeout
-  mockd down --timeout 60s
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
+		// Read PID file
+		pidInfo, err := readUpPIDFile(*pidFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Println("No running mockd services found.")
+				return nil
+			}
+			return fmt.Errorf("reading PID file: %w", err)
 		}
-		return err
-	}
 
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %v", fs.Args())
-	}
-
-	// Read PID file
-	pidInfo, err := readUpPIDFile(*pidFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			fmt.Println("No running mockd services found.")
-			return nil
-		}
-		return fmt.Errorf("reading PID file: %w", err)
-	}
-
-	// Check if main process is running
-	if !processExists(pidInfo.PID) {
-		fmt.Println("mockd is not running (stale PID file)")
-		_ = os.Remove(*pidFile)
-		return nil
-	}
-
-	fmt.Printf("Stopping mockd (PID %d)...\n", pidInfo.PID)
-
-	// Send SIGTERM to main process
-	proc, err := os.FindProcess(pidInfo.PID)
-	if err != nil {
-		return fmt.Errorf("finding process: %w", err)
-	}
-
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		return fmt.Errorf("sending signal: %w", err)
-	}
-
-	// Wait for process to exit
-	deadline := time.Now().Add(*timeout)
-	for time.Now().Before(deadline) {
+		// Check if main process is running
 		if !processExists(pidInfo.PID) {
-			fmt.Println("mockd stopped")
+			fmt.Println("mockd is not running (stale PID file)")
 			_ = os.Remove(*pidFile)
 			return nil
 		}
-		time.Sleep(100 * time.Millisecond)
-	}
 
-	// Force kill if still running
-	fmt.Println("Timeout reached, force killing...")
-	if err := proc.Signal(syscall.SIGKILL); err != nil {
-		return fmt.Errorf("force kill: %w", err)
-	}
+		fmt.Printf("Stopping mockd (PID %d)...\n", pidInfo.PID)
 
-	_ = os.Remove(*pidFile)
-	fmt.Println("mockd stopped (forced)")
-	return nil
+		// Send SIGTERM to main process
+		proc, err := os.FindProcess(pidInfo.PID)
+		if err != nil {
+			return fmt.Errorf("finding process: %w", err)
+		}
+
+		if err := proc.Signal(syscall.SIGTERM); err != nil {
+			return fmt.Errorf("sending signal: %w", err)
+		}
+
+		// Wait for process to exit
+		deadline := time.Now().Add(*timeout)
+		for time.Now().Before(deadline) {
+			if !processExists(pidInfo.PID) {
+				fmt.Println("mockd stopped")
+				_ = os.Remove(*pidFile)
+				return nil
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// Force kill if still running
+		fmt.Println("Timeout reached, force killing...")
+		if err := proc.Signal(syscall.SIGKILL); err != nil {
+			return fmt.Errorf("force kill: %w", err)
+		}
+
+		_ = os.Remove(*pidFile)
+		fmt.Println("mockd stopped (forced)")
+		return nil
+	},
 }
 
 func defaultUpPIDPath() string {
@@ -143,4 +121,10 @@ func processExists(pid int) bool {
 	// On Unix, FindProcess always succeeds. Send signal 0 to check if process exists.
 	err = proc.Signal(syscall.Signal(0))
 	return err == nil
+}
+
+func init() {
+	downCmd.Flags().StringVar(&downPidFile, "pid-file", defaultUpPIDPath(), "Path to PID file")
+	downCmd.Flags().DurationVar(&downTimeout, "timeout", 30*time.Second, "Shutdown timeout")
+	rootCmd.AddCommand(downCmd)
 }

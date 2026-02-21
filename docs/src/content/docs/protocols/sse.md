@@ -13,26 +13,26 @@ Create SSE mocks directly from the command line:
 
 ```bash
 # Basic SSE with custom events
-mockd add --path /events --sse \
+mockd http add --path /events --sse \
   --sse-event 'connected:{"status":"ok"}' \
   --sse-event 'update:{"count":1}' \
   --sse-event 'update:{"count":2}' \
   --sse-delay 500
 
 # OpenAI-compatible streaming
-mockd add -m POST --path /v1/chat/completions --sse --sse-template openai-chat
+mockd http add -m POST --path /v1/chat/completions --sse --sse-template openai-chat
 
 # Notification stream template
-mockd add --path /notifications --sse --sse-template notification-stream
+mockd http add --path /notifications --sse --sse-template notification-stream
 
 # Infinite keepalive stream
-mockd add --path /stream --sse \
+mockd http add --path /stream --sse \
   --sse-event 'ping:{}' \
   --sse-delay 1000 \
   --sse-repeat 0
 
 # SSE with keepalive pings every 15 seconds
-mockd add --path /long-poll --sse \
+mockd http add --path /long-poll --sse \
   --sse-event 'data:{"value":1}' \
   --sse-keepalive 15000
 ```
