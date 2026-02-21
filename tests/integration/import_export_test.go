@@ -40,7 +40,7 @@ func TestImportOpenAPI3Spec(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 
@@ -162,7 +162,7 @@ func TestImportSwagger2Spec(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 
@@ -233,7 +233,7 @@ func TestImportPostmanCollection(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 
@@ -363,7 +363,7 @@ func TestImportWireMockStubs(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 
@@ -487,7 +487,7 @@ func TestImportHARFile(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 
@@ -954,7 +954,7 @@ func TestRoundTripWithServerIntegration(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 

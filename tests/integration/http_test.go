@@ -50,7 +50,7 @@ func setupHTTPServer(t *testing.T) *httpTestBundle {
 		srv.Stop()
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 

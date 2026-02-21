@@ -30,10 +30,10 @@ func setupMatchingServer(t *testing.T) *matchingTestBundle {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -44,7 +44,7 @@ func setupMatchingServer(t *testing.T) *matchingTestBundle {
 		srv.Stop()
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 

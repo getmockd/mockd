@@ -49,8 +49,8 @@ func setupTemplatingServer(t *testing.T) *templatingTestBundle {
 	err := srv.Start()
 	require.NoError(t, err)
 
-	// Give server time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for server to be ready
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 

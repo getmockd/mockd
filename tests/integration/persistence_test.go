@@ -64,7 +64,7 @@ func setupPersistenceServer(t *testing.T) *persistenceTestBundle {
 		time.Sleep(10 * time.Millisecond) // Allow file handles to release
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 
@@ -170,7 +170,7 @@ func TestPersistenceRestartWithConfigFile(t *testing.T) {
 	err := srv1.Start()
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv1.ManagementPort())
 
 	client1 := engineclient.New(fmt.Sprintf("http://localhost:%d", srv1.ManagementPort()))
 
@@ -224,7 +224,7 @@ func TestPersistenceRestartWithConfigFile(t *testing.T) {
 	err = srv2.Start()
 	require.NoError(t, err)
 	defer srv2.Stop()
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv2.ManagementPort())
 
 	// Verify mock was restored
 	resp, err = http.Get(fmt.Sprintf("http://localhost:%d/api/restart-test", httpPort2))
@@ -457,7 +457,7 @@ func TestNewServerWithMocksFromFile(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Verify mock works
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/preloaded", httpPort))

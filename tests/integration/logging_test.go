@@ -63,7 +63,7 @@ func setupLoggingServer(t *testing.T) *loggingTestBundle {
 		time.Sleep(10 * time.Millisecond) // Allow file handles to release
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 

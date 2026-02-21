@@ -2,7 +2,6 @@ package integration
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/admin"
-	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/cli"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
@@ -37,20 +35,8 @@ func testServer(t *testing.T) (*mcp.Server, *engine.Server, func()) {
 	}
 
 	// Wait for engine management API to be ready
+	waitForReady(t, engineCfg.ManagementPort)
 	engineURL := fmt.Sprintf("http://localhost:%d", engineCfg.ManagementPort)
-	engClient := engineclient.New(engineURL)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	for {
-		if err := engClient.Health(ctx); err == nil {
-			break
-		}
-		if ctx.Err() != nil {
-			eng.Stop()
-			t.Fatalf("engine management API not ready: %v", ctx.Err())
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
 
 	// Create admin API with engine client
 	adminPort := getFreePort()
@@ -787,4 +773,3 @@ func TestMCP_ResourcesRead_DynamicUpdates(t *testing.T) {
 
 // Helper for unused imports
 var _ = io.EOF
-var _ = time.Now

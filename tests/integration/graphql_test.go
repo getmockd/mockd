@@ -56,6 +56,9 @@ func setupGraphQLServer(t *testing.T, cfg *graphql.GraphQLConfig) *graphqlTestBu
 		path = "/graphql"
 	}
 	mux.Handle(path, handler)
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
@@ -76,7 +79,7 @@ func setupGraphQLServer(t *testing.T, cfg *graphql.GraphQLConfig) *graphqlTestBu
 	})
 
 	// Wait for server to be ready
-	time.Sleep(100 * time.Millisecond)
+	waitForReady(t, port)
 
 	return &graphqlTestBundle{
 		Handler: handler,

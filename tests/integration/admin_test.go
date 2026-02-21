@@ -53,7 +53,7 @@ func setupAdminTest(t *testing.T) (*engine.Server, *admin.API, int, int, func())
 	err = adminAPI.Start()
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, adminPort)
 
 	cleanup := func() {
 		adminAPI.Stop()

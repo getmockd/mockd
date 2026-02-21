@@ -4,7 +4,10 @@ package integration
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"sync/atomic"
+	"testing"
+	"time"
 )
 
 // Global port counter for all integration tests to avoid port collisions
@@ -35,4 +38,42 @@ func isPortFree(port int) bool {
 	}
 	ln.Close()
 	return true
+}
+
+// waitForReady polls a server's /health endpoint until it responds with 200,
+// replacing fixed time.Sleep waits after srv.Start(). Fails the test if the
+// server doesn't become ready within the timeout.
+func waitForReady(t *testing.T, port int) {
+	t.Helper()
+	url := fmt.Sprintf("http://localhost:%d/health", port)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url) //nolint:gosec // test helper
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("server on port %d never became ready (waited 5s)", port)
+}
+
+// waitForTCPReady polls a TCP port until it accepts connections, for use with
+// non-HTTP servers like gRPC. Fails the test if the port doesn't accept
+// connections within the timeout.
+func waitForTCPReady(t *testing.T, port int) {
+	t.Helper()
+	addr := fmt.Sprintf("localhost:%d", port)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("TCP port %d never became ready (waited 5s)", port)
 }

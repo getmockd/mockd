@@ -769,7 +769,7 @@ func TestWS_FullServer_WithMiddleware(t *testing.T) {
 	})
 
 	// Wait for server to be ready
-	time.Sleep(100 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Connect via WebSocket - this goes through the FULL middleware chain
 	wsURL := "ws://localhost:" + itoa(port) + "/ws/echo"

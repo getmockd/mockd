@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,11 +36,11 @@ func setupHTTPSServer(t *testing.T, withHTTP bool) *httpsTestBundle {
 	}
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		HTTPSPort:    httpsPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		HTTPSPort:      httpsPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 		TLS: &config.TLSConfig{
 			Enabled:          true,
 			AutoGenerateCert: true,
@@ -56,7 +55,7 @@ func setupHTTPSServer(t *testing.T, withHTTP bool) *httpsTestBundle {
 		srv.Stop()
 	})
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 
@@ -194,10 +193,10 @@ func TestHTTPSWithCertificateFiles(t *testing.T) {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPSPort:    httpsPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPSPort:      httpsPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 		TLS: &config.TLSConfig{
 			Enabled:          true,
 			AutoGenerateCert: false,
@@ -211,7 +210,7 @@ func TestHTTPSWithCertificateFiles(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 

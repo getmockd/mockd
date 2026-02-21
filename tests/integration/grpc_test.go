@@ -53,8 +53,7 @@ func setupGRPCServer(t *testing.T, cfg *grpc.GRPCConfig) *grpc.Server {
 		server.Stop(context.Background(), 5*time.Second)
 	})
 
-	// Wait for server to be ready
-	time.Sleep(100 * time.Millisecond)
+	waitForTCPReady(t, cfg.Port)
 
 	return server
 }

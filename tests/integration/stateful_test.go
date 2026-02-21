@@ -184,7 +184,7 @@ func TestStateful_US1_PostCreatesResourceReturns201(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Create a user
 	body := bytes.NewBufferString(`{"name": "Alice", "email": "alice@example.com"}`)
@@ -224,7 +224,7 @@ func TestStateful_US1_GetRetrievesSingleResourceByID(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// GET single user by ID
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/users/user-123", httpPort))
@@ -258,7 +258,7 @@ func TestStateful_US1_GetCollectionReturnsAllResources(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// GET collection
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/users", httpPort))
@@ -290,7 +290,7 @@ func TestStateful_US1_PutUpdatesExistingResource(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// PUT to update user
 	body := bytes.NewBufferString(`{"name": "Robert", "role": "admin"}`)
@@ -327,7 +327,7 @@ func TestStateful_US1_DeleteRemovesResourceReturns204(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// DELETE user
 	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://localhost:%d/api/users/user-123", httpPort), nil)
@@ -358,7 +358,7 @@ func TestStateful_US1_GetReturns404ForNonExistent(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// GET non-existent user
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/users/nonexistent-id", httpPort))
@@ -388,7 +388,7 @@ func TestStateful_US1_PostReturns409ForDuplicateID(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// POST with duplicate ID
 	body := bytes.NewBufferString(`{"id": "existing-id", "name": "Duplicate"}`)
@@ -423,7 +423,7 @@ func TestStateful_US2_SeedDataAvailableAfterStart(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Verify all seed data is available
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/products", httpPort))
@@ -464,7 +464,7 @@ func TestStateful_US2_SeedDataPersistsUntilRestart(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Modify the seed data by adding a new user
 	body := bytes.NewBufferString(`{"name": "NewUser"}`)
@@ -509,7 +509,7 @@ func TestStateful_US3_PostWithoutIDGeneratesUniqueID(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Create multiple items without IDs
 	ids := make(map[string]bool)
@@ -547,7 +547,7 @@ func TestStateful_US3_CreatedResourceHasCreatedAtTimestamp(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	beforeCreate := time.Now().Add(-1 * time.Second)
 
@@ -587,7 +587,7 @@ func TestStateful_US3_UpdatedResourceHasNewUpdatedAtTimestamp(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Get original to compare timestamps
 	resp1, err := http.Get(fmt.Sprintf("http://localhost:%d/api/items/item-1", httpPort))
@@ -641,7 +641,7 @@ func TestStateful_US4_PostResetResetsAllResources(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Add a new user
 	body := bytes.NewBufferString(`{"name": "NewUser"}`)
@@ -703,7 +703,7 @@ func TestStateful_US4_ResetWithResourceParamResetsOnlyThat(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Add items to both resources
 	body1 := bytes.NewBufferString(`{"name": "NewUser"}`)
@@ -760,7 +760,7 @@ func TestStateful_US4_GetStateReturnsOverview(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Add some products
 	body := bytes.NewBufferString(`{"name": "Product1"}`)
@@ -809,7 +809,7 @@ func TestStateful_US4_GetResourceDetailsReturnsInfo(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Get resource details - the endpoint is /state/resources/{name}
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/state/resources/users", adminPort))
@@ -860,7 +860,7 @@ func TestStateful_US5_LimitOffsetReturnsCorrectPage(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Get page with limit=10, offset=20
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/items?limit=10&offset=20", httpPort))
@@ -895,7 +895,7 @@ func TestStateful_US5_FilterByFieldValue(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Filter by status=active
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/users?status=active", httpPort))
@@ -928,7 +928,7 @@ func TestStateful_US5_SortByFieldWithOrder(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Sort by name ascending
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/users?sort=name&order=asc", httpPort))
@@ -961,7 +961,7 @@ func TestStateful_US5_ResponseIncludesPaginationMeta(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/items?limit=2", httpPort))
 	require.NoError(t, err)
@@ -1008,7 +1008,7 @@ func TestStateful_US6_GetNestedResourcesFiltersByParent(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Get orders for user-1
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/users/user-1/orders", httpPort))
@@ -1048,7 +1048,7 @@ func TestStateful_US6_PostNestedResourceAutoSetsParentID(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Create order for user-1 (without explicitly setting userId)
 	body := bytes.NewBufferString(`{"total": 150, "item": "Widget"}`)
@@ -1087,7 +1087,7 @@ func TestStateful_US6_PathParameterExtractedFromNestedPath(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Get comments for post-A
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/posts/post-A/comments", httpPort))

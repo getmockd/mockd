@@ -85,7 +85,8 @@ func setupPortConflictServer(t *testing.T) *portConflictTestBundle {
 		os.RemoveAll(dataDir)
 	})
 
-	time.Sleep(100 * time.Millisecond)
+	waitForReady(t, managementPort)
+	waitForReady(t, adminPort)
 
 	return &portConflictTestBundle{
 		Server:         srv,

@@ -64,8 +64,8 @@ func setupObservabilityTest(t *testing.T) *ObservabilityTestBundle {
 	err := srv.Start()
 	require.NoError(t, err)
 
-	// Give server time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for server to be ready
+	waitForReady(t, srv.ManagementPort())
 
 	// Create a temp directory for test data isolation
 	tempDir := t.TempDir()
@@ -78,8 +78,8 @@ func setupObservabilityTest(t *testing.T) *ObservabilityTestBundle {
 	err = adminAPI.Start()
 	require.NoError(t, err)
 
-	// Give admin API time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for admin API to be ready
+	waitForReady(t, adminPort)
 
 	engineClient := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 
@@ -615,7 +615,7 @@ func TestObservability_OpenTelemetryTraces(t *testing.T) {
 		tracer.Shutdown(context.Background())
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Make HTTP request
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/traced", httpPort))
@@ -712,7 +712,7 @@ func TestObservability_TraceContextPropagation(t *testing.T) {
 		tracer.Shutdown(context.Background())
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Create request with traceparent header
 	incomingTraceID := "0af7651916cd43dd8448eb211c80319c"
@@ -1517,7 +1517,7 @@ func TestObservability_TracingSkipPaths(t *testing.T) {
 		tracer.Shutdown(context.Background())
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Request the traced endpoint (should create trace)
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/traced-endpoint", httpPort))

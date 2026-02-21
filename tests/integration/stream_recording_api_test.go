@@ -61,7 +61,7 @@ func setupStreamRecordingAPITest(t *testing.T) (*admin.API, *recording.FileStore
 	err = adminAPI.Start()
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	cleanup := func() {
 		adminAPI.Stop()

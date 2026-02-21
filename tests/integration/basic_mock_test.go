@@ -3,13 +3,11 @@ package integration
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"io"
 	"net/http"
 	"testing"
-	"time"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/config"
@@ -42,8 +40,8 @@ func TestBasicMockCreationAndResponse(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	// Give server time to start
-	time.Sleep(50 * time.Millisecond)
+	// Wait for server readiness
+	waitForReady(t, srv.ManagementPort())
 
 	// Create engine client for mock CRUD operations
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
@@ -105,7 +103,7 @@ func TestUpdateMockAndVerifyNewResponse(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Create engine client
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
@@ -184,7 +182,7 @@ func TestDeleteMockReturns404(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Create engine client
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
@@ -245,7 +243,7 @@ func TestServerRestartInMemoryPersistence(t *testing.T) {
 	err := srv.Start()
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Create engine client
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
@@ -286,7 +284,7 @@ func TestServerRestartInMemoryPersistence(t *testing.T) {
 	require.NoError(t, err)
 	defer srv2.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv2.ManagementPort())
 
 	// Verify mock is gone (in-memory only)
 	resp, err = http.Get(fmt.Sprintf("http://localhost:%d/api/restart-test", httpPort))
@@ -314,7 +312,7 @@ func TestMultipleMocksWithPriority(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Create engine client
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
@@ -388,7 +386,7 @@ func TestWildcardPathMatching(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Create engine client
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))

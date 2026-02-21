@@ -36,6 +36,9 @@ func setupSOAPServer(t *testing.T, cfg *soap.SOAPConfig) *soapTestBundle {
 
 	mux := http.NewServeMux()
 	mux.Handle(cfg.Path, handler)
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
@@ -53,7 +56,7 @@ func setupSOAPServer(t *testing.T, cfg *soap.SOAPConfig) *soapTestBundle {
 	})
 
 	// Wait for server to be ready
-	time.Sleep(100 * time.Millisecond)
+	waitForReady(t, port)
 
 	return &soapTestBundle{
 		Handler: handler,

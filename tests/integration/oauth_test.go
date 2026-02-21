@@ -136,7 +136,7 @@ func setupOAuthServer(t *testing.T) *oauthTestBundle {
 		srv.Stop()
 	})
 
-	time.Sleep(100 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 	baseURL := fmt.Sprintf("http://localhost:%d", httpPort)
@@ -1294,7 +1294,7 @@ func TestOAuth_MultipleProviders(t *testing.T) {
 		srv.Stop()
 	})
 
-	time.Sleep(100 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
 	baseURL := fmt.Sprintf("http://localhost:%d", httpPort)

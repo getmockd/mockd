@@ -536,9 +536,6 @@ func TestSSE_FullServer_WithMiddleware(t *testing.T) {
 	}
 	defer server.Stop()
 
-	// Wait for server to be ready
-	time.Sleep(100 * time.Millisecond)
-
 	// Create engine client to add mock via API
 	client := engineclient.New(fmt.Sprintf("http://localhost:%d", mgmtPort))
 	ctx := context.Background()

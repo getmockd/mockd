@@ -30,7 +30,7 @@ func TestStateful_Validation_RejectsInvalidData(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Create a valid user first to establish baseline
 	validBody := bytes.NewBufferString(`{"name": "Alice", "email": "alice@example.com"}`)
@@ -66,7 +66,7 @@ func TestStateful_Validation_AcceptsValidData(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Valid product with all fields
 	body := bytes.NewBufferString(`{
@@ -107,7 +107,7 @@ func TestStateful_Validation_UpdateValidation(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Valid update
 	validBody := bytes.NewBufferString(`{"name": "Updated", "price": 20.0}`)
@@ -152,7 +152,7 @@ func TestStateful_Validation_NestedResourceValidation(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Valid comment - should be accepted
 	validBody := bytes.NewBufferString(`{"text": "Great post!", "author": "Alice"}`)
@@ -186,7 +186,7 @@ func TestStateful_Validation_EmptyBody(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Stop()
 
-	time.Sleep(50 * time.Millisecond)
+	waitForReady(t, srv.ManagementPort())
 
 	// Empty body should create resource with just auto-generated fields
 	resp, err := http.Post(
