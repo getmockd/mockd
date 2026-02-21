@@ -14,6 +14,7 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/logging"
+	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/store/file"
 	"github.com/spf13/cobra"
@@ -24,7 +25,7 @@ var (
 	startWatch       bool
 	startValidate    bool
 	startEngineName  string
-	startAdminURL    string
+	startRegisterURL string
 	startLogLevel    string
 	startLogFormat   string
 	startDetach      bool
@@ -59,7 +60,7 @@ You can configure the server using flags, environment variables, or a config fil
   mockd start --load ./mocks/ --validate
 
   # Start in engine mode, registering with an admin server
-  mockd start --engine-name "dev-engine" --admin-url http://admin.example.com:4290
+  mockd start --engine-name "dev-engine" --register-url http://admin.example.com:4290
 
   # Start with TLS using certificate files
   mockd start --tls-cert server.crt --tls-key server.key --https-port 8443
@@ -131,7 +132,7 @@ func init() {
 	startCmd.Flags().BoolVar(&startWatch, "watch", false, "Watch for file changes (with --load)")
 	startCmd.Flags().BoolVar(&startValidate, "validate", false, "Validate files before serving (with --load)")
 	startCmd.Flags().StringVar(&startEngineName, "engine-name", "", "Name for this engine when registering with admin")
-	startCmd.Flags().StringVar(&startAdminURL, "admin-url", "", "Admin server URL to register with (enables engine mode)")
+	startCmd.Flags().StringVar(&startRegisterURL, "register-url", "", "Admin server URL to register with (enables engine mode)")
 	startCmd.Flags().StringVar(&startLogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	startCmd.Flags().StringVar(&startLogFormat, "log-format", "text", "Log format (text, json)")
 	startCmd.Flags().BoolVarP(&startDetach, "detach", "d", false, "Run server in background (daemon mode)")
@@ -157,7 +158,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 		Level:  logging.ParseLevel(startLogLevel),
 		Format: logging.ParseFormat(startLogFormat),
 	})
-	_ = log // used by engine/admin below
 
 	// Check for port conflicts
 	if err := ports.Check(sf.Port); err != nil {
@@ -236,16 +236,16 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 		// Validate files if requested
 		if startValidate {
-			errors, err := dirLoader.Validate()
+			validationErrs, err := dirLoader.Validate()
 			if err != nil {
 				return fmt.Errorf("failed to validate directory: %w", err)
 			}
-			if len(errors) > 0 {
+			if len(validationErrs) > 0 {
 				fmt.Fprintf(os.Stderr, "Validation errors:\n")
-				for _, e := range errors {
+				for _, e := range validationErrs {
 					fmt.Fprintf(os.Stderr, "  - %s\n", e.Error())
 				}
-				return fmt.Errorf("validation failed with %d errors", len(errors))
+				return fmt.Errorf("validation failed with %d errors", len(validationErrs))
 			}
 		}
 
@@ -274,15 +274,25 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Start file watcher if requested
+	var watcher *config.Watcher
 	if startWatch && dirLoader != nil {
-		watcher := config.NewWatcher(dirLoader)
+		watcher = config.NewWatcher(dirLoader)
 		eventCh := watcher.Start()
 		go handleWatchEvents(eventCh, dirLoader, engClient)
 		fmt.Println("Watching for file changes...")
 	}
+	// Ensure watcher cleanup on shutdown
+	defer func() {
+		if watcher != nil {
+			watcher.Stop()
+		}
+	}()
 
 	// Create and start the admin API
-	adminOpts := []admin.Option{admin.WithLocalEngine(engineURL)}
+	adminOpts := []admin.Option{
+		admin.WithLocalEngine(engineURL),
+		admin.WithWorkspaceManager(engine.NewWorkspaceManager(nil)),
+	}
 	if sf.NoAuth {
 		adminOpts = append(adminOpts, admin.WithAPIKeyDisabled())
 	}
@@ -290,6 +300,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		adminOpts = append(adminOpts, admin.WithDataDir(sf.DataDir))
 	}
 	adminAPI := admin.NewAPI(sf.AdminPort, adminOpts...)
+	adminAPI.SetLogger(log.With("component", "admin"))
 	if err := adminAPI.Start(); err != nil {
 		_ = server.Stop()
 		if isAddrInUseError(err) {
@@ -298,8 +309,19 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start admin API: %w", err)
 	}
 
+	// Wire stream recording to WebSocket and SSE handlers
+	if recMgr := adminAPI.StreamRecordingManager(); recMgr != nil {
+		if recStore := recMgr.Store(); recStore != nil {
+			hookFactory := recording.NewFileStoreHookFactory(recStore)
+			wsManager := server.Handler().WebSocketManager()
+			wsManager.SetRecordingHookFactory(hookFactory)
+			sseHandler := server.Handler().SSEHandler()
+			sseHandler.SetRecordingHookFactory(hookFactory.CreateSSEHookFactory())
+		}
+	}
+
 	// Register with remote admin if engine mode is enabled
-	if startAdminURL != "" {
+	if startRegisterURL != "" {
 		name := startEngineName
 		if name == "" {
 			hostname, _ := os.Hostname()
@@ -311,14 +333,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 		// Create engine client to communicate with admin
 		engineClient := engine.NewEngineClient(&engine.EngineClientConfig{
-			AdminURL:     startAdminURL,
+			AdminURL:     startRegisterURL,
 			EngineName:   name,
 			LocalPort:    sf.Port,
 			PollInterval: 10 * time.Second,
 		}, wsManager)
 
 		// Start the engine client (registers and starts polling)
-		ctx := context.Background()
 		if err := engineClient.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start engine client: %w", err)
 		}
@@ -327,12 +348,17 @@ func runStart(cmd *cobra.Command, args []string) error {
 		defer engineClient.Stop()
 		defer func() { _ = wsManager.StopAll() }()
 
-		fmt.Printf("Engine mode: connected to admin at %s\n", startAdminURL)
+		fmt.Printf("Engine mode: connected to admin at %s\n", startRegisterURL)
 	}
 
 	// Write PID file for process management
 	if startPidFile != "" {
-		if err := writePIDFileForServe(startPidFile, "dev", sf.Port, sf.HTTPSPort, sf.AdminPort, sf.ConfigFile, 0); err != nil {
+		mocksCount, _ := engClient.ListMocks(ctx)
+		pidMocksLoaded := len(mocksCount)
+		if stateOverview, err := engClient.GetStateOverview(ctx); err == nil {
+			pidMocksLoaded += stateOverview.Total
+		}
+		if err := writePIDFileForServe(startPidFile, "dev", sf.Port, sf.HTTPSPort, sf.AdminPort, sf.ConfigFile, pidMocksLoaded); err != nil {
 			output.Warn("failed to write PID file: %v", err)
 		}
 		defer func() {

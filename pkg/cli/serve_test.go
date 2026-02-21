@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"flag"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -77,38 +75,17 @@ func TestParseLabels(t *testing.T) {
 	}
 }
 
-func TestRunServe_FlagParsing(t *testing.T) {
-	// Test that --help doesn't panic
-	t.Run("help flag", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r != nil {
-				t.Errorf("RunServe panicked with --help: %v", r)
-			}
-		}()
-
-		// Capture stderr since help goes there
-		oldStderr := os.Stderr
-		_, w, _ := os.Pipe()
-		os.Stderr = w
-
-		// This will return ErrHelp which is fine
-		_ = RunServe([]string{"--help"})
-
-		w.Close()
-		os.Stderr = oldStderr
-	})
-}
-
-func TestRunServe_ModeValidation(t *testing.T) {
+func TestValidateServeFlags(t *testing.T) {
 	t.Run("register and pull mutually exclusive", func(t *testing.T) {
-		err := RunServe([]string{
-			"--register",
-			"--pull", "mockd://test/api",
-			"--name", "test-runtime",
-			"--token", "test-token",
-		})
+		f := &serveFlags{
+			register: true,
+			pull:     "mockd://test/api",
+			name:     "test-runtime",
+			token:    "test-token",
+		}
+		err := validateServeFlags(f)
 		if err == nil {
-			t.Error("expected error when both --register and --pull are specified")
+			t.Error("expected error when both register and pull are specified")
 		}
 		if err != nil && err.Error() != "cannot use --register and --pull together" {
 			t.Errorf("unexpected error: %v", err)
@@ -116,240 +93,159 @@ func TestRunServe_ModeValidation(t *testing.T) {
 	})
 
 	t.Run("register requires name", func(t *testing.T) {
-		err := RunServe([]string{
-			"--register",
-			"--token", "test-token",
-		})
+		f := &serveFlags{
+			register: true,
+			token:    "test-token",
+		}
+		err := validateServeFlags(f)
 		if err == nil {
-			t.Error("expected error when --register without --name")
+			t.Error("expected error when register without name")
 		}
 	})
 
 	t.Run("register requires token", func(t *testing.T) {
-		err := RunServe([]string{
-			"--register",
-			"--name", "test-runtime",
-		})
+		f := &serveFlags{
+			register: true,
+			name:     "test-runtime",
+		}
+		err := validateServeFlags(f)
 		if err == nil {
-			t.Error("expected error when --register without --token")
+			t.Error("expected error when register without token")
 		}
 	})
 
 	t.Run("pull requires token", func(t *testing.T) {
-		// Clear any existing env var
 		os.Unsetenv("MOCKD_TOKEN")
 		os.Unsetenv("MOCKD_RUNTIME_TOKEN")
 
-		err := RunServe([]string{
-			"--pull", "mockd://test/api",
-		})
+		f := &serveFlags{
+			pull: "mockd://test/api",
+		}
+		err := validateServeFlags(f)
 		if err == nil {
-			t.Error("expected error when --pull without --token")
+			t.Error("expected error when pull without token")
 		}
 	})
-}
 
-func TestRunServe_TokenFromEnv(t *testing.T) {
-	// This test verifies that token can be read from environment variable
-	// We can't fully test serve without actually starting a server,
-	// but we can verify the validation logic
-	t.Run("MOCKD_RUNTIME_TOKEN env var", func(t *testing.T) {
-		os.Setenv("MOCKD_RUNTIME_TOKEN", "env-token")
-		defer os.Unsetenv("MOCKD_RUNTIME_TOKEN")
-
-		// Register mode should not fail on missing token when env var is set
-		// (it will fail on other things like port availability)
-		err := RunServe([]string{
-			"--register",
-			"--name", "test-runtime",
-			"--port", "0", // Use port 0 to fail fast
-		})
-		// The error should NOT be about missing token
-		if err != nil && err.Error() == "--token is required when using --register (or set MOCKD_RUNTIME_TOKEN)" {
-			t.Error("token should have been read from MOCKD_RUNTIME_TOKEN env var")
-		}
-	})
-}
-
-func TestRunServe_ConfigFile(t *testing.T) {
-	t.Run("nonexistent config file", func(t *testing.T) {
-		err := RunServe([]string{
-			"--config", "/nonexistent/path/config.yaml",
-			"--port", "0",
-		})
-		// Should fail when trying to load config (after port checks which may also fail)
-		// This might pass if port 0 causes an earlier error, which is fine
-		_ = err
-	})
-
-	t.Run("valid config file path format", func(t *testing.T) {
-		// Create a temporary config file
-		tmpDir := t.TempDir()
-		configPath := filepath.Join(tmpDir, "test-config.yaml")
-		err := os.WriteFile(configPath, []byte(`
-version: "1.0"
-mocks: []
-`), 0644)
+	t.Run("valid port ranges", func(t *testing.T) {
+		f := &serveFlags{port: 4280, adminPort: 4290}
+		err := validateServeFlags(f)
 		if err != nil {
-			t.Fatalf("failed to create test config: %v", err)
+			t.Errorf("unexpected error for valid ports: %v", err)
 		}
+	})
 
-		// Just verify the flag parsing works - can't run the full server in test
-		// because RunServe blocks waiting for signals
-		fs := flag.NewFlagSet("serve-test", flag.ContinueOnError)
-		cfg := fs.String("config", "", "Path to mock configuration file")
-		fs.StringVar(cfg, "c", "", "Path to mock configuration file (shorthand)")
-
-		err = fs.Parse([]string{"--config", configPath})
-		if err != nil {
-			t.Errorf("failed to parse config flag: %v", err)
-		}
-		if *cfg != configPath {
-			t.Errorf("config path mismatch: got %s, want %s", *cfg, configPath)
+	t.Run("invalid port range", func(t *testing.T) {
+		f := &serveFlags{port: 99999, adminPort: 4290}
+		err := validateServeFlags(f)
+		if err == nil {
+			t.Error("expected error for invalid port")
 		}
 	})
 }
 
-func TestServeFlagDefaults(t *testing.T) {
-	// Test that flags have correct default values
-	fs := flag.NewFlagSet("test-serve", flag.ContinueOnError)
+func TestBuildServerConfiguration(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		f := &serveFlags{
+			port:      4280,
+			adminPort: 4290,
+		}
+		cfg, err := buildServerConfiguration(f)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.HTTPPort != 4280 {
+			t.Errorf("port: got %d, want 4280", cfg.HTTPPort)
+		}
+		if cfg.AdminPort != 4290 {
+			t.Errorf("admin port: got %d, want 4290", cfg.AdminPort)
+		}
+	})
 
-	// Register same flags as RunServe
-	port := fs.Int("port", 4280, "HTTP server port")
-	adminPort := fs.Int("admin-port", 4290, "Admin API port")
-	httpsPort := fs.Int("https-port", 0, "HTTPS server port")
-	readTimeout := fs.Int("read-timeout", 30, "Read timeout in seconds")
-	writeTimeout := fs.Int("write-timeout", 30, "Write timeout in seconds")
-	maxLogEntries := fs.Int("max-log-entries", 1000, "Maximum request log entries")
-	autoCert := fs.Bool("auto-cert", true, "Auto-generate TLS certificate")
-	graphqlPath := fs.String("graphql-path", "/graphql", "GraphQL endpoint path")
-	grpcReflection := fs.Bool("grpc-reflection", true, "Enable gRPC reflection")
+	t.Run("request timeout overrides both", func(t *testing.T) {
+		f := &serveFlags{
+			readTimeout:    10,
+			writeTimeout:   10,
+			requestTimeout: 60,
+		}
+		cfg, _ := buildServerConfiguration(f)
+		if cfg.ReadTimeout != 60 {
+			t.Errorf("read timeout: got %d, want 60", cfg.ReadTimeout)
+		}
+		if cfg.WriteTimeout != 60 {
+			t.Errorf("write timeout: got %d, want 60", cfg.WriteTimeout)
+		}
+	})
 
-	// Parse empty args to get defaults
-	if err := fs.Parse([]string{}); err != nil {
-		t.Fatalf("failed to parse: %v", err)
-	}
+	t.Run("TLS config from flags", func(t *testing.T) {
+		f := &serveFlags{
+			tlsCert:   "/path/to/cert.pem",
+			tlsKey:    "/path/to/key.pem",
+			httpsPort: 8443,
+		}
+		cfg, _ := buildServerConfiguration(f)
+		if cfg.TLS == nil {
+			t.Fatal("expected TLS config")
+		}
+		if cfg.TLS.CertFile != "/path/to/cert.pem" {
+			t.Errorf("cert file: got %s", cfg.TLS.CertFile)
+		}
+	})
 
-	// Verify defaults
-	if *port != 4280 {
-		t.Errorf("default port: got %d, want 4280", *port)
-	}
-	if *adminPort != 4290 {
-		t.Errorf("default admin port: got %d, want 4290", *adminPort)
-	}
-	if *httpsPort != 0 {
-		t.Errorf("default HTTPS port: got %d, want 0", *httpsPort)
-	}
-	if *readTimeout != 30 {
-		t.Errorf("default read timeout: got %d, want 30", *readTimeout)
-	}
-	if *writeTimeout != 30 {
-		t.Errorf("default write timeout: got %d, want 30", *writeTimeout)
-	}
-	if *maxLogEntries != 1000 {
-		t.Errorf("default max log entries: got %d, want 1000", *maxLogEntries)
-	}
-	if !*autoCert {
-		t.Error("default auto-cert should be true")
-	}
-	if *graphqlPath != "/graphql" {
-		t.Errorf("default graphql path: got %s, want /graphql", *graphqlPath)
-	}
-	if !*grpcReflection {
-		t.Error("default grpc-reflection should be true")
-	}
-}
+	t.Run("mTLS config from flags", func(t *testing.T) {
+		f := &serveFlags{
+			mtlsEnabled:    true,
+			mtlsCA:         "/path/to/ca.crt",
+			mtlsAllowedCNs: "client1,client2",
+		}
+		cfg, _ := buildServerConfiguration(f)
+		if cfg.MTLS == nil {
+			t.Fatal("expected mTLS config")
+		}
+		if len(cfg.MTLS.AllowedCNs) != 2 {
+			t.Errorf("allowed CNs: got %d, want 2", len(cfg.MTLS.AllowedCNs))
+		}
+	})
 
-func TestServeFlagCustomValues(t *testing.T) {
-	fs := flag.NewFlagSet("test-serve-custom", flag.ContinueOnError)
+	t.Run("CORS config from flags", func(t *testing.T) {
+		f := &serveFlags{
+			corsOrigins: "https://app.example.com, https://other.com",
+		}
+		cfg, _ := buildServerConfiguration(f)
+		if cfg.CORS == nil {
+			t.Fatal("expected CORS config")
+		}
+		if len(cfg.CORS.AllowOrigins) != 2 {
+			t.Errorf("origins: got %d, want 2", len(cfg.CORS.AllowOrigins))
+		}
+	})
 
-	port := fs.Int("port", 4280, "HTTP server port")
-	fs.IntVar(port, "p", 4280, "HTTP server port (shorthand)")
-	adminPort := fs.Int("admin-port", 4290, "Admin API port")
-	configFile := fs.String("config", "", "Path to mock configuration file")
-	fs.StringVar(configFile, "c", "", "Path to mock configuration file (shorthand)")
-	httpsPort := fs.Int("https-port", 0, "HTTPS server port")
-	tlsCert := fs.String("tls-cert", "", "Path to TLS certificate file")
-	tlsKey := fs.String("tls-key", "", "Path to TLS private key file")
-	mtlsEnabled := fs.Bool("mtls-enabled", false, "Enable mTLS")
-	auditEnabled := fs.Bool("audit-enabled", false, "Enable audit logging")
-	register := fs.Bool("register", false, "Register with control plane")
-	name := fs.String("name", "", "Runtime name")
-	detach := fs.Bool("detach", false, "Run in background")
-	fs.BoolVar(detach, "d", false, "Run in background (shorthand)")
-
-	args := []string{
-		"-p", "3000",
-		"--admin-port", "4000",
-		"-c", "/path/to/config.yaml",
-		"--https-port", "8443",
-		"--tls-cert", "/path/to/cert.pem",
-		"--tls-key", "/path/to/key.pem",
-		"--mtls-enabled",
-		"--audit-enabled",
-		"--register",
-		"--name", "my-runtime",
-		"-d",
-	}
-
-	if err := fs.Parse(args); err != nil {
-		t.Fatalf("failed to parse: %v", err)
-	}
-
-	if *port != 3000 {
-		t.Errorf("port: got %d, want 3000", *port)
-	}
-	if *adminPort != 4000 {
-		t.Errorf("admin port: got %d, want 4000", *adminPort)
-	}
-	if *configFile != "/path/to/config.yaml" {
-		t.Errorf("config file: got %s, want /path/to/config.yaml", *configFile)
-	}
-	if *httpsPort != 8443 {
-		t.Errorf("HTTPS port: got %d, want 8443", *httpsPort)
-	}
-	if *tlsCert != "/path/to/cert.pem" {
-		t.Errorf("TLS cert: got %s, want /path/to/cert.pem", *tlsCert)
-	}
-	if *tlsKey != "/path/to/key.pem" {
-		t.Errorf("TLS key: got %s, want /path/to/key.pem", *tlsKey)
-	}
-	if !*mtlsEnabled {
-		t.Error("mtls-enabled should be true")
-	}
-	if !*auditEnabled {
-		t.Error("audit-enabled should be true")
-	}
-	if !*register {
-		t.Error("register should be true")
-	}
-	if *name != "my-runtime" {
-		t.Errorf("name: got %s, want my-runtime", *name)
-	}
-	if !*detach {
-		t.Error("detach should be true")
-	}
+	t.Run("rate limit config from flags", func(t *testing.T) {
+		f := &serveFlags{
+			rateLimit: 100.0,
+		}
+		cfg, _ := buildServerConfiguration(f)
+		if cfg.RateLimit == nil {
+			t.Fatal("expected rate limit config")
+		}
+		if cfg.RateLimit.RequestsPerSecond != 100.0 {
+			t.Errorf("rps: got %f, want 100.0", cfg.RateLimit.RequestsPerSecond)
+		}
+		if cfg.RateLimit.BurstSize != 200 {
+			t.Errorf("burst: got %d, want 200", cfg.RateLimit.BurstSize)
+		}
+	})
 }
 
 func TestFormatPortError(t *testing.T) {
-	// formatPortError is unexported but we can test it indirectly through RunServe
-	// by checking error messages when port is in use
-
-	// This test verifies the error handling path exists
-	// A real port conflict test would require starting a listener first
 	t.Run("error message format", func(t *testing.T) {
-		// We can't easily test the actual error without binding a port,
-		// but we verify the code path doesn't panic
-		defer func() {
-			if r := recover(); r != nil {
-				t.Errorf("formatPortError panicked: %v", r)
-			}
-		}()
-
-		// Try to start on a likely-in-use port (this may or may not error)
-		// The main goal is to verify no panics in error handling
-		_ = RunServe([]string{
-			"--port", "1", // Privileged port, will likely fail
-		})
+		err := formatPortError(3000, nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		msg := err.Error()
+		if msg == "" {
+			t.Error("expected non-empty error message")
+		}
 	})
 }

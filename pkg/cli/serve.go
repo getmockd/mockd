@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -33,10 +32,162 @@ import (
 	"github.com/getmockd/mockd/pkg/store/file"
 	"github.com/getmockd/mockd/pkg/tracing"
 	"github.com/getmockd/mockd/pkg/validation"
+
+	"github.com/spf13/cobra"
 )
 
 // shutdownTimeout is the maximum time to wait for graceful shutdown.
 const shutdownTimeout = 30 * time.Second
+
+// serveFlagVals is the package-level instance bound to cobra flags.
+var serveFlagVals serveFlags
+
+// serveCmd represents the serve command — the full-featured foreground server.
+var serveCmd = &cobra.Command{
+	Use:   "serve",
+	Short: "Start the full-featured mock server (foreground)",
+	Long: `Start the mock server. Can operate in three modes:
+
+1. Local mode (default): Serve mocks from local configuration
+2. Runtime mode (--register): Register with control plane and receive deployments
+3. Pull mode (--pull): Pull mocks from cloud and serve locally
+
+The serve command is the full-featured server entrypoint with support for MCP,
+CORS, rate limiting, distributed tracing, log aggregation, and more.
+Use 'mockd start' for a simpler startup experience.`,
+	Example: `  # Start with defaults
+  mockd serve
+
+  # Start with config file on custom port
+  mockd serve --config mocks.json --port 3000
+
+  # Register as a runtime
+  mockd serve --register --name ci-runner-1 --token $MOCKD_RUNTIME_TOKEN
+
+  # Pull and serve from cloud
+  mockd serve --pull mockd://acme/payment-api
+
+  # Start with TLS using certificate files
+  mockd serve --tls-cert server.crt --tls-key server.key --https-port 8443
+
+  # Start with mTLS enabled
+  mockd serve --mtls-enabled --mtls-ca ca.crt --tls-cert server.crt --tls-key server.key
+
+  # Start with distributed tracing (send traces to Jaeger via OTLP)
+  mockd serve --otlp-endpoint http://localhost:4318/v1/traces
+
+  # Start with MCP server enabled (for AI assistants via HTTP)
+  mockd serve --mcp
+
+  # Start in daemon/background mode
+  mockd serve -d`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Get token from env var if not provided via flag
+		if serveFlagVals.token == "" {
+			serveFlagVals.token = os.Getenv("MOCKD_RUNTIME_TOKEN")
+		}
+		return runServeWithFlags(&serveFlagVals)
+	},
+}
+
+//nolint:funlen // flag registration is inherently long
+func initServeCmd() {
+	rootCmd.AddCommand(serveCmd)
+
+	f := &serveFlagVals
+
+	// Standard server flags
+	serveCmd.Flags().IntVarP(&f.port, "port", "p", cliconfig.DefaultPort, "HTTP server port")
+	serveCmd.Flags().IntVarP(&f.adminPort, "admin-port", "a", cliconfig.DefaultAdminPort, "Admin API port")
+	serveCmd.Flags().StringVarP(&f.configFile, "config", "c", "", "Path to mock configuration file")
+	serveCmd.Flags().IntVar(&f.httpsPort, "https-port", cliconfig.DefaultHTTPSPort, "HTTPS server port (0 = disabled)")
+	serveCmd.Flags().IntVar(&f.readTimeout, "read-timeout", cliconfig.DefaultReadTimeout, "Read timeout in seconds")
+	serveCmd.Flags().IntVar(&f.writeTimeout, "write-timeout", cliconfig.DefaultWriteTimeout, "Write timeout in seconds")
+	serveCmd.Flags().IntVar(&f.requestTimeout, "request-timeout", 0, "Request timeout in seconds (sets both read and write timeout)")
+	serveCmd.Flags().IntVar(&f.maxLogEntries, "max-log-entries", cliconfig.DefaultMaxLogEntries, "Maximum request log entries")
+	serveCmd.Flags().IntVar(&f.maxConnections, "max-connections", 0, "Maximum concurrent HTTP connections (0 = unlimited)")
+	serveCmd.Flags().BoolVar(&f.autoCert, "auto-cert", cliconfig.DefaultAutoCert, "Auto-generate TLS certificate")
+
+	// TLS flags
+	serveCmd.Flags().StringVar(&f.tlsCert, "tls-cert", "", "Path to TLS certificate file")
+	serveCmd.Flags().StringVar(&f.tlsKey, "tls-key", "", "Path to TLS private key file")
+	serveCmd.Flags().BoolVar(&f.tlsAuto, "tls-auto", false, "Auto-generate self-signed certificate")
+
+	// mTLS flags
+	serveCmd.Flags().BoolVar(&f.mtlsEnabled, "mtls-enabled", false, "Enable mTLS client certificate validation")
+	serveCmd.Flags().StringVar(&f.mtlsClientAuth, "mtls-client-auth", "require-and-verify", "Client auth mode (none, request, require, verify-if-given, require-and-verify)")
+	serveCmd.Flags().StringVar(&f.mtlsCA, "mtls-ca", "", "Path to CA certificate for client validation")
+	serveCmd.Flags().StringVar(&f.mtlsAllowedCNs, "mtls-allowed-cns", "", "Comma-separated list of allowed Common Names")
+
+	// Audit flags
+	serveCmd.Flags().BoolVar(&f.auditEnabled, "audit-enabled", false, "Enable audit logging")
+	serveCmd.Flags().StringVar(&f.auditFile, "audit-file", "", "Path to audit log file")
+	serveCmd.Flags().StringVar(&f.auditLevel, "audit-level", "info", "Audit log level (debug, info, warn, error)")
+
+	// Runtime mode flags
+	serveCmd.Flags().BoolVar(&f.register, "register", false, "Register with control plane as a runtime")
+	serveCmd.Flags().StringVar(&f.controlPlane, "control-plane", "https://api.mockd.io", "Control plane URL")
+	serveCmd.Flags().StringVar(&f.token, "token", "", "Runtime token (or set MOCKD_RUNTIME_TOKEN env var)")
+	serveCmd.Flags().StringVar(&f.name, "name", "", "Runtime name (required with --register)")
+	serveCmd.Flags().StringVar(&f.labels, "labels", "", "Runtime labels as key=value pairs (comma-separated)")
+
+	// Pull mode flags
+	serveCmd.Flags().StringVar(&f.pull, "pull", "", "Pull and serve mocks from mockd:// URI")
+	serveCmd.Flags().StringVar(&f.cacheDir, "cache", "", "Local cache directory for pulled mocks")
+
+	// GraphQL flags
+	serveCmd.Flags().StringVar(&f.graphqlSchema, "graphql-schema", "", "Path to GraphQL schema file")
+	serveCmd.Flags().StringVar(&f.graphqlPath, "graphql-path", "/graphql", "GraphQL endpoint path")
+
+	// OAuth flags
+	serveCmd.Flags().BoolVar(&f.oauthEnabled, "oauth-enabled", false, "Enable OAuth provider")
+	serveCmd.Flags().StringVar(&f.oauthIssuer, "oauth-issuer", "", "OAuth issuer URL")
+	serveCmd.Flags().IntVar(&f.oauthPort, "oauth-port", 0, "OAuth server port")
+
+	// Chaos flags
+	serveCmd.Flags().BoolVar(&f.chaosEnabled, "chaos-enabled", false, "Enable chaos injection")
+	serveCmd.Flags().StringVar(&f.chaosLatency, "chaos-latency", "", "Add random latency (e.g., '10ms-100ms')")
+	serveCmd.Flags().Float64Var(&f.chaosErrorRate, "chaos-error-rate", 0, "Error rate (0.0-1.0)")
+
+	// Validation flags
+	serveCmd.Flags().StringVar(&f.validateSpec, "validate-spec", "", "Path to OpenAPI spec for request validation")
+	serveCmd.Flags().BoolVar(&f.validateFail, "validate-fail", false, "Fail on validation error")
+
+	// Storage flags
+	serveCmd.Flags().StringVar(&f.dataDir, "data-dir", "", "Data directory for persistent storage")
+	serveCmd.Flags().BoolVar(&f.noAuth, "no-auth", false, "Disable API key authentication on admin API")
+
+	// Daemon/detach flags
+	serveCmd.Flags().BoolVarP(&f.detach, "detach", "d", false, "Run server in background (daemon mode)")
+	serveCmd.Flags().StringVar(&f.pidFile, "pid-file", DefaultPIDPath(), "Path to PID file")
+
+	// Logging flags
+	serveCmd.Flags().StringVar(&f.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	serveCmd.Flags().StringVar(&f.logFormat, "log-format", "text", "Log format (text, json)")
+	serveCmd.Flags().StringVar(&f.lokiEndpoint, "loki-endpoint", "", "Loki endpoint for log aggregation")
+
+	// Tracing flags
+	serveCmd.Flags().StringVar(&f.otlpEndpoint, "otlp-endpoint", "", "OTLP HTTP endpoint for distributed tracing")
+	serveCmd.Flags().Float64Var(&f.traceSampler, "trace-sampler", 1.0, "Trace sampling ratio (0.0-1.0)")
+
+	// MCP flags
+	serveCmd.Flags().BoolVar(&f.mcpEnabled, "mcp", false, "Enable MCP (Model Context Protocol) HTTP server")
+	serveCmd.Flags().IntVar(&f.mcpPort, "mcp-port", 9091, "MCP server port")
+	serveCmd.Flags().BoolVar(&f.mcpAllowRemote, "mcp-allow-remote", false, "Allow remote MCP connections")
+
+	// CORS flags
+	serveCmd.Flags().StringVar(&f.corsOrigins, "cors-origins", "", "Comma-separated CORS allowed origins")
+
+	// Rate limiting flags
+	serveCmd.Flags().Float64Var(&f.rateLimit, "rate-limit", 0, "Rate limit in requests per second (0 = disabled)")
+
+	// Persistence flags
+	serveCmd.Flags().BoolVar(&f.noPersist, "no-persist", false, "Disable persistent storage (mocks are lost on restart)")
+}
+
+func init() {
+	initServeCmd()
+}
 
 // serveFlags holds all parsed command-line flags for the serve command.
 type serveFlags struct {
@@ -146,18 +297,11 @@ type serveContext struct {
 	cancel        context.CancelFunc
 }
 
-// RunServe handles the serve command (enhanced start with runtime mode support).
-// It coordinates flag parsing, configuration, server startup, and shutdown.
-func RunServe(args []string) error {
-	// Parse command-line flags
-	flags, err := parseServeFlags(args)
-	if err != nil {
-		return err
-	}
-
+// runServeWithFlags is the core serve logic called by the cobra command.
+func runServeWithFlags(flags *serveFlags) error {
 	// Handle detach mode (daemon) - re-exec as child and exit
 	if flags.detach && os.Getenv("MOCKD_CHILD") == "" {
-		return daemonize(args, flags.pidFile, flags.port, flags.adminPort)
+		return daemonize(nil, flags.pidFile, flags.port, flags.adminPort)
 	}
 
 	// Validate flags for different modes
@@ -247,247 +391,7 @@ func RunServe(args []string) error {
 	return runMainLoop(sctx)
 }
 
-// parseServeFlags parses all command-line flags for the serve command.
-func parseServeFlags(args []string) (*serveFlags, error) {
-	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	f := &serveFlags{}
-
-	// Standard server flags
-	fs.IntVar(&f.port, "port", cliconfig.DefaultPort, "HTTP server port")
-	fs.IntVar(&f.port, "p", cliconfig.DefaultPort, "HTTP server port (shorthand)")
-	fs.IntVar(&f.adminPort, "admin-port", cliconfig.DefaultAdminPort, "Admin API port")
-	fs.IntVar(&f.adminPort, "a", cliconfig.DefaultAdminPort, "Admin API port (shorthand)")
-	fs.StringVar(&f.configFile, "config", "", "Path to mock configuration file")
-	fs.StringVar(&f.configFile, "c", "", "Path to mock configuration file (shorthand)")
-	fs.IntVar(&f.httpsPort, "https-port", cliconfig.DefaultHTTPSPort, "HTTPS server port (0 = disabled)")
-	fs.IntVar(&f.readTimeout, "read-timeout", cliconfig.DefaultReadTimeout, "Read timeout in seconds")
-	fs.IntVar(&f.writeTimeout, "write-timeout", cliconfig.DefaultWriteTimeout, "Write timeout in seconds")
-	fs.IntVar(&f.requestTimeout, "request-timeout", 0, "Request timeout in seconds (sets both read and write timeout, 0 = use individual timeouts)")
-	fs.IntVar(&f.maxLogEntries, "max-log-entries", cliconfig.DefaultMaxLogEntries, "Maximum request log entries")
-	fs.IntVar(&f.maxConnections, "max-connections", 0, "Maximum concurrent HTTP connections (0 = unlimited)")
-	fs.BoolVar(&f.autoCert, "auto-cert", cliconfig.DefaultAutoCert, "Auto-generate TLS certificate")
-
-	// TLS flags
-	fs.StringVar(&f.tlsCert, "tls-cert", "", "Path to TLS certificate file")
-	fs.StringVar(&f.tlsKey, "tls-key", "", "Path to TLS private key file")
-	fs.BoolVar(&f.tlsAuto, "tls-auto", false, "Auto-generate self-signed certificate")
-
-	// mTLS flags
-	fs.BoolVar(&f.mtlsEnabled, "mtls-enabled", false, "Enable mTLS client certificate validation")
-	fs.StringVar(&f.mtlsClientAuth, "mtls-client-auth", "require-and-verify", "Client auth mode (none, request, require, verify-if-given, require-and-verify)")
-	fs.StringVar(&f.mtlsCA, "mtls-ca", "", "Path to CA certificate for client validation")
-	fs.StringVar(&f.mtlsAllowedCNs, "mtls-allowed-cns", "", "Comma-separated list of allowed Common Names")
-
-	// Audit flags
-	fs.BoolVar(&f.auditEnabled, "audit-enabled", false, "Enable audit logging")
-	fs.StringVar(&f.auditFile, "audit-file", "", "Path to audit log file")
-	fs.StringVar(&f.auditLevel, "audit-level", "info", "Log level (debug, info, warn, error)")
-
-	// Runtime mode flags
-	fs.BoolVar(&f.register, "register", false, "Register with control plane as a runtime")
-	fs.StringVar(&f.controlPlane, "control-plane", "https://api.mockd.io", "Control plane URL")
-	fs.StringVar(&f.token, "token", "", "Runtime token (or set MOCKD_RUNTIME_TOKEN env var)")
-	fs.StringVar(&f.name, "name", "", "Runtime name (required with --register)")
-	fs.StringVar(&f.labels, "labels", "", "Runtime labels as key=value pairs (comma-separated)")
-
-	// Pull mode flags
-	fs.StringVar(&f.pull, "pull", "", "Pull and serve mocks from mockd:// URI")
-	fs.StringVar(&f.cacheDir, "cache", "", "Local cache directory for pulled mocks")
-
-	// GraphQL flags
-	fs.StringVar(&f.graphqlSchema, "graphql-schema", "", "Path to GraphQL schema file")
-	fs.StringVar(&f.graphqlPath, "graphql-path", "/graphql", "GraphQL endpoint path")
-
-	// OAuth flags
-	fs.BoolVar(&f.oauthEnabled, "oauth-enabled", false, "Enable OAuth provider")
-	fs.StringVar(&f.oauthIssuer, "oauth-issuer", "", "OAuth issuer URL")
-	fs.IntVar(&f.oauthPort, "oauth-port", 0, "OAuth server port")
-
-	// Chaos flags
-	fs.BoolVar(&f.chaosEnabled, "chaos-enabled", false, "Enable chaos injection")
-	fs.StringVar(&f.chaosLatency, "chaos-latency", "", "Add random latency (e.g., \"10ms-100ms\")")
-	fs.Float64Var(&f.chaosErrorRate, "chaos-error-rate", 0, "Error rate (0.0-1.0)")
-
-	// Validation flags
-	fs.StringVar(&f.validateSpec, "validate-spec", "", "Path to OpenAPI spec for request validation")
-	fs.BoolVar(&f.validateFail, "validate-fail", false, "Fail on validation error")
-
-	// Storage flags
-	fs.StringVar(&f.dataDir, "data-dir", "", "Data directory for persistent storage (default: ~/.local/share/mockd)")
-	fs.BoolVar(&f.noAuth, "no-auth", false, "Disable API key authentication on admin API")
-
-	// Daemon/detach flags
-	fs.BoolVar(&f.detach, "detach", false, "Run server in background (daemon mode)")
-	fs.BoolVar(&f.detach, "d", false, "Run server in background (shorthand)")
-	fs.StringVar(&f.pidFile, "pid-file", DefaultPIDPath(), "Path to PID file")
-
-	// Logging flags
-	fs.StringVar(&f.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
-	fs.StringVar(&f.logFormat, "log-format", "text", "Log format (text, json)")
-	fs.StringVar(&f.lokiEndpoint, "loki-endpoint", "", "Loki endpoint for log aggregation (e.g., http://localhost:3100/loki/api/v1/push)")
-
-	// Tracing flags
-	fs.StringVar(&f.otlpEndpoint, "otlp-endpoint", "", "OTLP HTTP endpoint for distributed tracing (e.g., http://localhost:4318/v1/traces)")
-	fs.Float64Var(&f.traceSampler, "trace-sampler", 1.0, "Trace sampling ratio (0.0-1.0, default: 1.0 = all traces)")
-
-	// MCP flags
-	fs.BoolVar(&f.mcpEnabled, "mcp", false, "Enable MCP (Model Context Protocol) server")
-	fs.IntVar(&f.mcpPort, "mcp-port", 9091, "MCP server port")
-	fs.BoolVar(&f.mcpAllowRemote, "mcp-allow-remote", false, "Allow remote MCP connections (default: localhost only)")
-
-	// CORS flags
-	fs.StringVar(&f.corsOrigins, "cors-origins", "", "Comma-separated CORS allowed origins (e.g., '*' or 'https://app.example.com')")
-
-	// Rate limiting flags
-	fs.Float64Var(&f.rateLimit, "rate-limit", 0, "Rate limit in requests per second (0 = disabled)")
-
-	// Persistence flags
-	fs.BoolVar(&f.noPersist, "no-persist", false, "Disable persistent storage (mocks are lost on restart)")
-
-	fs.Usage = func() {
-		printServeUsage()
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return nil, err
-	}
-
-	// Get token from env var if not provided via flag
-	if f.token == "" {
-		f.token = os.Getenv("MOCKD_RUNTIME_TOKEN")
-	}
-
-	return f, nil
-}
-
-// printServeUsage prints the serve command usage information.
-func printServeUsage() {
-	fmt.Fprint(os.Stderr, `Usage: mockd serve [flags]
-
-Start the mock server. Can operate in three modes:
-
-1. Local mode (default): Serve mocks from local configuration
-2. Runtime mode (--register): Register with control plane and receive deployments
-3. Pull mode (--pull): Pull mocks from cloud and serve locally
-
-Flags:
-  -p, --port          HTTP server port (default: 4280)
-  -a, --admin-port    Admin API port (default: 4290)
-  -c, --config        Path to mock configuration file
-      --https-port    HTTPS server port (0 = disabled)
-      --read-timeout  Read timeout in seconds (default: 30)
-      --write-timeout Write timeout in seconds (default: 30)
-      --request-timeout Request timeout in seconds (sets both read and write timeout)
-      --max-log-entries Maximum request log entries (default: 1000)
-      --max-connections Maximum concurrent HTTP connections (0 = unlimited)
-      --auto-cert     Auto-generate TLS certificate (default: true)
-
-TLS flags:
-      --tls-cert      Path to TLS certificate file
-      --tls-key       Path to TLS private key file
-      --tls-auto      Auto-generate self-signed certificate
-
-mTLS flags:
-      --mtls-enabled  Enable mTLS client certificate validation
-      --mtls-client-auth Client auth mode (none, request, require, verify-if-given, require-and-verify)
-      --mtls-ca       Path to CA certificate for client validation
-      --mtls-allowed-cns Comma-separated list of allowed Common Names
-
-Audit flags:
-      --audit-enabled Enable audit logging
-      --audit-file    Path to audit log file
-      --audit-level   Log level (debug, info, warn, error)
-
-Runtime mode (register with control plane):
-      --register      Register with control plane as a runtime
-      --control-plane Control plane URL (default: https://api.mockd.io)
-      --token         Runtime token (or MOCKD_RUNTIME_TOKEN env var)
-      --name          Runtime name (required with --register)
-      --labels        Runtime labels (key=value,key2=value2)
-
-Pull mode (serve mocks from cloud):
-      --pull          mockd:// URI to pull and serve
-      --cache         Local cache directory for pulled mocks
-
-GraphQL flags:
-      --graphql-schema Path to GraphQL schema file
-      --graphql-path   GraphQL endpoint path (default: /graphql)
-
-OAuth flags:
-      --oauth-enabled   Enable OAuth provider
-      --oauth-issuer    OAuth issuer URL
-      --oauth-port      OAuth server port
-
-Chaos flags:
-      --chaos-enabled   Enable chaos injection
-      --chaos-latency   Add random latency (e.g., "10ms-100ms")
-      --chaos-error-rate Error rate (0.0-1.0)
-
-Validation flags:
-      --validate-spec   Path to OpenAPI spec for request validation
-      --validate-fail   Fail on validation error (default: false)
-
-Storage flags:
-      --data-dir      Data directory for persistent storage (default: ~/.local/share/mockd)
-      --no-auth       Disable API key authentication on admin API
-
-Daemon flags:
-  -d, --detach      Run server in background (daemon mode)
-      --pid-file    Path to PID file (default: ~/.mockd/mockd.pid)
-
-Logging flags:
-      --log-level     Log level (debug, info, warn, error) (default: info)
-      --log-format    Log format (text, json) (default: text)
-      --loki-endpoint Loki endpoint for log aggregation (e.g., http://localhost:3100/loki/api/v1/push)
-
-Tracing flags:
-      --otlp-endpoint OTLP HTTP endpoint for distributed tracing (e.g., http://localhost:4318/v1/traces)
-      --trace-sampler Trace sampling ratio 0.0-1.0 (default: 1.0 = all traces)
-
-MCP flags:
-      --mcp              Enable MCP (Model Context Protocol) HTTP server
-      --mcp-port         MCP server port (default: 9091)
-      --mcp-allow-remote Allow remote MCP connections (default: localhost only)
-
-Examples:
-  # Start with defaults
-  mockd serve
-
-  # Start with config file on custom port
-  mockd serve --config mocks.json --port 3000
-
-  # Register as a runtime
-  mockd serve --register --name ci-runner-1 --token $MOCKD_RUNTIME_TOKEN
-
-  # Pull and serve from cloud
-  mockd serve --pull mockd://acme/payment-api
-
-  # Start with TLS using certificate files
-  mockd serve --tls-cert server.crt --tls-key server.key --https-port 8443
-
-  # Start with mTLS enabled
-  mockd serve --mtls-enabled --mtls-ca ca.crt --tls-cert server.crt --tls-key server.key
-
-  # Start with audit logging
-  mockd serve --audit-enabled --audit-file audit.log --audit-level debug
-
-  # Start in daemon/background mode
-  mockd serve -d
-  mockd serve --detach --config mocks.yaml
-
-  # Start with distributed tracing (send traces to Jaeger via OTLP)
-  mockd serve --otlp-endpoint http://localhost:4318/v1/traces
-
-  # Start with JSON structured logging
-  mockd serve --log-level debug --log-format json
-
-  # Start with MCP server enabled (for AI assistants via HTTP)
-  mockd serve --mcp
-
-  # For stdio MCP (Claude Desktop), use: mockd mcp
-`)
-
-}
+// validateServeFlags validates flag combinations for different operating modes.
 
 // validateServeFlags validates flag combinations for different operating modes.
 func validateServeFlags(f *serveFlags) error {
