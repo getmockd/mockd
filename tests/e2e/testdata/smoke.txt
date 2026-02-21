@@ -1,0 +1,12 @@
+-- smoke.txt --
+# Wait for healthy using the built in CLI status command against the injected ENV var
+exec mockd status -u $ADMIN_URL
+stdout 'admin|healthy'
+
+# SMOKE-001/002: Admin health endpoint returns ok via status command
+exec mockd status -u $ADMIN_URL --json
+stdout 'admin'
+
+# SMOKE-004/005: List mocks returns 200 and zero mocks
+exec mockd list -u $ADMIN_URL --json
+stdout '\[\]'

@@ -1,0 +1,24 @@
+-- cli_version.txt --
+# ============================================================================
+# CLI Version & Help — version output, help text
+# ============================================================================
+
+# CLI-VER-001: mockd version exits 0 and contains mockd
+exec mockd version
+stdout 'mockd'
+
+# CLI-VER-002: mockd version --json returns valid JSON
+exec mockd version --json
+stdout '^{' # Starts with valid JSON object bracket
+
+# CLI-HELP-001: mockd --help mentions core commands
+exec mockd --help
+stdout 'add'
+stdout 'list'
+stdout 'import'
+
+# CLI-HELP-002: mockd add --help mentions path and body flags
+# Cobra returns exit 0 for help commands natively now, testscript expects 0
+exec mockd add --help
+stdout 'path'
+stdout 'body'
