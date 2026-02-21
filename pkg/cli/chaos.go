@@ -2,266 +2,189 @@ package cli
 
 import (
 	"errors"
-	"flag"
 	"fmt"
-	"os"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
+	"github.com/spf13/cobra"
 )
 
-// RunChaos handles the chaos command and its subcommands.
-func RunChaos(args []string) error {
-	if len(args) == 0 {
-		printChaosUsage()
-		return nil
-	}
+var (
+	chaosEnableAdminURL    string
+	chaosEnableLatency     string
+	chaosEnableErrorRate   float64
+	chaosEnableErrorCode   int
+	chaosEnablePath        string
+	chaosEnableProbability float64
 
-	subcommand := args[0]
-	subArgs := args[1:]
+	chaosDisableAdminURL string
 
-	switch subcommand {
-	case "enable":
-		return runChaosEnable(subArgs)
-	case "disable":
-		return runChaosDisable(subArgs)
-	case "status":
-		return runChaosStatus(subArgs)
-	case "help", "--help", "-h":
-		printChaosUsage()
-		return nil
-	default:
-		return fmt.Errorf("unknown chaos subcommand: %s\n\nRun 'mockd chaos --help' for usage", subcommand)
-	}
+	chaosStatusAdminURL string
+)
+
+var chaosCmd = &cobra.Command{
+	Use:   "chaos",
+	Short: "Manage chaos injection for fault testing",
+	Long:  `Manage chaos injection for fault testing.`,
 }
 
-func printChaosUsage() {
-	fmt.Print(`Usage: mockd chaos <subcommand> [flags]
+var chaosEnableCmd = &cobra.Command{
+	Use:   "enable",
+	Short: "Enable chaos injection with specified parameters",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		adminURL := &chaosEnableAdminURL
+		latency := &chaosEnableLatency
+		errorRate := &chaosEnableErrorRate
+		errorCode := &chaosEnableErrorCode
+		path := &chaosEnablePath
+		probability := &chaosEnableProbability
 
-Manage chaos injection for fault testing.
-
-Subcommands:
-  enable   Enable chaos injection with specified parameters
-  disable  Disable chaos injection
-  status   Show current chaos configuration
-
-Run 'mockd chaos <subcommand> --help' for more information.
-`)
-}
-
-// runChaosEnable enables chaos injection.
-func runChaosEnable(args []string) error {
-	fs := flag.NewFlagSet("chaos enable", flag.ContinueOnError)
-
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-
-	latency := fs.String("latency", "", "Add random latency (e.g., \"10ms-100ms\")")
-	fs.StringVar(latency, "l", "", "Add random latency (shorthand)")
-
-	errorRate := fs.Float64("error-rate", 0, "Error rate (0.0-1.0)")
-	fs.Float64Var(errorRate, "e", 0, "Error rate (shorthand)")
-
-	errorCode := fs.Int("error-code", 500, "HTTP error code to return")
-
-	path := fs.String("path", "", "Path pattern to apply chaos to (regex)")
-	fs.StringVar(path, "p", "", "Path pattern (shorthand)")
-
-	probability := fs.Float64("probability", 1.0, "Probability of applying chaos (0.0-1.0)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd chaos enable [flags]
-
-Enable chaos injection on the running mock server.
-
-Flags:
-      --admin-url    Admin API base URL (default: http://localhost:4290)
-  -l, --latency      Add random latency (e.g., "10ms-100ms")
-  -e, --error-rate   Error rate (0.0-1.0)
-      --error-code   HTTP error code to return (default: 500)
-  -p, --path         Path pattern to apply chaos to (regex)
-      --probability  Probability of applying chaos (default: 1.0)
-
-Examples:
-  # Enable random latency
-  mockd chaos enable --latency "50ms-200ms"
-
-  # Enable error injection with 10% rate
-  mockd chaos enable --error-rate 0.1 --error-code 503
-
-  # Apply chaos only to specific paths
-  mockd chaos enable --latency "100ms-500ms" --path "/api/.*"
-
-  # Combine latency and errors
-  mockd chaos enable --latency "10ms-50ms" --error-rate 0.05
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	// Validate that at least one chaos option is specified
-	if *latency == "" && *errorRate == 0 {
-		return errors.New("at least --latency or --error-rate must be specified")
-	}
-
-	// Build chaos config
-	chaosConfig := map[string]interface{}{
-		"enabled": true,
-	}
-
-	if *latency != "" {
-		min, max := ParseLatencyRange(*latency)
-		chaosConfig["latency"] = map[string]interface{}{
-			"min":         min,
-			"max":         max,
-			"probability": *probability,
+		// Validate that at least one chaos option is specified
+		if *latency == "" && *errorRate == 0 {
+			return errors.New("at least --latency or --error-rate must be specified")
 		}
-	}
 
-	if *errorRate > 0 {
-		chaosConfig["errorRate"] = map[string]interface{}{
-			"probability": *errorRate,
-			"defaultCode": *errorCode,
+		// Build chaos config
+		chaosConfig := map[string]interface{}{
+			"enabled": true,
 		}
-	}
 
-	if *path != "" {
-		chaosConfig["rules"] = []map[string]interface{}{
-			{
-				"pathPattern": *path,
+		if *latency != "" {
+			min, max := ParseLatencyRange(*latency)
+			chaosConfig["latency"] = map[string]interface{}{
+				"min":         min,
+				"max":         max,
 				"probability": *probability,
-			},
-		}
-	}
-
-	// Send request to admin API
-	client := NewAdminClientWithAuth(*adminURL)
-	if err := client.SetChaosConfig(chaosConfig); err != nil {
-		return fmt.Errorf("failed to enable chaos: %s", FormatConnectionError(err))
-	}
-
-	fmt.Println("Chaos injection enabled")
-	if *latency != "" {
-		fmt.Printf("  Latency: %s\n", *latency)
-	}
-	if *errorRate > 0 {
-		fmt.Printf("  Error rate: %.1f%% (HTTP %d)\n", *errorRate*100, *errorCode)
-	}
-	if *path != "" {
-		fmt.Printf("  Path pattern: %s\n", *path)
-	}
-
-	return nil
-}
-
-// runChaosDisable disables chaos injection.
-func runChaosDisable(args []string) error {
-	fs := flag.NewFlagSet("chaos disable", flag.ContinueOnError)
-
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd chaos disable [flags]
-
-Disable chaos injection on the running mock server.
-
-Flags:
-      --admin-url   Admin API base URL (default: http://localhost:4290)
-
-Examples:
-  mockd chaos disable
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	// Send request to admin API
-	client := NewAdminClientWithAuth(*adminURL)
-	chaosConfig := map[string]interface{}{
-		"enabled": false,
-	}
-
-	if err := client.SetChaosConfig(chaosConfig); err != nil {
-		return fmt.Errorf("failed to disable chaos: %s", FormatConnectionError(err))
-	}
-
-	fmt.Println("Chaos injection disabled")
-	return nil
-}
-
-// runChaosStatus shows the current chaos configuration.
-func runChaosStatus(args []string) error {
-	fs := flag.NewFlagSet("chaos status", flag.ContinueOnError)
-
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd chaos status [flags]
-
-Show current chaos configuration.
-
-Flags:
-      --admin-url   Admin API base URL (default: http://localhost:4290)
-      --json        Output in JSON format
-
-Examples:
-  mockd chaos status
-  mockd chaos status --json
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	// Get chaos config from admin API
-	client := NewAdminClientWithAuth(*adminURL)
-	config, err := client.GetChaosConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get chaos status: %s", FormatConnectionError(err))
-	}
-
-	if *jsonOutput {
-		return output.JSON(config)
-	}
-
-	// Pretty print status
-	enabled, _ := config["enabled"].(bool)
-	if !enabled {
-		fmt.Println("Chaos injection: disabled")
-		return nil
-	}
-
-	fmt.Println("Chaos injection: enabled")
-
-	if global, ok := config["global"].(map[string]interface{}); ok {
-		if latency, ok := global["latency"].(map[string]interface{}); ok {
-			min, _ := latency["min"].(string)
-			max, _ := latency["max"].(string)
-			prob, _ := latency["probability"].(float64)
-			fmt.Printf("  Latency: %s-%s (%.0f%% probability)\n", min, max, prob*100)
-		}
-		if errorRate, ok := global["errorRate"].(map[string]interface{}); ok {
-			prob, _ := errorRate["probability"].(float64)
-			code, _ := errorRate["defaultCode"].(float64)
-			fmt.Printf("  Error rate: %.1f%% (HTTP %d)\n", prob*100, int(code))
-		}
-	}
-
-	if rules, ok := config["rules"].([]interface{}); ok && len(rules) > 0 {
-		fmt.Println("  Rules:")
-		for _, r := range rules {
-			if rule, ok := r.(map[string]interface{}); ok {
-				pattern, _ := rule["pathPattern"].(string)
-				prob, _ := rule["probability"].(float64)
-				fmt.Printf("    - %s (%.0f%% probability)\n", pattern, prob*100)
 			}
 		}
-	}
 
-	return nil
+		if *errorRate > 0 {
+			chaosConfig["errorRate"] = map[string]interface{}{
+				"probability": *errorRate,
+				"defaultCode": *errorCode,
+			}
+		}
+
+		if *path != "" {
+			chaosConfig["rules"] = []map[string]interface{}{
+				{
+					"pathPattern": *path,
+					"probability": *probability,
+				},
+			}
+		}
+
+		// Send request to admin API
+		client := NewAdminClientWithAuth(*adminURL)
+		if err := client.SetChaosConfig(chaosConfig); err != nil {
+			return fmt.Errorf("failed to enable chaos: %s", FormatConnectionError(err))
+		}
+
+		fmt.Println("Chaos injection enabled")
+		if *latency != "" {
+			fmt.Printf("  Latency: %s\n", *latency)
+		}
+		if *errorRate > 0 {
+			fmt.Printf("  Error rate: %.1f%% (HTTP %d)\n", *errorRate*100, *errorCode)
+		}
+		if *path != "" {
+			fmt.Printf("  Path pattern: %s\n", *path)
+		}
+
+		return nil
+	},
+}
+
+var chaosDisableCmd = &cobra.Command{
+	Use:   "disable",
+	Short: "Disable chaos injection",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		adminURL := &chaosDisableAdminURL
+
+		// Send request to admin API
+		client := NewAdminClientWithAuth(*adminURL)
+		chaosConfig := map[string]interface{}{
+			"enabled": false,
+		}
+
+		if err := client.SetChaosConfig(chaosConfig); err != nil {
+			return fmt.Errorf("failed to disable chaos: %s", FormatConnectionError(err))
+		}
+
+		fmt.Println("Chaos injection disabled")
+		return nil
+	},
+}
+
+var chaosStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show current chaos configuration",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		adminURL := &chaosStatusAdminURL
+
+		// Get chaos config from admin API
+		client := NewAdminClientWithAuth(*adminURL)
+		config, err := client.GetChaosConfig()
+		if err != nil {
+			return fmt.Errorf("failed to get chaos status: %s", FormatConnectionError(err))
+		}
+
+		if jsonOutput {
+			return output.JSON(config)
+		}
+
+		// Pretty print status
+		enabled, _ := config["enabled"].(bool)
+		if !enabled {
+			fmt.Println("Chaos injection: disabled")
+			return nil
+		}
+
+		fmt.Println("Chaos injection: enabled")
+
+		if global, ok := config["global"].(map[string]interface{}); ok {
+			if latency, ok := global["latency"].(map[string]interface{}); ok {
+				min, _ := latency["min"].(string)
+				max, _ := latency["max"].(string)
+				prob, _ := latency["probability"].(float64)
+				fmt.Printf("  Latency: %s-%s (%.0f%% probability)\n", min, max, prob*100)
+			}
+			if errorRate, ok := global["errorRate"].(map[string]interface{}); ok {
+				prob, _ := errorRate["probability"].(float64)
+				code, _ := errorRate["defaultCode"].(float64)
+				fmt.Printf("  Error rate: %.1f%% (HTTP %d)\n", prob*100, int(code))
+			}
+		}
+
+		if rules, ok := config["rules"].([]interface{}); ok && len(rules) > 0 {
+			fmt.Println("  Rules:")
+			for _, r := range rules {
+				if rule, ok := r.(map[string]interface{}); ok {
+					pattern, _ := rule["pathPattern"].(string)
+					prob, _ := rule["probability"].(float64)
+					fmt.Printf("    - %s (%.0f%% probability)\n", pattern, prob*100)
+				}
+			}
+		}
+
+		return nil
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(chaosCmd)
+
+	chaosCmd.AddCommand(chaosEnableCmd)
+	chaosEnableCmd.Flags().StringVar(&chaosEnableAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
+	chaosEnableCmd.Flags().StringVarP(&chaosEnableLatency, "latency", "l", "", "Add random latency (e.g., \"10ms-100ms\")")
+	chaosEnableCmd.Flags().Float64VarP(&chaosEnableErrorRate, "error-rate", "e", 0, "Error rate (0.0-1.0)")
+	chaosEnableCmd.Flags().IntVar(&chaosEnableErrorCode, "error-code", 500, "HTTP error code to return")
+	chaosEnableCmd.Flags().StringVarP(&chaosEnablePath, "path", "p", "", "Path pattern to apply chaos to (regex)")
+	chaosEnableCmd.Flags().Float64Var(&chaosEnableProbability, "probability", 1.0, "Probability of applying chaos (0.0-1.0)")
+
+	chaosCmd.AddCommand(chaosDisableCmd)
+	chaosDisableCmd.Flags().StringVar(&chaosDisableAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
+
+	chaosCmd.AddCommand(chaosStatusCmd)
+	chaosStatusCmd.Flags().StringVar(&chaosStatusAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 }

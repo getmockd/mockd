@@ -4,106 +4,126 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	grpcpkg "github.com/getmockd/mockd/pkg/grpc"
+	"github.com/spf13/cobra"
 )
 
-// RunGRPC handles the grpc command and its subcommands.
-func RunGRPC(args []string) error {
-	if len(args) == 0 {
-		printGRPCUsage()
-		return nil
-	}
-
-	subcommand := args[0]
-	subArgs := args[1:]
-
-	switch subcommand {
-	case "add":
-		return RunAdd(append([]string{"grpc"}, subArgs...))
-	case "list":
-		// Delegate generic mock listing flag when requested vs internal grpc-specific list
-		if len(subArgs) > 0 && subArgs[0] == "--mocks" {
-		    return RunList(append([]string{"--type", "grpc"}, subArgs[1:]...))
-		}
-		return runGRPCList(subArgs)
-	case "get":
-		return RunGet(subArgs)
-	case "delete", "rm", "remove":
-		return RunDelete(subArgs)
-	case "call":
-		return runGRPCCall(subArgs)
-	case "help", "--help", "-h":
-		printGRPCUsage()
-		return nil
-	default:
-		return fmt.Errorf("unknown grpc subcommand: %s\n\nRun 'mockd grpc --help' for usage", subcommand)
-	}
+var grpcCmd = &cobra.Command{
+	Use:   "grpc",
+	Short: "Manage and test gRPC endpoints",
 }
 
-func printGRPCUsage() {
-	fmt.Print(`Usage: mockd grpc <subcommand> [flags]
+var grpcAddCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Add a new gRPC mock endpoint",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Use huh interactive forms if attributes are missing
+		if !cmd.Flags().Changed("service") {
+			var formService, formMethod, formProto string
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewInput().
+						Title("Path to the .proto file?").
+						Placeholder("api.proto").
+						Value(&formProto),
+					huh.NewInput().
+						Title("What is the gRPC service name to mock?").
+						Placeholder("greet.Greeter").
+						Value(&formService),
+					huh.NewInput().
+						Title("What gRPC method in that service?").
+						Placeholder("SayHello").
+						Value(&formMethod),
+				),
+			)
+			if err := form.Run(); err != nil {
+				return err
+			}
+			addService = formService
+			addRPCMethod = formMethod
+			addProtoFiles = append(addProtoFiles, formProto)
+		}
+		addMockType = "grpc"
+		return runAdd(cmd, args)
+	},
+}
 
-Manage and test gRPC endpoints.
+func init() {
+	rootCmd.AddCommand(grpcCmd)
+	grpcCmd.AddCommand(grpcAddCmd)
 
-Subcommands:
-  add     Add a new gRPC mock endpoint
-  list    List services and methods from a proto file (use --mocks to list gRPC mocks)
-  get     Get details of a gRPC mock
-  delete  Delete a gRPC mock
-  call    Call a gRPC method
+	grpcAddCmd.Flags().StringVar(&addService, "service", "", "gRPC service name (e.g., greeter.Greeter)")
+	grpcAddCmd.Flags().StringVar(&addRPCMethod, "rpc-method", "", "gRPC method name")
+	grpcAddCmd.Flags().IntVar(&addGRPCPort, "grpc-port", 50051, "gRPC server port")
+	grpcAddCmd.Flags().Var(&addProtoFiles, "proto", "Path to .proto file")
+	grpcAddCmd.Flags().StringVar(&addResponse, "response", "", "JSON response data")
 
-Run 'mockd grpc <subcommand> --help' for more information.
-`)
+	// Add list/get/delete generic aliases
+	grpcCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List gRPC mocks or definitions from a proto file",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// If --mocks is passed, list mocks on server, otherwise do internal proto list
+			listMocks, _ := cmd.Flags().GetBool("mocks")
+			if listMocks {
+				listMockType = "grpc"
+				return runList(cmd, args)
+			}
+			return runGRPCList(cmd, args)
+		},
+	})
+	// Just bind the boolean for mock listing
+	grpcCmd.Commands()[1].Flags().Bool("mocks", false, "List server gRPC mocks instead of local proto definitions")
+	grpcCmd.Commands()[1].Flags().StringVar(&grpcImportPath, "import", "", "Import path for proto includes")
+	grpcCmd.Commands()[1].Flags().StringVar(&grpcImportPath, "I", "", "Import path (shorthand)")
+
+	grpcCmd.AddCommand(&cobra.Command{
+		Use:   "get",
+		Short: "Get details of a gRPC mock",
+		RunE:  runGet,
+	})
+	grpcCmd.AddCommand(&cobra.Command{
+		Use:   "delete",
+		Short: "Delete a gRPC mock",
+		RunE:  runDelete,
+	})
+
+	// Bind call functionality
+	grpcCallCmd.Flags().StringVarP(&grpcMetadata, "metadata", "m", "", "gRPC metadata")
+	grpcCallCmd.Flags().BoolVar(&grpcPlaintext, "plaintext", true, "Use plaintext")
+	grpcCallCmd.Flags().BoolVar(&grpcPretty, "pretty", true, "Pretty print")
+	grpcCmd.AddCommand(grpcCallCmd)
+}
+
+var grpcImportPath string
+var grpcMetadata string
+var grpcPlaintext bool
+var grpcPretty bool
+
+var grpcCallCmd = &cobra.Command{
+	Use:   "call <endpoint> <service/method> <json-body>",
+	Short: "Call a gRPC method",
+	RunE:  runGRPCCall,
 }
 
 // runGRPCList lists services and methods from a proto file.
-func runGRPCList(args []string) error {
-	fs := flag.NewFlagSet("grpc list", flag.ContinueOnError)
-
-	importPath := fs.String("import", "", "Import path for proto includes")
-	fs.StringVar(importPath, "I", "", "Import path (shorthand)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd grpc list <proto-file>
-
-List services and methods defined in a proto file.
-
-Arguments:
-  proto-file    Path to the .proto file
-
-Flags:
-  -I, --import  Import path for proto includes
-
-Examples:
-  # List services from a proto file
-  mockd grpc list api.proto
-
-  # With import path
-  mockd grpc list api.proto -I ./proto
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() < 1 {
-		fs.Usage()
+func runGRPCList(_ *cobra.Command, args []string) error {
+	if len(args) < 1 {
 		return errors.New("proto file is required")
 	}
 
-	protoFile := fs.Arg(0)
+	protoFile := args[0]
 
 	// Parse proto file
 	var importPaths []string
-	if *importPath != "" {
-		importPaths = strings.Split(*importPath, ",")
+	if grpcImportPath != "" {
+		importPaths = strings.Split(grpcImportPath, ",")
 	}
 
 	schema, err := grpcpkg.ParseProtoFile(protoFile, importPaths)
@@ -156,57 +176,14 @@ Examples:
 }
 
 // runGRPCCall executes a gRPC call against an endpoint.
-func runGRPCCall(args []string) error {
-	fs := flag.NewFlagSet("grpc call", flag.ContinueOnError)
-
-	metadata := fs.String("metadata", "", "gRPC metadata as key:value,key2:value2")
-	fs.StringVar(metadata, "m", "", "gRPC metadata (shorthand)")
-
-	plaintext := fs.Bool("plaintext", true, "Use plaintext (no TLS)")
-	pretty := fs.Bool("pretty", true, "Pretty print output")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd grpc call <endpoint> <service/method> <json-body>
-
-Call a gRPC method on an endpoint.
-
-Arguments:
-  endpoint        gRPC server address (e.g., localhost:50051)
-  service/method  Full service and method name (e.g., package.Service/Method)
-  json-body       JSON request body or @filename
-
-Flags:
-  -m, --metadata  gRPC metadata as key:value,key2:value2
-      --plaintext Use plaintext (no TLS, default: true)
-      --pretty    Pretty print output (default: true)
-
-Examples:
-  # Call a method
-  mockd grpc call localhost:50051 greet.Greeter/SayHello '{"name": "World"}'
-
-  # With metadata
-  mockd grpc call localhost:50051 greet.Greeter/SayHello '{"name": "World"}' \
-    -m "authorization:Bearer token123"
-
-  # Request from file
-  mockd grpc call localhost:50051 greet.Greeter/SayHello @request.json
-
-Note: This command uses grpcurl if available, otherwise provides instructions.
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() < 3 {
-		fs.Usage()
+func runGRPCCall(cmd *cobra.Command, args []string) error {
+	if len(args) < 3 {
 		return errors.New("endpoint, service/method, and json-body are required")
 	}
 
-	endpoint := fs.Arg(0)
-	serviceMethod := fs.Arg(1)
-	jsonBody := fs.Arg(2)
+	endpoint := args[0]
+	serviceMethod := args[1]
+	jsonBody := args[2]
 
 	// Load body from file if prefixed with @
 	if len(jsonBody) > 0 && jsonBody[0] == '@' {
@@ -226,18 +203,18 @@ Note: This command uses grpcurl if available, otherwise provides instructions.
 	// Check if grpcurl is available
 	grpcurlPath, err := exec.LookPath("grpcurl")
 	if err != nil {
-		return printGRPCCallInstructions(endpoint, serviceMethod, jsonBody, *metadata, *plaintext)
+		return printGRPCCallInstructions(endpoint, serviceMethod, jsonBody, grpcMetadata, grpcPlaintext)
 	}
 
 	// Build grpcurl command
 	grpcArgs := []string{}
-	if *plaintext {
+	if grpcPlaintext {
 		grpcArgs = append(grpcArgs, "-plaintext")
 	}
 
 	// Add metadata
-	if *metadata != "" {
-		for _, m := range strings.Split(*metadata, ",") {
+	if grpcMetadata != "" {
+		for _, m := range strings.Split(grpcMetadata, ",") {
 			parts := strings.SplitN(m, ":", 2)
 			if len(parts) == 2 {
 				grpcArgs = append(grpcArgs, "-H", fmt.Sprintf("%s: %s", parts[0], parts[1]))
@@ -248,12 +225,12 @@ Note: This command uses grpcurl if available, otherwise provides instructions.
 	grpcArgs = append(grpcArgs, "-d", jsonBody)
 	grpcArgs = append(grpcArgs, endpoint, serviceMethod)
 
-	cmd := exec.Command(grpcurlPath, grpcArgs...)
+	execCmd := exec.Command(grpcurlPath, grpcArgs...)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	execCmd.Stdout = &stdout
+	execCmd.Stderr = &stderr
 
-	if err := cmd.Run(); err != nil {
+	if err := execCmd.Run(); err != nil {
 		if stderr.Len() > 0 {
 			return fmt.Errorf("grpc call failed: %s", stderr.String())
 		}
@@ -262,7 +239,7 @@ Note: This command uses grpcurl if available, otherwise provides instructions.
 
 	// Print response
 	output := stdout.String()
-	if *pretty {
+	if grpcPretty {
 		var prettyJSON bytes.Buffer
 		if err := json.Indent(&prettyJSON, []byte(output), "", "  "); err != nil {
 			fmt.Println(output)

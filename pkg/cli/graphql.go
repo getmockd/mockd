@@ -4,95 +4,142 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 
+	"github.com/charmbracelet/huh"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
 	"github.com/getmockd/mockd/pkg/graphql"
+	"github.com/spf13/cobra"
 )
 
-// RunGraphQL handles the graphql command and its subcommands.
-func RunGraphQL(args []string) error {
-	if len(args) == 0 {
-		printGraphQLUsage()
-		return nil
-	}
-
-	subcommand := args[0]
-	subArgs := args[1:]
-
-	switch subcommand {
-	case "add":
-		return RunAdd(append([]string{"graphql"}, subArgs...))
-	case "list":
-		return RunList(append([]string{"--type", "graphql"}, subArgs...))
-	case "get":
-		return RunGet(subArgs)
-	case "delete", "rm", "remove":
-		return RunDelete(subArgs)
-	case "validate":
-		return runGraphQLValidate(subArgs)
-	case "query":
-		return runGraphQLQuery(subArgs)
-	case "help", "--help", "-h":
-		printGraphQLUsage()
-		return nil
-	default:
-		return fmt.Errorf("unknown graphql subcommand: %s\n\nRun 'mockd graphql --help' for usage", subcommand)
-	}
+var graphqlCmd = &cobra.Command{
+	Use:   "graphql",
+	Short: "Manage and test GraphQL endpoints",
 }
 
-func printGraphQLUsage() {
-	fmt.Print(`Usage: mockd graphql <subcommand> [flags]
+var graphqlAddCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Add a new GraphQL mock endpoint",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Use huh interactive forms if attributes are missing
+		if !cmd.Flags().Changed("path") {
+			var formPath, formOperationType, formOperationName, formResponse string
 
-Manage and test GraphQL endpoints.
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewInput().
+						Title("What is the GraphQL endpoint path?").
+						Placeholder("/graphql").
+						Value(&formPath).
+						Validate(func(s string) error {
+							if s == "" {
+								return errors.New("path is required")
+							}
+							return nil
+						}),
+					huh.NewSelect[string]().
+						Title("Operation Type").
+						Options(
+							huh.NewOption("Query", "query"),
+							huh.NewOption("Mutation", "mutation"),
+						).
+						Value(&formOperationType),
+					huh.NewInput().
+						Title("Operation Name").
+						Placeholder("GetUser").
+						Value(&formOperationName).
+						Validate(func(s string) error {
+							if s == "" {
+								return errors.New("operation name is required")
+							}
+							return nil
+						}),
+					huh.NewText().
+						Title("Response JSON").
+						Placeholder(`{"data": {"user": {"name": "Test"}}}`).
+						Value(&formResponse),
+				),
+			)
+			if err := form.Run(); err != nil {
+				return err
+			}
+			addPath = formPath
+			addOpType = formOperationType
+			addOperation = formOperationName
+			addResponse = formResponse
+		}
+		addMockType = "graphql"
+		return runAdd(cmd, args)
+	},
+}
 
-Subcommands:
-  add       Add a new GraphQL mock endpoint
-  list      List GraphQL mocks
-  get       Get details of a GraphQL mock
-  delete    Delete a GraphQL mock
-  validate  Validate a GraphQL schema file
-  query     Execute a query against a GraphQL endpoint
+var (
+	graphqlVariables     string
+	graphqlOperationName string
+	graphqlHeaders       string
+	graphqlPretty        bool
+)
 
-Run 'mockd graphql <subcommand> --help' for more information.
-`)
+func init() {
+	rootCmd.AddCommand(graphqlCmd)
+	graphqlCmd.AddCommand(graphqlAddCmd)
+
+	graphqlAddCmd.Flags().StringVar(&addPath, "path", "", "URL path to match")
+	graphqlAddCmd.Flags().StringVar(&addOperation, "operation", "", "Operation name")
+	graphqlAddCmd.Flags().StringVar(&addOpType, "op-type", "query", "GraphQL operation type (query/mutation)")
+	graphqlAddCmd.Flags().StringVar(&addResponse, "response", "", "JSON response data")
+
+	// Add list/get/delete generic aliases
+	graphqlCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List GraphQL mocks",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			listMockType = "graphql"
+			return runList(cmd, args)
+		},
+	})
+	graphqlCmd.AddCommand(&cobra.Command{
+		Use:   "get",
+		Short: "Get details of a GraphQL mock",
+		RunE:  runGet,
+	})
+	graphqlCmd.AddCommand(&cobra.Command{
+		Use:   "delete",
+		Short: "Delete a GraphQL mock",
+		RunE:  runDelete,
+	})
+
+	graphqlCmd.AddCommand(graphqlValidateCmd)
+
+	graphqlQueryCmd.Flags().StringVarP(&graphqlVariables, "variables", "v", "", "JSON string of variables")
+	graphqlQueryCmd.Flags().StringVarP(&graphqlOperationName, "operation", "o", "", "Operation name")
+	graphqlQueryCmd.Flags().StringVarP(&graphqlHeaders, "header", "H", "", "Additional headers (key:value,key2:value2)")
+	graphqlQueryCmd.Flags().BoolVar(&graphqlPretty, "pretty", true, "Pretty print output")
+	graphqlCmd.AddCommand(graphqlQueryCmd)
+}
+
+var graphqlValidateCmd = &cobra.Command{
+	Use:   "validate <schema-file>",
+	Short: "Validate a GraphQL schema file",
+	RunE:  runGraphQLValidate,
+}
+
+var graphqlQueryCmd = &cobra.Command{
+	Use:   "query <endpoint> <query>",
+	Short: "Execute a query against a GraphQL endpoint",
+	RunE:  runGraphQLQuery,
 }
 
 // runGraphQLValidate validates a GraphQL schema file.
-func runGraphQLValidate(args []string) error {
-	fs := flag.NewFlagSet("graphql validate", flag.ContinueOnError)
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd graphql validate <schema-file>
-
-Validate a GraphQL schema file.
-
-Arguments:
-  schema-file    Path to the GraphQL schema file (.graphql or .gql)
-
-Examples:
-  # Validate a schema file
-  mockd graphql validate schema.graphql
-
-  # Validate with full path
-  mockd graphql validate ./schemas/api.graphql
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() < 1 {
-		fs.Usage()
+func runGraphQLValidate(cmd *cobra.Command, args []string) error {
+	if len(args) < 1 {
 		return errors.New("schema file is required")
 	}
 
-	schemaFile := fs.Arg(0)
+	schemaFile := args[0]
 
 	// Read schema file
 	schemaBytes, err := os.ReadFile(schemaFile)
@@ -131,64 +178,13 @@ Examples:
 }
 
 // runGraphQLQuery executes a GraphQL query against an endpoint.
-func runGraphQLQuery(args []string) error {
-	fs := flag.NewFlagSet("graphql query", flag.ContinueOnError)
-
-	variables := fs.String("variables", "", "JSON string of variables")
-	fs.StringVar(variables, "v", "", "JSON string of variables (shorthand)")
-
-	operationName := fs.String("operation", "", "Operation name for multi-operation documents")
-	fs.StringVar(operationName, "o", "", "Operation name (shorthand)")
-
-	headers := fs.String("header", "", "Additional headers (key:value,key2:value2)")
-	fs.StringVar(headers, "H", "", "Additional headers (shorthand)")
-
-	pretty := fs.Bool("pretty", true, "Pretty print output")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd graphql query <endpoint> <query>
-
-Execute a GraphQL query against an endpoint.
-
-Arguments:
-  endpoint    GraphQL endpoint URL (e.g., http://localhost:4280/graphql)
-  query       GraphQL query string or @filename
-
-Flags:
-  -v, --variables   JSON string of variables
-  -o, --operation   Operation name for multi-operation documents
-  -H, --header      Additional headers (key:value,key2:value2)
-      --pretty      Pretty print output (default: true)
-
-Examples:
-  # Simple query
-  mockd graphql query http://localhost:4280/graphql "{ users { id name } }"
-
-  # Query with variables
-  mockd graphql query http://localhost:4280/graphql \
-    "query GetUser($id: ID!) { user(id: $id) { name } }" \
-    -v '{"id": "123"}'
-
-  # Query from file
-  mockd graphql query http://localhost:4280/graphql @query.graphql
-
-  # With custom headers
-  mockd graphql query http://localhost:4280/graphql "{ me { name } }" \
-    -H "Authorization:Bearer token123"
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() < 2 {
-		fs.Usage()
+func runGraphQLQuery(cmd *cobra.Command, args []string) error {
+	if len(args) < 2 {
 		return errors.New("endpoint and query are required")
 	}
 
-	endpoint := fs.Arg(0)
-	query := fs.Arg(1)
+	endpoint := args[0]
+	query := args[1]
 
 	// Load query from file if prefixed with @
 	if len(query) > 0 && query[0] == '@' {
@@ -201,8 +197,8 @@ Examples:
 
 	// Parse variables
 	var varsMap map[string]interface{}
-	if *variables != "" {
-		if err := json.Unmarshal([]byte(*variables), &varsMap); err != nil {
+	if graphqlVariables != "" {
+		if err := json.Unmarshal([]byte(graphqlVariables), &varsMap); err != nil {
 			return fmt.Errorf("invalid variables JSON: %w", err)
 		}
 	}
@@ -211,7 +207,7 @@ Examples:
 	reqBody := graphql.GraphQLRequest{
 		Query:         query,
 		Variables:     varsMap,
-		OperationName: *operationName,
+		OperationName: graphqlOperationName,
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)
@@ -228,8 +224,8 @@ Examples:
 	req.Header.Set("Content-Type", "application/json")
 
 	// Add custom headers
-	if *headers != "" {
-		for _, header := range parse.SplitHeaders(*headers) {
+	if graphqlHeaders != "" {
+		for _, header := range parse.SplitHeaders(graphqlHeaders) {
 			parts := parse.HeaderParts(header)
 			if len(parts) == 2 {
 				req.Header.Set(parts[0], parts[1])
@@ -252,7 +248,7 @@ Examples:
 	}
 
 	// Print response
-	if *pretty {
+	if graphqlPretty {
 		var prettyJSON bytes.Buffer
 		if err := json.Indent(&prettyJSON, respBody, "", "  "); err != nil {
 			fmt.Println(string(respBody))

@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,89 +11,123 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
+	"github.com/charmbracelet/huh"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
+	"github.com/spf13/cobra"
 )
 
-// RunSOAP handles the soap command and its subcommands.
-func RunSOAP(args []string) error {
-	if len(args) == 0 {
-		printSOAPUsage()
-		return nil
-	}
-
-	subcommand := args[0]
-	subArgs := args[1:]
-
-	switch subcommand {
-	case "add":
-		// Forward to the main add command but enforce the soap protocol
-		return RunAdd(append([]string{"soap"}, subArgs...))
-	case "list":
-		return RunList(append([]string{"--type", "soap"}, subArgs...))
-	case "get":
-		return RunGet(subArgs)
-	case "delete", "rm", "remove":
-		return RunDelete(subArgs)
-	case "validate":
-		return runSOAPValidate(subArgs)
-	case "call":
-		return runSOAPCall(subArgs)
-	case "help", "--help", "-h":
-		printSOAPUsage()
-		return nil
-	default:
-		return fmt.Errorf("unknown soap subcommand: %s\n\nRun 'mockd soap --help' for usage", subcommand)
-	}
+var soapCmd = &cobra.Command{
+	Use:   "soap",
+	Short: "Manage and test SOAP endpoints",
 }
 
-func printSOAPUsage() {
-	fmt.Print(`Usage: mockd soap <subcommand> [flags]
+var soapAddCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Add a new SOAP mock endpoint",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Use huh interactive forms if attributes are missing
+		if !cmd.Flags().Changed("path") {
+			var formPath, formAction, formResponse string
 
-Manage and test SOAP web services.
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewInput().
+						Title("What is the SOAP endpoint path?").
+						Placeholder("/soap/calculator").
+						Value(&formPath).
+						Validate(func(s string) error {
+							if s == "" {
+								return errors.New("path is required")
+							}
+							return nil
+						}),
+					huh.NewInput().
+						Title("SOAP Action").
+						Placeholder("http://example.com/Add").
+						Value(&formAction).
+						Validate(func(s string) error {
+							if s == "" {
+								return errors.New("action is required")
+							}
+							return nil
+						}),
+					huh.NewText().
+						Title("Response XML").
+						Placeholder("<AddResponse><Result>3</Result></AddResponse>").
+						Value(&formResponse),
+				),
+			)
+			if err := form.Run(); err != nil {
+				return err
+			}
+			addPath = formPath
+			addOperation = formAction
+			addResponse = formResponse
+		}
+		addMockType = "soap"
+		return runAdd(cmd, args)
+	},
+}
 
-Subcommands:
-  add       Add a new SOAP mock endpoint
-  list      List SOAP mocks
-  get       Get details of a SOAP mock
-  delete    Delete a SOAP mock
-  validate  Validate a WSDL file
-  call      Call a SOAP operation
+var (
+	soapHeaders string
+	soapPretty  bool
+)
 
-Run 'mockd soap <subcommand> --help' for more information.
-`)
+func init() {
+	rootCmd.AddCommand(soapCmd)
+	soapCmd.AddCommand(soapAddCmd)
+
+	soapAddCmd.Flags().StringVar(&addPath, "path", "", "URL path to match")
+	soapAddCmd.Flags().StringVar(&addOperation, "action", "", "SOAP action")
+	soapAddCmd.Flags().StringVar(&addResponse, "response", "", "XML response body")
+
+	// Add list/get/delete generic aliases
+	soapCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List SOAP mocks",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			listMockType = "soap"
+			return runList(cmd, args)
+		},
+	})
+	soapCmd.AddCommand(&cobra.Command{
+		Use:   "get",
+		Short: "Get details of a SOAP mock",
+		RunE:  runGet,
+	})
+	soapCmd.AddCommand(&cobra.Command{
+		Use:   "delete",
+		Short: "Delete a SOAP mock",
+		RunE:  runDelete,
+	})
+
+	soapCmd.AddCommand(soapValidateCmd)
+
+	soapCallCmd.Flags().StringVarP(&soapHeaders, "header", "H", "", "Additional headers (key:value,key2:value2)")
+	soapCallCmd.Flags().BoolVar(&soapPretty, "pretty", true, "Pretty print output")
+	soapCmd.AddCommand(soapCallCmd)
+}
+
+var soapValidateCmd = &cobra.Command{
+	Use:   "validate <wsdl-file>",
+	Short: "Validate a WSDL file",
+	RunE:  runSOAPValidate,
+}
+
+var soapCallCmd = &cobra.Command{
+	Use:   "call <endpoint> <action> <body>",
+	Short: "Execute a SOAP call against an endpoint",
+	RunE:  runSOAPCall,
 }
 
 // runSOAPValidate validates a WSDL file.
-func runSOAPValidate(args []string) error {
-	fs := flag.NewFlagSet("soap validate", flag.ContinueOnError)
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd soap validate <wsdl-file>
-
-Validate a WSDL file.
-
-Arguments:
-  wsdl-file    Path to the WSDL file
-
-Examples:
-  # Validate a WSDL file
-  mockd soap validate service.wsdl
-
-  # Validate with full path
-  mockd soap validate ./wsdl/calculator.wsdl
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() < 1 {
-		fs.Usage()
+func runSOAPValidate(cmd *cobra.Command, args []string) error {
+	if len(args) < 1 {
 		return errors.New("wsdl file is required")
 	}
 
-	wsdlFile := fs.Arg(0)
+	wsdlFile := args[0]
 
 	// Read WSDL file
 	wsdlBytes, err := os.ReadFile(wsdlFile)
@@ -203,85 +236,43 @@ Examples:
 }
 
 // runSOAPCall executes a SOAP call against an endpoint.
-func runSOAPCall(args []string) error {
-	fs := flag.NewFlagSet("soap call", flag.ContinueOnError)
-
-	soapAction := fs.String("action", "", "SOAPAction header value")
-	fs.StringVar(soapAction, "a", "", "SOAPAction header (shorthand)")
-
-	body := fs.String("body", "", "SOAP body content (XML) or @filename")
-	fs.StringVar(body, "b", "", "SOAP body content (shorthand)")
-
-	headers := fs.String("header", "", "Additional headers (key:value,key2:value2)")
-	fs.StringVar(headers, "H", "", "Additional headers (shorthand)")
-
-	soap12 := fs.Bool("soap12", false, "Use SOAP 1.2 (default: SOAP 1.1)")
-	pretty := fs.Bool("pretty", true, "Pretty print output")
-	timeout := fs.Int("timeout", 30, "Request timeout in seconds")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd soap call <endpoint> <operation> [flags]
-
-Call a SOAP operation on an endpoint.
-
-Arguments:
-  endpoint     SOAP service endpoint URL
-  operation    Operation name (used in SOAP body if no body provided)
-
-Flags:
-  -a, --action   SOAPAction header value
-  -b, --body     SOAP body content (XML) or @filename
-  -H, --header   Additional headers (key:value,key2:value2)
-      --soap12   Use SOAP 1.2 (default: SOAP 1.1)
-      --pretty   Pretty print output (default: true)
-      --timeout  Request timeout in seconds (default: 30)
-
-Examples:
-  # Call an operation with auto-generated body
-  mockd soap call http://localhost:4280/soap GetUser
-
-  # Call with SOAPAction header
-  mockd soap call http://localhost:4280/soap GetUser \
-    -a "http://example.com/GetUser"
-
-  # Call with custom body
-  mockd soap call http://localhost:4280/soap GetUser \
-    -b '<GetUser xmlns="http://example.com/"><id>123</id></GetUser>'
-
-  # Call with body from file
-  mockd soap call http://localhost:4280/soap GetUser -b @request.xml
-
-  # Use SOAP 1.2
-  mockd soap call http://localhost:4280/soap GetUser --soap12
-
-Note: This command uses curl under the hood for HTTP requests.
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() < 2 {
-		fs.Usage()
+func runSOAPCall(cmd *cobra.Command, args []string) error {
+	if len(args) < 2 {
 		return errors.New("endpoint and operation are required")
 	}
 
-	endpoint := fs.Arg(0)
-	operation := fs.Arg(1)
+	endpoint := args[0]
+	operation := args[1]
+	body := ""
+	if len(args) >= 3 {
+		body = args[2]
+	}
+
+	soapAction := ""
+	if cmd.Flags().Changed("action") {
+		soapAction, _ = cmd.Flags().GetString("action")
+	}
+	soap12 := false
+	if cmd.Flags().Changed("soap12") {
+		soap12, _ = cmd.Flags().GetBool("soap12")
+	}
+	timeout := 30
+	if cmd.Flags().Changed("timeout") {
+		timeout, _ = cmd.Flags().GetInt("timeout")
+	}
 
 	// Build SOAP body
 	var soapBody string
-	if *body != "" {
+	if body != "" {
 		// Load body from file if prefixed with @
-		if len(*body) > 0 && (*body)[0] == '@' {
-			bodyBytes, err := os.ReadFile((*body)[1:])
+		if len(body) > 0 && body[0] == '@' {
+			bodyBytes, err := os.ReadFile(body[1:])
 			if err != nil {
 				return fmt.Errorf("failed to read body file: %w", err)
 			}
 			soapBody = string(bodyBytes)
 		} else {
-			soapBody = *body
+			soapBody = body
 		}
 	} else {
 		// Generate minimal body for operation
@@ -291,11 +282,11 @@ Note: This command uses curl under the hood for HTTP requests.
 	// Build SOAP envelope
 	var envelope string
 	var contentType string
-	if *soap12 {
+	if soap12 {
 		envelope = buildSOAP12Envelope(soapBody)
 		contentType = "application/soap+xml; charset=utf-8"
-		if *soapAction != "" {
-			contentType = fmt.Sprintf("application/soap+xml; charset=utf-8; action=\"%s\"", *soapAction)
+		if soapAction != "" {
+			contentType = fmt.Sprintf("application/soap+xml; charset=utf-8; action=\"%s\"", soapAction)
 		}
 	} else {
 		envelope = buildSOAP11Envelope(soapBody)
@@ -309,13 +300,13 @@ Note: This command uses curl under the hood for HTTP requests.
 	}
 
 	req.Header.Set("Content-Type", contentType)
-	if !*soap12 && *soapAction != "" {
-		req.Header.Set("SOAPAction", fmt.Sprintf("\"%s\"", *soapAction))
+	if !soap12 && soapAction != "" {
+		req.Header.Set("SOAPAction", fmt.Sprintf("\"%s\"", soapAction))
 	}
 
 	// Add custom headers
-	if *headers != "" {
-		for _, header := range parse.SplitHeaders(*headers) {
+	if soapHeaders != "" {
+		for _, header := range parse.SplitHeaders(soapHeaders) {
 			parts := parse.HeaderParts(header)
 			if len(parts) == 2 {
 				req.Header.Set(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
@@ -325,7 +316,7 @@ Note: This command uses curl under the hood for HTTP requests.
 
 	// Execute request
 	client := &http.Client{
-		Timeout: secondsToDuration(*timeout),
+		Timeout: secondsToDuration(timeout),
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -340,7 +331,7 @@ Note: This command uses curl under the hood for HTTP requests.
 	}
 
 	// Print response
-	if *pretty {
+	if soapPretty {
 		prettyXML := prettyPrintXML(respBody)
 		fmt.Println(prettyXML)
 	} else {

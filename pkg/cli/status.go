@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
+	"github.com/spf13/cobra"
 )
 
 // StatusOutput represents the JSON output format for status.
@@ -47,70 +47,46 @@ type StatusStats struct {
 	RequestsUnmatched int `json:"requestsUnmatched"`
 }
 
-// RunStatus handles the status command.
-func RunStatus(args []string) error {
-	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+var (
+	statusPidFile   string
+	statusAdminPort int
+	statusPort      int
+)
 
-	pidFile := fs.String("pid-file", "", "Path to PID file (default: ~/.mockd/mockd.pid)")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-	adminPort := fs.Int("admin-port", cliconfig.DefaultAdminPort, "Admin API port to probe")
-	enginePort := fs.Int("port", cliconfig.DefaultPort, "Mock engine port to probe")
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show the status of the running mockd server",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Determine PID file path
+		pidPath := statusPidFile
+		if pidPath == "" {
+			pidPath = DefaultPIDPath()
+		}
 
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd status [flags]
+		// Try to read PID file first
+		info, err := ReadPIDFile(pidPath)
+		if err == nil && info.IsRunning() {
+			// PID file exists and process is running - use it
+			return printRunningFromPIDFile(info, jsonOutput)
+		}
 
-Show the status of the running mockd server.
+		// No PID file or stale PID file - try port detection
+		detected := detectRunningServer(statusAdminPort, statusPort)
+		if detected != nil {
+			return printRunningFromDetection(detected, jsonOutput)
+		}
 
-Flags:
-      --pid-file    Path to PID file (default: ~/.mockd/mockd.pid)
-      --json        Output in JSON format
-  -p, --port        Mock engine port to probe (default: 4280)
-  -a, --admin-port  Admin API port to probe (default: 4290)
+		// Nothing found
+		return printNotRunning(jsonOutput)
+	},
+}
 
-Examples:
-  # Check server status
-  mockd status
-
-  # Output as JSON
-  mockd status --json
-
-  # Use custom PID file
-  mockd status --pid-file /tmp/mockd.pid
-
-  # Check status on custom ports
-  mockd status --port 3000 --admin-port 3001
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %v", fs.Args())
-	}
-
-	// Determine PID file path
-	pidPath := *pidFile
-	if pidPath == "" {
-		pidPath = DefaultPIDPath()
-	}
-
-	// Try to read PID file first
-	info, err := ReadPIDFile(pidPath)
-	if err == nil && info.IsRunning() {
-		// PID file exists and process is running - use it
-		return printRunningFromPIDFile(info, *jsonOutput)
-	}
-
-	// No PID file or stale PID file - try port detection
-	detected := detectRunningServer(*adminPort, *enginePort)
-	if detected != nil {
-		return printRunningFromDetection(detected, *jsonOutput)
-	}
-
-	// Nothing found
-	return printNotRunning(*jsonOutput)
+func init() {
+	statusCmd.Flags().StringVar(&statusPidFile, "pid-file", "", "Path to PID file (default: ~/.mockd/mockd.pid)")
+	statusCmd.Flags().IntVarP(&statusPort, "port", "p", cliconfig.DefaultPort, "Mock engine port to probe")
+	statusCmd.Flags().IntVarP(&statusAdminPort, "admin-port", "a", cliconfig.DefaultAdminPort, "Admin API port to probe")
+	rootCmd.AddCommand(statusCmd)
 }
 
 // printRunningFromPIDFile prints status when we have PID file info.

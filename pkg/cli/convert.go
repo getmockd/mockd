@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,59 +11,30 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/getmockd/mockd/pkg/recording"
+	"github.com/spf13/cobra"
 )
 
-// RunConvert handles the convert command.
-// It reads recordings from disk (written by mockd proxy start) and converts
-// them to mock definitions that can be imported into a mockd server.
-func RunConvert(args []string) error {
-	fs := flag.NewFlagSet("convert", flag.ContinueOnError)
+var (
+	convertSessionName    string
+	convertFile           string
+	convertRecordingsDir  string
+	convertIncludeHosts   string
+	convertPathFilter     string
+	convertMethod         string
+	convertStatus         string
+	convertSmartMatch     bool
+	convertDuplicates     string
+	convertIncludeHeaders bool
+	convertCheckSensitive bool
+	convertOutput         string
+)
 
-	// Source selection
-	sessionName := fs.String("session", "", "Session name or directory (default: latest)")
-	fs.StringVar(sessionName, "s", "", "Session name (shorthand)")
-	file := fs.String("file", "", "Path to a recording file or directory")
-	fs.StringVar(file, "f", "", "Path to a recording file or directory (shorthand)")
-	recordingsDir := fs.String("recordings-dir", "", "Base recordings directory")
-	includeHosts := fs.String("include-hosts", "", "Comma-separated host patterns to include")
-
-	// Conversion options
-	pathFilter := fs.String("path-filter", "", "Glob pattern to filter paths (e.g., /api/*)")
-	methodFilter := fs.String("method", "", "Comma-separated HTTP methods (e.g., GET,POST)")
-	statusFilter := fs.String("status", "", "Status code filter (e.g., 2xx, 200,201)")
-	smartMatch := fs.Bool("smart-match", false, "Convert dynamic path segments to parameters")
-	duplicates := fs.String("duplicates", "first", "Duplicate handling: first, last, all")
-	includeHeaders := fs.Bool("include-headers", false, "Include request headers in matchers")
-	checkSensitive := fs.Bool("check-sensitive", true, "Check for sensitive data and warn")
-
-	// Output
-	output := fs.String("output", "", "Output file path (default: stdout)")
-	fs.StringVar(output, "o", "", "Output file path (shorthand)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd convert [flags]
-
-Convert recorded API traffic to mock definitions.
+var convertCmd = &cobra.Command{
+	Use:   "convert",
+	Short: "Convert recorded API traffic to mock definitions",
+	Long: `Convert recorded API traffic to mock definitions.
 Reads recordings from disk (written by 'mockd proxy start') and produces
 mock configuration that can be imported with 'mockd import'.
-
-Source Selection:
-  -s, --session         Session name or directory (default: latest)
-  -f, --file            Path to a recording file or directory
-      --recordings-dir  Base recordings directory override
-      --include-hosts   Comma-separated host patterns to include
-
-Conversion Options:
-      --path-filter     Glob pattern to filter paths (e.g., /api/*)
-      --method          Comma-separated HTTP methods (e.g., GET,POST)
-      --status          Status code filter (e.g., 2xx, 200,201)
-      --smart-match     Convert dynamic path segments like /users/123 to /users/{id}
-      --duplicates      Duplicate handling strategy: first, last, all (default: first)
-      --include-headers Include request headers in mock matchers
-      --check-sensitive Check for sensitive data and show warnings (default: true)
-
-Output:
-  -o, --output          Output file path (default: stdout)
 
 Examples:
   # Convert latest session
@@ -80,90 +50,117 @@ Examples:
   mockd convert --file ./my-recordings/rec_abc123.json
 
   # Pipe directly to import
-  mockd convert --session my-api --smart-match | mockd import
-`)
-	}
+  mockd convert --session my-api --smart-match | mockd import`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		file := &convertFile
+		sessionName := &convertSessionName
+		recordingsDir := &convertRecordingsDir
+		includeHosts := &convertIncludeHosts
+		statusFilter := &convertStatus
+		includeHeaders := &convertIncludeHeaders
+		duplicates := &convertDuplicates
+		smartMatch := &convertSmartMatch
+		pathFilter := &convertPathFilter
+		methodFilter := &convertMethod
+		checkSensitive := &convertCheckSensitive
+		output := &convertOutput
 
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
+		// Load recordings from disk
+		recordings, err := loadRecordingsFromFlags(*file, *sessionName, *recordingsDir)
+		if err != nil {
+			return err
+		}
 
-	// Load recordings from disk
-	recordings, err := loadRecordingsFromFlags(*file, *sessionName, *recordingsDir)
-	if err != nil {
-		return err
-	}
-
-	if len(recordings) == 0 {
-		return errors.New("no recordings found")
-	}
-
-	// Filter by host if specified
-	if *includeHosts != "" {
-		hostPatterns := splitPatterns(*includeHosts)
-		recordings = filterByHosts(recordings, hostPatterns)
 		if len(recordings) == 0 {
-			return errors.New("no recordings match the host filter")
-		}
-	}
-
-	// Build conversion options
-	statusCodes, statusRange := recording.ParseStatusFilter(*statusFilter)
-
-	opts := recording.SessionConvertOptions{
-		ConvertOptions: recording.ConvertOptions{
-			IncludeHeaders: *includeHeaders,
-			Deduplicate:    *duplicates != "all",
-			SmartMatch:     *smartMatch,
-		},
-		Filter: recording.FilterOptions{
-			PathPattern: *pathFilter,
-			Methods:     recording.ParseMethodFilter(*methodFilter),
-			StatusCodes: statusCodes,
-			StatusRange: statusRange,
-		},
-		Duplicates: *duplicates,
-	}
-
-	if opts.Duplicates == "" {
-		opts.Duplicates = "first"
-	}
-
-	// Convert
-	result := recording.ConvertRecordingsWithOptions(recordings, opts)
-
-	// Show sensitive data warnings
-	if *checkSensitive && len(result.Warnings) > 0 {
-		fmt.Fprintf(os.Stderr, "Warning: Found %d potential sensitive data issues:\n", len(result.Warnings))
-
-		warningsByType := make(map[string][]recording.SensitiveDataWarning)
-		for _, w := range result.Warnings {
-			warningsByType[w.Type] = append(warningsByType[w.Type], w)
+			return errors.New("no recordings found")
 		}
 
-		for typ, warnings := range warningsByType {
-			fmt.Fprintf(os.Stderr, "  %s (%d):\n", cases.Title(language.English).String(typ), len(warnings))
-			shown := 0
-			for _, w := range warnings {
-				if shown >= 3 {
-					fmt.Fprintf(os.Stderr, "    ... and %d more\n", len(warnings)-3)
-					break
-				}
-				fmt.Fprintf(os.Stderr, "    - %s\n", w.Message)
-				shown++
+		// Filter by host if specified
+		if *includeHosts != "" {
+			hostPatterns := splitPatterns(*includeHosts)
+			recordings = filterByHosts(recordings, hostPatterns)
+			if len(recordings) == 0 {
+				return errors.New("no recordings match the host filter")
 			}
 		}
-		fmt.Fprintln(os.Stderr)
-	}
 
-	// Show stats
-	fmt.Fprintf(os.Stderr, "Processed %d recordings", result.Total)
-	if result.Filtered > 0 {
-		fmt.Fprintf(os.Stderr, " (filtered out %d)", result.Filtered)
-	}
-	fmt.Fprintf(os.Stderr, ", generated %d mocks\n", len(result.Mocks))
+		// Build conversion options
+		statusCodes, statusRange := recording.ParseStatusFilter(*statusFilter)
 
-	return outputConversionResult(result, *output)
+		opts := recording.SessionConvertOptions{
+			ConvertOptions: recording.ConvertOptions{
+				IncludeHeaders: *includeHeaders,
+				Deduplicate:    *duplicates != "all",
+				SmartMatch:     *smartMatch,
+			},
+			Filter: recording.FilterOptions{
+				PathPattern: *pathFilter,
+				Methods:     recording.ParseMethodFilter(*methodFilter),
+				StatusCodes: statusCodes,
+				StatusRange: statusRange,
+			},
+			Duplicates: *duplicates,
+		}
+
+		if opts.Duplicates == "" {
+			opts.Duplicates = "first"
+		}
+
+		// Convert
+		result := recording.ConvertRecordingsWithOptions(recordings, opts)
+
+		// Show sensitive data warnings
+		if *checkSensitive && len(result.Warnings) > 0 {
+			fmt.Fprintf(os.Stderr, "Warning: Found %d potential sensitive data issues:\n", len(result.Warnings))
+
+			warningsByType := make(map[string][]recording.SensitiveDataWarning)
+			for _, w := range result.Warnings {
+				warningsByType[w.Type] = append(warningsByType[w.Type], w)
+			}
+
+			for typ, warnings := range warningsByType {
+				fmt.Fprintf(os.Stderr, "  %s (%d):\n", cases.Title(language.English).String(typ), len(warnings))
+				shown := 0
+				for _, w := range warnings {
+					if shown >= 3 {
+						fmt.Fprintf(os.Stderr, "    ... and %d more\n", len(warnings)-3)
+						break
+					}
+					fmt.Fprintf(os.Stderr, "    - %s\n", w.Message)
+					shown++
+				}
+			}
+			fmt.Fprintln(os.Stderr)
+		}
+
+		// Show stats
+		fmt.Fprintf(os.Stderr, "Processed %d recordings", result.Total)
+		if result.Filtered > 0 {
+			fmt.Fprintf(os.Stderr, " (filtered out %d)", result.Filtered)
+		}
+		fmt.Fprintf(os.Stderr, ", generated %d mocks\n", len(result.Mocks))
+
+		return outputConversionResult(result, *output)
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(convertCmd)
+
+	convertCmd.Flags().StringVarP(&convertSessionName, "session", "s", "", "Session name or directory (default: latest)")
+	convertCmd.Flags().StringVarP(&convertFile, "file", "f", "", "Path to a recording file or directory")
+	convertCmd.Flags().StringVar(&convertRecordingsDir, "recordings-dir", "", "Base recordings directory override")
+	convertCmd.Flags().StringVar(&convertIncludeHosts, "include-hosts", "", "Comma-separated host patterns to include")
+
+	convertCmd.Flags().StringVar(&convertPathFilter, "path-filter", "", "Glob pattern to filter paths (e.g., /api/*)")
+	convertCmd.Flags().StringVar(&convertMethod, "method", "", "Comma-separated HTTP methods (e.g., GET,POST)")
+	convertCmd.Flags().StringVar(&convertStatus, "status", "", "Status code filter (e.g., 2xx, 200,201)")
+	convertCmd.Flags().BoolVar(&convertSmartMatch, "smart-match", false, "Convert dynamic path segments like /users/123 to /users/{id}")
+	convertCmd.Flags().StringVar(&convertDuplicates, "duplicates", "first", "Duplicate handling strategy: first, last, all")
+	convertCmd.Flags().BoolVar(&convertIncludeHeaders, "include-headers", false, "Include request headers in mock matchers")
+	convertCmd.Flags().BoolVar(&convertCheckSensitive, "check-sensitive", true, "Check for sensitive data and show warnings")
+
+	convertCmd.Flags().StringVarP(&convertOutput, "output", "o", "", "Output file path (default: stdout)")
 }
 
 // loadRecordingsFromFlags resolves the recording source from CLI flags.

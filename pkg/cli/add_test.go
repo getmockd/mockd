@@ -708,34 +708,6 @@ func TestBuildSOAPMock(t *testing.T) {
 	}
 }
 
-func TestRunAdd_InvalidMockType(t *testing.T) {
-	err := RunAdd([]string{
-		"--type", "invalid",
-		"--path", "/test",
-	})
-	if err == nil {
-		t.Error("expected error for invalid mock type")
-	}
-}
-
-func TestRunAdd_HelpFlag(t *testing.T) {
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("RunAdd panicked with --help: %v", r)
-		}
-	}()
-
-	// Capture stderr since help goes there
-	oldStderr := os.Stderr
-	_, w, _ := os.Pipe()
-	os.Stderr = w
-
-	_ = RunAdd([]string{"--help"})
-
-	w.Close()
-	os.Stderr = oldStderr
-}
-
 func TestOutputJSONResult(t *testing.T) {
 	// Test JSON output formatting
 	// We can't easily capture stdout in unit tests, but we can verify

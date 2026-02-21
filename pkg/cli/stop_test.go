@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+func RunStop(args []string) error {
+	stopCmd.SetArgs(args)
+	return stopCmd.Execute()
+}
+
 func TestRunStop_NoServer(t *testing.T) {
 	tmpDir := t.TempDir()
 	pidPath := filepath.Join(tmpDir, "nonexistent.pid")

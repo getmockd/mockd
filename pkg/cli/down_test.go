@@ -8,6 +8,11 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 )
 
+func RunDown(args []string) error {
+	downCmd.SetArgs(args)
+	return downCmd.Execute()
+}
+
 func TestRunDown_HelpFlag(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {

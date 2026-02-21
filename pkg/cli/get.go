@@ -2,17 +2,16 @@ package cli
 
 import (
 	"errors"
-	"flag"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
-	"github.com/getmockd/mockd/pkg/cliconfig"
+	"github.com/spf13/cobra"
 )
 
 // reorderArgs moves flags before positional arguments to work around
 // Go's flag package behavior of stopping at the first non-flag argument.
+// Keep it in case other files use it still, but mockd get no longer needs it for cobra.
 func reorderArgs(args []string, knownFlags []string) []string {
 	var flags, positional []string
 
@@ -61,53 +60,37 @@ func reorderArgs(args []string, knownFlags []string) []string {
 	return append(flags, positional...)
 }
 
-// RunGet handles the get command.
-func RunGet(args []string) error { //nolint:gocyclo // CLI command handler with many subcommands
-	fs := flag.NewFlagSet("get", flag.ContinueOnError)
-
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd get <mock-id> [flags]
-
-Get details of a specific mock.
-
-Arguments:
-  mock-id    ID of the mock to retrieve (required)
-
-Flags:
-      --admin-url    Admin API base URL (default: http://localhost:4290)
-      --json         Output in JSON format
-
-Examples:
-  # Get mock details
+var getCmd = &cobra.Command{
+	Use:   "get <mock-id>",
+	Short: "Get details of a specific mock",
+	Long:  `Get details of a specific mock.`,
+	Example: `  # Get mock details
   mockd get abc123
 
   # Get as JSON
-  mockd get abc123 --json
-`)
-	}
+  mockd get abc123 --json`,
+	RunE: runGet,
+}
 
-	// Reorder args so flags come before positional arguments
-	reorderedArgs := reorderArgs(args, []string{"admin-url"})
+func init() {
+	rootCmd.AddCommand(getCmd)
+}
 
-	if err := fs.Parse(reorderedArgs); err != nil {
-		return err
-	}
+//nolint:gocyclo
+func runGet(cmd *cobra.Command, args []string) error {
 
 	// Get mock ID from positional args
-	if fs.NArg() < 1 {
+	if len(args) < 1 {
 		return errors.New(`mock ID is required
 
 Usage: mockd get <mock-id>
 
 Run 'mockd get --help' for more options`)
 	}
-	mockID := fs.Arg(0)
+	mockID := args[0]
 
 	// Create admin client and get mock
-	client := NewAdminClientWithAuth(*adminURL)
+	client := NewAdminClientWithAuth(adminURL)
 	mock, err := client.GetMock(mockID)
 	if err != nil {
 		if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 404 {
@@ -117,7 +100,7 @@ Run 'mockd get --help' for more options`)
 	}
 
 	// Output result
-	if *jsonOutput {
+	if jsonOutput {
 		return output.JSON(mock)
 	}
 

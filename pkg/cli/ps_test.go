@@ -8,6 +8,11 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 )
 
+func RunPs(args []string) error {
+	psCmd.SetArgs(args)
+	return psCmd.Execute()
+}
+
 func TestRunPs_HelpFlag(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {

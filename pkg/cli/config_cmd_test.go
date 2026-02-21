@@ -11,21 +11,37 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 )
 
+func runConfigShowTest(args []string) (string, error) {
+	// Reset global/command variables to keep tests isolated
+	jsonOutput = false
+	configShowFiles = nil
+	configShowService = ""
+
+	// Reset Cobra help flags which persist across test executions
+	if f := rootCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+	if f := configShowCmd.Flags().Lookup("help"); f != nil {
+		f.Changed = false
+		f.Value.Set("false")
+	}
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+
+	rootCmd.SetArgs(append([]string{"config", "show"}, args...))
+	err := rootCmd.Execute()
+
+	rootCmd.SetOut(nil)
+	rootCmd.SetErr(nil)
+
+	return buf.String(), err
+}
+
 func TestRunConfigShow_HelpFlag(t *testing.T) {
-	// Capture stderr
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	err := RunConfigShow([]string{"--help"})
-
-	w.Close()
-	os.Stderr = oldStderr
-
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
+	output, err := runConfigShowTest([]string{"--help"})
 
 	// --help returns nil after printing usage
 	if err != nil {
@@ -33,8 +49,8 @@ func TestRunConfigShow_HelpFlag(t *testing.T) {
 	}
 
 	// Check that help text was printed
-	if !strings.Contains(output, "Display resolved configuration") {
-		t.Errorf("expected help text to contain 'Display resolved configuration', got: %s", output)
+	if !strings.Contains(output, "Show resolved project config") {
+		t.Errorf("expected help text to contain 'Show resolved project config', got: %s", output)
 	}
 }
 
@@ -60,24 +76,11 @@ workspaces:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := RunConfigShow([]string{"-f", configPath})
-
-	w.Close()
-	os.Stdout = oldStdout
+	output, err := runConfigShowTest([]string{"-f", configPath})
 
 	if err != nil {
 		t.Fatalf("RunConfigShow returned error: %v", err)
 	}
-
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
 
 	// Check output contains expected content
 	if !strings.Contains(output, "version:") {
@@ -115,24 +118,11 @@ engines:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := RunConfigShow([]string{"-f", configPath, "--json"})
-
-	w.Close()
-	os.Stdout = oldStdout
+	output, err := runConfigShowTest([]string{"-f", configPath, "--json"})
 
 	if err != nil {
 		t.Fatalf("RunConfigShow returned error: %v", err)
 	}
-
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
 
 	// Parse JSON output
 	var cfg config.ProjectConfig
@@ -175,24 +165,11 @@ engines:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := RunConfigShow([]string{"-f", configPath, "--service", "local"})
-
-	w.Close()
-	os.Stdout = oldStdout
+	output, err := runConfigShowTest([]string{"-f", configPath, "--service", "local"})
 
 	if err != nil {
 		t.Fatalf("RunConfigShow returned error: %v", err)
 	}
-
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
 
 	// Check output contains the specific admin
 	if !strings.Contains(output, "name: local") {
@@ -231,24 +208,11 @@ engines:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := RunConfigShow([]string{"-f", configPath, "--service", "default"})
-
-	w.Close()
-	os.Stdout = oldStdout
+	output, err := runConfigShowTest([]string{"-f", configPath, "--service", "default"})
 
 	if err != nil {
 		t.Fatalf("RunConfigShow returned error: %v", err)
 	}
-
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
 
 	// Check output contains the specific engine
 	if !strings.Contains(output, "name: default") {
@@ -284,24 +248,11 @@ engines:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := RunConfigShow([]string{"-f", configPath, "--service", "default", "--json"})
-
-	w.Close()
-	os.Stdout = oldStdout
+	output, err := runConfigShowTest([]string{"-f", configPath, "--service", "default", "--json"})
 
 	if err != nil {
 		t.Fatalf("RunConfigShow returned error: %v", err)
 	}
-
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
 
 	// Parse JSON output
 	var engine config.EngineConfig
@@ -339,7 +290,7 @@ engines:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	err := RunConfigShow([]string{"-f", configPath, "--service", "nonexistent"})
+	_, err := runConfigShowTest([]string{"-f", configPath, "--service", "nonexistent"})
 
 	if err == nil {
 		t.Fatal("expected error for nonexistent service")
@@ -371,24 +322,11 @@ engines:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := RunConfigShow([]string{"-f", configPath})
-
-	w.Close()
-	os.Stdout = oldStdout
+	output, err := runConfigShowTest([]string{"-f", configPath})
 
 	if err != nil {
 		t.Fatalf("RunConfigShow returned error: %v", err)
 	}
-
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
 
 	// Check that the env var was expanded
 	if !strings.Contains(output, "port: 9999") {
@@ -421,24 +359,11 @@ engines:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := RunConfigShow([]string{"-f", configPath})
-
-	w.Close()
-	os.Stdout = oldStdout
+	output, err := runConfigShowTest([]string{"-f", configPath})
 
 	if err != nil {
 		t.Fatalf("RunConfigShow returned error: %v", err)
 	}
-
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
 
 	// Check that the default value was used
 	if !strings.Contains(output, "port: 7777") {
@@ -462,7 +387,7 @@ func TestRunConfigShow_NoConfigFile(t *testing.T) {
 		}
 	}()
 
-	err := RunConfigShow([]string{})
+	_, err := runConfigShowTest([]string{})
 
 	if err == nil {
 		t.Fatal("expected error when no config file exists")
@@ -470,6 +395,22 @@ func TestRunConfigShow_NoConfigFile(t *testing.T) {
 	if !strings.Contains(err.Error(), "no config found") {
 		t.Errorf("expected 'no config found' error, got: %v", err)
 	}
+}
+
+func printFullConfigTestHelper(cfg *config.ProjectConfig, configPath string, isJSON bool) (string, error) {
+	// Capture stdout using os.Pipe since this directly tests the print function not cobra
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := printFullConfig(cfg, configPath, isJSON)
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	return buf.String(), err
 }
 
 func TestPrintFullConfig_YAML(t *testing.T) {
@@ -483,24 +424,11 @@ func TestPrintFullConfig_YAML(t *testing.T) {
 		},
 	}
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printFullConfig(cfg, "./mockd.yaml", false)
-
-	w.Close()
-	os.Stdout = oldStdout
+	output, err := printFullConfigTestHelper(cfg, "./mockd.yaml", false)
 
 	if err != nil {
 		t.Fatalf("printFullConfig returned error: %v", err)
 	}
-
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
 
 	// Check YAML output
 	if !strings.Contains(output, "version:") {
@@ -519,77 +447,15 @@ func TestPrintFullConfig_JSON(t *testing.T) {
 		},
 	}
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printFullConfig(cfg, "./mockd.yaml", true)
-
-	w.Close()
-	os.Stdout = oldStdout
+	output, err := printFullConfigTestHelper(cfg, "./mockd.yaml", true)
 
 	if err != nil {
 		t.Fatalf("printFullConfig returned error: %v", err)
 	}
 
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
-
 	// Should be valid JSON
 	var parsed config.ProjectConfig
 	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
 		t.Fatalf("expected valid JSON output, got error: %v", err)
-	}
-}
-
-func TestRunConfigSubcommand_Show(t *testing.T) {
-	// Test that "show" is recognized as a subcommand
-	// We can't fully test it without a config file, but we can verify routing
-
-	// Create a temporary config file
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "mockd.yaml")
-
-	configContent := `version: "1.0"
-admins:
-  - name: local
-    port: 4290
-`
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		t.Fatalf("failed to write config file: %v", err)
-	}
-
-	// Test that the subcommand is handled
-	handled, err := runConfigSubcommand([]string{"show", "-f", configPath})
-	if !handled {
-		t.Error("expected 'show' to be handled as subcommand")
-	}
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestRunConfigSubcommand_Unknown(t *testing.T) {
-	// Test that unknown subcommands are not handled
-	handled, err := runConfigSubcommand([]string{"unknown"})
-	if handled {
-		t.Error("expected 'unknown' to not be handled")
-	}
-	if err != nil {
-		t.Errorf("unexpected error for unhandled subcommand: %v", err)
-	}
-}
-
-func TestRunConfigSubcommand_Empty(t *testing.T) {
-	// Test that empty args are not handled (falls through to base config command)
-	handled, err := runConfigSubcommand([]string{})
-	if handled {
-		t.Error("expected empty args to not be handled")
-	}
-	if err != nil {
-		t.Errorf("unexpected error for empty args: %v", err)
 	}
 }

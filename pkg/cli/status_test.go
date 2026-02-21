@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+func RunStatus(args []string) error {
+	statusCmd.SetArgs(args)
+	return statusCmd.Execute()
+}
+
 func TestRunStatus_NoServer(t *testing.T) {
 	// Use non-existent PID file path
 	tmpDir := t.TempDir()

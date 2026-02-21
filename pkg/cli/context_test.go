@@ -9,6 +9,11 @@ import (
 	"github.com/getmockd/mockd/pkg/cliconfig"
 )
 
+func RunContext(args []string) error {
+	contextCmd.SetArgs(args)
+	return contextCmd.Execute()
+}
+
 func setupTestContextConfig(t *testing.T) (cleanup func()) {
 	t.Helper()
 

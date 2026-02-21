@@ -8,6 +8,11 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 )
 
+func RunUp(args []string) error {
+	upCmd.SetArgs(args)
+	return upCmd.Execute()
+}
+
 func TestRunUp_HelpFlag(t *testing.T) {
 	// --help should not panic or return error
 	defer func() {

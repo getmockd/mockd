@@ -31,14 +31,6 @@ func RunWebSocket(args []string) error {
 	subArgs := args[1:]
 
 	switch subcommand {
-	case "add":
-		return RunAdd(append([]string{"websocket"}, subArgs...))
-	case "list":
-		return RunList(append([]string{"--type", "websocket"}, subArgs...))
-	case "get":
-		return RunGet(subArgs)
-	case "delete", "rm", "remove":
-		return RunDelete(subArgs)
 	case "connect":
 		return runWebSocketConnect(subArgs)
 	case "send":

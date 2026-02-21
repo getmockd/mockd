@@ -78,7 +78,7 @@ Flags:
 
 	// Create MCP server (provides dispatch/tools/resources, not HTTP).
 	// Stateful tools go through the admin API (no local store needed).
-	mcp.SetServerVersion(Version)
+	mcp.SetServerVersion(cli.Version)
 	server := mcp.NewServer(mcpCfg, adminClient, nil)
 
 	// Seed sessions with resolved context so tools know which server they're talking to.
@@ -138,7 +138,7 @@ func startMCPHTTP(adminURL string, port int, allowRemote bool, storeIface interf
 		store = s
 	}
 
-	mcp.SetServerVersion(Version)
+	mcp.SetServerVersion(cli.Version)
 	server := mcp.NewServer(mcpCfg, adminClient, store)
 
 	// Seed sessions with the resolved context so tools know which server they're talking to.

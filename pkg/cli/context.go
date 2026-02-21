@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"errors"
-	"flag"
 	"fmt"
 	"net/url"
 	"os"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
+	"github.com/spf13/cobra"
 )
 
 // contextForJSON is a sanitized version of Context for JSON output.
@@ -44,70 +44,25 @@ func sanitizeContextsForJSON(contexts map[string]*cliconfig.Context) map[string]
 	return result
 }
 
-// RunContext handles the context command and its subcommands.
-func RunContext(args []string) error {
-	if len(args) == 0 {
-		// No subcommand: show current context
+var contextCmd = &cobra.Command{
+	Use:   "context",
+	Short: "Manage contexts (admin server + workspace pairs)",
+	RunE: func(cmd *cobra.Command, args []string) error {
 		return runContextShow()
-	}
-
-	subcommand := args[0]
-	subArgs := args[1:]
-
-	switch subcommand {
-	case "use":
-		return runContextUse(subArgs)
-	case "add":
-		return runContextAdd(subArgs)
-	case "list", "ls":
-		return runContextList(subArgs)
-	case "remove", "rm", "delete":
-		return runContextRemove(subArgs)
-	case "show":
-		return runContextShow()
-	case "--help", "-h", "help":
-		printContextUsage()
-		return nil
-	default:
-		return fmt.Errorf("unknown context subcommand: %s\n\nRun 'mockd context --help' for usage", subcommand)
-	}
+	},
 }
 
-func printContextUsage() {
-	fmt.Print(`Usage: mockd context [command]
+var contextShowCmd = &cobra.Command{
+	Use:   "show",
+	Short: "Show current context",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runContextShow()
+	},
+}
 
-Manage contexts (admin server + workspace pairs).
-
-Commands:
-  (no command)  Show current context
-  show          Show current context (same as no command)
-  use <name>    Switch to a different context
-  add <name>    Add a new context
-  list          List all contexts
-  remove <name> Remove a context
-
-Examples:
-  # Show current context
-  mockd context
-
-  # Switch to a different context
-  mockd context use staging
-
-  # Add a new context (flags before name)
-  mockd context add -u https://staging.example.com:4290 staging
-
-  # Add context interactively
-  mockd context add production
-
-  # List all contexts
-  mockd context list
-
-  # Remove a context
-  mockd context remove old-server
-
-Configuration:
-  Contexts are stored in ~/.config/mockd/contexts.yaml
-`)
+func init() {
+	rootCmd.AddCommand(contextCmd)
+	contextCmd.AddCommand(contextShowCmd)
 }
 
 // runContextShow displays the current context.
@@ -161,360 +116,293 @@ func runContextShow() error {
 	return nil
 }
 
-// runContextUse switches to a different context.
-func runContextUse(args []string) error {
-	fs := flag.NewFlagSet("context use", flag.ContinueOnError)
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd context use <name>
+var contextUseCmd = &cobra.Command{
+	Use:   "use <name>",
+	Short: "Switch to a different context",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
 
-Switch to a different context.
-
-Examples:
-  mockd context use staging
-  mockd context use local
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() != 1 {
-		fs.Usage()
-		return errors.New("context name required")
-	}
-
-	name := fs.Arg(0)
-
-	cfg, err := cliconfig.LoadContextConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load context config: %w", err)
-	}
-
-	if err := cfg.SetCurrentContext(name); err != nil {
-		// List available contexts in error message
-		var available []string
-		for n := range cfg.Contexts {
-			available = append(available, n)
-		}
-		sort.Strings(available)
-		return fmt.Errorf("%w\n\nAvailable contexts: %s", err, strings.Join(available, ", "))
-	}
-
-	if err := cliconfig.SaveContextConfig(cfg); err != nil {
-		return fmt.Errorf("failed to save context config: %w", err)
-	}
-
-	ctx := cfg.Contexts[name]
-	fmt.Printf("Switched to context %q\n", name)
-	fmt.Printf("  Admin URL: %s\n", ctx.AdminURL)
-	if ctx.Workspace != "" {
-		fmt.Printf("  Workspace: %s\n", ctx.Workspace)
-	}
-
-	return nil
-}
-
-// runContextAdd adds a new context.
-func runContextAdd(args []string) error {
-	fs := flag.NewFlagSet("context add", flag.ContinueOnError)
-
-	adminURL := fs.String("admin-url", "", "Admin API URL (e.g., http://localhost:4290)")
-	fs.StringVar(adminURL, "u", "", "Admin API URL (shorthand)")
-	workspace := fs.String("workspace", "", "Default workspace for this context")
-	fs.StringVar(workspace, "w", "", "Default workspace (shorthand)")
-	description := fs.String("description", "", "Description for this context")
-	fs.StringVar(description, "d", "", "Description (shorthand)")
-	authToken := fs.String("token", "", "Auth token for cloud/enterprise deployments")
-	fs.StringVar(authToken, "t", "", "Auth token (shorthand)")
-	tlsInsecure := fs.Bool("tls-insecure", false, "Skip TLS certificate verification")
-	useCurrent := fs.Bool("use", false, "Switch to this context after adding")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd context add <name> [flags]
-
-Add a new context.
-
-Flags:
-  -u, --admin-url    Admin API URL (e.g., http://localhost:4290)
-  -w, --workspace    Default workspace for this context
-  -d, --description  Description for this context
-  -t, --token        Auth token for cloud/enterprise deployments
-      --tls-insecure Skip TLS certificate verification (for self-signed certs)
-      --use          Switch to this context after adding
-      --json         Output in JSON format
-
-Examples:
-  # Add with flags (flags must come before name)
-  mockd context add -u https://staging.example.com:4290 staging
-
-  # Add interactively (will prompt for URL)
-  mockd context add production
-
-  # Add and switch to it
-  mockd context add -u http://dev-server:4290 --use dev
-
-  # Add with auth token
-  mockd context add -u https://api.mockd.io -t YOUR_TOKEN --use cloud
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() != 1 {
-		fs.Usage()
-		return errors.New("context name required")
-	}
-
-	name := fs.Arg(0)
-
-	// Validate name
-	if name == "" {
-		return errors.New("context name cannot be empty")
-	}
-	if len(name) > 64 {
-		return errors.New("context name cannot exceed 64 characters")
-	}
-	if strings.ContainsAny(name, " \t\n/\\") {
-		return errors.New("context name cannot contain whitespace or path separators")
-	}
-
-	// If admin URL not provided, prompt interactively
-	if *adminURL == "" {
-		fmt.Printf("Adding context %q\n", name)
-		fmt.Print("Admin URL (e.g., http://localhost:4290): ")
-		reader := bufio.NewReader(os.Stdin)
-		input, err := reader.ReadString('\n')
+		cfg, err := cliconfig.LoadContextConfig()
 		if err != nil {
-			return fmt.Errorf("failed to read input: %w", err)
+			return fmt.Errorf("failed to load context config: %w", err)
 		}
-		*adminURL = strings.TrimSpace(input)
-		if *adminURL == "" {
-			return errors.New("admin URL is required")
+
+		if err := cfg.SetCurrentContext(name); err != nil {
+			// List available contexts in error message
+			var available []string
+			for n := range cfg.Contexts {
+				available = append(available, n)
+			}
+			sort.Strings(available)
+			return fmt.Errorf("%w\n\nAvailable contexts: %s", err, strings.Join(available, ", "))
 		}
-	}
 
-	// Validate URL
-	parsedURL, err := url.Parse(*adminURL)
-	if err != nil {
-		return fmt.Errorf("invalid admin URL: %w", err)
-	}
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return errors.New("invalid admin URL: must start with http:// or https://")
-	}
-	if parsedURL.Host == "" {
-		return errors.New("invalid admin URL: missing host")
-	}
-	// Reject URLs with embedded credentials (user:pass@host)
-	if parsedURL.User != nil {
-		return errors.New("invalid admin URL: embedded credentials (user:pass@host) are not allowed; use --token for authentication")
-	}
-
-	cfg, err := cliconfig.LoadContextConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load context config: %w", err)
-	}
-
-	ctx := &cliconfig.Context{
-		AdminURL:    *adminURL,
-		Workspace:   *workspace,
-		Description: *description,
-		AuthToken:   *authToken,
-		TLSInsecure: *tlsInsecure,
-	}
-
-	if err := cfg.AddContext(name, ctx); err != nil {
-		return err
-	}
-
-	if *useCurrent {
-		cfg.CurrentContext = name
-	}
-
-	if err := cliconfig.SaveContextConfig(cfg); err != nil {
-		return fmt.Errorf("failed to save context config: %w", err)
-	}
-
-	if *jsonOutput {
-		result := struct {
-			Name    string          `json:"name"`
-			Context *contextForJSON `json:"context"`
-			Current bool            `json:"current"`
-		}{
-			Name:    name,
-			Context: sanitizeContextForJSON(ctx),
-			Current: cfg.CurrentContext == name,
+		if err := cliconfig.SaveContextConfig(cfg); err != nil {
+			return fmt.Errorf("failed to save context config: %w", err)
 		}
-		return output.JSON(result)
-	}
 
-	fmt.Printf("Added context %q\n", name)
-	if *useCurrent {
-		fmt.Printf("Switched to context %q\n", name)
-	}
-
-	return nil
-}
-
-// runContextList lists all contexts.
-func runContextList(args []string) error {
-	fs := flag.NewFlagSet("context list", flag.ContinueOnError)
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd context list [flags]
-
-List all contexts.
-
-Flags:
-      --json  Output in JSON format
-
-Examples:
-  mockd context list
-  mockd context list --json
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	cfg, err := cliconfig.LoadContextConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load context config: %w", err)
-	}
-
-	if *jsonOutput {
-		result := struct {
-			CurrentContext string                     `json:"currentContext"`
-			Contexts       map[string]*contextForJSON `json:"contexts"`
-		}{
-			CurrentContext: cfg.CurrentContext,
-			Contexts:       sanitizeContextsForJSON(cfg.Contexts),
-		}
-		return output.JSON(result)
-	}
-
-	if len(cfg.Contexts) == 0 {
-		fmt.Println("No contexts configured")
-		fmt.Println("\nRun 'mockd context add <name>' to create a context")
-		return nil
-	}
-
-	// Sort context names for consistent output
-	names := make([]string, 0, len(cfg.Contexts))
-	for name := range cfg.Contexts {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	w := output.Table()
-	_, _ = fmt.Fprintln(w, "CURRENT\tNAME\tADMIN URL\tWORKSPACE\tDESCRIPTION")
-
-	for _, name := range names {
 		ctx := cfg.Contexts[name]
-		current := ""
-		if name == cfg.CurrentContext {
-			current = "*"
-		}
-
-		workspace := ctx.Workspace
-		if workspace == "" {
-			workspace = "-"
-		}
-
-		description := ctx.Description
-		if len(description) > 30 {
-			description = description[:27] + "..."
-		}
-		if description == "" {
-			description = "-"
-		}
-
-		adminURL := ctx.AdminURL
-		if len(adminURL) > 35 {
-			adminURL = adminURL[:32] + "..."
-		}
-
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, name, adminURL, workspace, description)
-	}
-
-	return w.Flush()
-}
-
-// runContextRemove removes a context.
-func runContextRemove(args []string) error {
-	fs := flag.NewFlagSet("context remove", flag.ContinueOnError)
-	force := fs.Bool("force", false, "Force removal without confirmation")
-	fs.BoolVar(force, "f", false, "Force removal (shorthand)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd context remove <name> [flags]
-
-Remove a context.
-
-Flags:
-  -f, --force  Force removal without confirmation
-
-Examples:
-  mockd context remove old-server
-  mockd context remove old-server --force
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() != 1 {
-		fs.Usage()
-		return errors.New("context name required")
-	}
-
-	name := fs.Arg(0)
-
-	cfg, err := cliconfig.LoadContextConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load context config: %w", err)
-	}
-
-	// Check if context exists
-	ctx, exists := cfg.Contexts[name]
-	if !exists {
-		return fmt.Errorf("context not found: %s", name)
-	}
-
-	// Confirm unless forced
-	if !*force {
-		fmt.Printf("Remove context %q?\n", name)
+		fmt.Printf("Switched to context %q\n", name)
 		fmt.Printf("  Admin URL: %s\n", ctx.AdminURL)
 		if ctx.Workspace != "" {
 			fmt.Printf("  Workspace: %s\n", ctx.Workspace)
 		}
-		fmt.Print("Type 'yes' to confirm: ")
 
-		reader := bufio.NewReader(os.Stdin)
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("failed to read input: %w", err)
+		return nil
+	},
+}
+
+func init() {
+	contextCmd.AddCommand(contextUseCmd)
+}
+
+var (
+	contextAddAdminURL    string
+	contextAddWorkspace   string
+	contextAddDescription string
+	contextAddToken       string
+	contextAddTLSInsecure bool
+	contextAddUseCurrent  bool
+)
+
+var contextAddCmd = &cobra.Command{
+	Use:   "add <name>",
+	Short: "Add a new context",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var name string
+		if len(args) > 0 {
+			name = args[0]
 		}
-		if strings.TrimSpace(input) != "yes" {
-			fmt.Println("Aborted")
+
+		// Validate name
+		if name == "" {
+			return errors.New("context name cannot be empty")
+		}
+		if len(name) > 64 {
+			return errors.New("context name cannot exceed 64 characters")
+		}
+		if strings.ContainsAny(name, " \t\n/\\") {
+			return errors.New("context name cannot contain whitespace or path separators")
+		}
+
+		// If admin URL not provided, prompt interactively
+		if contextAddAdminURL == "" {
+			fmt.Printf("Adding context %q\n", name)
+			fmt.Print("Admin URL (e.g., http://localhost:4290): ")
+			reader := bufio.NewReader(os.Stdin)
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("failed to read input: %w", err)
+			}
+			contextAddAdminURL = strings.TrimSpace(input)
+			if contextAddAdminURL == "" {
+				return errors.New("admin URL is required")
+			}
+		}
+
+		// Validate URL
+		parsedURL, err := url.Parse(contextAddAdminURL)
+		if err != nil {
+			return fmt.Errorf("invalid admin URL: %w", err)
+		}
+		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+			return errors.New("invalid admin URL: must start with http:// or https://")
+		}
+		if parsedURL.Host == "" {
+			return errors.New("invalid admin URL: missing host")
+		}
+		// Reject URLs with embedded credentials (user:pass@host)
+		if parsedURL.User != nil {
+			return errors.New("invalid admin URL: embedded credentials (user:pass@host) are not allowed; use --token for authentication")
+		}
+
+		cfg, err := cliconfig.LoadContextConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load context config: %w", err)
+		}
+
+		ctx := &cliconfig.Context{
+			AdminURL:    contextAddAdminURL,
+			Workspace:   contextAddWorkspace,
+			Description: contextAddDescription,
+			AuthToken:   contextAddToken,
+			TLSInsecure: contextAddTLSInsecure,
+		}
+
+		if err := cfg.AddContext(name, ctx); err != nil {
+			return err
+		}
+
+		if contextAddUseCurrent {
+			cfg.CurrentContext = name
+		}
+
+		if err := cliconfig.SaveContextConfig(cfg); err != nil {
+			return fmt.Errorf("failed to save context config: %w", err)
+		}
+
+		if jsonOutput {
+			result := struct {
+				Name    string          `json:"name"`
+				Context *contextForJSON `json:"context"`
+				Current bool            `json:"current"`
+			}{
+				Name:    name,
+				Context: sanitizeContextForJSON(ctx),
+				Current: cfg.CurrentContext == name,
+			}
+			return output.JSON(result)
+		}
+
+		fmt.Printf("Added context %q\n", name)
+		if contextAddUseCurrent {
+			fmt.Printf("Switched to context %q\n", name)
+		}
+
+		return nil
+	},
+}
+
+func init() {
+	contextAddCmd.Flags().StringVarP(&contextAddAdminURL, "admin-url", "u", "", "Admin API URL (e.g., http://localhost:4290)")
+	contextAddCmd.Flags().StringVarP(&contextAddWorkspace, "workspace", "w", "", "Default workspace for this context")
+	contextAddCmd.Flags().StringVarP(&contextAddDescription, "description", "d", "", "Description for this context")
+	contextAddCmd.Flags().StringVarP(&contextAddToken, "token", "t", "", "Auth token for cloud/enterprise deployments")
+	contextAddCmd.Flags().BoolVar(&contextAddTLSInsecure, "tls-insecure", false, "Skip TLS certificate verification")
+	contextAddCmd.Flags().BoolVar(&contextAddUseCurrent, "use", false, "Switch to this context after adding")
+	contextCmd.AddCommand(contextAddCmd)
+}
+
+var contextListCmd = &cobra.Command{
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List all contexts",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := cliconfig.LoadContextConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load context config: %w", err)
+		}
+
+		if jsonOutput {
+			result := struct {
+				CurrentContext string                     `json:"currentContext"`
+				Contexts       map[string]*contextForJSON `json:"contexts"`
+			}{
+				CurrentContext: cfg.CurrentContext,
+				Contexts:       sanitizeContextsForJSON(cfg.Contexts),
+			}
+			return output.JSON(result)
+		}
+
+		if len(cfg.Contexts) == 0 {
+			fmt.Println("No contexts configured")
+			fmt.Println("\nRun 'mockd context add <name>' to create a context")
 			return nil
 		}
-	}
 
-	if err := cfg.RemoveContext(name); err != nil {
-		return err
-	}
+		// Sort context names for consistent output
+		names := make([]string, 0, len(cfg.Contexts))
+		for name := range cfg.Contexts {
+			names = append(names, name)
+		}
+		sort.Strings(names)
 
-	if err := cliconfig.SaveContextConfig(cfg); err != nil {
-		return fmt.Errorf("failed to save context config: %w", err)
-	}
+		w := output.Table()
+		_, _ = fmt.Fprintln(w, "CURRENT\tNAME\tADMIN URL\tWORKSPACE\tDESCRIPTION")
 
-	fmt.Printf("Removed context %q\n", name)
-	return nil
+		for _, name := range names {
+			ctx := cfg.Contexts[name]
+			current := ""
+			if name == cfg.CurrentContext {
+				current = "*"
+			}
+
+			workspace := ctx.Workspace
+			if workspace == "" {
+				workspace = "-"
+			}
+
+			description := ctx.Description
+			if len(description) > 30 {
+				description = description[:27] + "..."
+			}
+			if description == "" {
+				description = "-"
+			}
+
+			adminURL := ctx.AdminURL
+			if len(adminURL) > 35 {
+				adminURL = adminURL[:32] + "..."
+			}
+
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, name, adminURL, workspace, description)
+		}
+
+		return w.Flush()
+	},
+}
+
+func init() {
+	contextCmd.AddCommand(contextListCmd)
+}
+
+var contextRemoveForce bool
+
+var contextRemoveCmd = &cobra.Command{
+	Use:     "remove <name>",
+	Aliases: []string{"rm", "delete"},
+	Short:   "Remove a context",
+	Args:    cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+
+		cfg, err := cliconfig.LoadContextConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load context config: %w", err)
+		}
+
+		// Check if context exists
+		ctx, exists := cfg.Contexts[name]
+		if !exists {
+			return fmt.Errorf("context not found: %s", name)
+		}
+
+		// Confirm unless forced
+		if !contextRemoveForce {
+			fmt.Printf("Remove context %q?\n", name)
+			fmt.Printf("  Admin URL: %s\n", ctx.AdminURL)
+			if ctx.Workspace != "" {
+				fmt.Printf("  Workspace: %s\n", ctx.Workspace)
+			}
+			fmt.Print("Type 'yes' to confirm: ")
+
+			reader := bufio.NewReader(os.Stdin)
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("failed to read input: %w", err)
+			}
+			if strings.TrimSpace(input) != "yes" {
+				fmt.Println("Aborted")
+				return nil
+			}
+		}
+
+		if err := cfg.RemoveContext(name); err != nil {
+			return err
+		}
+
+		if err := cliconfig.SaveContextConfig(cfg); err != nil {
+			return fmt.Errorf("failed to save context config: %w", err)
+		}
+
+		fmt.Printf("Removed context %q\n", name)
+		return nil
+	},
+}
+
+func init() {
+	contextRemoveCmd.Flags().BoolVarP(&contextRemoveForce, "force", "f", false, "Force removal without confirmation")
+	contextCmd.AddCommand(contextRemoveCmd)
 }

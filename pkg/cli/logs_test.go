@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+func RunLogs(args []string) error {
+	logsCmd.SetArgs(args)
+	return logsCmd.Execute()
+}
+
 func TestRunLogs_HelpFlag(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {

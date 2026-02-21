@@ -2,7 +2,6 @@ package cli
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,130 +10,165 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getmockd/mockd/pkg/cli/internal/output"
-	"github.com/getmockd/mockd/pkg/cliconfig"
+	"github.com/charmbracelet/huh"
+	"github.com/spf13/cobra"
 )
 
-// RunMQTT handles the mqtt command and its subcommands.
-func RunMQTT(args []string) error {
-	if len(args) == 0 {
-		printMQTTUsage()
-		return nil
-	}
-
-	subcommand := args[0]
-	subArgs := args[1:]
-
-	switch subcommand {
-	case "add":
-		return RunAdd(append([]string{"mqtt"}, subArgs...))
-	case "list":
-		return RunList(append([]string{"--type", "mqtt"}, subArgs...))
-	case "get":
-		return RunGet(subArgs)
-	case "delete", "rm", "remove":
-		return RunDelete(subArgs)
-	case "publish":
-		return runMQTTPublish(subArgs)
-	case "subscribe":
-		return runMQTTSubscribe(subArgs)
-	case "status":
-		return runMQTTStatus(subArgs)
-	case "help", "--help", "-h":
-		printMQTTUsage()
-		return nil
-	default:
-		return fmt.Errorf("unknown mqtt subcommand: %s\n\nRun 'mockd mqtt --help' for usage", subcommand)
-	}
+var mqttCmd = &cobra.Command{
+	Use:   "mqtt",
+	Short: "Manage and test MQTT endpoints",
 }
 
-func printMQTTUsage() {
-	fmt.Print(`Usage: mockd mqtt <subcommand> [flags]
+var mqttAddCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Add a new MQTT mock endpoint",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Use huh interactive forms if attributes are missing
+		if !cmd.Flags().Changed("topic") {
+			var formTopic, formPayload string
+			var formQosString = "0"
 
-Publish and subscribe to MQTT messages for testing.
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewInput().
+						Title("What MQTT topic should be mocked?").
+						Placeholder("sensors/temp/#").
+						Value(&formTopic).
+						Validate(func(s string) error {
+							if s == "" {
+								return errors.New("topic is required")
+							}
+							return nil
+						}),
+					huh.NewInput().
+						Title("What payload JSON should be returned?").
+						Placeholder(`{"status": "ok"}`).
+						Value(&formPayload),
+					huh.NewSelect[string]().
+						Title("QoS Level").
+						Options(
+							huh.NewOption("0 - At most once", "0"),
+							huh.NewOption("1 - At least once", "1"),
+							huh.NewOption("2 - Exactly once", "2"),
+						).
+						Value(&formQosString),
+				),
+			)
+			if err := form.Run(); err != nil {
+				return err
+			}
+			addTopic = formTopic
+			addPayload = formPayload
+			addQoS, _ = strconv.Atoi(formQosString)
+		}
+		addMockType = "mqtt"
+		return runAdd(cmd, args)
+	},
+}
 
-Subcommands:
-  add        Add a new MQTT mock endpoint
-  list       List MQTT mocks
-  get        Get details of an MQTT mock
-  delete     Delete an MQTT mock
-  publish    Publish a message to a topic
-  subscribe  Subscribe to a topic and print messages
-  status     Show MQTT broker status
+func init() {
+	rootCmd.AddCommand(mqttCmd)
+	mqttCmd.AddCommand(mqttAddCmd)
 
-Run 'mockd mqtt <subcommand> --help' for more information.
-`)
+	mqttAddCmd.Flags().StringVar(&addTopic, "topic", "", "MQTT topic pattern")
+	mqttAddCmd.Flags().StringVar(&addPayload, "payload", "", "MQTT response payload")
+	mqttAddCmd.Flags().IntVar(&addQoS, "qos", 0, "MQTT QoS level (0, 1, 2)")
+	mqttAddCmd.Flags().IntVar(&addMQTTPort, "mqtt-port", 1883, "MQTT broker port")
+
+	// Add list/get/delete generic aliases
+	mqttCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List MQTT mocks",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			listMockType = "mqtt"
+			return runList(cmd, args)
+		},
+	})
+	mqttCmd.AddCommand(&cobra.Command{
+		Use:   "get",
+		Short: "Get details of an MQTT mock",
+		RunE:  runGet,
+	})
+	mqttCmd.AddCommand(&cobra.Command{
+		Use:   "delete",
+		Short: "Delete an MQTT mock",
+		RunE:  runDelete,
+	})
+
+	// Add existing subcommands to mqttCmd
+	mqttPubCmd.Flags().StringVarP(&mqttMessage, "message", "m", "", "Message to publish")
+	mqttPubCmd.Flags().IntVarP(&mqttQos, "qos", "q", 0, "QoS level (0, 1, 2)")
+	mqttPubCmd.Flags().BoolVarP(&mqttRetain, "retain", "r", false, "Retain message")
+	mqttPubCmd.Flags().StringVarP(&mqttUsername, "username", "u", "", "Username")
+	mqttPubCmd.Flags().StringVarP(&mqttPassword, "password", "P", "", "Password")
+	mqttCmd.AddCommand(mqttPubCmd)
+
+	mqttSubCmd.Flags().IntVarP(&mqttQos, "qos", "q", 0, "QoS level (0, 1, 2)")
+	mqttSubCmd.Flags().IntVarP(&mqttCount, "count", "c", 0, "Stop after receiving this many messages")
+	mqttSubCmd.Flags().DurationVarP(&mqttTimeout, "timeout", "t", 0, "Stop after this duration")
+	mqttSubCmd.Flags().StringVarP(&mqttUsername, "username", "u", "", "Username")
+	mqttSubCmd.Flags().StringVarP(&mqttPassword, "password", "P", "", "Password")
+	mqttCmd.AddCommand(mqttSubCmd)
+
+	mqttStatusCmd.Flags().StringVar(&mqttAdminURL, "admin-url", "http://localhost:4290", "Admin API base URL")
+	mqttCmd.AddCommand(mqttStatusCmd)
+}
+
+var (
+	mqttMessage  string
+	mqttQos      int
+	mqttRetain   bool
+	mqttUsername string
+	mqttPassword string
+	mqttCount    int
+	mqttTimeout  time.Duration
+	mqttAdminURL string
+)
+
+var mqttPubCmd = &cobra.Command{
+	Use:   "publish <broker> <topic> <message>",
+	Short: "Publish a message to an MQTT topic",
+	RunE:  runMQTTPublish,
+}
+
+var mqttSubCmd = &cobra.Command{
+	Use:   "subscribe <broker> <topic>",
+	Short: "Subscribe to an MQTT topic and print messages",
+	RunE:  runMQTTSubscribe,
+}
+
+var mqttStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show the current MQTT broker status",
+	RunE:  runMQTTStatus,
 }
 
 // runMQTTPublish publishes a message to an MQTT topic.
-func runMQTTPublish(args []string) error {
-	fs := flag.NewFlagSet("mqtt publish", flag.ContinueOnError)
-
-	broker := fs.String("broker", "localhost:1883", "MQTT broker address")
-	fs.StringVar(broker, "b", "localhost:1883", "MQTT broker address (shorthand)")
-
-	username := fs.String("username", "", "MQTT username")
-	fs.StringVar(username, "u", "", "MQTT username (shorthand)")
-
-	password := fs.String("password", "", "MQTT password")
-	fs.StringVar(password, "P", "", "MQTT password (shorthand)")
-
-	qos := fs.Int("qos", 0, "QoS level (0, 1, or 2)")
-	retain := fs.Bool("retain", false, "Retain message")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd mqtt publish [flags] <topic> <message>
-
-Publish a message to an MQTT topic.
-
-Arguments:
-  topic      MQTT topic to publish to
-  message    Message payload (or @filename for file content)
-
-Flags:
-  -b, --broker    MQTT broker address (default: localhost:1883)
-  -u, --username  MQTT username
-  -P, --password  MQTT password
-      --qos       QoS level 0, 1, or 2 (default: 0)
-      --retain    Retain message on broker
-
-Examples:
-  # Publish a simple message
-  mockd mqtt publish sensors/temperature "25.5"
-
-  # Publish with custom broker
-  mockd mqtt publish -b mqtt.example.com:1883 sensors/temp "25.5"
-
-  # Publish with authentication
-  mockd mqtt publish -u user -P pass sensors/temp "25.5"
-
-  # Publish with QoS 1 and retain
-  mockd mqtt publish --qos 1 --retain sensors/temp "25.5"
-
-  # Publish from file
-  mockd mqtt publish sensors/config @config.json
-`)
+func runMQTTPublish(cmd *cobra.Command, args []string) error {
+	if len(args) < 2 {
+		return errors.New("broker address and topic are required")
 	}
 
-	if err := fs.Parse(args); err != nil {
-		return err
+	broker := args[0]
+	topic := args[1]
+
+	// Message can be positional or flag
+	msg := mqttMessage
+	if msg == "" && len(args) >= 3 {
+		msg = args[2]
 	}
 
-	if fs.NArg() < 2 {
-		fs.Usage()
-		return errors.New("topic and message are required")
+	if msg == "" {
+		return errors.New("message is required (via -m flag or argument)")
 	}
-
-	topic := fs.Arg(0)
-	message := fs.Arg(1)
 
 	// Load message from file if prefixed with @
-	if len(message) > 0 && message[0] == '@' {
-		msgBytes, err := os.ReadFile(message[1:])
+	if len(msg) > 0 && msg[0] == '@' {
+		msgBytes, err := os.ReadFile(msg[1:])
 		if err != nil {
 			return fmt.Errorf("failed to read message file: %w", err)
 		}
-		message = string(msgBytes)
+		msg = string(msgBytes)
 	}
 
 	//nolint:misspell // mosquitto is the correct name of the MQTT broker software
@@ -142,154 +176,102 @@ Examples:
 	//nolint:misspell // mosquitto is the correct name of the MQTT broker software
 	mosquittoPubPath, err := exec.LookPath("mosquitto_pub")
 	if err != nil {
-		return printMQTTPublishInstructions(*broker, topic, message, *username, *password, *qos, *retain)
+		return printMQTTPublishInstructions(broker, topic, msg, mqttUsername, mqttPassword, mqttQos, mqttRetain)
 	}
 
 	//nolint:misspell // mosquitto is MQTT broker software name
 	// Build mosquitto_pub command
-	pubArgs := []string{"-h", extractMQTTHost(*broker), "-p", extractMQTTPort(*broker)}
-	if *username != "" {
-		pubArgs = append(pubArgs, "-u", *username)
+	pubArgs := []string{"-h", extractMQTTHost(broker), "-p", extractMQTTPort(broker)}
+	if mqttUsername != "" {
+		pubArgs = append(pubArgs, "-u", mqttUsername)
 	}
-	if *password != "" {
-		pubArgs = append(pubArgs, "-P", *password)
+	if mqttPassword != "" {
+		pubArgs = append(pubArgs, "-P", mqttPassword)
 	}
-	pubArgs = append(pubArgs, "-q", strconv.Itoa(*qos))
-	if *retain {
+	pubArgs = append(pubArgs, "-q", strconv.Itoa(mqttQos))
+	if mqttRetain {
 		pubArgs = append(pubArgs, "-r")
 	}
-	pubArgs = append(pubArgs, "-t", topic, "-m", message)
+	pubArgs = append(pubArgs, "-t", topic, "-m", msg)
 
-	cmd := exec.Command(mosquittoPubPath, pubArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	execCmd := exec.Command(mosquittoPubPath, pubArgs...)
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	if err := execCmd.Run(); err != nil {
 		return fmt.Errorf("failed to publish message: %w", err)
 	}
 
-	fmt.Printf("Published to %s: %s\n", topic, message)
+	fmt.Printf("Published to %s: %s\n", topic, msg)
 	return nil
 }
 
 // runMQTTSubscribe subscribes to an MQTT topic and prints messages.
-func runMQTTSubscribe(args []string) error {
-	fs := flag.NewFlagSet("mqtt subscribe", flag.ContinueOnError)
-
-	broker := fs.String("broker", "localhost:1883", "MQTT broker address")
-	fs.StringVar(broker, "b", "localhost:1883", "MQTT broker address (shorthand)")
-
-	username := fs.String("username", "", "MQTT username")
-	fs.StringVar(username, "u", "", "MQTT username (shorthand)")
-
-	password := fs.String("password", "", "MQTT password")
-	fs.StringVar(password, "P", "", "MQTT password (shorthand)")
-
-	qos := fs.Int("qos", 0, "QoS level (0, 1, or 2)")
-	count := fs.Int("count", 0, "Number of messages to receive (0 = unlimited)")
-	fs.IntVar(count, "n", 0, "Number of messages (shorthand)")
-
-	timeout := fs.Duration("timeout", 0, "Timeout duration (0 = no timeout)")
-	fs.DurationVar(timeout, "t", 0, "Timeout (shorthand)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd mqtt subscribe [flags] <topic>
-
-Subscribe to an MQTT topic and print received messages.
-
-Arguments:
-  topic    MQTT topic to subscribe to (supports wildcards: +, #)
-
-Flags:
-  -b, --broker    MQTT broker address (default: localhost:1883)
-  -u, --username  MQTT username
-  -P, --password  MQTT password
-      --qos       QoS level 0, 1, or 2 (default: 0)
-  -n, --count     Number of messages to receive (0 = unlimited)
-  -t, --timeout   Timeout duration (e.g., 30s, 5m)
-
-Examples:
-  # Subscribe to a topic
-  mockd mqtt subscribe sensors/temperature
-
-  # Subscribe with wildcard
-  mockd mqtt subscribe "sensors/#"
-
-  # Receive only 5 messages
-  mockd mqtt subscribe -n 5 sensors/temperature
-
-  # Subscribe with timeout
-  mockd mqtt subscribe -t 30s sensors/temperature
-
-  # Subscribe with authentication
-  mockd mqtt subscribe -u user -P pass sensors/temperature
-`)
+func runMQTTSubscribe(cmd *cobra.Command, args []string) error {
+	if len(args) < 1 {
+		return errors.New("topic is required, optionally provide broker as first arg")
 	}
 
-	if err := fs.Parse(args); err != nil {
-		return err
+	broker := "localhost:1883"
+	topic := args[0]
+	if len(args) >= 2 {
+		broker = args[0]
+		topic = args[1]
 	}
-
-	if fs.NArg() < 1 {
-		fs.Usage()
-		return errors.New("topic is required")
-	}
-
-	topic := fs.Arg(0)
 
 	// Check if mosquitto_sub is available
 	//nolint:misspell // mosquitto is the correct name of the MQTT broker software
 	mosquittoSubPath, err := exec.LookPath("mosquitto_sub")
 	if err != nil {
-		return printMQTTSubscribeInstructions(*broker, topic, *username, *password, *qos, *count, *timeout)
+		return printMQTTSubscribeInstructions(broker, topic, mqttUsername, mqttPassword, mqttQos, mqttCount, mqttTimeout)
 	}
 
 	//nolint:misspell // mosquitto is the correct name of the MQTT broker software
 	// Build mosquitto_sub command
-	subArgs := []string{"-h", extractMQTTHost(*broker), "-p", extractMQTTPort(*broker)}
-	if *username != "" {
-		subArgs = append(subArgs, "-u", *username)
+	subArgs := []string{"-h", extractMQTTHost(broker), "-p", extractMQTTPort(broker)}
+	if mqttUsername != "" {
+		subArgs = append(subArgs, "-u", mqttUsername)
 	}
-	if *password != "" {
-		subArgs = append(subArgs, "-P", *password)
+	if mqttPassword != "" {
+		subArgs = append(subArgs, "-P", mqttPassword)
 	}
-	subArgs = append(subArgs, "-q", strconv.Itoa(*qos))
-	if *count > 0 {
-		subArgs = append(subArgs, "-C", strconv.Itoa(*count))
+	subArgs = append(subArgs, "-q", strconv.Itoa(mqttQos))
+	if mqttCount > 0 {
+		subArgs = append(subArgs, "-C", strconv.Itoa(mqttCount))
 	}
 	subArgs = append(subArgs, "-v", "-t", topic)
 
 	fmt.Printf("Subscribed to %s (Ctrl+C to stop)\n", topic)
 
-	cmd := exec.Command(mosquittoSubPath, subArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmdSub := exec.Command(mosquittoSubPath, subArgs...)
+	cmdSub.Stdout = os.Stdout
+	cmdSub.Stderr = os.Stderr
 
 	// Handle signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Start command in background
-	if err := cmd.Start(); err != nil {
+	if err := cmdSub.Start(); err != nil {
 		return fmt.Errorf("failed to start subscription: %w", err)
 	}
 
 	// Setup timeout if specified
 	done := make(chan error)
 	go func() {
-		done <- cmd.Wait()
+		done <- cmdSub.Wait()
 	}()
 
-	if *timeout > 0 {
+	if mqttTimeout > 0 {
 		select {
 		case err := <-done:
 			if err != nil {
 				return fmt.Errorf("subscription error: %w", err)
 			}
 		case <-sigChan:
-			_ = cmd.Process.Kill()
-		case <-time.After(*timeout):
-			_ = cmd.Process.Kill()
+			_ = cmdSub.Process.Kill()
+		case <-time.After(mqttTimeout):
+			_ = cmdSub.Process.Kill()
 			fmt.Println("\nTimeout reached")
 		}
 	} else {
@@ -299,7 +281,7 @@ Examples:
 				return fmt.Errorf("subscription error: %w", err)
 			}
 		case <-sigChan:
-			_ = cmd.Process.Kill()
+			_ = cmdSub.Process.Kill()
 		}
 	}
 
@@ -397,40 +379,16 @@ func printMQTTSubscribeInstructions(broker, topic, username, password string, qo
 }
 
 // runMQTTStatus shows the current MQTT broker status.
-func runMQTTStatus(args []string) error {
-	fs := flag.NewFlagSet("mqtt status", flag.ContinueOnError)
-
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd mqtt status [flags]
-
-Show MQTT broker status.
-
-Flags:
-      --admin-url   Admin API base URL (default: http://localhost:4290)
-      --json        Output in JSON format
-
-Examples:
-  mockd mqtt status
-  mockd mqtt status --json
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
+func runMQTTStatus(cmd *cobra.Command, args []string) error {
+	if mqttAdminURL == "" {
+		mqttAdminURL = "http://localhost:4290"
 	}
 
 	// Get MQTT status from admin API
-	client := NewAdminClientWithAuth(*adminURL)
+	client := NewAdminClientWithAuth(mqttAdminURL)
 	status, err := client.GetMQTTStatus()
 	if err != nil {
 		return fmt.Errorf("failed to get MQTT status: %s", FormatConnectionError(err))
-	}
-
-	if *jsonOutput {
-		return output.JSON(status)
 	}
 
 	// Pretty print status

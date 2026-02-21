@@ -1,55 +1,47 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/spf13/cobra"
 )
 
-// RunDoctor handles the doctor command for diagnosing setup issues.
-func RunDoctor(args []string) error {
-	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+var (
+	doctorConfigFile string
+	doctorPort       int
+	doctorAdminPort  int
+)
 
-	configFile := fs.String("config", "", "Path to config file to validate")
-	fs.StringVar(configFile, "c", "", "Path to config file (shorthand)")
-	port := fs.Int("port", 4280, "Mock server port to check")
-	fs.IntVar(port, "p", 4280, "Mock server port (shorthand)")
-	adminPort := fs.Int("admin-port", 4290, "Admin API port to check")
-	fs.IntVar(adminPort, "a", 4290, "Admin API port (shorthand)")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd doctor [flags]
-
-Diagnose common setup issues and validate configuration.
-
-Flags:
-  -c, --config        Path to config file to validate
-  -p, --port          Mock server port to check (default: 4280)
-  -a, --admin-port    Admin API port to check (default: 4290)
-
-Examples:
-  # Run all checks with defaults
+var doctorCmd = &cobra.Command{
+	Use:   "doctor",
+	Short: "Diagnose common setup issues and validate configuration",
+	Long:  `Diagnose common setup issues and validate configuration.`,
+	Example: `  # Run all checks with defaults
   mockd doctor
 
   # Validate a specific config file
   mockd doctor --config mocks.yaml
 
   # Check custom ports
-  mockd doctor -p 3000 -a 3001
-`)
-	}
+  mockd doctor -p 3000 -a 3001`,
+	RunE: runDoctor,
+}
 
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
+func init() {
+	rootCmd.AddCommand(doctorCmd)
+	doctorCmd.Flags().StringVar(&doctorConfigFile, "config", "", "Path to config file to validate")
+	doctorCmd.Flags().IntVarP(&doctorPort, "port", "p", 4280, "Mock server port to check")
+	doctorCmd.Flags().IntVarP(&doctorAdminPort, "admin-port", "a", 4290, "Admin API port to check")
+}
 
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %v", fs.Args())
-	}
+func runDoctor(cmd *cobra.Command, args []string) error {
+	configFile := doctorConfigFile
+	port := doctorPort
+	adminPort := doctorAdminPort
 
 	fmt.Println("mockd doctor")
 	fmt.Println("============")
@@ -58,16 +50,16 @@ Examples:
 	allPassed := true
 
 	// Check 1: Port availability
-	fmt.Printf("Checking port %d (mock server)... ", *port)
-	if ports.IsAvailable(*port) {
+	fmt.Printf("Checking port %d (mock server)... ", port)
+	if ports.IsAvailable(port) {
 		fmt.Println("available")
 	} else {
 		fmt.Println("IN USE")
 		allPassed = false
 	}
 
-	fmt.Printf("Checking port %d (admin API)... ", *adminPort)
-	if ports.IsAvailable(*adminPort) {
+	fmt.Printf("Checking port %d (admin API)... ", adminPort)
+	if ports.IsAvailable(adminPort) {
 		fmt.Println("available")
 	} else {
 		fmt.Println("IN USE")
@@ -75,9 +67,9 @@ Examples:
 	}
 
 	// Check 2: Config file validation
-	if *configFile != "" {
-		fmt.Printf("Validating config file %s... ", *configFile)
-		if err := validateConfigFile(*configFile); err != nil {
+	if configFile != "" {
+		fmt.Printf("Validating config file %s... ", configFile)
+		if err := validateConfigFile(configFile); err != nil {
 			fmt.Printf("FAILED\n  %s\n", err)
 			allPassed = false
 		} else {
@@ -86,8 +78,8 @@ Examples:
 	}
 
 	// Check 3: Check if mockd is already running
-	fmt.Printf("Checking for running mockd on :%d... ", *adminPort)
-	if checkMockdRunning(*adminPort) {
+	fmt.Printf("Checking for running mockd on :%d... ", adminPort)
+	if checkMockdRunning(adminPort) {
 		fmt.Println("running")
 	} else {
 		fmt.Println("not running")
