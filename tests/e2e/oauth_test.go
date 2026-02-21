@@ -141,7 +141,6 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 
 	t.Run("Create Extra OAuth Mock", func(t *testing.T) {
 		resp := apiReq("POST", "/mocks", []byte(`{
-  resp.Body.Close()
 			"type": "oauth",
 			"name": "OAuth Verify",
 			"oauth": {

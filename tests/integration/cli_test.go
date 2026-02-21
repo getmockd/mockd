@@ -265,6 +265,9 @@ func TestCLIImportExportCommands(t *testing.T) {
 		"--no-auth",
 		"--data-dir", dataDir,
 	)
+	var stdout, stderr bytes.Buffer
+	serverCmd.Stdout = &stdout
+	serverCmd.Stderr = &stderr
 	serverCmd.Dir = "../.."
 	if err := serverCmd.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -273,7 +276,7 @@ func TestCLIImportExportCommands(t *testing.T) {
 
 	adminURL := fmt.Sprintf("http://localhost:%d", adminPort)
 	if !waitForServer(adminURL+"/health", 60*time.Second) {
-		t.Fatal("Server did not become ready in time")
+		t.Fatalf("Server did not become ready in time\nstdout: %s\nstderr: %s", stdout.String(), stderr.String())
 	}
 
 	// Add a mock first
