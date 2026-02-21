@@ -53,7 +53,7 @@ Download pre-built binaries from the [GitHub Releases](https://github.com/getmoc
 mockd start
 
 # Create a mock endpoint
-mockd add --method GET --path /api/hello --body '{"message": "Hello, World!"}'
+mockd http add --method GET --path /api/hello --body '{"message": "Hello, World!"}'
 
 # Try it
 curl http://localhost:4280/api/hello
