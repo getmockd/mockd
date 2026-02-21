@@ -512,7 +512,8 @@ func TestBinaryE2E_StatefulCRUDWithValidation(t *testing.T) {
 		}
 
 		// Verify deleted
-		resp2, _ := http.Get(proc.mockURL() + "/api/crud-validated/seed-1")
+		resp2, err := http.Get(proc.mockURL() + "/api/crud-validated/seed-1")
+		require.NoError(t, err)
 		resp2.Body.Close()
 
 		if resp2.StatusCode != http.StatusNotFound {

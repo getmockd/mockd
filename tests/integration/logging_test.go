@@ -204,15 +204,18 @@ func TestLoggingFilterByCriteria(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make mixed requests
-	resp1, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/users", bundle.HTTPPort))
+	resp1, err := http.Get(fmt.Sprintf("http://localhost:%d/api/users", bundle.HTTPPort))
+	require.NoError(t, err)
 	if resp1 != nil && resp1.Body != nil {
 		resp1.Body.Close()
 	}
-	resp2, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/users", bundle.HTTPPort))
+	resp2, err := http.Get(fmt.Sprintf("http://localhost:%d/api/users", bundle.HTTPPort))
+	require.NoError(t, err)
 	if resp2 != nil && resp2.Body != nil {
 		resp2.Body.Close()
 	}
-	resp3, _ := http.Post(fmt.Sprintf("http://localhost:%d/api/orders", bundle.HTTPPort), "application/json", nil)
+	resp3, err := http.Post(fmt.Sprintf("http://localhost:%d/api/orders", bundle.HTTPPort), "application/json", nil)
+	require.NoError(t, err)
 	if resp3 != nil && resp3.Body != nil {
 		resp3.Body.Close()
 	}
@@ -268,7 +271,8 @@ func TestLoggingClearLogs(t *testing.T) {
 
 	// Make some requests
 	for i := 0; i < 5; i++ {
-		resp, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/test", bundle.HTTPPort))
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/test", bundle.HTTPPort))
+		require.NoError(t, err)
 		if resp != nil && resp.Body != nil {
 			resp.Body.Close()
 		}
@@ -325,7 +329,8 @@ func TestLoggingGetSingleRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make a request
-	resp0, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/single", bundle.HTTPPort))
+	resp0, err := http.Get(fmt.Sprintf("http://localhost:%d/api/single", bundle.HTTPPort))
+	require.NoError(t, err)
 	if resp0 != nil && resp0.Body != nil {
 		resp0.Body.Close()
 	}
@@ -476,7 +481,8 @@ func TestLoggingLimitAndOffset(t *testing.T) {
 
 	// Make several requests
 	for i := 0; i < 10; i++ {
-		resp, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/test", bundle.HTTPPort))
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/test", bundle.HTTPPort))
+		require.NoError(t, err)
 		if resp != nil && resp.Body != nil {
 			resp.Body.Close()
 		}

@@ -38,16 +38,16 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 
 	adminURL := "http://localhost:" + strconv.Itoa(adminPort)
 	engineURL := "http://localhost:" + strconv.Itoa(controlPort)
-	
+
 	engClient := engineclient.New(engineURL)
 
-	adminAPI := admin.NewAPI(adminPort, 
-		admin.WithLocalEngine(engineURL), 
+	adminAPI := admin.NewAPI(adminPort,
+		admin.WithLocalEngine(engineURL),
 		admin.WithAPIKeyDisabled(),
 		admin.WithDataDir(t.TempDir()),
 	)
 	adminAPI.SetLocalEngine(engClient)
-	
+
 	go func() {
 		_ = adminAPI.Start()
 	}()
@@ -60,16 +60,18 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 
 	apiReq := func(method, path string, body []byte) *http.Response {
 		urlStr := adminURL + path
-		req, _ := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		resp, _ := client.Do(req)
-		
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+
 		if resp.StatusCode >= 400 {
 			b, _ := ioutil.ReadAll(resp.Body)
 			t.Logf("API Error %s %s -> %d : %s", method, urlStr, resp.StatusCode, string(b))
 			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
 		}
-		
+
 		return resp
 	}
 
@@ -99,11 +101,13 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		  ]
 		}
 	}`, mqttPort))
-	
+
 	resp := apiReq("POST", "/mocks", mockReqBody)
 	require.Equal(t, 201, resp.StatusCode, "Failed to create MQTT mock")
-	
-	var createdMock struct { ID string `json:"id"` }
+
+	var createdMock struct {
+		ID string `json:"id"`
+	}
 	json.NewDecoder(resp.Body).Decode(&createdMock)
 	resp.Body.Close()
 	mockID := createdMock.ID
@@ -123,7 +127,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 			opts.SetPassword(password)
 		}
 		opts.SetConnectTimeout(2 * time.Second)
-		
+
 		c := mqtt.NewClient(opts)
 		token := c.Connect()
 		if token.Wait() && token.Error() != nil {
@@ -142,7 +146,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		c, err := connectMQTT("pub-test", mqttPort, "", "")
 		require.NoError(t, err)
 		defer c.Disconnect(250)
-		
+
 		token := c.Publish("test/ping", 0, false, "hello")
 		token.Wait()
 		require.NoError(t, token.Error())
@@ -150,11 +154,11 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 
 	t.Run("Subscribe receives temp message", func(t *testing.T) {
 		msgChan := make(chan string, 1)
-		
+
 		c, err := connectMQTT("sub-test-temp", mqttPort, "", "")
 		require.NoError(t, err)
 		defer c.Disconnect(250)
-		
+
 		token := c.Subscribe("sensors/temp", 0, func(client mqtt.Client, msg mqtt.Message) {
 			msgChan <- string(msg.Payload())
 		})
@@ -164,7 +168,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		// Depending on whether it's auto-published upon subscription or if we manually publish
 		// Let's trigger it manually just in case
 		c.Publish("sensors/temp", 0, false, `{"temp": 72, "unit": "F"}`)
-		
+
 		select {
 		case msg := <-msgChan:
 			assert.Contains(t, msg, "temp")
@@ -175,11 +179,11 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 
 	t.Run("Wildcard subscription receives messages", func(t *testing.T) {
 		msgChan := make(chan string, 1)
-		
+
 		c, err := connectMQTT("sub-test-wildcard", mqttPort, "", "")
 		require.NoError(t, err)
 		defer c.Disconnect(250)
-		
+
 		token := c.Subscribe("sensors/#", 0, func(client mqtt.Client, msg mqtt.Message) {
 			msgChan <- string(msg.Payload())
 		})
@@ -187,7 +191,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		require.NoError(t, token.Error())
 
 		c.Publish("sensors/temp", 0, false, `{"temp": 99}`)
-		
+
 		select {
 		case msg := <-msgChan:
 			assert.Contains(t, msg, "temp")
@@ -198,11 +202,11 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 
 	t.Run("Single-level wildcard receives messages", func(t *testing.T) {
 		msgChan := make(chan string, 1)
-		
+
 		c, err := connectMQTT("sub-test-single-wildcard", mqttPort, "", "")
 		require.NoError(t, err)
 		defer c.Disconnect(250)
-		
+
 		token := c.Subscribe("sensors/+/data", 0, func(client mqtt.Client, msg mqtt.Message) {
 			msgChan <- string(msg.Payload())
 		})
@@ -210,7 +214,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		require.NoError(t, token.Error())
 
 		c.Publish("sensors/livingroom/data", 0, false, `{"reading": 42}`)
-		
+
 		select {
 		case msg := <-msgChan:
 			assert.Contains(t, msg, "reading")
@@ -222,7 +226,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 	t.Run("Retained message delivered to late subscriber", func(t *testing.T) {
 		pubClient, err := connectMQTT("pub-retained", mqttPort, "", "")
 		require.NoError(t, err)
-		
+
 		token := pubClient.Publish("test/retained", 0, true, `{"retained": true}`)
 		token.Wait()
 		require.NoError(t, token.Error())
@@ -234,7 +238,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		msgChan := make(chan string, 1)
 		subClient, err := connectMQTT("sub-retained", mqttPort, "", "")
 		require.NoError(t, err)
-		
+
 		token = subClient.Subscribe("test/retained", 0, func(client mqtt.Client, msg mqtt.Message) {
 			msgChan <- string(msg.Payload())
 		})
@@ -268,11 +272,13 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 			  ]
 			}
 		}`, authPort))
-		
+
 		resp := apiReq("POST", "/mocks", authMockReqBody)
 		require.Equal(t, 201, resp.StatusCode)
-		
-		var authMock struct { ID string `json:"id"` }
+
+		var authMock struct {
+			ID string `json:"id"`
+		}
 		json.NewDecoder(resp.Body).Decode(&authMock)
 		resp.Body.Close()
 
@@ -293,10 +299,10 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		resp1 := apiReq("POST", "/mocks/"+mockID+"/toggle", []byte(`{"enabled": false}`))
 		resp1.Body.Close()
 		time.Sleep(500 * time.Millisecond)
-		
+
 		_, err := connectMQTT("test-disabled", mqttPort, "", "")
 		require.Error(t, err, "Broker should be unreachable when disabled")
-		
+
 		resp2 := apiReq("POST", "/mocks/"+mockID+"/toggle", []byte(`{"enabled": true}`))
 		resp2.Body.Close()
 		time.Sleep(500 * time.Millisecond)
@@ -306,7 +312,7 @@ func TestMQTTProtocolIntegration(t *testing.T) {
 		respD2 := apiReq("DELETE", "/mocks/"+mockID, nil)
 		respD2.Body.Close()
 		time.Sleep(500 * time.Millisecond)
-		
+
 		_, err := connectMQTT("test-deleted", mqttPort, "", "")
 		require.Error(t, err, "Broker should be unreachable after deletion")
 	})

@@ -29,6 +29,7 @@ import (
 
 	ws "github.com/coder/websocket"
 	mqttclient "github.com/eclipse/paho.mqtt.golang"
+	"github.com/stretchr/testify/require"
 )
 
 // binaryTestContext holds shared state for binary E2E tests.
@@ -1251,7 +1252,8 @@ func TestBinaryE2E_AdminAPICRUD(t *testing.T) {
 		}
 
 		// Verify deletion
-		resp, _ = http.Get(proc.adminURL() + "/mocks/" + mockID)
+		resp, err = http.Get(proc.adminURL() + "/mocks/" + mockID)
+		require.NoError(t, err)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusNotFound {
 			t.Errorf("Expected 404 after deletion, got %d", resp.StatusCode)
@@ -3808,7 +3810,8 @@ func TestBinaryE2E_ChaosLatencyInjection(t *testing.T) {
 
 	// Measure baseline latency
 	start := time.Now()
-	resp, _ = http.Get(proc.mockURL() + "/api/chaos-latency")
+	resp, err = http.Get(proc.mockURL() + "/api/chaos-latency")
+	require.NoError(t, err)
 	resp.Body.Close()
 	baseline := time.Since(start)
 
@@ -3833,7 +3836,8 @@ func TestBinaryE2E_ChaosLatencyInjection(t *testing.T) {
 
 	// Measure latency with chaos enabled
 	start = time.Now()
-	resp, _ = http.Get(proc.mockURL() + "/api/chaos-latency")
+	resp, err = http.Get(proc.mockURL() + "/api/chaos-latency")
+	require.NoError(t, err)
 	resp.Body.Close()
 	withChaos := time.Since(start)
 
@@ -3887,7 +3891,8 @@ func TestBinaryE2E_ChaosErrorRateInjection(t *testing.T) {
 	// Make 50 requests and count errors
 	errors := 0
 	for i := 0; i < 50; i++ {
-		resp, _ := http.Get(proc.mockURL() + "/api/chaos-error")
+		resp, err := http.Get(proc.mockURL() + "/api/chaos-error")
+		require.NoError(t, err)
 		if resp.StatusCode == 500 {
 			errors++
 		}

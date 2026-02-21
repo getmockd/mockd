@@ -62,9 +62,11 @@ func TestWebSocketProtocolIntegration(t *testing.T) {
 
 	apiReq := func(method, path string, body []byte) *http.Response {
 		urlStr := adminURL + path
-		req, _ := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
 
 		if resp.StatusCode >= 400 {
 			b, _ := ioutil.ReadAll(resp.Body)
@@ -108,7 +110,9 @@ func TestWebSocketProtocolIntegration(t *testing.T) {
 		}`))
 		require.Equal(t, 201, resp.StatusCode)
 
-		var mock struct{ ID string `json:"id"` }
+		var mock struct {
+			ID string `json:"id"`
+		}
 		json.NewDecoder(resp.Body).Decode(&mock)
 		resp.Body.Close()
 
@@ -124,7 +128,9 @@ func TestWebSocketProtocolIntegration(t *testing.T) {
 
 	t.Run("Echo mode returns sent message", func(t *testing.T) {
 		c, resp, err := websocket.DefaultDialer.Dial(wsTargetURL+"/ws/echo", nil)
-		if resp != nil { defer resp.Body.Close() }
+		if resp != nil {
+			defer resp.Body.Close()
+		}
 		require.NoError(t, err)
 		defer c.Close()
 
@@ -138,7 +144,9 @@ func TestWebSocketProtocolIntegration(t *testing.T) {
 
 	t.Run("Matcher responds with pong for ping", func(t *testing.T) {
 		c, resp, err := websocket.DefaultDialer.Dial(wsTargetURL+"/ws/test", nil)
-		if resp != nil { defer resp.Body.Close() }
+		if resp != nil {
+			defer resp.Body.Close()
+		}
 		require.NoError(t, err)
 		defer c.Close()
 
@@ -152,7 +160,9 @@ func TestWebSocketProtocolIntegration(t *testing.T) {
 
 	t.Run("Default response for unmatched message", func(t *testing.T) {
 		c, resp, err := websocket.DefaultDialer.Dial(wsTargetURL+"/ws/test", nil)
-		if resp != nil { defer resp.Body.Close() }
+		if resp != nil {
+			defer resp.Body.Close()
+		}
 		require.NoError(t, err)
 		defer c.Close()
 
@@ -166,7 +176,9 @@ func TestWebSocketProtocolIntegration(t *testing.T) {
 
 	t.Run("Multiple messages over single connection", func(t *testing.T) {
 		c, resp, err := websocket.DefaultDialer.Dial(wsTargetURL+"/ws/echo", nil)
-		if resp != nil { defer resp.Body.Close() }
+		if resp != nil {
+			defer resp.Body.Close()
+		}
 		require.NoError(t, err)
 		defer c.Close()
 
@@ -183,7 +195,9 @@ func TestWebSocketProtocolIntegration(t *testing.T) {
 
 	t.Run("Connection to non-existent WS path fails", func(t *testing.T) {
 		_, resp, err := websocket.DefaultDialer.Dial(wsTargetURL+"/ws/no-such-path", nil)
-		if resp != nil { defer resp.Body.Close() }
+		if resp != nil {
+			defer resp.Body.Close()
+		}
 		require.Error(t, err)
 		if resp != nil {
 			assert.Equal(t, 404, resp.StatusCode)

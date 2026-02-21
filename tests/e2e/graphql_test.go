@@ -35,16 +35,16 @@ func TestGraphQLProtocolIntegration(t *testing.T) {
 	adminURL := "http://localhost:" + strconv.Itoa(adminPort)
 	engineURL := "http://localhost:" + strconv.Itoa(controlPort)
 	mockTargetURL := "http://localhost:" + strconv.Itoa(port)
-	
+
 	engClient := engineclient.New(engineURL)
 
-	adminAPI := admin.NewAPI(adminPort, 
-		admin.WithLocalEngine(engineURL), 
+	adminAPI := admin.NewAPI(adminPort,
+		admin.WithLocalEngine(engineURL),
 		admin.WithAPIKeyDisabled(),
 		admin.WithDataDir(t.TempDir()),
 	)
 	adminAPI.SetLocalEngine(engClient)
-	
+
 	go func() {
 		_ = adminAPI.Start()
 	}()
@@ -57,23 +57,27 @@ func TestGraphQLProtocolIntegration(t *testing.T) {
 
 	apiReq := func(method, path string, body []byte) *http.Response {
 		urlStr := adminURL + path
-		req, _ := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		resp, _ := client.Do(req)
-		
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+
 		if resp.StatusCode >= 400 {
 			b, _ := ioutil.ReadAll(resp.Body)
 			t.Logf("API Error %s %s -> %d : %s", method, urlStr, resp.StatusCode, string(b))
 			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
 		}
-		
+
 		return resp
 	}
 
 	engineReq := func(method, path string, body []byte) (*http.Response, string) {
-		req, _ := http.NewRequest(method, mockTargetURL+path, bytes.NewBuffer(body))
+		req, err := http.NewRequest(method, mockTargetURL+path, bytes.NewBuffer(body))
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
 		b, _ := ioutil.ReadAll(resp.Body)
 		return resp, string(b)
 	}
@@ -110,7 +114,7 @@ func TestGraphQLProtocolIntegration(t *testing.T) {
 		  }
 		}
 	}`)
-	
+
 	resp := apiReq("POST", "/mocks", mockReqBody)
 	resp.Body.Close()
 	require.Equal(t, 201, resp.StatusCode, "Failed to create GraphQL mock")
@@ -126,11 +130,13 @@ func TestGraphQLProtocolIntegration(t *testing.T) {
 			}
 		}`))
 		require.Equal(t, 201, resp.StatusCode)
-		
-		var mock struct { ID string `json:"id"` }
+
+		var mock struct {
+			ID string `json:"id"`
+		}
 		json.NewDecoder(resp.Body).Decode(&mock)
 		resp.Body.Close()
-		
+
 		resp = apiReq("DELETE", "/mocks/"+mock.ID, nil)
 		resp.Body.Close()
 		require.Equal(t, 204, resp.StatusCode)

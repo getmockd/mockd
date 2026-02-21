@@ -62,9 +62,11 @@ func TestSSEProtocolIntegration(t *testing.T) {
 
 	apiReq := func(method, path string, body []byte) *http.Response {
 		urlStr := adminURL + path
-		req, _ := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
 
 		if resp.StatusCode >= 400 {
 			b, _ := ioutil.ReadAll(resp.Body)
@@ -122,7 +124,9 @@ func TestSSEProtocolIntegration(t *testing.T) {
 		}`))
 		require.Equal(t, 201, resp.StatusCode)
 
-		var mock struct{ ID string `json:"id"` }
+		var mock struct {
+			ID string `json:"id"`
+		}
 		json.NewDecoder(resp.Body).Decode(&mock)
 		resp.Body.Close()
 

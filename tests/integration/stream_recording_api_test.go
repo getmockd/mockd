@@ -443,11 +443,12 @@ func TestReplayAPI_Stop(t *testing.T) {
 	// Start a replay
 	replayReq := map[string]interface{}{"mode": "triggered"}
 	reqBody, _ := json.Marshal(replayReq)
-	resp, _ := http.Post(
+	resp, err := http.Post(
 		fmt.Sprintf("http://localhost:%d/stream-recordings/%s/replay", adminPort, recordingID),
 		"application/json",
 		bytes.NewReader(reqBody),
 	)
+	require.NoError(t, err)
 	respBody, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 

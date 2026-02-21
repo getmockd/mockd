@@ -60,9 +60,11 @@ func TestSOAPProtocolIntegration(t *testing.T) {
 
 	apiReq := func(method, path string, body []byte) *http.Response {
 		urlStr := adminURL + path
-		req, _ := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
 
 		if resp.StatusCode >= 400 {
 			b, _ := ioutil.ReadAll(resp.Body)
@@ -74,10 +76,12 @@ func TestSOAPProtocolIntegration(t *testing.T) {
 	}
 
 	engineSOAPReq := func(path, action string, body []byte) (*http.Response, string) {
-		req, _ := http.NewRequest("POST", mockTargetURL+path, bytes.NewBuffer(body))
+		req, err := http.NewRequest("POST", mockTargetURL+path, bytes.NewBuffer(body))
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", "text/xml")
 		req.Header.Set("SOAPAction", action)
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
 		b, _ := ioutil.ReadAll(resp.Body)
 		return resp, string(b)
 	}
@@ -116,7 +120,9 @@ func TestSOAPProtocolIntegration(t *testing.T) {
 		}`))
 		require.Equal(t, 201, resp.StatusCode)
 
-		var mock struct{ ID string `json:"id"` }
+		var mock struct {
+			ID string `json:"id"`
+		}
 		json.NewDecoder(resp.Body).Decode(&mock)
 		resp.Body.Close()
 

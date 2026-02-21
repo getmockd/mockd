@@ -645,12 +645,14 @@ func TestStateful_US4_PostResetResetsAllResources(t *testing.T) {
 
 	// Add a new user
 	body := bytes.NewBufferString(`{"name": "NewUser"}`)
-	resp1, _ := http.Post(fmt.Sprintf("http://localhost:%d/api/users", httpPort), "application/json", body)
+	resp1, err := http.Post(fmt.Sprintf("http://localhost:%d/api/users", httpPort), "application/json", body)
+	require.NoError(t, err)
 	resp1.Body.Close()
 
 	// Delete the seed user
 	req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://localhost:%d/api/users/user-1", httpPort), nil)
-	resp2, _ := http.DefaultClient.Do(req)
+	resp2, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
 	resp2.Body.Close()
 
 	// Reset state via admin API
@@ -705,11 +707,13 @@ func TestStateful_US4_ResetWithResourceParamResetsOnlyThat(t *testing.T) {
 
 	// Add items to both resources
 	body1 := bytes.NewBufferString(`{"name": "NewUser"}`)
-	resp1, _ := http.Post(fmt.Sprintf("http://localhost:%d/api/users", httpPort), "application/json", body1)
+	resp1, err := http.Post(fmt.Sprintf("http://localhost:%d/api/users", httpPort), "application/json", body1)
+	require.NoError(t, err)
 	resp1.Body.Close()
 
 	body2 := bytes.NewBufferString(`{"name": "NewProduct"}`)
-	resp2, _ := http.Post(fmt.Sprintf("http://localhost:%d/api/products", httpPort), "application/json", body2)
+	resp2, err := http.Post(fmt.Sprintf("http://localhost:%d/api/products", httpPort), "application/json", body2)
+	require.NoError(t, err)
 	resp2.Body.Close()
 
 	// Reset only users resource
@@ -718,7 +722,8 @@ func TestStateful_US4_ResetWithResourceParamResetsOnlyThat(t *testing.T) {
 	resp3.Body.Close()
 
 	// Verify users is reset (only 1 item)
-	resp4, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/users", httpPort))
+	resp4, err := http.Get(fmt.Sprintf("http://localhost:%d/api/users", httpPort))
+	require.NoError(t, err)
 	var usersResult stateful.PaginatedResponse
 	json.NewDecoder(resp4.Body).Decode(&usersResult)
 	resp4.Body.Close()
@@ -726,7 +731,8 @@ func TestStateful_US4_ResetWithResourceParamResetsOnlyThat(t *testing.T) {
 	assert.Equal(t, 1, usersResult.Meta.Total, "users should be reset to seed data only")
 
 	// Verify products still has 2 items (not reset)
-	resp5, _ := http.Get(fmt.Sprintf("http://localhost:%d/api/products", httpPort))
+	resp5, err := http.Get(fmt.Sprintf("http://localhost:%d/api/products", httpPort))
+	require.NoError(t, err)
 	var productsResult stateful.PaginatedResponse
 	json.NewDecoder(resp5.Body).Decode(&productsResult)
 	resp5.Body.Close()
@@ -758,7 +764,8 @@ func TestStateful_US4_GetStateReturnsOverview(t *testing.T) {
 
 	// Add some products
 	body := bytes.NewBufferString(`{"name": "Product1"}`)
-	resp1, _ := http.Post(fmt.Sprintf("http://localhost:%d/api/products", httpPort), "application/json", body)
+	resp1, err := http.Post(fmt.Sprintf("http://localhost:%d/api/products", httpPort), "application/json", body)
+	require.NoError(t, err)
 	resp1.Body.Close()
 
 	// Get state overview

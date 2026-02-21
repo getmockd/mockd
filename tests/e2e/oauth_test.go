@@ -70,9 +70,11 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 
 	apiReq := func(method, path string, body []byte) *http.Response {
 		urlStr := adminURL + path
-		req, _ := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
 
 		if resp.StatusCode >= 400 {
 			b, _ := ioutil.ReadAll(resp.Body)
@@ -84,17 +86,21 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 	}
 
 	engineReq := func(method, path string, body []byte) (*http.Response, string) {
-		req, _ := http.NewRequest(method, mockTargetURL+path, bytes.NewBuffer(body))
+		req, err := http.NewRequest(method, mockTargetURL+path, bytes.NewBuffer(body))
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
 		b, _ := ioutil.ReadAll(resp.Body)
 		return resp, string(b)
 	}
 
 	engineForm := func(path, formBody string) (*http.Response, string) {
-		req, _ := http.NewRequest("POST", mockTargetURL+path, strings.NewReader(formBody))
+		req, err := http.NewRequest("POST", mockTargetURL+path, strings.NewReader(formBody))
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		resp, _ := client.Do(req)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
 		b, _ := ioutil.ReadAll(resp.Body)
 		return resp, string(b)
 	}
@@ -150,7 +156,9 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		}`))
 		require.Equal(t, 201, resp.StatusCode)
 
-		var mock struct{ ID string `json:"id"` }
+		var mock struct {
+			ID string `json:"id"`
+		}
 		json.NewDecoder(resp.Body).Decode(&mock)
 		resp.Body.Close()
 
@@ -182,7 +190,9 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		assert.Contains(t, body, "access_token")
 
 		// Verify JWT structure
-		var tokenResp struct{ AccessToken string `json:"access_token"` }
+		var tokenResp struct {
+			AccessToken string `json:"access_token"`
+		}
 		json.Unmarshal([]byte(body), &tokenResp)
 
 		parts := strings.Split(tokenResp.AccessToken, ".")
@@ -198,7 +208,7 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 
 	t.Run("Invalid credentials rejected", func(t *testing.T) {
 		resp, _ := engineForm("/oauth/token", "grant_type=client_credentials&client_id=wrong&client_secret=wrong")
-  resp.Body.Close()
+		resp.Body.Close()
 		assert.True(t, resp.StatusCode == 400 || resp.StatusCode == 401)
 	})
 
@@ -273,7 +283,9 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		resp, body := engineForm("/oauth/token", "grant_type=password&client_id=test-app&client_secret=test-secret&username=testuser&password=testpass&scope=openid")
 		resp.Body.Close()
 
-		var tokenResp struct{ RefreshToken string `json:"refresh_token"` }
+		var tokenResp struct {
+			RefreshToken string `json:"refresh_token"`
+		}
 		json.Unmarshal([]byte(body), &tokenResp)
 		require.NotEmpty(t, tokenResp.RefreshToken)
 
@@ -287,14 +299,18 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		resp, body := engineForm("/oauth/token", "grant_type=client_credentials&client_id=test-app&client_secret=test-secret&scope=openid")
 		resp.Body.Close()
 
-		var tokenResp struct{ AccessToken string `json:"access_token"` }
+		var tokenResp struct {
+			AccessToken string `json:"access_token"`
+		}
 		json.Unmarshal([]byte(body), &tokenResp)
 
 		resp2, body2 := engineForm("/oauth/introspect", "token="+tokenResp.AccessToken+"&client_id=test-app&client_secret=test-secret")
 		resp2.Body.Close()
 		assert.Equal(t, 200, resp2.StatusCode)
 
-		var introResp struct{ Active bool `json:"active"` }
+		var introResp struct {
+			Active bool `json:"active"`
+		}
 		json.Unmarshal([]byte(body2), &introResp)
 		assert.True(t, introResp.Active)
 	})
@@ -303,16 +319,20 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		resp, body := engineForm("/oauth/token", "grant_type=client_credentials&client_id=test-app&client_secret=test-secret&scope=openid")
 		resp.Body.Close()
 
-		var tokenResp struct{ AccessToken string `json:"access_token"` }
+		var tokenResp struct {
+			AccessToken string `json:"access_token"`
+		}
 		json.Unmarshal([]byte(body), &tokenResp)
 
 		resp2, _ := engineForm("/oauth/revoke", "token="+tokenResp.AccessToken+"&client_id=test-app&client_secret=test-secret")
-  resp2.Body.Close()
+		resp2.Body.Close()
 		assert.Equal(t, 200, resp2.StatusCode)
 
 		resp3, body3 := engineForm("/oauth/introspect", "token="+tokenResp.AccessToken+"&client_id=test-app&client_secret=test-secret")
 		resp3.Body.Close()
-		var introResp struct{ Active bool `json:"active"` }
+		var introResp struct {
+			Active bool `json:"active"`
+		}
 		json.Unmarshal([]byte(body3), &introResp)
 		assert.False(t, introResp.Active)
 	})
@@ -321,7 +341,9 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		resp, body := engineForm("/oauth/token", "grant_type=password&client_id=test-app&client_secret=test-secret&username=testuser&password=testpass&scope=openid+profile+email")
 		resp.Body.Close()
 
-		var tokenResp struct{ AccessToken string `json:"access_token"` }
+		var tokenResp struct {
+			AccessToken string `json:"access_token"`
+		}
 		json.Unmarshal([]byte(body), &tokenResp)
 
 		req, _ := http.NewRequest("GET", mockTargetURL+"/oauth/userinfo", nil)
@@ -329,7 +351,7 @@ func TestOAuthProtocolIntegration(t *testing.T) {
 		resp2, err := client.Do(req)
 		require.NoError(t, err)
 		defer resp2.Body.Close()
-		
+
 		assert.Equal(t, 200, resp2.StatusCode)
 		body2, _ := ioutil.ReadAll(resp2.Body)
 		assert.Contains(t, string(body2), "user-123")
