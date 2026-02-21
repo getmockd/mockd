@@ -243,20 +243,40 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 
 // handleConvertRecordings wraps the convert handler to pass the engine client.
 func (a *API) handleConvertRecordings(w http.ResponseWriter, r *http.Request) {
-	a.proxyManager.handleConvertRecordings(w, r, a.localEngine.Load())
+	engine := a.localEngine.Load()
+	if engine == nil {
+		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
+		return
+	}
+	a.proxyManager.handleConvertRecordings(w, r, engine)
 }
 
 // handleConvertSingleRecording wraps the single recording convert handler.
 func (a *API) handleConvertSingleRecording(w http.ResponseWriter, r *http.Request) {
-	a.proxyManager.handleConvertSingleRecording(w, r, a.localEngine.Load())
+	engine := a.localEngine.Load()
+	if engine == nil {
+		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
+		return
+	}
+	a.proxyManager.handleConvertSingleRecording(w, r, engine)
 }
 
 // handleConvertSession wraps the session convert handler.
 func (a *API) handleConvertSession(w http.ResponseWriter, r *http.Request) {
-	a.proxyManager.handleConvertSession(w, r, a.localEngine.Load())
+	engine := a.localEngine.Load()
+	if engine == nil {
+		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
+		return
+	}
+	a.proxyManager.handleConvertSession(w, r, engine)
 }
 
 // handleConvertStreamRecording wraps the stream recording convert handler.
 func (a *API) handleConvertStreamRecording(w http.ResponseWriter, r *http.Request) {
-	a.streamRecordingManager.handleConvertStreamRecording(w, r, a.localEngine.Load())
+	engine := a.localEngine.Load()
+	if engine == nil {
+		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
+		return
+	}
+	a.streamRecordingManager.handleConvertStreamRecording(w, r, engine)
 }

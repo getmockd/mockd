@@ -104,6 +104,7 @@ func (h *AuthHook) OnACLCheck(cl *mqtt.Client, topic string, write bool) bool {
 }
 
 // checkPublishACL verifies if a user has publish (write) permission for a topic.
+// Uses the same "most-restrictive-wins" logic as OnACLCheck for consistency.
 // Returns true if the user is allowed to publish to the topic.
 func checkPublishACL(config *MQTTAuthConfig, username, topic string) bool {
 	for _, user := range config.Users {
@@ -116,13 +117,20 @@ func checkPublishACL(config *MQTTAuthConfig, username, topic string) bool {
 			return true
 		}
 
+		// Check ACL rules — most restrictive wins (matches OnACLCheck behavior)
+		matched := false
+		allowed := true
 		for _, rule := range user.ACL {
 			if matchTopic(rule.Topic, topic) {
+				matched = true
 				if !checkAccess(rule.Access, true) {
-					return false // deny publish
+					allowed = false
+					break // Any deny is final
 				}
-				return true // allow publish
 			}
+		}
+		if matched {
+			return allowed
 		}
 
 		// User has ACL rules but none match this topic — deny

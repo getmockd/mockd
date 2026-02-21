@@ -66,12 +66,6 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// In permissive mode, skip validation entirely and pass through
-	if m.config.GetMode() == ModePermissive {
-		m.handler.ServeHTTP(w, r)
-		return
-	}
-
 	// Store original body for re-reading
 	var bodyBytes []byte
 	if r.Body != nil && r.Body != http.NoBody {
@@ -109,14 +103,35 @@ func (m *Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// In warn mode, add warning headers but allow request through
-			if m.config.GetMode() == ModeWarn {
+			mode := m.config.GetMode()
+			switch mode {
+			case ModeWarn:
+				// Add warning headers but allow request through
 				w.Header().Set("X-Mockd-Validation-Warnings", "true")
 				w.Header().Set("X-Mockd-Validation-Errors", strconv.Itoa(len(result.Errors)))
 				// Fall through to handler — do not return
-			} else if m.config.FailOnError {
-				m.handleError(w, result)
-				return
+			case ModePermissive:
+				// Only reject if there are required-field errors
+				hasRequired := false
+				for _, fieldErr := range result.Errors {
+					if fieldErr.Code == "required" || fieldErr.Code == "missing_required" {
+						hasRequired = true
+						break
+					}
+				}
+				if hasRequired {
+					m.handleError(w, result)
+					return
+				}
+				// Non-required errors: add warning headers and pass through
+				w.Header().Set("X-Mockd-Validation-Warnings", "true")
+				w.Header().Set("X-Mockd-Validation-Errors", strconv.Itoa(len(result.Errors)))
+			default:
+				// Strict mode (or FailOnError)
+				if m.config.FailOnError {
+					m.handleError(w, result)
+					return
+				}
 			}
 		}
 	}

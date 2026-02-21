@@ -81,7 +81,8 @@ func (h *SSEHandler) SetTemplateEngine(engine *template.Engine) {
 
 // logConnection logs an SSE connection open or close event.
 func (h *SSEHandler) logConnection(stream *SSEStream, path string, mockID string, isOpen bool, eventCount int, durationMs int) {
-	if h.requestLogger == nil {
+	logger := h.GetRequestLogger()
+	if logger == nil {
 		return
 	}
 
@@ -105,12 +106,13 @@ func (h *SSEHandler) logConnection(stream *SSEStream, path string, mockID string
 		},
 	}
 
-	h.requestLogger.Log(entry)
+	logger.Log(entry)
 }
 
 // logEvent logs an SSE event sent to a client.
 func (h *SSEHandler) logEvent(stream *SSEStream, path string, mockID string, event *SSEEventDef) {
-	if h.requestLogger == nil {
+	logger := h.GetRequestLogger()
+	if logger == nil {
 		return
 	}
 
@@ -133,7 +135,7 @@ func (h *SSEHandler) logEvent(stream *SSEStream, path string, mockID string, eve
 		},
 	}
 
-	h.requestLogger.Log(entry)
+	logger.Log(entry)
 }
 
 // generateLogID generates a unique log entry ID.

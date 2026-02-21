@@ -669,10 +669,16 @@ func (c *Client) CreateStatefulItem(ctx context.Context, resourceName string, da
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode == http.StatusNotFound {
+	switch resp.StatusCode {
+	case http.StatusCreated, http.StatusOK:
+		// success — decode below
+	case http.StatusNotFound:
 		return nil, ErrNotFound
-	}
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+	case http.StatusConflict:
+		return nil, fmt.Errorf("%w: %v", ErrConflict, c.parseError(resp))
+	case http.StatusInsufficientStorage:
+		return nil, fmt.Errorf("%w: %v", ErrCapacity, c.parseError(resp))
+	default:
 		return nil, c.parseError(resp)
 	}
 

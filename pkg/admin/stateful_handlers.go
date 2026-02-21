@@ -206,6 +206,14 @@ func (a *API) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request, e
 			writeError(w, http.StatusNotFound, "not_found", "Resource not found")
 			return
 		}
+		if errors.Is(err, engineclient.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", sanitizeEngineError(err, a.logger(), "create stateful item"))
+			return
+		}
+		if errors.Is(err, engineclient.ErrCapacity) {
+			writeError(w, http.StatusInsufficientStorage, "capacity_exceeded", sanitizeEngineError(err, a.logger(), "create stateful item"))
+			return
+		}
 		writeError(w, http.StatusBadRequest, "create_failed", sanitizeEngineError(err, a.logger(), "create stateful item"))
 		return
 	}

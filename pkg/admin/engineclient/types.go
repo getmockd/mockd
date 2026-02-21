@@ -14,6 +14,10 @@ var (
 	ErrNotFound = store.ErrNotFound
 	// ErrDuplicate is returned when a resource already exists.
 	ErrDuplicate = errors.New("resource already exists")
+	// ErrConflict is returned when a create/update conflicts with existing state (409).
+	ErrConflict = errors.New("conflict")
+	// ErrCapacity is returned when a stateful resource is at max capacity (507).
+	ErrCapacity = errors.New("capacity exceeded")
 )
 
 // Type aliases that point to the canonical shared types in pkg/api/types/.

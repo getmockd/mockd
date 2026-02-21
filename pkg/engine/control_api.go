@@ -738,7 +738,7 @@ func (a *ControlAPIAdapter) GetWebSocketStats() *api.WebSocketStats {
 
 	return &api.WebSocketStats{
 		TotalConnections:  int64(stats.TotalConnections),
-		ActiveConnections: stats.TotalConnections,
+		ActiveConnections: stats.TotalConnections, // WS manager tracks only current live connections
 		TotalMessagesSent: stats.TotalMessagesSent,
 		TotalMessagesRecv: stats.TotalMessagesReceived,
 		ConnectionsByMock: connectionsByMock,

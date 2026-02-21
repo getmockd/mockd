@@ -797,15 +797,19 @@ func (s *Server) clearMocks() {
 
 // ProtocolStatus returns the status of all protocols.
 func (s *Server) ProtocolStatus() map[string]ProtocolStatusInfo {
+	s.mu.RLock()
+	running := s.running
+	s.mu.RUnlock()
+
 	status := make(map[string]ProtocolStatusInfo)
 
 	// HTTP is always enabled if server is running
 	httpStatus := "stopped"
-	if s.running {
+	if running {
 		httpStatus = "running"
 	}
 	status["http"] = ProtocolStatusInfo{
-		Enabled: s.running,
+		Enabled: running,
 		Port:    s.cfg.HTTPPort,
 		Status:  httpStatus,
 	}

@@ -176,9 +176,9 @@ func (s *FileStore) doSave() error {
 	}
 	defer s.saving.Store(false)
 
-	s.mu.RLock()
+	s.mu.Lock()
 	if s.cfg.ReadOnly {
-		s.mu.RUnlock()
+		s.mu.Unlock()
 		return store.ErrReadOnly
 	}
 
@@ -186,7 +186,7 @@ func (s *FileStore) doSave() error {
 	s.data.Version = dataVersion
 
 	data, err := json.MarshalIndent(s.data, "", "  ")
-	s.mu.RUnlock()
+	s.mu.Unlock()
 
 	if err != nil {
 		return err

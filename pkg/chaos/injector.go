@@ -66,9 +66,10 @@ func compileRule(rule ChaosRule) (*compiledRule, error) {
 	}
 
 	prob := rule.Probability
-	if prob <= 0 {
-		prob = 1.0 // Default to always apply if probability not set
+	if prob < 0 {
+		prob = 1.0 // Default to always apply if probability not set (negative = unset)
 	}
+	// prob == 0 means "disabled" — rule matches but never fires
 
 	return &compiledRule{
 		pattern: pattern,
@@ -371,6 +372,8 @@ func (i *Injector) ResetStats() {
 
 // GetConfig returns the current chaos configuration
 func (i *Injector) GetConfig() *ChaosConfig {
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	return i.config
 }
 
