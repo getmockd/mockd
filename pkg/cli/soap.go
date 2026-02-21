@@ -26,6 +26,9 @@ func RunSOAP(args []string) error {
 	subArgs := args[1:]
 
 	switch subcommand {
+	case "add":
+		// Forward to the main add command but enforce the soap protocol
+		return RunAdd(append([]string{"soap"}, subArgs...))
 	case "validate":
 		return runSOAPValidate(subArgs)
 	case "call":
@@ -44,6 +47,7 @@ func printSOAPUsage() {
 Manage and test SOAP web services.
 
 Subcommands:
+  add       Add a new SOAP mock endpoint
   validate  Validate a WSDL file
   call      Call a SOAP operation
 

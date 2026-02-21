@@ -18,11 +18,29 @@ import (
 
 // RunAdd handles the add command.
 func RunAdd(args []string) error {
-	fs := flag.NewFlagSet("add", flag.ContinueOnError)
+	subcommandType := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		validTypes := map[string]bool{"http": true, "websocket": true, "graphql": true, "grpc": true, "mqtt": true, "soap": true, "oauth": true}
+		if validTypes[strings.ToLower(args[0])] {
+			subcommandType = strings.ToLower(args[0])
+			args = args[1:]
+		}
+	}
+
+	fsName := "add"
+	if subcommandType != "" {
+		fsName = "add " + subcommandType
+	}
+	fs := flag.NewFlagSet(fsName, flag.ContinueOnError)
+
+	mockTypeDefault := "http"
+	if subcommandType != "" {
+		mockTypeDefault = subcommandType
+	}
 
 	// Mock type (new)
-	mockType := fs.String("type", "http", "Mock type (http, websocket, graphql, grpc, mqtt, soap, oauth)")
-	fs.StringVar(mockType, "t", "http", "Mock type (shorthand)")
+	mockType := fs.String("type", mockTypeDefault, "Mock type (http, websocket, graphql, grpc, mqtt, soap, oauth)")
+	fs.StringVar(mockType, "t", mockTypeDefault, "Mock type (shorthand)")
 
 	// Common flags
 	name := fs.String("name", "", "Mock display name")
@@ -98,155 +116,11 @@ func RunAdd(args []string) error {
 	oauthPassword := fs.String("oauth-password", "password", "OAuth test password")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd add [flags]
-
-Add a new mock endpoint.
-
-Global Flags:
-  -t, --type            Mock type: http, websocket, graphql, grpc, mqtt, soap, oauth (default: http)
-  -n, --name            Mock display name
-      --allow-duplicate Create a new mock even if one exists on the same path
-      --admin-url       Admin API base URL (default: http://localhost:4290)
-      --json            Output in JSON format
-
-HTTP Flags (--type http):
-  -m, --method        HTTP method to match (default: GET)
-      --path          URL path to match (required)
-  -s, --status        Response status code (default: 200)
-  -b, --body          Response body
-      --body-file     Read response body from file
-  -H, --header        Response header (key:value), repeatable
-      --match-header  Required request header (key:value), repeatable
-      --match-query   Required query param (key=value or key:value), repeatable
-      --match-body-contains  Match requests whose body contains this string
-      --path-pattern  Regex path pattern for matching (alternative to --path)
-      --priority      Mock priority (higher = matched first)
-      --delay         Response delay in milliseconds
-
-SSE Flags (Server-Sent Events, use with --type http):
-      --sse           Enable SSE streaming response
-      --sse-event     SSE event (type:data), repeatable. Examples:
-                        --sse-event 'message:hello'
-                        --sse-event 'update:{"count":1}'
-      --sse-delay     Delay between events in ms (default: 100)
-      --sse-template  Use built-in template: openai-chat, notification-stream
-      --sse-repeat    Repeat events N times (0 = infinite, default: 1)
-      --sse-keepalive Keepalive interval in ms (0 = disabled)
-
-WebSocket Flags (--type websocket):
-      --path          WebSocket path (required)
-      --message       Default response message (JSON)
-      --echo          Enable echo mode
-
-GraphQL Flags (--type graphql):
-      --path          GraphQL endpoint path (default: /graphql)
-      --operation     Operation name (required)
-      --op-type       Operation type: query or mutation (default: query)
-      --response      JSON response data
-  NOTE: For full GraphQL with schema validation, use YAML config file.
-
-gRPC Flags (--type grpc):
-      --proto         Path to .proto file (required, repeatable for multiple files)
-      --proto-path    Import path for proto dependencies (repeatable)
-      --service       Service name, e.g., myapp.UserService (required)
-      --rpc-method    RPC method name (required)
-      --response      JSON response data
-      --grpc-port     gRPC server port (default: 50051)
-                      If a gRPC mock already exists on this port, the new
-                      service/method is merged into it automatically.
-                      For multiple services, use YAML config with services array.
-
-MQTT Flags (--type mqtt):
-      --topic         Topic pattern (required)
-      --payload       Response payload
-      --qos           QoS level: 0, 1, or 2 (default: 0)
-      --mqtt-port     MQTT broker port (default: 1883)
-                      If an MQTT mock already exists on this port, the new
-                      topic is merged into it automatically.
-                      For multiple topics, use YAML config with topics array.
-
-SOAP Flags (--type soap):
-      --path          SOAP endpoint path (default: /soap)
-      --operation     SOAP operation name (required)
-      --soap-action   SOAPAction header value
-      --response      XML response body
-
-OAuth Flags (--type oauth):
-      --issuer          OAuth issuer URL (default: http://localhost:4280)
-      --client-id       OAuth client ID (default: test-client)
-      --client-secret   OAuth client secret (default: test-secret)
-      --oauth-user      Test username (default: testuser)
-      --oauth-password  Test password (default: password)
-
-Examples:
-  # Simple HTTP GET mock
-  mockd add --path /api/users --status 200 --body '[]'
-
-  # HTTP POST with JSON response
-  mockd add -m POST --path /api/users -s 201 \
-    -b '{"id": "new-id", "created": true}' \
-    -H "Content-Type:application/json"
-
-  # SSE endpoint with custom events
-  mockd add --path /events --sse \
-    --sse-event 'connected:{"status":"ok"}' \
-    --sse-event 'update:{"count":1}' \
-    --sse-event 'update:{"count":2}' \
-    --sse-delay 500
-
-  # SSE with OpenAI-style streaming (for LLM mock)
-  mockd add --path /v1/chat/completions --sse --sse-template openai-chat
-
-  # Infinite SSE stream (heartbeat style)
-  mockd add --path /stream --sse \
-    --sse-event 'ping:{}' --sse-delay 1000 --sse-repeat 0
-
-  # WebSocket mock with echo mode
-  mockd add --type websocket --path /ws/chat --echo
-
-  # WebSocket mock with default response
-  mockd add --type websocket --path /ws/events \
-    --message '{"type": "connected", "status": "ok"}'
-
-  # GraphQL query mock
-  mockd add --type graphql --operation getUser \
-    --response '{"data": {"user": {"id": "1", "name": "Alice"}}}'
-
-  # GraphQL mutation mock
-  mockd add --type graphql --operation createUser --op-type mutation \
-    --response '{"data": {"createUser": {"id": "new-id"}}}'
-
-  # gRPC mock (proto file required)
-  mockd add --type grpc \
-    --proto ./service.proto \
-    --service myapp.UserService \
-    --rpc-method GetUser \
-    --response '{"id": "1", "name": "Alice"}'
-
-  # gRPC with import paths for proto dependencies
-  mockd add --type grpc \
-    --proto ./api/v1/service.proto \
-    --proto-path ./api \
-    --service myapp.v1.UserService \
-    --rpc-method GetUser \
-    --response '{"id": "1", "name": "Alice"}'
-
-  # MQTT mock
-  mockd add --type mqtt --topic sensors/temperature --payload '{"temp": 72.5}' --qos 1
-
-  # SOAP mock
-  mockd add --type soap --operation GetWeather --soap-action "http://example.com/GetWeather" \
-    --response '<GetWeatherResponse><Temperature>72</Temperature></GetWeatherResponse>'
-
-  # OAuth/OIDC mock (minimal, uses defaults)
-  mockd add --type oauth
-
-  # OAuth mock with custom client and issuer
-  mockd add --type oauth --name "Auth Server" \
-    --issuer http://localhost:4280/auth \
-    --client-id my-app --client-secret s3cret \
-    --oauth-user admin --oauth-password admin123
-`)
+		if subcommandType != "" {
+			printProtocolUsage(subcommandType)
+		} else {
+			printFullUsage()
+		}
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -1228,4 +1102,103 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 
 	// Fallback for unknown types
 	return output.JSON(created)
+}
+
+func printFullUsage() {
+	fmt.Fprint(os.Stderr, `Usage: mockd add [protocol] [flags]
+
+Add a new mock endpoint.
+
+Supported Protocols:
+  http        HTTP REST endpoints
+  websocket   WebSocket generic endpoints
+  graphql     GraphQL queries and mutations
+  grpc        gRPC services via reflection
+  mqtt        MQTT topics
+  soap        SOAP XML operations
+  oauth       OAuth/OIDC endpoints
+
+Global Flags:
+  -t, --type            Mock type (default: http). Legacy equivalent to using protocol arg.
+  -n, --name            Mock display name
+      --allow-duplicate Create a new mock even if one exists on the same path
+      --admin-url       Admin API base URL (default: http://localhost:4290)
+      --json            Output in JSON format
+
+Run 'mockd add [protocol] --help' to see protocol-specific flags.
+`)
+}
+
+func printProtocolUsage(protocol string) {
+	fmt.Fprintf(os.Stderr, "Usage: mockd add %s [flags]\n\n", protocol)
+	switch protocol {
+	case "http":
+		fmt.Fprint(os.Stderr, `HTTP Flags:
+  -m, --method        HTTP method to match (default: GET)
+      --path          URL path to match (required)
+  -s, --status        Response status code (default: 200)
+  -b, --body          Response body
+      --body-file     Read response body from file
+  -H, --header        Response header (key:value), repeatable
+      --match-header  Required request header (key:value), repeatable
+      --match-query   Required query param (key=value or key:value), repeatable
+      --match-body-contains  Match requests whose body contains this string
+      --path-pattern  Regex path pattern for matching (alternative to --path)
+      --priority      Mock priority (higher = matched first)
+      --delay         Response delay in milliseconds
+
+SSE Flags (Server-Sent Events)
+      --sse           Enable SSE streaming response
+      --sse-event     SSE event (type:data), repeatable.
+      --sse-delay     Delay between events in ms (default: 100)
+      --sse-template  Use built-in template: openai-chat, notification-stream
+      --sse-repeat    Repeat events N times (0 = infinite, default: 1)
+      --sse-keepalive Keepalive interval in ms (0 = disabled)
+`)
+	case "websocket":
+		fmt.Fprint(os.Stderr, `WebSocket Flags:
+      --path          WebSocket path (required)
+      --message       Default response message (JSON)
+      --echo          Enable echo mode
+`)
+	case "graphql":
+		fmt.Fprint(os.Stderr, `GraphQL Flags:
+      --path          GraphQL endpoint path (default: /graphql)
+      --operation     Operation name (required)
+      --op-type       Operation type: query or mutation (default: query)
+      --response      JSON response data
+  NOTE: For full GraphQL with schema validation, use YAML config file.
+`)
+	case "grpc":
+		fmt.Fprint(os.Stderr, `gRPC Flags:
+      --proto         Path to .proto file (required, repeatable for multiple files)
+      --proto-path    Import path for proto dependencies (repeatable)
+      --service       Service name, e.g., myapp.UserService (required)
+      --rpc-method    RPC method name (required)
+      --response      JSON response data
+      --grpc-port     gRPC server port (default: 50051)
+`)
+	case "mqtt":
+		fmt.Fprint(os.Stderr, `MQTT Flags:
+      --topic         Topic pattern (required)
+      --payload       Response payload
+      --qos           QoS level: 0, 1, or 2 (default: 0)
+      --mqtt-port     MQTT broker port (default: 1883)
+`)
+	case "soap":
+		fmt.Fprint(os.Stderr, `SOAP Flags:
+      --path          SOAP endpoint path (default: /soap)
+      --operation     SOAP operation name (required)
+      --soap-action   SOAPAction header value
+      --response      XML response body
+`)
+	case "oauth":
+		fmt.Fprint(os.Stderr, `OAuth Flags:
+      --issuer          OAuth issuer URL (default: http://localhost:4280)
+      --client-id       OAuth client ID (default: test-client)
+      --client-secret   OAuth client secret (default: test-secret)
+      --oauth-user      Test username (default: testuser)
+      --oauth-password  Test password (default: password)
+`)
+	}
 }

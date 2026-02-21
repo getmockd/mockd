@@ -124,7 +124,8 @@ Examples:
 	if info, err := os.Stat(dataDir); err == nil && info.IsDir() {
 		fmt.Printf("exists (%s)\n", dataDir)
 	} else {
-		fmt.Printf("not found (%s)\n", dataDir)
+		// Output as info rather than a failure, since it will be created on demand
+		fmt.Printf("not found (will be created automatically at %s)\n", dataDir)
 	}
 
 	fmt.Println()
