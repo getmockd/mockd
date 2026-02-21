@@ -1,0 +1,44 @@
+-- cli_negative.txt --
+# ============================================================================
+# CLI Negative Cases — error handling, missing args, bad inputs
+# ============================================================================
+
+# CLI-NEG-001: mockd add without --path fails or auto-generates path
+! exec mockd add --body '{"no":"path"}' --admin-url $ADMIN_URL
+stderr 'Error: required flag\(s\) "path" not set'
+
+# CLI-NEG-002: mockd get nonexistent mock fails
+! exec mockd get nonexistent-mock-id-99999 --admin-url $ADMIN_URL
+stderr '404'
+
+# CLI-NEG-003: mockd delete nonexistent mock fails
+! exec mockd delete nonexistent-mock-id-99999 --admin-url $ADMIN_URL
+stderr '404'
+
+# CLI-NEG-004: mockd import nonexistent file fails
+! exec mockd import /tmp/nonexistent-file-12345.yaml --admin-url $ADMIN_URL
+stderr 'no such file or directory'
+
+# CLI-NEG-005: mockd import invalid YAML fails
+-- cli_bad.yaml --
+this: is: not: valid: yaml: [[[
+-- end --
+! exec mockd import cli_bad.yaml --admin-url $ADMIN_URL
+stderr 'failed to parse file'
+
+# CLI-NEG-006: mockd add --type invalid_type fails
+# Our new Cobra API requires protocols as subcommands not `--type`, so `--type` is a global flag parsed dynamically, but unsupported protocol should fail or fall back.
+! exec mockd add --type invalid_type --path /cli/bad-type --body '{"bad":true}' --admin-url $ADMIN_URL
+stderr 'unknown protocol type'
+
+# CLI-NEG-007: mockd list with unreachable admin-url fails
+! exec mockd list --admin-url http://nonexistent-host:9999
+stderr 'connection refused|no such host|context deadline'
+
+# CLI-NEG-008: mockd delete without ID fails
+! exec mockd delete --admin-url $ADMIN_URL
+stderr 'requires at least 1 arg'
+
+# CLI-NEG-009: mockd get without ID fails
+! exec mockd get --admin-url $ADMIN_URL
+stderr 'requires at least 1 arg'

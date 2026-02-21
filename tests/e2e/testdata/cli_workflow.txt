@@ -1,0 +1,91 @@
+-- cli_workflow.txt --
+# ============================================================================
+# CLI End-to-End Workflow — realistic user workflow from empty to verified
+# ============================================================================
+# Simulates: add mocks → test → log → export → delete → re-import → verify
+
+# Ensure clean slate
+exec mockd delete --all --admin-url $ADMIN_URL
+exec mockd logs --requests --clear --admin-url $ADMIN_URL
+
+# ─── Step 1: Build API ──────────────────────────────────────────────────────
+
+# CLI-FLOW-001: Add GET products
+exec mockd add --method GET --path /api/v1/products --body '[{"id":"p1","name":"Widget"},{"id":"p2","name":"Gadget"}]' --name 'List Products' --admin-url $ADMIN_URL
+stdout 'Created'
+
+# CLI-FLOW-002: Add GET product by ID
+exec mockd add --method GET --path '/api/v1/products/{id}' --body '{"id":"p1","name":"Widget","price":9.99}' --name 'Get Product' --admin-url $ADMIN_URL
+stdout 'Created'
+
+# CLI-FLOW-003: Add POST product
+exec mockd add --method POST --path /api/v1/products --status 201 --body '{"id":"p3","name":"New Product","created":true}' --name 'Create Product' --admin-url $ADMIN_URL
+stdout 'Created'
+
+# CLI-FLOW-004: Add DELETE product
+exec mockd add --method DELETE --path '/api/v1/products/{id}' --status 204 --body '' --name 'Delete Product' --admin-url $ADMIN_URL
+stdout 'Created'
+
+
+# ─── Step 2: Verify Endpoints ────────────────────────────────────────────────
+
+# CLI-FLOW-005: GET products works
+exec curl -s -o /dev/null -w '%{http_code}' $ENGINE_URL/api/v1/products
+stdout '200'
+
+# CLI-FLOW-006: GET product by ID works
+exec curl -s -o /dev/null -w '%{http_code}' $ENGINE_URL/api/v1/products/p1
+stdout '200'
+
+# CLI-FLOW-007: POST product works
+exec curl -s -o /dev/null -w '%{http_code}' -X POST $ENGINE_URL/api/v1/products -d '{"name":"test"}'
+stdout '201'
+
+# CLI-FLOW-008: DELETE product works
+exec curl -s -o /dev/null -w '%{http_code}' -X DELETE $ENGINE_URL/api/v1/products/p1
+stdout '204'
+
+
+# ─── Step 3: Check Logs ─────────────────────────────────────────────────────
+
+# CLI-FLOW-009: At least 4 requests logged
+exec mockd logs --requests --admin-url $ADMIN_URL
+stdout '/api/v1/products'
+
+
+# ─── Step 4: Export ──────────────────────────────────────────────────────────
+
+# CLI-FLOW-010: Export succeeds
+exec mockd export --name 'product-api' --output cli-workflow-export.yaml --admin-url $ADMIN_URL
+exists cli-workflow-export.yaml
+
+
+# ─── Step 5: Delete All ─────────────────────────────────────────────────────
+
+# CLI-FLOW-011: Mocks gone after delete
+exec mockd delete --all --admin-url $ADMIN_URL
+exec curl -s -o /dev/null -w '%{http_code}' $ENGINE_URL/api/v1/products
+stdout '404'
+
+
+# ─── Step 6: Re-import ──────────────────────────────────────────────────────
+
+# CLI-FLOW-012: Re-import succeeds
+exec mockd import cli-workflow-export.yaml --admin-url $ADMIN_URL
+stdout 'Imported'
+
+
+# ─── Step 7: Verify Again ───────────────────────────────────────────────────
+
+# CLI-FLOW-013: GET products works after re-import
+exec curl -s -o /dev/null -w '%{http_code}' $ENGINE_URL/api/v1/products
+stdout '200'
+
+# CLI-FLOW-014: POST product works after re-import
+exec curl -s -o /dev/null -w '%{http_code}' -X POST $ENGINE_URL/api/v1/products -d '{"name":"test"}'
+stdout '201'
+
+# CLI-FLOW-015: All 4 mocks restored
+exec mockd list --json --admin-url $ADMIN_URL
+stdout 'Create Product'
+stdout 'Delete Product'

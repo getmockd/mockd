@@ -1,0 +1,85 @@
+-- cli_import_test.yaml --
+version: "1.0"
+name: cli-import-test
+mocks:
+  - id: cli-imp-alpha
+    type: http
+    name: Imported Alpha
+    http:
+      matcher:
+        method: GET
+        path: /cli/imported-alpha
+      response:
+        statusCode: 200
+        body: '{"from":"import","name":"alpha"}'
+  - id: cli-imp-beta
+    type: http
+    name: Imported Beta
+    http:
+      matcher:
+        method: POST
+        path: /cli/imported-beta
+      response:
+        statusCode: 201
+        body: '{"from":"import","name":"beta"}'
+-- cli_replace_test.yaml --
+version: "1.0"
+name: cli-replace-test
+mocks:
+  - id: cli-replace-mock
+    type: http
+    name: Replacement Mock
+    http:
+      matcher:
+        method: GET
+        path: /cli/replaced
+      response:
+        statusCode: 200
+        body: '{"replaced":true}'
+-- cli_import_export.txt --
+# ============================================================================
+# CLI Import & Export — import YAML, export, replace, dry-run, round-trip
+# ============================================================================
+
+# Ensure initial clean slate
+exec mockd import cli_replace_test.yaml --replace --admin-url $ADMIN_URL
+
+# CLI-IMP-001: mockd import exits 0 and says Imported
+exec mockd import cli_import_test.yaml --admin-url $ADMIN_URL
+stdout 'Imported'
+
+# CLI-IMP-002: Imported alpha responds with correct body
+exec curl -s $ENGINE_URL/cli/imported-alpha
+stdout '{"from":"import","name":"alpha"}'
+
+# CLI-IMP-003: Imported beta responds 201
+exec curl -s -X POST $ENGINE_URL/cli/imported-beta -d '{}' -w '%{http_code}'
+stdout '201'
+
+# CLI-EXP-001: mockd export contains imported paths
+exec mockd export --name 'cli-export-test' --admin-url $ADMIN_URL
+stdout '/cli/imported-alpha'
+stdout '/cli/imported-beta'
+
+# CLI-EXP-002: mockd export --output creates file
+exec mockd export --name 'cli-export-file' --output cli_exported.yaml --admin-url $ADMIN_URL
+exists cli_exported.yaml
+grep '/cli/imported-alpha' cli_exported.yaml
+
+# CLI-IMP-004: mockd import --replace clears old mocks
+exec mockd import cli_replace_test.yaml --replace --admin-url $ADMIN_URL
+exec curl -s -o /dev/null -w '%{http_code}' $ENGINE_URL/cli/replaced
+stdout '200'
+exec curl -s -o /dev/null -w '%{http_code}' $ENGINE_URL/cli/imported-alpha
+stdout '404'
+
+# CLI-IMP-005: mockd import --dry-run doesn't change state
+exec mockd import cli_import_test.yaml --dry-run --admin-url $ADMIN_URL
+stdout 'Dry run'
+exec curl -s -o /dev/null -w '%{http_code}' $ENGINE_URL/cli/replaced
+stdout '200'
+
+# CLI-IMP-006: Re-import exported file works
+exec mockd import cli_exported.yaml --replace --admin-url $ADMIN_URL
+exec mockd list --admin-url $ADMIN_URL
+stdout 'cli-imp-alpha'

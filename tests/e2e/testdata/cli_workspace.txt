@@ -1,0 +1,29 @@
+-- cli_workspace.txt --
+# ============================================================================
+# CLI Workspace Management — list, create (via API), delete via CLI
+# ============================================================================
+
+# Ensure initial generic clean slate
+exec mockd delete --all --admin-url $ADMIN_URL
+
+# CLI-WKSP-001: mockd workspace list exits 0
+exec mockd workspace list -u $ADMIN_URL
+stdout 'local'
+
+# CLI-WKSP-002: mockd workspace list --json returns valid JSON
+exec mockd workspace list --json -u $ADMIN_URL
+stdout '"id":\s*"local"'
+
+# CLI-WKSP-003: CLI shows workspace created via API & Delete Works
+exec curl -s -X POST $ADMIN_URL/workspaces -d '{"name": "cli-delete-test", "description": "For CLI delete test"}'
+stdout '"id":"([^"]+)"'
+env WS_ID=$1
+
+exec mockd workspace list -u $ADMIN_URL
+stdout 'cli-delete-test'
+
+exec mockd workspace delete --force -u $ADMIN_URL $WS_ID
+stdout 'Deleted'
+
+exec curl -s -o /dev/null -w '%{http_code}' $ADMIN_URL/workspaces/$WS_ID
+stdout '404'
