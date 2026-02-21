@@ -12,10 +12,9 @@ import (
 )
 
 var (
-	stopPidFile  string
-	stopAdminURL string
-	stopForce    bool
-	stopTimeout  int
+	stopPidFile string
+	stopForce   bool
+	stopTimeout int
 )
 
 var stopCmd = &cobra.Command{
@@ -36,16 +35,9 @@ var stopCmd = &cobra.Command{
 			}
 		}
 
-		adminURL := &stopAdminURL
-		pidFile := &stopPidFile
-		force := &stopForce
-		timeout := &stopTimeout
-
-		// Resolve admin URL from flag, env, or config
-		resolvedAdminURL := cliconfig.ResolveAdminURL(*adminURL)
-
-		// If admin-url is specified, verify the server is reachable before trying to stop
-		if *adminURL != "" {
+		// If admin-url was explicitly provided, verify the server is reachable before trying to stop
+		if cmd.Flags().Changed("admin-url") {
+			resolvedAdminURL := cliconfig.ResolveAdminURL(adminURL)
 			client := &http.Client{Timeout: 5 * time.Second}
 			resp, err := client.Get(resolvedAdminURL + "/health")
 			if err != nil {
@@ -58,7 +50,7 @@ var stopCmd = &cobra.Command{
 		}
 
 		// Determine PID file path
-		pidPath := *pidFile
+		pidPath := stopPidFile
 		if pidPath == "" {
 			pidPath = DefaultPIDPath()
 		}
@@ -85,7 +77,7 @@ var stopCmd = &cobra.Command{
 		// Determine which signal to send
 		sig := signalTerm
 		sigName := signalTermName()
-		if *force {
+		if stopForce {
 			sig = signalKill
 			sigName = signalKillName()
 		}
@@ -99,7 +91,7 @@ var stopCmd = &cobra.Command{
 		}
 
 		// For SIGKILL, we don't wait gracefully
-		if *force {
+		if stopForce {
 			fmt.Println("done")
 			// Wait a moment then clean up PID file
 			time.Sleep(100 * time.Millisecond)
@@ -108,7 +100,7 @@ var stopCmd = &cobra.Command{
 		}
 
 		// Wait for process to exit with timeout
-		timeoutDuration := time.Duration(*timeout) * time.Second
+		timeoutDuration := time.Duration(stopTimeout) * time.Second
 		deadline := time.Now().Add(timeoutDuration)
 
 		for time.Now().Before(deadline) {
@@ -122,7 +114,7 @@ var stopCmd = &cobra.Command{
 
 		// Timeout reached - process didn't stop
 		fmt.Println("timeout")
-		fmt.Printf("\nProcess did not stop within %d seconds.\n", *timeout)
+		fmt.Printf("\nProcess did not stop within %d seconds.\n", stopTimeout)
 		fmt.Println("Try: mockd stop --force")
 		return errors.New("timeout waiting for process to stop")
 	},
@@ -133,7 +125,6 @@ var stopCmd = &cobra.Command{
 
 func init() {
 	stopCmd.Flags().StringVar(&stopPidFile, "pid-file", "", "Path to PID file (default: ~/.mockd/mockd.pid)")
-	stopCmd.Flags().StringVar(&stopAdminURL, "admin-url", "", "Admin API base URL to verify server before stopping")
 	stopCmd.Flags().BoolVarP(&stopForce, "force", "f", false, "Send SIGKILL instead of SIGTERM")
 	stopCmd.Flags().IntVar(&stopTimeout, "timeout", 10, "Timeout in seconds to wait for graceful shutdown")
 	rootCmd.AddCommand(stopCmd)

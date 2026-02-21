@@ -35,7 +35,6 @@ var (
 	tunnelAuthBasic string
 	tunnelAllowIPs  string
 
-	tunnelEnableAdminURL          string
 	tunnelEnableEngine            string
 	tunnelEnableMode              string
 	tunnelEnableSubdomain         string
@@ -51,15 +50,10 @@ var (
 	tunnelEnableExcludeFolders    string
 	tunnelEnableExcludeMocks      string
 
-	tunnelDisableAdminURL string
-	tunnelDisableEngine   string
+	tunnelDisableEngine string
 
-	tunnelStatusAdminURL string
-	tunnelStatusEngine   string
+	tunnelStatusEngine string
 
-	tunnelListAdminURL string
-
-	tunnelPreviewAdminURL          string
 	tunnelPreviewEngine            string
 	tunnelPreviewMode              string
 	tunnelPreviewWorkspaces        string
@@ -250,7 +244,7 @@ var tunnelEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "Enable tunnel on an engine, making mocks publicly accessible",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		adminAddr := &tunnelEnableAdminURL
+		adminAddr := &adminURL
 		engineID := &tunnelEnableEngine
 		mode := &tunnelEnableMode
 		subdomain := &tunnelEnableSubdomain
@@ -365,10 +359,9 @@ var tunnelDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Disable tunnel on an engine, removing public access",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		adminAddr := &tunnelDisableAdminURL
 		engineID := &tunnelDisableEngine
 
-		client := tunnelHTTPClient(*adminAddr)
+		client := tunnelHTTPClient(adminURL)
 
 		resolvedEngine, err := resolveEngineID(client, *engineID)
 		if err != nil {
@@ -394,10 +387,9 @@ var tunnelStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show detailed tunnel status for an engine",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		adminAddr := &tunnelStatusAdminURL
 		engineID := &tunnelStatusEngine
 
-		client := tunnelHTTPClient(*adminAddr)
+		client := tunnelHTTPClient(adminURL)
 
 		resolvedEngine, err := resolveEngineID(client, *engineID)
 		if err != nil {
@@ -457,9 +449,8 @@ var tunnelStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Alias for disable",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Stop behaves identically to disable in earlier setup, we map flags to Disable variables.
-		// So we can just call the disable command's RunE.
-		tunnelDisableAdminURL = tunnelStatusAdminURL // Copy if needed, but we will attach flags the same
+		// Stop is an alias for disable. Flags bind directly to tunnelDisable* vars (see init),
+		// so we just delegate to the disable command's RunE.
 		return tunnelDisableCmd.RunE(cmd, args)
 	},
 }
@@ -468,9 +459,7 @@ var tunnelListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all active tunnels across all engines",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		adminAddr := &tunnelListAdminURL
-
-		client := tunnelHTTPClient(*adminAddr)
+		client := tunnelHTTPClient(adminURL)
 
 		resp, err := client.get("/tunnels")
 		if err != nil {
@@ -525,7 +514,7 @@ var tunnelPreviewCmd = &cobra.Command{
 	Use:   "preview",
 	Short: "Preview which mocks would be exposed through a tunnel",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		adminAddr := &tunnelPreviewAdminURL
+		adminAddr := &adminURL
 		engineID := &tunnelPreviewEngine
 		mode := &tunnelPreviewMode
 		workspaces := &tunnelPreviewWorkspaces
@@ -758,7 +747,6 @@ func init() {
 	tunnelCmd.Flags().StringVar(&tunnelAllowIPs, "allow-ips", "", "Allow only these IPs (comma-separated CIDR or IP)")
 
 	tunnelCmd.AddCommand(tunnelEnableCmd)
-	tunnelEnableCmd.Flags().StringVar(&tunnelEnableAdminURL, "admin-url", "", "Admin API address (auto-detected from context)")
 	tunnelEnableCmd.Flags().StringVar(&tunnelEnableEngine, "engine", "local", "Engine ID")
 	tunnelEnableCmd.Flags().StringVar(&tunnelEnableMode, "mode", "all", "Exposure mode: all, selected, none")
 	tunnelEnableCmd.Flags().StringVar(&tunnelEnableSubdomain, "subdomain", "", "Custom subdomain (auto-assigned if empty)")
@@ -775,22 +763,17 @@ func init() {
 	tunnelEnableCmd.Flags().StringVar(&tunnelEnableExcludeMocks, "exclude-mocks", "", "Exclude these mock IDs (comma-separated)")
 
 	tunnelCmd.AddCommand(tunnelDisableCmd)
-	tunnelDisableCmd.Flags().StringVar(&tunnelDisableAdminURL, "admin-url", "", "Admin API address (auto-detected from context)")
 	tunnelDisableCmd.Flags().StringVar(&tunnelDisableEngine, "engine", "local", "Engine ID")
 
 	tunnelCmd.AddCommand(tunnelStatusCmd)
-	tunnelStatusCmd.Flags().StringVar(&tunnelStatusAdminURL, "admin-url", "", "Admin API address (auto-detected from context)")
 	tunnelStatusCmd.Flags().StringVar(&tunnelStatusEngine, "engine", "local", "Engine ID")
 
 	tunnelCmd.AddCommand(tunnelStopCmd)
-	tunnelStopCmd.Flags().StringVar(&tunnelDisableAdminURL, "admin-url", "", "Admin API address (auto-detected from context)")
 	tunnelStopCmd.Flags().StringVar(&tunnelDisableEngine, "engine", "local", "Engine ID")
 
 	tunnelCmd.AddCommand(tunnelListCmd)
-	tunnelListCmd.Flags().StringVar(&tunnelListAdminURL, "admin-url", "", "Admin API address")
 
 	tunnelCmd.AddCommand(tunnelPreviewCmd)
-	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewAdminURL, "admin-url", "", "Admin API address (auto-detected from context)")
 	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewEngine, "engine", "local", "Engine ID")
 	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewMode, "mode", "all", "Exposure mode: all, selected, none")
 	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewWorkspaces, "workspaces", "", "Expose only these workspaces (comma-separated)")

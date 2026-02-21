@@ -14,7 +14,6 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/portability"
 	"github.com/spf13/cobra"
 )
@@ -50,10 +49,9 @@ var (
 	templatesListCategory string
 	templatesListBaseURL  string
 
-	templatesAddOutput   string
-	templatesAddAdminURL string
-	templatesAddBaseURL  string
-	templatesAddDryRun   bool
+	templatesAddOutput  string
+	templatesAddBaseURL string
+	templatesAddDryRun  bool
 )
 
 var templatesCmd = &cobra.Command{
@@ -168,22 +166,17 @@ var templatesAddCmd = &cobra.Command{
 	Short:   "Download and import a template from the template library",
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		output := &templatesAddOutput
-		adminURL := &templatesAddAdminURL
-		baseURL := &templatesAddBaseURL
-		dryRun := &templatesAddDryRun
-
 		templateID := args[0]
 
 		// Fetch the template
-		templateURL := fmt.Sprintf("%s/%s/template.yaml", *baseURL, templateID)
+		templateURL := fmt.Sprintf("%s/%s/template.yaml", templatesAddBaseURL, templateID)
 		data, err := fetchURL(templateURL)
 		if err != nil {
 			return fmt.Errorf("failed to fetch template %s: %w\n\nRun 'mockd templates list' to see available templates", templateID, err)
 		}
 
 		// Dry run - just print the content
-		if *dryRun {
+		if templatesAddDryRun {
 			fmt.Printf("# Template: %s\n", templateID)
 			fmt.Printf("# Source: %s\n\n", templateURL)
 			fmt.Print(string(data))
@@ -191,21 +184,21 @@ var templatesAddCmd = &cobra.Command{
 		}
 
 		// Save to file
-		if *output != "" {
+		if templatesAddOutput != "" {
 			// Ensure parent directory exists
-			dir := filepath.Dir(*output)
+			dir := filepath.Dir(templatesAddOutput)
 			if dir != "" && dir != "." {
 				if err := os.MkdirAll(dir, 0755); err != nil {
 					return fmt.Errorf("failed to create directory: %w", err)
 				}
 			}
 
-			if err := os.WriteFile(*output, data, 0644); err != nil {
+			if err := os.WriteFile(templatesAddOutput, data, 0644); err != nil {
 				return fmt.Errorf("failed to write file: %w", err)
 			}
-			fmt.Printf("Template saved to %s\n", *output)
+			fmt.Printf("Template saved to %s\n", templatesAddOutput)
 			fmt.Println("\nTo use this template:")
-			fmt.Printf("  mockd serve --load %s\n", *output)
+			fmt.Printf("  mockd serve --load %s\n", templatesAddOutput)
 			return nil
 		}
 
@@ -217,7 +210,7 @@ var templatesAddCmd = &cobra.Command{
 		}
 
 		// Import to running server
-		client := NewAdminClientWithAuth(*adminURL)
+		client := NewAdminClientWithAuth(adminURL)
 		result, err := client.ImportConfig(collection, false)
 		if err != nil {
 			// Check if server is not running
@@ -226,7 +219,7 @@ var templatesAddCmd = &cobra.Command{
 
 Suggestions:
   • Start the server with: mockd serve
-  • Save to file instead: mockd templates add %s -o template.yaml`, *adminURL, templateID)
+  • Save to file instead: mockd templates add %s -o template.yaml`, adminURL, templateID)
 			}
 			return fmt.Errorf("failed to import template: %w", err)
 		}
@@ -246,7 +239,6 @@ func init() {
 
 	templatesCmd.AddCommand(templatesAddCmd)
 	templatesAddCmd.Flags().StringVarP(&templatesAddOutput, "output", "o", "", "Save to file instead of importing to server")
-	templatesAddCmd.Flags().StringVar(&templatesAddAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 	templatesAddCmd.Flags().StringVar(&templatesAddBaseURL, "base-url", defaultTemplatesBaseURL, "Templates repository base URL")
 	templatesAddCmd.Flags().BoolVar(&templatesAddDryRun, "dry-run", false, "Preview template content without importing")
 }

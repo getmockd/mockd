@@ -110,7 +110,6 @@ func init() {
 	mqttSubCmd.Flags().StringVarP(&mqttPassword, "password", "P", "", "Password")
 	mqttCmd.AddCommand(mqttSubCmd)
 
-	mqttStatusCmd.Flags().StringVar(&mqttAdminURL, "admin-url", "http://localhost:4290", "Admin API base URL")
 	mqttCmd.AddCommand(mqttStatusCmd)
 }
 
@@ -122,7 +121,6 @@ var (
 	mqttPassword string
 	mqttCount    int
 	mqttTimeout  time.Duration
-	mqttAdminURL string
 )
 
 var mqttPubCmd = &cobra.Command{
@@ -380,12 +378,8 @@ func printMQTTSubscribeInstructions(broker, topic, username, password string, qo
 
 // runMQTTStatus shows the current MQTT broker status.
 func runMQTTStatus(cmd *cobra.Command, args []string) error {
-	if mqttAdminURL == "" {
-		mqttAdminURL = "http://localhost:4290"
-	}
-
 	// Get MQTT status from admin API
-	client := NewAdminClientWithAuth(mqttAdminURL)
+	client := NewAdminClientWithAuth(adminURL)
 	status, err := client.GetMQTTStatus()
 	if err != nil {
 		return fmt.Errorf("failed to get MQTT status: %s", FormatConnectionError(err))

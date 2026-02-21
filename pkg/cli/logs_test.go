@@ -19,9 +19,8 @@ func RunLogs(args []string) error {
 	logsUnmatched = false
 	logsVerbose = false
 	logsClear = false
-	logsAdminURL = ""
 	jsonOutput = false
-	
+
 	if f := rootCmd.Flags().Lookup("help"); f != nil {
 		f.Changed = false
 		f.Value.Set("false")

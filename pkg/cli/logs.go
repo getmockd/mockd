@@ -33,7 +33,6 @@ var (
 	logsUnmatched bool
 	logsVerbose   bool
 	logsClear     bool
-	logsAdminURL  string
 )
 
 var logsCmd = &cobra.Command{
@@ -61,7 +60,7 @@ request logs from the admin API instead.`,
 				verbose:    logsVerbose,
 				clear:      logsClear,
 				follow:     logsFollow,
-				adminURL:   cliconfig.ResolveAdminURL(logsAdminURL),
+				adminURL:   cliconfig.ResolveAdminURL(adminURL),
 				jsonOutput: jsonOutput,
 			})
 		}
@@ -91,7 +90,6 @@ func init() {
 	logsCmd.Flags().BoolVar(&logsUnmatched, "unmatched", false, "Show only unmatched requests [requests mode]")
 	logsCmd.Flags().BoolVar(&logsVerbose, "verbose", false, "Show headers and body [requests mode]")
 	logsCmd.Flags().BoolVar(&logsClear, "clear", false, "Clear all logs [requests mode]")
-	logsCmd.Flags().StringVar(&logsAdminURL, "admin-url", "", "Admin API base URL [requests mode]")
 
 	rootCmd.AddCommand(logsCmd)
 }

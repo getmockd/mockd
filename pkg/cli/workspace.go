@@ -99,8 +99,6 @@ func runWorkspaceShow() error {
 	return nil
 }
 
-var workspaceUseAdminURL string
-
 var workspaceUseCmd = &cobra.Command{
 	Use:   "use <id>",
 	Short: "Switch to a different workspace in the current context",
@@ -119,7 +117,7 @@ var workspaceUseCmd = &cobra.Command{
 		}
 
 		// Determine admin URL
-		targetURL := cliconfig.ResolveAdminURL(workspaceUseAdminURL)
+		targetURL := cliconfig.ResolveAdminURL(adminURL)
 
 		// Verify workspace exists on server
 		client := NewWorkspaceClient(targetURL, &WorkspaceClientOptions{
@@ -147,18 +145,15 @@ var workspaceUseCmd = &cobra.Command{
 }
 
 func init() {
-	workspaceUseCmd.Flags().StringVarP(&workspaceUseAdminURL, "admin-url", "u", "", "Admin API base URL (overrides context)")
 	workspaceCmd.AddCommand(workspaceUseCmd)
 }
-
-var workspaceListAdminURL string
 
 var workspaceListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List all workspaces on the server",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		targetURL := cliconfig.ResolveAdminURL(workspaceListAdminURL)
+		targetURL := cliconfig.ResolveAdminURL(adminURL)
 
 		// Get client options from context
 		var opts *WorkspaceClientOptions
@@ -228,12 +223,10 @@ var workspaceListCmd = &cobra.Command{
 }
 
 func init() {
-	workspaceListCmd.Flags().StringVarP(&workspaceListAdminURL, "admin-url", "u", "", "Admin API base URL (overrides context)")
 	workspaceCmd.AddCommand(workspaceListCmd)
 }
 
 var (
-	workspaceCreateAdminURL   string
 	workspaceCreateName       string
 	workspaceCreateDesc       string
 	workspaceCreateType       string
@@ -248,7 +241,7 @@ var workspaceCreateCmd = &cobra.Command{
 			return errors.New("workspace name required (--name)")
 		}
 
-		targetURL := cliconfig.ResolveAdminURL(workspaceCreateAdminURL)
+		targetURL := cliconfig.ResolveAdminURL(adminURL)
 
 		// Get client options from context
 		var opts *WorkspaceClientOptions
@@ -293,7 +286,6 @@ var workspaceCreateCmd = &cobra.Command{
 }
 
 func init() {
-	workspaceCreateCmd.Flags().StringVarP(&workspaceCreateAdminURL, "admin-url", "u", "", "Admin API base URL (overrides context)")
 	workspaceCreateCmd.Flags().StringVarP(&workspaceCreateName, "name", "n", "", "Workspace name (required)")
 	workspaceCreateCmd.Flags().StringVarP(&workspaceCreateDesc, "description", "d", "", "Workspace description")
 	workspaceCreateCmd.Flags().StringVar(&workspaceCreateType, "type", "local", "Workspace type")
@@ -302,8 +294,7 @@ func init() {
 }
 
 var (
-	workspaceDeleteAdminURL string
-	workspaceDeleteForce    bool
+	workspaceDeleteForce bool
 )
 
 var workspaceDeleteCmd = &cobra.Command{
@@ -313,7 +304,7 @@ var workspaceDeleteCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		workspaceID := args[0]
-		targetURL := cliconfig.ResolveAdminURL(workspaceDeleteAdminURL)
+		targetURL := cliconfig.ResolveAdminURL(adminURL)
 
 		// Get client options from context
 		var opts *WorkspaceClientOptions
@@ -372,7 +363,6 @@ var workspaceDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	workspaceDeleteCmd.Flags().StringVarP(&workspaceDeleteAdminURL, "admin-url", "u", "", "Admin API base URL (overrides context)")
 	workspaceDeleteCmd.Flags().BoolVarP(&workspaceDeleteForce, "force", "f", false, "Force deletion without confirmation")
 	workspaceCmd.AddCommand(workspaceDeleteCmd)
 }

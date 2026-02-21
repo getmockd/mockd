@@ -6,18 +6,15 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
 )
-
-var healthAdminURL string
 
 var healthCmd = &cobra.Command{
 	Use:   "health",
 	Short: "Check if the mockd server is healthy and reachable",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client := NewAdminClientWithAuth(healthAdminURL)
+		client := NewAdminClientWithAuth(adminURL)
 
 		type healthResult struct {
 			Status   string `json:"status"`
@@ -29,7 +26,7 @@ var healthCmd = &cobra.Command{
 		if err != nil {
 			result := healthResult{
 				Status:   "unhealthy",
-				AdminURL: healthAdminURL,
+				AdminURL: adminURL,
 				Error:    err.Error(),
 			}
 			if jsonOutput {
@@ -43,7 +40,7 @@ var healthCmd = &cobra.Command{
 
 		result := healthResult{
 			Status:   "healthy",
-			AdminURL: healthAdminURL,
+			AdminURL: adminURL,
 		}
 		if jsonOutput {
 			data, _ := json.MarshalIndent(result, "", "  ")
@@ -56,6 +53,5 @@ var healthCmd = &cobra.Command{
 }
 
 func init() {
-	healthCmd.Flags().StringVar(&healthAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 	rootCmd.AddCommand(healthCmd)
 }

@@ -11,9 +11,8 @@ func RunStop(args []string) error {
 	stopPidFile = ""
 	stopForce = false
 	stopTimeout = 0
-	stopAdminURL = ""
 	jsonOutput = false
-	
+
 	if f := rootCmd.Flags().Lookup("help"); f != nil {
 		f.Changed = false
 		f.Value.Set("false")

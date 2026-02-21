@@ -12,7 +12,6 @@ import (
 	"github.com/getmockd/mockd/pkg/ai"
 	"github.com/getmockd/mockd/pkg/ai/generator"
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/portability"
 	"github.com/spf13/cobra"
@@ -26,7 +25,6 @@ var (
 	generateProvider string
 	generateModel    string
 	generateDryRun   bool
-	generateAdminURL string
 )
 
 var generateCmd = &cobra.Command{
@@ -53,17 +51,8 @@ Examples:
   # Preview what would be generated
   mockd generate --ai --prompt "blog API" --dry-run`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		input := &generateInput
-		prompt := &generatePrompt
-		outputFile := &generateOutput
-		aiFlag := &generateAIFlag
-		provider := &generateProvider
-		model := &generateModel
-		dryRun := &generateDryRun
-		adminURL := &generateAdminURL
-
 		// Validate input
-		if *input == "" && *prompt == "" {
+		if generateInput == "" && generatePrompt == "" {
 			return errors.New(`either --input or --prompt is required
 
 Usage: mockd generate --ai --input openapi.yaml
@@ -73,20 +62,20 @@ Run 'mockd generate --help' for more options`)
 		}
 
 		// Check AI configuration
-		if *aiFlag {
-			cfg := buildAIConfig(*provider, *model)
+		if generateAIFlag {
+			cfg := buildAIConfig(generateProvider, generateModel)
 			if err := cfg.Validate(); err != nil {
 				return formatAIConfigError(err)
 			}
 		}
 
 		// Handle OpenAPI input
-		if *input != "" {
-			return generateFromOpenAPI(*input, *outputFile, *aiFlag, *provider, *model, *dryRun, *adminURL)
+		if generateInput != "" {
+			return generateFromOpenAPI(generateInput, generateOutput, generateAIFlag, generateProvider, generateModel, generateDryRun, adminURL)
 		}
 
 		// Handle prompt-based generation
-		return generateFromPrompt(*prompt, *outputFile, *provider, *model, *dryRun, *adminURL)
+		return generateFromPrompt(generatePrompt, generateOutput, generateProvider, generateModel, generateDryRun, adminURL)
 	},
 }
 
@@ -294,7 +283,6 @@ var (
 	enhanceAIFlag   bool
 	enhanceProvider string
 	enhanceModel    string
-	enhanceAdminURL string
 )
 
 var enhanceCmd = &cobra.Command{
@@ -315,12 +303,7 @@ Examples:
   # Use specific provider
   mockd enhance --ai --provider anthropic`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		aiFlag := &enhanceAIFlag
-		providerFlag := &enhanceProvider
-		modelFlag := &enhanceModel
-		adminURL := &enhanceAdminURL
-
-		if !*aiFlag {
+		if !enhanceAIFlag {
 			return errors.New(`--ai flag is required
 
 Usage: mockd enhance --ai
@@ -329,7 +312,7 @@ Run 'mockd enhance --help' for more options`)
 		}
 
 		// Check AI configuration
-		cfg := buildAIConfig(*providerFlag, *modelFlag)
+		cfg := buildAIConfig(enhanceProvider, enhanceModel)
 		if err := cfg.Validate(); err != nil {
 			return formatAIConfigError(err)
 		}
@@ -343,7 +326,7 @@ Run 'mockd enhance --help' for more options`)
 		gen := generator.New(aiProvider)
 
 		// Get existing mocks from server
-		client := NewAdminClientWithAuth(*adminURL)
+		client := NewAdminClientWithAuth(adminURL)
 		mocks, err := client.ListMocks()
 		if err != nil {
 			return fmt.Errorf("%s", FormatConnectionError(err))
@@ -402,11 +385,9 @@ func init() {
 	generateCmd.Flags().StringVar(&generateProvider, "provider", "", "AI provider (openai, anthropic, ollama, openrouter)")
 	generateCmd.Flags().StringVar(&generateModel, "model", "", "AI model to use")
 	generateCmd.Flags().BoolVar(&generateDryRun, "dry-run", false, "Preview generation without saving")
-	generateCmd.Flags().StringVar(&generateAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 
 	rootCmd.AddCommand(enhanceCmd)
 	enhanceCmd.Flags().BoolVar(&enhanceAIFlag, "ai", false, "Enable AI-powered enhancement")
 	enhanceCmd.Flags().StringVar(&enhanceProvider, "provider", "", "AI provider (openai, anthropic, ollama, openrouter)")
 	enhanceCmd.Flags().StringVar(&enhanceModel, "model", "", "AI model to use")
-	enhanceCmd.Flags().StringVar(&enhanceAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 }

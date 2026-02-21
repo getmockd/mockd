@@ -5,21 +5,15 @@ import (
 	"fmt"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
 )
 
 var (
-	chaosEnableAdminURL    string
 	chaosEnableLatency     string
 	chaosEnableErrorRate   float64
 	chaosEnableErrorCode   int
 	chaosEnablePath        string
 	chaosEnableProbability float64
-
-	chaosDisableAdminURL string
-
-	chaosStatusAdminURL string
 )
 
 var chaosCmd = &cobra.Command{
@@ -32,15 +26,8 @@ var chaosEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "Enable chaos injection with specified parameters",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		adminURL := &chaosEnableAdminURL
-		latency := &chaosEnableLatency
-		errorRate := &chaosEnableErrorRate
-		errorCode := &chaosEnableErrorCode
-		path := &chaosEnablePath
-		probability := &chaosEnableProbability
-
 		// Validate that at least one chaos option is specified
-		if *latency == "" && *errorRate == 0 {
+		if chaosEnableLatency == "" && chaosEnableErrorRate == 0 {
 			return errors.New("at least --latency or --error-rate must be specified")
 		}
 
@@ -49,46 +36,46 @@ var chaosEnableCmd = &cobra.Command{
 			"enabled": true,
 		}
 
-		if *latency != "" {
-			min, max := ParseLatencyRange(*latency)
+		if chaosEnableLatency != "" {
+			min, max := ParseLatencyRange(chaosEnableLatency)
 			chaosConfig["latency"] = map[string]interface{}{
 				"min":         min,
 				"max":         max,
-				"probability": *probability,
+				"probability": chaosEnableProbability,
 			}
 		}
 
-		if *errorRate > 0 {
+		if chaosEnableErrorRate > 0 {
 			chaosConfig["errorRate"] = map[string]interface{}{
-				"probability": *errorRate,
-				"defaultCode": *errorCode,
+				"probability": chaosEnableErrorRate,
+				"defaultCode": chaosEnableErrorCode,
 			}
 		}
 
-		if *path != "" {
+		if chaosEnablePath != "" {
 			chaosConfig["rules"] = []map[string]interface{}{
 				{
-					"pathPattern": *path,
-					"probability": *probability,
+					"pathPattern": chaosEnablePath,
+					"probability": chaosEnableProbability,
 				},
 			}
 		}
 
 		// Send request to admin API
-		client := NewAdminClientWithAuth(*adminURL)
+		client := NewAdminClientWithAuth(adminURL)
 		if err := client.SetChaosConfig(chaosConfig); err != nil {
 			return fmt.Errorf("failed to enable chaos: %s", FormatConnectionError(err))
 		}
 
 		fmt.Println("Chaos injection enabled")
-		if *latency != "" {
-			fmt.Printf("  Latency: %s\n", *latency)
+		if chaosEnableLatency != "" {
+			fmt.Printf("  Latency: %s\n", chaosEnableLatency)
 		}
-		if *errorRate > 0 {
-			fmt.Printf("  Error rate: %.1f%% (HTTP %d)\n", *errorRate*100, *errorCode)
+		if chaosEnableErrorRate > 0 {
+			fmt.Printf("  Error rate: %.1f%% (HTTP %d)\n", chaosEnableErrorRate*100, chaosEnableErrorCode)
 		}
-		if *path != "" {
-			fmt.Printf("  Path pattern: %s\n", *path)
+		if chaosEnablePath != "" {
+			fmt.Printf("  Path pattern: %s\n", chaosEnablePath)
 		}
 
 		return nil
@@ -99,10 +86,8 @@ var chaosDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Disable chaos injection",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		adminURL := &chaosDisableAdminURL
-
 		// Send request to admin API
-		client := NewAdminClientWithAuth(*adminURL)
+		client := NewAdminClientWithAuth(adminURL)
 		chaosConfig := map[string]interface{}{
 			"enabled": false,
 		}
@@ -120,10 +105,8 @@ var chaosStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show current chaos configuration",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		adminURL := &chaosStatusAdminURL
-
 		// Get chaos config from admin API
-		client := NewAdminClientWithAuth(*adminURL)
+		client := NewAdminClientWithAuth(adminURL)
 		config, err := client.GetChaosConfig()
 		if err != nil {
 			return fmt.Errorf("failed to get chaos status: %s", FormatConnectionError(err))
@@ -175,7 +158,6 @@ func init() {
 	rootCmd.AddCommand(chaosCmd)
 
 	chaosCmd.AddCommand(chaosEnableCmd)
-	chaosEnableCmd.Flags().StringVar(&chaosEnableAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 	chaosEnableCmd.Flags().StringVarP(&chaosEnableLatency, "latency", "l", "", "Add random latency (e.g., \"10ms-100ms\")")
 	chaosEnableCmd.Flags().Float64VarP(&chaosEnableErrorRate, "error-rate", "e", 0, "Error rate (0.0-1.0)")
 	chaosEnableCmd.Flags().IntVar(&chaosEnableErrorCode, "error-code", 500, "HTTP error code to return")
@@ -183,8 +165,6 @@ func init() {
 	chaosEnableCmd.Flags().Float64Var(&chaosEnableProbability, "probability", 1.0, "Probability of applying chaos (0.0-1.0)")
 
 	chaosCmd.AddCommand(chaosDisableCmd)
-	chaosDisableCmd.Flags().StringVar(&chaosDisableAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 
 	chaosCmd.AddCommand(chaosStatusCmd)
-	chaosStatusCmd.Flags().StringVar(&chaosStatusAdminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
 }
