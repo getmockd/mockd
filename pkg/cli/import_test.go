@@ -3,52 +3,69 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
-func TestRunImport_SourceRequired(t *testing.T) {
-	err := RunImport([]string{})
+// setImportFlags sets package-level import flags for testing and returns cleanup via t.Cleanup.
+func setImportFlags(t *testing.T, format string, replace, dryRun, includeStatic bool) {
+	t.Helper()
+	oldFormat := importFormat
+	oldReplace := importReplace
+	oldDryRun := importDryRun
+	oldIncludeStatic := importIncludeStatic
+	t.Cleanup(func() {
+		importFormat = oldFormat
+		importReplace = oldReplace
+		importDryRun = oldDryRun
+		importIncludeStatic = oldIncludeStatic
+	})
+	importFormat = format
+	importReplace = replace
+	importDryRun = dryRun
+	importIncludeStatic = includeStatic
+}
+
+func TestImportCmd_SourceRequired(t *testing.T) {
+	// The Cobra importCmd requires exactly 1 arg (cobra.ExactArgs(1)).
+	// Cobra validates arg count before RunE, so we just verify the Args validator rejects 0 args.
+	err := cobra.ExactArgs(1)(importCmd, []string{})
 	if err == nil {
-		t.Error("expected error when source is not provided")
+		t.Error("expected ExactArgs(1) to reject 0 args")
 	}
 }
 
-func TestRunImport_FileNotFound(t *testing.T) {
-	err := RunImport([]string{"/nonexistent/path/file.json"})
+func TestImportCmd_FileNotFoundDirect(t *testing.T) {
+	// Test proper invocation with a nonexistent file
+	setImportFlags(t, "", false, false, false)
+	err := runImportCobra(importCmd, []string{"/nonexistent/file.json"})
 	if err == nil {
 		t.Error("expected error for nonexistent file")
 	}
 }
 
-func TestRunImport_HelpFlag(t *testing.T) {
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("RunImport panicked with --help: %v", r)
-		}
-	}()
-
-	// Capture stderr since help goes there
-	oldStderr := os.Stderr
-	_, w, _ := os.Pipe()
-	os.Stderr = w
-
-	_ = RunImport([]string{"--help"})
-
-	w.Close()
-	os.Stderr = oldStderr
+func TestImportCmd_FileNotFound(t *testing.T) {
+	setImportFlags(t, "", false, false, false)
+	err := runImportCobra(importCmd, []string{"/nonexistent/path/file.json"})
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+	if err != nil && !strings.Contains(err.Error(), "file not found") {
+		t.Errorf("expected 'file not found' error, got: %v", err)
+	}
 }
 
-func TestRunImport_FormatDetection(t *testing.T) {
+func TestImportCmd_FormatDetection(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	tests := []struct {
-		name           string
-		filename       string
-		content        string
-		expectFormat   string
-		expectError    bool
-		errorContain   string
-		skipServerCall bool
+		name         string
+		filename     string
+		content      string
+		expectError  bool
+		errorContain string
 	}{
 		{
 			name:     "detect mockd from yaml content",
@@ -66,8 +83,6 @@ mocks:
         statusCode: 200
         body: "{}"
 `,
-			expectFormat:   "mockd",
-			skipServerCall: true,
 		},
 		{
 			name:     "detect openapi from yaml content",
@@ -84,8 +99,6 @@ paths:
         '200':
           description: OK
 `,
-			expectFormat:   "openapi",
-			skipServerCall: true,
 		},
 		{
 			name:     "detect postman from json content",
@@ -93,12 +106,11 @@ paths:
 			content: `{
   "info": {
     "name": "Test Collection",
-    "_postman_id": "12345"
+    "_postman_id": "12345",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": []
 }`,
-			expectFormat:   "postman",
-			skipServerCall: true,
 		},
 		{
 			name:     "detect har from json content",
@@ -109,8 +121,6 @@ paths:
     "entries": []
   }
 }`,
-			expectFormat:   "har",
-			skipServerCall: true,
 		},
 		{
 			name:     "detect wiremock from json content",
@@ -124,15 +134,6 @@ paths:
     "status": 200
   }
 }`,
-			expectFormat:   "wiremock",
-			skipServerCall: true,
-		},
-		{
-			name:           "detect curl command from file",
-			filename:       "curl-command",
-			content:        `curl -X GET https://api.example.com/test`,
-			expectFormat:   "curl",
-			skipServerCall: true,
 		},
 		{
 			name:         "unknown format",
@@ -152,38 +153,30 @@ paths:
 			}
 
 			// Run with dry-run to avoid needing a server
-			args := []string{filePath, "--dry-run"}
-			err := RunImport(args)
+			setImportFlags(t, "", false, true, false)
+			err := runImportCobra(importCmd, []string{filePath})
 
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got nil")
 				}
 				if tt.errorContain != "" && err != nil {
-					if !containsString(err.Error(), tt.errorContain) {
+					if !strings.Contains(err.Error(), tt.errorContain) {
 						t.Errorf("error should contain %q, got: %v", tt.errorContain, err)
 					}
 				}
 				return
 			}
 
-			// If we expect success but get an error, it might be due to
-			// server connection (which is expected without --dry-run working fully)
-			// The dry-run should work for valid formats
-			if err != nil && !tt.skipServerCall {
-				// Some errors are acceptable if format was detected correctly
-				if containsString(err.Error(), "connect") ||
-					containsString(err.Error(), "connection") {
-					// Connection error means format detection succeeded
-					return
-				}
-				t.Errorf("unexpected error: %v", err)
+			// For valid formats, dry-run should succeed (parse only, no server needed)
+			if err != nil {
+				t.Errorf("unexpected error with dry-run: %v", err)
 			}
 		})
 	}
 }
 
-func TestRunImport_ForceFormat(t *testing.T) {
+func TestImportCmd_ForceFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a file with ambiguous content
@@ -194,39 +187,42 @@ func TestRunImport_ForceFormat(t *testing.T) {
 	}
 
 	t.Run("force mockd format", func(t *testing.T) {
-		err := RunImport([]string{filePath, "--format", "mockd", "--dry-run"})
-		// May fail due to server connection, but shouldn't fail on format
-		if err != nil && containsString(err.Error(), "unknown format") {
+		setImportFlags(t, "mockd", false, true, false)
+		err := runImportCobra(importCmd, []string{filePath})
+		// May fail on parsing, but shouldn't fail on format detection
+		if err != nil && strings.Contains(err.Error(), "unknown format") {
 			t.Error("forced format should be accepted")
 		}
 	})
 
 	t.Run("invalid format", func(t *testing.T) {
-		err := RunImport([]string{filePath, "--format", "invalid"})
+		setImportFlags(t, "invalid", false, false, false)
+		err := runImportCobra(importCmd, []string{filePath})
 		if err == nil {
 			t.Error("expected error for invalid format")
+		}
+		if err != nil && !strings.Contains(err.Error(), "unknown format") {
+			t.Errorf("expected 'unknown format' error, got: %v", err)
 		}
 	})
 }
 
-func TestRunImport_CurlCommand(t *testing.T) {
+func TestImportCmd_CurlCommand(t *testing.T) {
 	// Test importing from a cURL command string
 	t.Run("basic curl command", func(t *testing.T) {
+		setImportFlags(t, "", false, true, false)
 		// The source itself is the curl command
-		err := RunImport([]string{
+		err := runImportCobra(importCmd, []string{
 			`curl -X POST https://api.example.com/users -H "Content-Type: application/json" -d '{"name": "test"}'`,
-			"--dry-run",
 		})
-		// This should parse the curl command (may fail on server connection)
-		if err != nil && !containsString(err.Error(), "connect") {
-			// If error is not about connection, it might be a parsing error
-			// which is acceptable for this test
+		// This should parse the curl command; may or may not succeed depending on parser
+		if err != nil && !strings.Contains(err.Error(), "connect") {
 			t.Logf("curl parsing returned error (acceptable): %v", err)
 		}
 	})
 }
 
-func TestRunImport_DryRun(t *testing.T) {
+func TestImportCmd_DryRun(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a valid mockd config file
@@ -264,7 +260,8 @@ mocks:
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := RunImport([]string{filePath, "--dry-run"})
+	setImportFlags(t, "", false, true, false)
+	err := runImportCobra(importCmd, []string{filePath})
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -279,12 +276,12 @@ mocks:
 	output := string(buf[:n])
 
 	// Verify output mentions dry run
-	if !containsString(output, "Dry run") {
+	if !strings.Contains(output, "Dry run") {
 		t.Error("output should mention dry run")
 	}
 }
 
-func TestRunImport_ReplaceFlag(t *testing.T) {
+func TestImportCmd_ReplaceFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a valid mockd config file
@@ -298,15 +295,16 @@ mocks: []
 	}
 
 	// Test with --replace flag (will fail on server connection but flag should be accepted)
-	err := RunImport([]string{filePath, "--replace"})
+	setImportFlags(t, "", true, false, false)
+	err := runImportCobra(importCmd, []string{filePath})
 
 	// Should fail with connection error, not flag parsing error
-	if err != nil && containsString(err.Error(), "flag") {
+	if err != nil && strings.Contains(err.Error(), "flag") {
 		t.Error("--replace flag should be accepted")
 	}
 }
 
-func TestRunImport_IncludeStaticFlag(t *testing.T) {
+func TestImportCmd_IncludeStaticFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a HAR file
@@ -322,11 +320,12 @@ func TestRunImport_IncludeStaticFlag(t *testing.T) {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
-	// Test with --include-static flag
-	err := RunImport([]string{filePath, "--include-static", "--dry-run"})
+	// Test with --include-static flag (dry-run to avoid server)
+	setImportFlags(t, "", false, true, true)
+	err := runImportCobra(importCmd, []string{filePath})
 
 	// Should not fail on flag parsing
-	if err != nil && containsString(err.Error(), "flag") {
+	if err != nil && strings.Contains(err.Error(), "flag") {
 		t.Error("--include-static flag should be accepted")
 	}
 }

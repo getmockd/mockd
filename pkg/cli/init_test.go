@@ -11,6 +11,32 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// setInitFlags sets package-level init flags for testing and returns a cleanup func.
+func setInitFlags(t *testing.T, force bool, output, format, template string, defaults, interactive bool) {
+	t.Helper()
+	// Save old values
+	oldForce := initForce
+	oldOutput := initOutput
+	oldFormat := initFormat
+	oldTemplate := initTemplate
+	oldDefaults := initDefaults
+	oldInteractive := initInteractive
+	t.Cleanup(func() {
+		initForce = oldForce
+		initOutput = oldOutput
+		initFormat = oldFormat
+		initTemplate = oldTemplate
+		initDefaults = oldDefaults
+		initInteractive = oldInteractive
+	})
+	initForce = force
+	initOutput = output
+	initFormat = format
+	initTemplate = template
+	initDefaults = defaults
+	initInteractive = interactive
+}
+
 func TestRunInit_Defaults(t *testing.T) {
 	// Create temp directory
 	tmpDir := t.TempDir()
@@ -21,9 +47,11 @@ func TestRunInit_Defaults(t *testing.T) {
 	os.Chdir(tmpDir)
 	defer os.Chdir(oldWd)
 
+	setInitFlags(t, false, outputPath, "", "", true, false)
+
 	// Run init with --defaults
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"--defaults", "-o", outputPath}, strings.NewReader(""), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("RunInit failed: %v", err)
 	}
@@ -72,8 +100,10 @@ func TestRunInit_TemplateMinimal(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "mockd.yaml")
 
+	setInitFlags(t, false, outputPath, "", "minimal", false, false)
+
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"--template", "minimal", "-o", outputPath}, strings.NewReader(""), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("RunInit failed: %v", err)
 	}
@@ -110,8 +140,10 @@ func TestRunInit_TemplateFull(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "mockd.yaml")
 
+	setInitFlags(t, false, outputPath, "", "full", false, false)
+
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"--template", "full", "-o", outputPath}, strings.NewReader(""), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("RunInit failed: %v", err)
 	}
@@ -148,8 +180,10 @@ func TestRunInit_TemplateAPI(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "mockd.yaml")
 
+	setInitFlags(t, false, outputPath, "", "api", false, false)
+
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"--template", "api", "-o", outputPath}, strings.NewReader(""), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("RunInit failed: %v", err)
 	}
@@ -182,8 +216,10 @@ func TestRunInit_InvalidTemplate(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "mockd.yaml")
 
+	setInitFlags(t, false, outputPath, "", "nonexistent", false, false)
+
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"--template", "nonexistent", "-o", outputPath}, strings.NewReader(""), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(""), &stdout, &stderr)
 	if err == nil {
 		t.Fatal("Expected error for invalid template")
 	}
@@ -201,8 +237,10 @@ func TestRunInit_FileExists(t *testing.T) {
 		t.Fatalf("Failed to create existing file: %v", err)
 	}
 
+	setInitFlags(t, false, outputPath, "", "", true, false)
+
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"--defaults", "-o", outputPath}, strings.NewReader(""), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(""), &stdout, &stderr)
 	if err == nil {
 		t.Fatal("Expected error when file exists")
 	}
@@ -220,8 +258,10 @@ func TestRunInit_ForceOverwrite(t *testing.T) {
 		t.Fatalf("Failed to create existing file: %v", err)
 	}
 
+	setInitFlags(t, true, outputPath, "", "", true, false)
+
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"--defaults", "--force", "-o", outputPath}, strings.NewReader(""), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("RunInit with --force failed: %v", err)
 	}
@@ -240,8 +280,10 @@ func TestRunInit_JSONOutput(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "mockd.json")
 
+	setInitFlags(t, false, outputPath, "", "", true, false)
+
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"--defaults", "-o", outputPath}, strings.NewReader(""), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("RunInit failed: %v", err)
 	}
@@ -267,11 +309,14 @@ func TestRunInit_Interactive(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "mockd.yaml")
 
+	// No --defaults and no --template → interactive mode
+	setInitFlags(t, false, outputPath, "", "", false, false)
+
 	// Simulate interactive input: custom ports, no HTTPS, api-key auth
 	input := "4291\n4281\nn\napi-key\n"
 
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"-o", outputPath}, strings.NewReader(input), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(input), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("RunInit failed: %v", err)
 	}
@@ -302,11 +347,13 @@ func TestRunInit_InteractiveWithHTTPS(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "mockd.yaml")
 
+	setInitFlags(t, false, outputPath, "", "", false, false)
+
 	// Simulate interactive input with HTTPS enabled
 	input := "4290\n4280\ny\n4443\nnone\n"
 
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"-o", outputPath}, strings.NewReader(input), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(input), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("RunInit failed: %v", err)
 	}
@@ -336,11 +383,13 @@ func TestRunInit_InteractiveDefaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "mockd.yaml")
 
+	setInitFlags(t, false, outputPath, "", "", false, false)
+
 	// Simulate interactive input with all defaults (just pressing enter)
 	input := "\n\n\n\n"
 
 	var stdout, stderr bytes.Buffer
-	err := runInitWithIO([]string{"-o", outputPath}, strings.NewReader(input), &stdout, &stderr)
+	err := runInitWithIO(strings.NewReader(input), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("RunInit failed: %v", err)
 	}

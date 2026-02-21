@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -38,87 +37,19 @@ func defaultInitConfig() *initConfig {
 }
 
 // RunInit handles the init command for creating a starter config file.
+// It reads from the package-level initForce, initOutput, initFormat, etc. vars
+// set by Cobra flags, or can be called from tests via runInitWithIO.
 func RunInit(args []string) error {
-	return runInitWithIO(args, os.Stdin, os.Stdout, os.Stderr)
+	return runInitWithIO(os.Stdin, os.Stdout, os.Stderr)
 }
 
 // runInitWithIO is the testable version of RunInit that accepts custom I/O.
-func runInitWithIO(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
-	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-
-	force := fs.Bool("force", false, "Overwrite existing config file")
-	output := fs.String("output", "mockd.yaml", "Output filename")
-	fs.StringVar(output, "o", "mockd.yaml", "Output filename (shorthand)")
-	format := fs.String("format", "", "Output format: yaml or json (default: inferred from filename)")
-	defaults := fs.Bool("defaults", false, "Generate minimal config without prompts")
-	interactive := fs.Bool("interactive", false, "Interactive mode - prompts for configuration")
-	fs.BoolVar(interactive, "i", false, "Interactive mode (shorthand)")
-	template := fs.String("template", "", "Use predefined template")
-	fs.StringVar(template, "t", "", "Use predefined template (shorthand)")
-
-	fs.Usage = func() {
-		_, _ = fmt.Fprint(stderr, `Usage: mockd init [flags]
-
-Create a starter mockd.yaml configuration file.
-
-Flags:
-      --force           Overwrite existing config file
-  -o, --output          Output filename (default: mockd.yaml)
-      --format          Output format: yaml or json (default: inferred from filename)
-      --defaults        Generate minimal config without prompts
-  -i, --interactive     Interactive mode - prompts for configuration
-  -t, --template        Use predefined template (see list below)
-
-Built-in Templates:
-  minimal          Just admin + engine + one health mock
-  full             Admin + engine + workspace + sample mocks
-  api              Setup for REST API mocking with CRUD examples
-
-Protocol Templates:
-  default          Basic HTTP mocks (hello, echo, health)
-  crud             Full REST CRUD API for resources
-  websocket-chat   Chat room WebSocket endpoint with echo
-  graphql-api      GraphQL API with User CRUD resolvers
-  grpc-service     gRPC Greeter service with reflection
-  mqtt-iot         MQTT broker with IoT sensor topics
-
-Examples:
-  # Interactive wizard (default)
-  mockd init
-
-  # Generate minimal config without prompts
-  mockd init --defaults
-
-  # Use a built-in template
-  mockd init --template full
-
-  # Use a protocol template
-  mockd init --template graphql-api
-
-  # List all available templates
-  mockd init --template list
-
-  # Custom output file
-  mockd init -o my-mocks.yaml
-
-  # Overwrite existing config
-  mockd init --force
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		if err == flag.ErrHelp {
-			return nil
-		}
-		return err
-	}
-
+func runInitWithIO(stdin io.Reader, stdout, stderr io.Writer) error {
 	// Determine output format
-	outputFormat := strings.ToLower(*format)
+	outputFormat := strings.ToLower(initFormat)
 	if outputFormat == "" {
 		// Infer from filename extension
-		ext := strings.ToLower(filepath.Ext(*output))
+		ext := strings.ToLower(filepath.Ext(initOutput))
 		if ext == ".json" {
 			outputFormat = "json"
 		} else {
@@ -132,14 +63,14 @@ Examples:
 	}
 
 	// Check if file already exists
-	if _, err := os.Stat(*output); err == nil {
-		if !*force {
-			return fmt.Errorf("file already exists: %s\n\nUse --force to overwrite", *output)
+	if _, err := os.Stat(initOutput); err == nil {
+		if !initForce {
+			return fmt.Errorf("file already exists: %s\n\nUse --force to overwrite", initOutput)
 		}
 	}
 
 	// Handle --template list
-	if *template == "list" {
+	if initTemplate == "list" {
 		_, _ = fmt.Fprint(stdout, templates.FormatList())
 		_, _ = fmt.Fprintln(stdout)
 		_, _ = fmt.Fprintln(stdout, "Built-in templates:")
@@ -155,12 +86,12 @@ Examples:
 	var err error
 
 	switch {
-	case *template != "":
+	case initTemplate != "":
 		// Check protocol templates first (raw YAML files from pkg/cli/templates)
-		if templates.Exists(*template) {
-			rawYAML, err = templates.Get(*template)
+		if templates.Exists(initTemplate) {
+			rawYAML, err = templates.Get(initTemplate)
 			if err != nil {
-				return fmt.Errorf("failed to load template %q: %w", *template, err)
+				return fmt.Errorf("failed to load template %q: %w", initTemplate, err)
 			}
 			// Protocol templates are always YAML, override format
 			if outputFormat == "json" {
@@ -168,17 +99,16 @@ Examples:
 			}
 		} else {
 			// Try built-in Go struct templates (minimal, full, api)
-			cfg, err = getProjectConfigTemplate(*template)
+			cfg, err = getProjectConfigTemplate(initTemplate)
 			if err != nil {
 				return err
 			}
 		}
-	case *defaults:
+	case initDefaults:
 		// Generate minimal config without prompts
 		cfg = generateMinimalProjectConfig(defaultInitConfig())
 	default:
 		// Interactive wizard (default, or explicit -i/--interactive)
-		_ = *interactive // explicit flag accepted but wizard is the default anyway
 		_, _ = fmt.Fprintln(stdout, "Creating new mockd configuration...")
 		_, _ = fmt.Fprintln(stdout)
 
@@ -210,12 +140,12 @@ Examples:
 	}
 
 	// Write the file
-	if err := os.WriteFile(*output, data, 0644); err != nil {
+	if err := os.WriteFile(initOutput, data, 0644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
 	// Print success message
-	_, _ = fmt.Fprintf(stdout, "\nWriting %s...\n", *output)
+	_, _ = fmt.Fprintf(stdout, "\nWriting %s...\n", initOutput)
 	_, _ = fmt.Fprintln(stdout, "Done! Run 'mockd up' to start.")
 
 	return nil
