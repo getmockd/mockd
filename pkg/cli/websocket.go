@@ -3,8 +3,6 @@ package cli
 import (
 	"bufio"
 	"context"
-	"errors"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,242 +14,526 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/flags"
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
-	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/gorilla/websocket"
+	"github.com/spf13/cobra"
 )
 
-// RunWebSocket handles the websocket command and its subcommands.
-func RunWebSocket(args []string) error {
-	if len(args) == 0 {
-		printWebSocketUsage()
-		return nil
-	}
+// ─── websocket parent command ────────────────────────────────────────────────
 
-	subcommand := args[0]
-	subArgs := args[1:]
-
-	switch subcommand {
-	case "connect":
-		return runWebSocketConnect(subArgs)
-	case "send":
-		return runWebSocketSend(subArgs)
-	case "listen":
-		return runWebSocketListen(subArgs)
-	case "status":
-		return runWebSocketStatus(subArgs)
-	case "help", "--help", "-h":
-		printWebSocketUsage()
-		return nil
-	default:
-		return fmt.Errorf("unknown websocket subcommand: %s\n\nRun 'mockd websocket --help' for usage", subcommand)
-	}
+var websocketCmd = &cobra.Command{
+	Use:     "websocket",
+	Aliases: []string{"ws"},
+	Short:   "Manage and test WebSocket endpoints",
 }
 
-func printWebSocketUsage() {
-	fmt.Print(`Usage: mockd websocket <subcommand> [flags]
-
-Interact with WebSocket endpoints for testing.
-
-Subcommands:
-  add       Add a new WebSocket mock endpoint
-  list      List WebSocket mocks
-  get       Get details of a WebSocket mock
-  delete    Delete a WebSocket mock
-  connect   Interactive WebSocket client (REPL mode)
-  send      Send a single message and exit
-  listen    Stream incoming messages
-  status    Show WebSocket handler status from admin API
-
-Run 'mockd websocket <subcommand> --help' for more information.
-`)
+var wsAddCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Add a new WebSocket mock endpoint",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		addMockType = "websocket"
+		return runAdd(cmd, args)
+	},
 }
 
-// runWebSocketConnect starts an interactive WebSocket REPL session.
-func runWebSocketConnect(args []string) error {
-	fs := flag.NewFlagSet("websocket connect", flag.ContinueOnError)
+// ─── websocket connect ───────────────────────────────────────────────────────
 
-	var headers flags.StringSlice
-	fs.Var(&headers, "header", "Custom headers (key:value), repeatable")
-	fs.Var(&headers, "H", "Custom headers (shorthand)")
+var (
+	wsConnectHeaders     flags.StringSlice
+	wsConnectSubprotocol string
+	wsConnectTimeout     time.Duration
+)
 
-	subprotocol := fs.String("subprotocol", "", "WebSocket subprotocol")
-	timeout := fs.Duration("timeout", 30*time.Second, "Connection timeout")
-	fs.DurationVar(timeout, "t", 30*time.Second, "Connection timeout (shorthand)")
-
-	jsonOutput := fs.Bool("json", false, "Output messages in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd websocket connect [flags] <url>
-
-Start an interactive WebSocket client session (REPL mode).
-Type messages to send, press Enter to send. Ctrl+C to exit.
-
-Arguments:
-  url    WebSocket URL (e.g., ws://localhost:4280/ws)
-
-Flags:
-  -H, --header       Custom headers (key:value), repeatable
-      --subprotocol  WebSocket subprotocol
-  -t, --timeout      Connection timeout (default: 30s)
-      --json         Output messages in JSON format
-
-Examples:
-  # Connect to a WebSocket endpoint
+var wsConnectCmd = &cobra.Command{
+	Use:   "connect <url>",
+	Short: "Interactive WebSocket client (REPL mode)",
+	Long: `Start an interactive WebSocket client session (REPL mode).
+Type messages to send, press Enter to send. Ctrl+C to exit.`,
+	Example: `  # Connect to a WebSocket endpoint
   mockd websocket connect ws://localhost:4280/ws
 
   # Connect with custom headers
   mockd websocket connect -H "Authorization:Bearer token" ws://localhost:4280/ws
 
   # Connect with subprotocol
-  mockd websocket connect --subprotocol graphql-ws ws://localhost:4280/graphql
-`)
-	}
+  mockd websocket connect --subprotocol graphql-ws ws://localhost:4280/graphql`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url := args[0]
 
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() < 1 {
-		fs.Usage()
-		return errors.New("url is required")
-	}
-
-	url := fs.Arg(0)
-
-	// Setup dialer
-	dialer := websocket.Dialer{
-		HandshakeTimeout: *timeout,
-	}
-
-	// Build request header
-	requestHeader := http.Header{}
-	for _, h := range headers {
-		parts := parse.HeaderParts(h)
-		if len(parts) == 2 {
-			requestHeader.Add(parts[0], parts[1])
+		// Setup dialer
+		dialer := websocket.Dialer{
+			HandshakeTimeout: wsConnectTimeout,
 		}
-	}
 
-	if *subprotocol != "" {
-		dialer.Subprotocols = []string{*subprotocol}
-	}
-
-	// Connect
-	fmt.Printf("Connecting to %s...\n", url)
-	conn, resp, err := dialer.Dial(url, requestHeader)
-	if resp != nil && resp.Body != nil {
-		defer func() { _ = resp.Body.Close() }()
-	}
-	if err != nil {
-		if resp != nil {
-			return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
+		// Build request header
+		requestHeader := http.Header{}
+		for _, h := range wsConnectHeaders {
+			parts := parse.HeaderParts(h)
+			if len(parts) == 2 {
+				requestHeader.Add(parts[0], parts[1])
+			}
 		}
-		return fmt.Errorf("connection failed: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
 
-	if *subprotocol != "" && resp.Header.Get("Sec-WebSocket-Protocol") != "" {
-		fmt.Printf("Connected (subprotocol: %s)\n", resp.Header.Get("Sec-WebSocket-Protocol"))
-	} else {
-		fmt.Println("Connected. Type messages and press Enter to send. Ctrl+C to exit.")
-	}
+		if wsConnectSubprotocol != "" {
+			dialer.Subprotocols = []string{wsConnectSubprotocol}
+		}
 
-	// Setup context for graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+		// Connect
+		fmt.Printf("Connecting to %s...\n", url)
+		conn, resp, err := dialer.Dial(url, requestHeader)
+		if resp != nil && resp.Body != nil {
+			defer func() { _ = resp.Body.Close() }()
+		}
+		if err != nil {
+			if resp != nil {
+				return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
+			}
+			return fmt.Errorf("connection failed: %w", err)
+		}
+		defer func() { _ = conn.Close() }()
 
-	// Handle signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		if wsConnectSubprotocol != "" && resp.Header.Get("Sec-WebSocket-Protocol") != "" {
+			fmt.Printf("Connected (subprotocol: %s)\n", resp.Header.Get("Sec-WebSocket-Protocol"))
+		} else {
+			fmt.Println("Connected. Type messages and press Enter to send. Ctrl+C to exit.")
+		}
 
-	go func() {
-		<-sigChan
-		fmt.Println("\nDisconnecting...")
-		cancel()
-		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	}()
+		// Setup context for graceful shutdown
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	// Channel for incoming messages
-	msgChan := make(chan wsMessage, 100)
-	errChan := make(chan error, 1)
+		// Handle signals
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Goroutine for reading messages
-	go func() {
+		go func() {
+			<-sigChan
+			fmt.Println("\nDisconnecting...")
+			cancel()
+			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+		}()
+
+		// Channel for incoming messages
+		msgChan := make(chan wsMessage, 100)
+		errChan := make(chan error, 1)
+
+		// Goroutine for reading messages
+		go func() {
+			for {
+				messageType, message, err := conn.ReadMessage()
+				if err != nil {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						errChan <- err
+						return
+					}
+				}
+				msgChan <- wsMessage{Type: messageType, Data: message}
+			}
+		}()
+
+		// Goroutine for reading user input
+		inputChan := make(chan string, 10)
+		go func() {
+			scanner := bufio.NewScanner(os.Stdin)
+			for scanner.Scan() {
+				select {
+				case <-ctx.Done():
+					return
+				case inputChan <- scanner.Text():
+				}
+			}
+		}()
+
+		// Main loop
 		for {
-			messageType, message, err := conn.ReadMessage()
+			select {
+			case <-ctx.Done():
+				return nil
+			case err := <-errChan:
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					fmt.Println("Connection closed by server")
+					return nil
+				}
+				return fmt.Errorf("read error: %w", err)
+			case msg := <-msgChan:
+				if jsonOutput {
+					m := map[string]interface{}{
+						"type":      messageTypeString(msg.Type),
+						"data":      string(msg.Data),
+						"timestamp": time.Now().Format(time.RFC3339),
+					}
+					if err := output.JSONCompact(m); err != nil {
+						output.Warn("failed to encode output: %v", err)
+					}
+				} else {
+					fmt.Printf("< %s\n", string(msg.Data))
+				}
+			case input := <-inputChan:
+				if input == "" {
+					continue
+				}
+				if err := conn.WriteMessage(websocket.TextMessage, []byte(input)); err != nil {
+					return fmt.Errorf("send error: %w", err)
+				}
+				if jsonOutput {
+					sent := map[string]interface{}{
+						"direction": "sent",
+						"type":      "text",
+						"data":      input,
+						"timestamp": time.Now().Format(time.RFC3339),
+					}
+					if err := output.JSONCompact(sent); err != nil {
+						output.Warn("failed to encode output: %v", err)
+					}
+				} else {
+					fmt.Printf("> %s\n", input)
+				}
+			}
+		}
+	},
+}
+
+// ─── websocket send ──────────────────────────────────────────────────────────
+
+var (
+	wsSendHeaders     flags.StringSlice
+	wsSendSubprotocol string
+	wsSendTimeout     time.Duration
+)
+
+var wsSendCmd = &cobra.Command{
+	Use:   "send <url> <message>",
+	Short: "Send a single message and exit",
+	Long: `Send a single message to a WebSocket endpoint and exit.
+
+If the message starts with @, the content is read from the named file.`,
+	Example: `  # Send a simple message
+  mockd websocket send ws://localhost:4280/ws "hello"
+
+  # Send JSON message
+  mockd websocket send ws://localhost:4280/ws '{"action":"ping"}'
+
+  # Send with custom headers
+  mockd websocket send -H "Authorization:Bearer token" ws://localhost:4280/ws "hello"
+
+  # Send message from file
+  mockd websocket send ws://localhost:4280/ws @message.json`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url := args[0]
+		message := args[1]
+
+		// Load message from file if prefixed with @
+		if len(message) > 0 && message[0] == '@' {
+			msgBytes, err := os.ReadFile(message[1:])
 			if err != nil {
+				return fmt.Errorf("failed to read message file: %w", err)
+			}
+			message = string(msgBytes)
+		}
+
+		// Setup dialer
+		dialer := websocket.Dialer{
+			HandshakeTimeout: wsSendTimeout,
+		}
+
+		// Build request header
+		requestHeader := http.Header{}
+		for _, h := range wsSendHeaders {
+			parts := parse.HeaderParts(h)
+			if len(parts) == 2 {
+				requestHeader.Add(parts[0], parts[1])
+			}
+		}
+
+		if wsSendSubprotocol != "" {
+			dialer.Subprotocols = []string{wsSendSubprotocol}
+		}
+
+		// Connect
+		conn, resp, err := dialer.Dial(url, requestHeader)
+		if resp != nil && resp.Body != nil {
+			defer func() { _ = resp.Body.Close() }()
+		}
+		if err != nil {
+			if resp != nil {
+				return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
+			}
+			return fmt.Errorf("connection failed: %w", err)
+		}
+		defer func() { _ = conn.Close() }()
+
+		// Send message
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		// Close gracefully
+		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+
+		if jsonOutput {
+			result := map[string]interface{}{
+				"success":   true,
+				"url":       url,
+				"message":   message,
+				"timestamp": time.Now().Format(time.RFC3339),
+			}
+			return output.JSON(result)
+		}
+
+		fmt.Printf("Sent to %s: %s\n", url, message)
+		return nil
+	},
+}
+
+// ─── websocket listen ────────────────────────────────────────────────────────
+
+var (
+	wsListenHeaders     flags.StringSlice
+	wsListenSubprotocol string
+	wsListenTimeout     time.Duration
+	wsListenCount       int
+)
+
+var wsListenCmd = &cobra.Command{
+	Use:   "listen <url>",
+	Short: "Stream incoming messages",
+	Long: `Listen for incoming WebSocket messages and print them.
+
+Messages are printed to stdout (one per line). Use --json for structured output.
+Use --count to limit the number of messages received.`,
+	Example: `  # Listen to all messages
+  mockd websocket listen ws://localhost:4280/ws
+
+  # Listen for 10 messages then exit
+  mockd websocket listen -n 10 ws://localhost:4280/ws
+
+  # Listen with JSON output
+  mockd websocket listen --json ws://localhost:4280/ws
+
+  # Listen with custom headers
+  mockd websocket listen -H "Authorization:Bearer token" ws://localhost:4280/ws`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url := args[0]
+
+		// Setup dialer
+		dialer := websocket.Dialer{
+			HandshakeTimeout: wsListenTimeout,
+		}
+
+		// Build request header
+		requestHeader := http.Header{}
+		for _, h := range wsListenHeaders {
+			parts := parse.HeaderParts(h)
+			if len(parts) == 2 {
+				requestHeader.Add(parts[0], parts[1])
+			}
+		}
+
+		if wsListenSubprotocol != "" {
+			dialer.Subprotocols = []string{wsListenSubprotocol}
+		}
+
+		// Connect
+		fmt.Fprintf(os.Stderr, "Connecting to %s...\n", url)
+		conn, resp, err := dialer.Dial(url, requestHeader)
+		if resp != nil && resp.Body != nil {
+			defer func() { _ = resp.Body.Close() }()
+		}
+		if err != nil {
+			if resp != nil {
+				return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
+			}
+			return fmt.Errorf("connection failed: %w", err)
+		}
+		defer func() { _ = conn.Close() }()
+
+		if wsListenCount > 0 {
+			fmt.Fprintf(os.Stderr, "Listening for %d messages (Ctrl+C to stop)\n", wsListenCount)
+		} else {
+			fmt.Fprintf(os.Stderr, "Listening for messages (Ctrl+C to stop)\n")
+		}
+
+		// Setup context for graceful shutdown
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// Handle signals
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+		// Use WaitGroup for clean shutdown
+		var wg sync.WaitGroup
+
+		go func() {
+			<-sigChan
+			fmt.Fprintln(os.Stderr, "\nDisconnecting...")
+			cancel()
+			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+		}()
+
+		received := 0
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
 				select {
 				case <-ctx.Done():
 					return
 				default:
-					errChan <- err
+				}
+
+				messageType, message, err := conn.ReadMessage()
+				if err != nil {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+							fmt.Fprintln(os.Stderr, "Connection closed by server")
+							return
+						}
+						fmt.Fprintf(os.Stderr, "Read error: %v\n", err)
+						return
+					}
+				}
+
+				if jsonOutput {
+					m := map[string]interface{}{
+						"type":      messageTypeString(messageType),
+						"data":      string(message),
+						"timestamp": time.Now().Format(time.RFC3339),
+						"index":     received,
+					}
+					if err := output.JSONCompact(m); err != nil {
+						output.Warn("failed to encode output: %v", err)
+					}
+				} else {
+					fmt.Println(string(message))
+				}
+
+				received++
+				if wsListenCount > 0 && received >= wsListenCount {
+					fmt.Fprintf(os.Stderr, "Received %d messages\n", received)
+					cancel()
 					return
 				}
 			}
-			msgChan <- wsMessage{Type: messageType, Data: message}
-		}
-	}()
+		}()
 
-	// Goroutine for reading user input
-	inputChan := make(chan string, 10)
-	go func() {
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			select {
-			case <-ctx.Done():
-				return
-			case inputChan <- scanner.Text():
-			}
-		}
-	}()
-
-	// Main loop
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case err := <-errChan:
-			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				fmt.Println("Connection closed by server")
-				return nil
-			}
-			return fmt.Errorf("read error: %w", err)
-		case msg := <-msgChan:
-			if *jsonOutput {
-				msg := map[string]interface{}{
-					"type":      messageTypeString(msg.Type),
-					"data":      string(msg.Data),
-					"timestamp": time.Now().Format(time.RFC3339),
-				}
-				if err := output.JSONCompact(msg); err != nil {
-					output.Warn("failed to encode output: %v", err)
-				}
-			} else {
-				fmt.Printf("< %s\n", string(msg.Data))
-			}
-		case input := <-inputChan:
-			if input == "" {
-				continue
-			}
-			if err := conn.WriteMessage(websocket.TextMessage, []byte(input)); err != nil {
-				return fmt.Errorf("send error: %w", err)
-			}
-			if *jsonOutput {
-				sent := map[string]interface{}{
-					"direction": "sent",
-					"type":      "text",
-					"data":      input,
-					"timestamp": time.Now().Format(time.RFC3339),
-				}
-				if err := output.JSONCompact(sent); err != nil {
-					output.Warn("failed to encode output: %v", err)
-				}
-			} else {
-				fmt.Printf("> %s\n", input)
-			}
-		}
-	}
+		wg.Wait()
+		return nil
+	},
 }
+
+// ─── websocket status ────────────────────────────────────────────────────────
+
+var wsStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show WebSocket handler status from admin API",
+	Example: `  mockd websocket status
+  mockd websocket status --json`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Uses root persistent adminURL
+		client := NewAdminClientWithAuth(adminURL)
+		mocks, err := client.ListMocksByType("websocket")
+		if err != nil {
+			return fmt.Errorf("failed to get WebSocket status: %s", FormatConnectionError(err))
+		}
+
+		if jsonOutput {
+			result := map[string]interface{}{
+				"enabled":   len(mocks) > 0,
+				"endpoints": mocks,
+				"count":     len(mocks),
+			}
+			return output.JSON(result)
+		}
+
+		// Pretty print status
+		if len(mocks) == 0 {
+			fmt.Println("WebSocket: no mocks configured")
+			return nil
+		}
+
+		fmt.Printf("WebSocket: %d mock(s) configured\n", len(mocks))
+		for _, m := range mocks {
+			path := ""
+			if m.WebSocket != nil {
+				path = m.WebSocket.Path
+			}
+			status := "enabled"
+			if m.Enabled != nil && !*m.Enabled {
+				status = "disabled"
+			}
+			fmt.Printf("  - %s (%s) [%s]\n", path, m.ID, status)
+		}
+
+		return nil
+	},
+}
+
+// ─── init ────────────────────────────────────────────────────────────────────
+
+func init() {
+	rootCmd.AddCommand(websocketCmd)
+
+	// websocket add flags
+	wsAddCmd.Flags().StringVar(&addPath, "path", "", "WebSocket endpoint path (e.g., /ws)")
+	wsAddCmd.Flags().StringVar(&addMessage, "message", "", "Default response message (JSON)")
+	wsAddCmd.Flags().BoolVar(&addEcho, "echo", false, "Enable echo mode")
+	wsAddCmd.Flags().StringVar(&addName, "name", "", "Mock display name")
+	websocketCmd.AddCommand(wsAddCmd)
+
+	// list/get/delete generic aliases
+	websocketCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List WebSocket mocks",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			listMockType = "websocket"
+			return runList(cmd, args)
+		},
+	})
+	websocketCmd.AddCommand(&cobra.Command{
+		Use:   "get",
+		Short: "Get details of a WebSocket mock",
+		RunE:  runGet,
+	})
+	websocketCmd.AddCommand(&cobra.Command{
+		Use:   "delete",
+		Short: "Delete a WebSocket mock",
+		RunE:  runDelete,
+	})
+
+	// websocket connect flags
+	wsConnectCmd.Flags().VarP(&wsConnectHeaders, "header", "H", "Custom headers (key:value), repeatable")
+	wsConnectCmd.Flags().StringVar(&wsConnectSubprotocol, "subprotocol", "", "WebSocket subprotocol")
+	wsConnectCmd.Flags().DurationVarP(&wsConnectTimeout, "timeout", "t", 30*time.Second, "Connection timeout")
+	websocketCmd.AddCommand(wsConnectCmd)
+
+	// websocket send flags
+	wsSendCmd.Flags().VarP(&wsSendHeaders, "header", "H", "Custom headers (key:value), repeatable")
+	wsSendCmd.Flags().StringVar(&wsSendSubprotocol, "subprotocol", "", "WebSocket subprotocol")
+	wsSendCmd.Flags().DurationVarP(&wsSendTimeout, "timeout", "t", 30*time.Second, "Connection timeout")
+	websocketCmd.AddCommand(wsSendCmd)
+
+	// websocket listen flags
+	wsListenCmd.Flags().VarP(&wsListenHeaders, "header", "H", "Custom headers (key:value), repeatable")
+	wsListenCmd.Flags().StringVar(&wsListenSubprotocol, "subprotocol", "", "WebSocket subprotocol")
+	wsListenCmd.Flags().DurationVarP(&wsListenTimeout, "timeout", "t", 30*time.Second, "Connection timeout")
+	wsListenCmd.Flags().IntVarP(&wsListenCount, "count", "n", 0, "Number of messages to receive (0 = unlimited)")
+	websocketCmd.AddCommand(wsListenCmd)
+
+	// websocket status
+	websocketCmd.AddCommand(wsStatusCmd)
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
 // wsMessage represents a WebSocket message.
 type wsMessage struct {
@@ -275,354 +557,4 @@ func messageTypeString(t int) string {
 	default:
 		return "unknown"
 	}
-}
-
-// runWebSocketSend sends a single message to a WebSocket endpoint.
-func runWebSocketSend(args []string) error {
-	fs := flag.NewFlagSet("websocket send", flag.ContinueOnError)
-
-	var headers flags.StringSlice
-	fs.Var(&headers, "header", "Custom headers (key:value), repeatable")
-	fs.Var(&headers, "H", "Custom headers (shorthand)")
-
-	subprotocol := fs.String("subprotocol", "", "WebSocket subprotocol")
-	timeout := fs.Duration("timeout", 30*time.Second, "Connection timeout")
-	fs.DurationVar(timeout, "t", 30*time.Second, "Connection timeout (shorthand)")
-
-	jsonOutput := fs.Bool("json", false, "Output result in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd websocket send [flags] <url> <message>
-
-Send a single message to a WebSocket endpoint and exit.
-
-Arguments:
-  url      WebSocket URL (e.g., ws://localhost:4280/ws)
-  message  Message to send (or @filename for file content)
-
-Flags:
-  -H, --header       Custom headers (key:value), repeatable
-      --subprotocol  WebSocket subprotocol
-  -t, --timeout      Connection timeout (default: 30s)
-      --json         Output result in JSON format
-
-Examples:
-  # Send a simple message
-  mockd websocket send ws://localhost:4280/ws "hello"
-
-  # Send JSON message
-  mockd websocket send ws://localhost:4280/ws '{"action":"ping"}'
-
-  # Send with custom headers
-  mockd websocket send -H "Authorization:Bearer token" ws://localhost:4280/ws "hello"
-
-  # Send message from file
-  mockd websocket send ws://localhost:4280/ws @message.json
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() < 2 {
-		fs.Usage()
-		return errors.New("url and message are required")
-	}
-
-	url := fs.Arg(0)
-	message := fs.Arg(1)
-
-	// Load message from file if prefixed with @
-	if len(message) > 0 && message[0] == '@' {
-		msgBytes, err := os.ReadFile(message[1:])
-		if err != nil {
-			return fmt.Errorf("failed to read message file: %w", err)
-		}
-		message = string(msgBytes)
-	}
-
-	// Setup dialer
-	dialer := websocket.Dialer{
-		HandshakeTimeout: *timeout,
-	}
-
-	// Build request header
-	requestHeader := http.Header{}
-	for _, h := range headers {
-		parts := parse.HeaderParts(h)
-		if len(parts) == 2 {
-			requestHeader.Add(parts[0], parts[1])
-		}
-	}
-
-	if *subprotocol != "" {
-		dialer.Subprotocols = []string{*subprotocol}
-	}
-
-	// Connect
-	conn, resp, err := dialer.Dial(url, requestHeader)
-	if resp != nil && resp.Body != nil {
-		defer func() { _ = resp.Body.Close() }()
-	}
-	if err != nil {
-		if resp != nil {
-			return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
-		}
-		return fmt.Errorf("connection failed: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	// Send message
-	if err := conn.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
-		return fmt.Errorf("send error: %w", err)
-	}
-
-	// Close gracefully
-	_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-
-	if *jsonOutput {
-		result := map[string]interface{}{
-			"success":   true,
-			"url":       url,
-			"message":   message,
-			"timestamp": time.Now().Format(time.RFC3339),
-		}
-		return output.JSON(result)
-	}
-
-	fmt.Printf("Sent to %s: %s\n", url, message)
-	return nil
-}
-
-// runWebSocketListen listens for incoming WebSocket messages.
-func runWebSocketListen(args []string) error {
-	fs := flag.NewFlagSet("websocket listen", flag.ContinueOnError)
-
-	var headers flags.StringSlice
-	fs.Var(&headers, "header", "Custom headers (key:value), repeatable")
-	fs.Var(&headers, "H", "Custom headers (shorthand)")
-
-	subprotocol := fs.String("subprotocol", "", "WebSocket subprotocol")
-	timeout := fs.Duration("timeout", 30*time.Second, "Connection timeout")
-	fs.DurationVar(timeout, "t", 30*time.Second, "Connection timeout (shorthand)")
-
-	count := fs.Int("count", 0, "Number of messages to receive (0 = unlimited)")
-	fs.IntVar(count, "n", 0, "Number of messages (shorthand)")
-
-	jsonOutput := fs.Bool("json", false, "Output messages in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd websocket listen [flags] <url>
-
-Listen for incoming WebSocket messages and print them.
-
-Arguments:
-  url    WebSocket URL (e.g., ws://localhost:4280/ws)
-
-Flags:
-  -H, --header       Custom headers (key:value), repeatable
-      --subprotocol  WebSocket subprotocol
-  -t, --timeout      Connection timeout (default: 30s)
-  -n, --count        Number of messages to receive (0 = unlimited)
-      --json         Output messages in JSON format
-
-Examples:
-  # Listen to all messages
-  mockd websocket listen ws://localhost:4280/ws
-
-  # Listen for 10 messages then exit
-  mockd websocket listen -n 10 ws://localhost:4280/ws
-
-  # Listen with JSON output
-  mockd websocket listen --json ws://localhost:4280/ws
-
-  # Listen with custom headers
-  mockd websocket listen -H "Authorization:Bearer token" ws://localhost:4280/ws
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() < 1 {
-		fs.Usage()
-		return errors.New("url is required")
-	}
-
-	url := fs.Arg(0)
-
-	// Setup dialer
-	dialer := websocket.Dialer{
-		HandshakeTimeout: *timeout,
-	}
-
-	// Build request header
-	requestHeader := http.Header{}
-	for _, h := range headers {
-		parts := parse.HeaderParts(h)
-		if len(parts) == 2 {
-			requestHeader.Add(parts[0], parts[1])
-		}
-	}
-
-	if *subprotocol != "" {
-		dialer.Subprotocols = []string{*subprotocol}
-	}
-
-	// Connect
-	fmt.Fprintf(os.Stderr, "Connecting to %s...\n", url)
-	conn, resp, err := dialer.Dial(url, requestHeader)
-	if resp != nil && resp.Body != nil {
-		defer func() { _ = resp.Body.Close() }()
-	}
-	if err != nil {
-		if resp != nil {
-			return fmt.Errorf("connection failed: %w (HTTP %d)", err, resp.StatusCode)
-		}
-		return fmt.Errorf("connection failed: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	if *count > 0 {
-		fmt.Fprintf(os.Stderr, "Listening for %d messages (Ctrl+C to stop)\n", *count)
-	} else {
-		fmt.Fprintf(os.Stderr, "Listening for messages (Ctrl+C to stop)\n")
-	}
-
-	// Setup context for graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Handle signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	// Use WaitGroup for clean shutdown
-	var wg sync.WaitGroup
-
-	go func() {
-		<-sigChan
-		fmt.Fprintln(os.Stderr, "\nDisconnecting...")
-		cancel()
-		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	}()
-
-	received := 0
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			messageType, message, err := conn.ReadMessage()
-			if err != nil {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-						fmt.Fprintln(os.Stderr, "Connection closed by server")
-						return
-					}
-					fmt.Fprintf(os.Stderr, "Read error: %v\n", err)
-					return
-				}
-			}
-
-			if *jsonOutput {
-				msg := map[string]interface{}{
-					"type":      messageTypeString(messageType),
-					"data":      string(message),
-					"timestamp": time.Now().Format(time.RFC3339),
-					"index":     received,
-				}
-				if err := output.JSONCompact(msg); err != nil {
-					output.Warn("failed to encode output: %v", err)
-				}
-			} else {
-				fmt.Println(string(message))
-			}
-
-			received++
-			if *count > 0 && received >= *count {
-				fmt.Fprintf(os.Stderr, "Received %d messages\n", received)
-				cancel()
-				return
-			}
-		}
-	}()
-
-	wg.Wait()
-	return nil
-}
-
-// runWebSocketStatus shows WebSocket mock status from admin API.
-func runWebSocketStatus(args []string) error {
-	fs := flag.NewFlagSet("websocket status", flag.ContinueOnError)
-
-	adminURL := fs.String("admin-url", cliconfig.GetAdminURL(), "Admin API base URL")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd websocket status [flags]
-
-Show WebSocket mock status from the admin API.
-
-Flags:
-      --admin-url   Admin API base URL (default: http://localhost:4290)
-      --json        Output in JSON format
-
-Examples:
-  mockd websocket status
-  mockd websocket status --json
-  mockd websocket status --admin-url http://localhost:9091
-`)
-	}
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	// Get WebSocket mocks from admin API
-	client := NewAdminClientWithAuth(*adminURL)
-	mocks, err := client.ListMocksByType("websocket")
-	if err != nil {
-		return fmt.Errorf("failed to get WebSocket status: %s", FormatConnectionError(err))
-	}
-
-	if *jsonOutput {
-		result := map[string]interface{}{
-			"enabled":   len(mocks) > 0,
-			"endpoints": mocks,
-			"count":     len(mocks),
-		}
-		return output.JSON(result)
-	}
-
-	// Pretty print status
-	if len(mocks) == 0 {
-		fmt.Println("WebSocket: no mocks configured")
-		return nil
-	}
-
-	fmt.Printf("WebSocket: %d mock(s) configured\n", len(mocks))
-	for _, m := range mocks {
-		path := ""
-		if m.WebSocket != nil {
-			path = m.WebSocket.Path
-		}
-		status := "enabled"
-		if m.Enabled != nil && !*m.Enabled {
-			status = "disabled"
-		}
-		fmt.Printf("  - %s (%s) [%s]\n", path, m.ID, status)
-	}
-
-	return nil
 }

@@ -1,13 +1,12 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
-	"os"
 	"sort"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
+	"github.com/spf13/cobra"
 )
 
 // PortInfo represents information about a single port.
@@ -36,29 +35,19 @@ type PortsResponse struct {
 	Ports []PortInfo `json:"ports"`
 }
 
-// RunPorts handles the ports command.
-func RunPorts(args []string) error {
-	fs := flag.NewFlagSet("ports", flag.ContinueOnError)
+var (
+	portsPIDFile string
+	portsVerbose bool
+)
 
-	pidFile := fs.String("pid-file", "", "Path to PID file (default: ~/.mockd/mockd.pid)")
-	jsonOutput := fs.Bool("json", false, "Output in JSON format")
-	verbose := fs.Bool("verbose", false, "Show extended info (engine ID, name, workspace)")
-	fs.BoolVar(verbose, "v", false, "Show extended info (shorthand)")
-	adminURL := fs.String("admin-url", "", "Admin API URL (default: from context)")
+var portsCmd = &cobra.Command{
+	Use:   "ports",
+	Short: "Show all ports in use by the running mockd server",
+	Long: `Show all ports in use by the running mockd server.
 
-	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `Usage: mockd ports [flags]
-
-Show all ports in use by the running mockd server.
-
-Flags:
-      --pid-file    Path to PID file (default: ~/.mockd/mockd.pid)
-      --json        Output in JSON format
-  -v, --verbose     Show extended info (engine ID, name, workspace)
-      --admin-url   Admin API URL (default: from context/config)
-
-Examples:
-  # Show all ports
+Lists all listening ports for mock engines, admin APIs, and protocol-specific
+listeners (gRPC, MQTT, etc.).`,
+	Example: `  # Show all ports
   mockd ports
 
   # Show with engine details
@@ -68,46 +57,44 @@ Examples:
   mockd ports --json
 
   # Query a specific admin server
-  mockd ports --admin-url http://staging:4290
-`)
-	}
+  mockd ports --admin-url http://staging:4290`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Resolve config from context/env/flags — uses root persistent adminURL
+		cfg := cliconfig.ResolveClientConfigSimple(adminURL)
 
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %v", fs.Args())
-	}
-
-	// Resolve config from context/env/flags
-	cfg := cliconfig.ResolveClientConfigSimple(*adminURL)
-
-	// Determine PID file path
-	pidPath := *pidFile
-	if pidPath == "" {
-		pidPath = DefaultPIDPath()
-	}
-
-	// Try to read PID file first for port information (fallback only)
-	pidInfo, _ := ReadPIDFile(pidPath)
-
-	// Try to get live port info from admin API using authenticated client
-	client := NewAdminClientWithAuth(cfg.AdminURL, WithAPIKey(cfg.APIKey))
-	ports, err := client.GetPortsVerbose(*verbose)
-	if err != nil {
-		// Fall back to PID file information
-		if pidInfo != nil && pidInfo.IsRunning() {
-			return printPortsFromPIDFile(pidInfo, *jsonOutput, *verbose)
+		// Determine PID file path
+		pidPath := portsPIDFile
+		if pidPath == "" {
+			pidPath = DefaultPIDPath()
 		}
-		return printNotRunningPorts(*jsonOutput)
-	}
 
-	return printPorts(ports, *jsonOutput, *verbose)
+		// Try to read PID file first for port information (fallback only)
+		pidInfo, _ := ReadPIDFile(pidPath)
+
+		// Try to get live port info from admin API using authenticated client
+		client := NewAdminClientWithAuth(cfg.AdminURL, WithAPIKey(cfg.APIKey))
+		ports, err := client.GetPortsVerbose(portsVerbose)
+		if err != nil {
+			// Fall back to PID file information
+			if pidInfo != nil && pidInfo.IsRunning() {
+				return printPortsFromPIDFile(pidInfo, jsonOutput, portsVerbose)
+			}
+			return printNotRunningPorts(jsonOutput)
+		}
+
+		return printPorts(ports, jsonOutput, portsVerbose)
+	},
+}
+
+func init() {
+	portsCmd.Flags().StringVar(&portsPIDFile, "pid-file", "", "Path to PID file (default: ~/.mockd/mockd.pid)")
+	portsCmd.Flags().BoolVarP(&portsVerbose, "verbose", "v", false, "Show extended info (engine ID, name, workspace)")
+	rootCmd.AddCommand(portsCmd)
 }
 
 // printPortsFromPIDFile prints port information from the PID file.
-func printPortsFromPIDFile(info *PIDFile, jsonOutput, verbose bool) error {
+func printPortsFromPIDFile(info *PIDFile, jsonOut, verbose bool) error {
 	var ports []PortInfo
 
 	// Add engine HTTP port
@@ -153,12 +140,12 @@ func printPortsFromPIDFile(info *PIDFile, jsonOutput, verbose bool) error {
 		ports = append(ports, p)
 	}
 
-	return printPorts(ports, jsonOutput, verbose)
+	return printPorts(ports, jsonOut, verbose)
 }
 
 // printPorts prints the port information in the requested format.
-func printPorts(ports []PortInfo, jsonOutput, verbose bool) error {
-	if jsonOutput {
+func printPorts(ports []PortInfo, jsonOut, verbose bool) error {
+	if jsonOut {
 		result := PortsOutput{
 			Ports:   ports,
 			Running: len(ports) > 0,
@@ -221,8 +208,8 @@ func printPorts(ports []PortInfo, jsonOutput, verbose bool) error {
 }
 
 // printNotRunningPorts prints a message when mockd is not running.
-func printNotRunningPorts(jsonOutput bool) error {
-	if jsonOutput {
+func printNotRunningPorts(jsonOut bool) error {
+	if jsonOut {
 		result := PortsOutput{
 			Ports:   []PortInfo{},
 			Running: false,

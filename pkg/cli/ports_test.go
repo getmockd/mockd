@@ -8,32 +8,6 @@ import (
 	"testing"
 )
 
-func TestRunPorts_HelpFlag(t *testing.T) {
-	// Capture stderr
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	err := RunPorts([]string{"--help"})
-
-	w.Close()
-	os.Stderr = oldStderr
-
-	// Read captured output
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	output := buf.String()
-
-	// --help causes flag.ErrHelp which is an error, but also prints usage
-	// Some flag packages return nil for --help, which is acceptable
-	_ = err
-
-	// Check that help text was printed
-	if !strings.Contains(output, "Show all ports in use") {
-		t.Errorf("expected help text to contain 'Show all ports in use', got: %s", output)
-	}
-}
-
 func TestPrintPorts_JSON(t *testing.T) {
 	ports := []PortInfo{
 		{Port: 4280, Protocol: "HTTP", Component: "Mock Engine", Status: "running"},
