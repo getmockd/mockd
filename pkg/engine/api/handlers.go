@@ -262,8 +262,9 @@ func (s *Server) handleListRequests(w http.ResponseWriter, r *http.Request) {
 
 	// Parse hasError filter
 	if v := r.URL.Query().Get("hasError"); v != "" {
-		hasError := v == "true"
-		filter.HasError = &hasError
+		if hasError, err := strconv.ParseBool(v); err == nil {
+			filter.HasError = &hasError
+		}
 	}
 
 	// Parse status code filter

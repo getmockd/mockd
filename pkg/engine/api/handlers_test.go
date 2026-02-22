@@ -132,6 +132,13 @@ func (m *mockEngine) GetRequestLogs(filter *requestlog.Filter) []*requestlog.Ent
 			if filter.Path != "" && !strings.Contains(entry.Path, filter.Path) {
 				continue
 			}
+			// Filter by hasError
+			if filter.HasError != nil {
+				hasErr := entry.Error != ""
+				if hasErr != *filter.HasError {
+					continue
+				}
+			}
 		}
 		result = append(result, entry)
 	}
@@ -1225,6 +1232,43 @@ func TestHandleListRequests(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 5, resp.Count)
 		assert.Equal(t, 10, resp.Total)
+	})
+
+	t.Run("filters hasError when valid boolean", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.requestLogs["ok"] = &requestlog.Entry{ID: "ok"}
+		engine.requestLogs["err"] = &requestlog.Entry{ID: "err", Error: "boom"}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/requests?hasError=true", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListRequests(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp RequestListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, 1, resp.Count)
+		assert.Equal(t, "err", resp.Requests[0].ID)
+	})
+
+	t.Run("ignores invalid hasError value", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.requestLogs["ok"] = &requestlog.Entry{ID: "ok"}
+		engine.requestLogs["err"] = &requestlog.Entry{ID: "err", Error: "boom"}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/requests?hasError=maybe", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListRequests(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp RequestListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, 2, resp.Count)
 	})
 }
 
