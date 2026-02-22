@@ -492,10 +492,17 @@ func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWri
 		}
 		response.MockID = mockID
 		response.Added = true
-		response.Message = fmt.Sprintf("%s mock added to engine at %s", rec.Protocol, req.EndpointPath)
+		response.Message = fmt.Sprintf("%s mock added to engine at %s", rec.Protocol, streamAddEndpointPath(rec.Protocol, req.EndpointPath))
 	}
 
 	writeJSON(w, http.StatusOK, response)
+}
+
+func streamAddEndpointPath(protocol recording.Protocol, requested string) string {
+	if protocol == recording.ProtocolSSE && requested == "" {
+		return "/sse/recorded"
+	}
+	return requested
 }
 
 // addStreamMockToEngine adds the converted stream mock to the engine via HTTP client.

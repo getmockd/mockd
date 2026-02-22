@@ -410,15 +410,11 @@ func (a *API) handleListRequests(w http.ResponseWriter, r *http.Request, engine 
 
 func buildRequestFilter(query interface{ Get(string) string }) *requestlog.Filter {
 	clientFilter := &requestlog.Filter{}
-	if limitStr := query.Get("limit"); limitStr != "" {
-		if limit, err := strconv.Atoi(limitStr); err == nil {
-			clientFilter.Limit = limit
-		}
+	if limit, ok := parsePositiveInt(query.Get("limit")); ok {
+		clientFilter.Limit = limit
 	}
-	if offsetStr := query.Get("offset"); offsetStr != "" {
-		if offset, err := strconv.Atoi(offsetStr); err == nil {
-			clientFilter.Offset = offset
-		}
+	if offset, ok := parseNonNegativeInt(query.Get("offset")); ok {
+		clientFilter.Offset = offset
 	}
 	if protocol := query.Get("protocol"); protocol != "" {
 		clientFilter.Protocol = protocol
