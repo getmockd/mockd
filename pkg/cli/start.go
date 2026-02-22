@@ -335,7 +335,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 		engineClient := engine.NewEngineClient(&engine.EngineClientConfig{
 			AdminURL:     startRegisterURL,
 			EngineName:   name,
-			LocalPort:    sf.Port,
+			// Register the engine control API port so the admin can address the engine.
+			LocalPort:    server.ManagementPort(),
 			PollInterval: 10 * time.Second,
 		}, wsManager)
 
