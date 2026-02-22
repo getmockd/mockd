@@ -436,3 +436,53 @@ func TestShouldAddToServer(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleListRecordings_LimitParsing(t *testing.T) {
+	store, _ := createTestStoreWithRecordings(
+		createTestRecording("rec-1", "session-1", "GET", "/a"),
+		createTestRecording("rec-2", "session-1", "GET", "/b"),
+	)
+	pm := &ProxyManager{store: store}
+
+	t.Run("invalid limit is ignored", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/recordings?limit=1x", nil)
+		rec := httptest.NewRecorder()
+
+		pm.handleListRecordings(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		var resp RecordingListResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.Limit != 0 {
+			t.Fatalf("expected limit=0 for invalid input, got %d", resp.Limit)
+		}
+		if len(resp.Recordings) != 2 {
+			t.Fatalf("expected all recordings, got %d", len(resp.Recordings))
+		}
+	})
+
+	t.Run("valid limit is applied", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/recordings?limit=1", nil)
+		rec := httptest.NewRecorder()
+
+		pm.handleListRecordings(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		var resp RecordingListResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.Limit != 1 {
+			t.Fatalf("expected limit=1, got %d", resp.Limit)
+		}
+		if len(resp.Recordings) != 1 {
+			t.Fatalf("expected 1 recording, got %d", len(resp.Recordings))
+		}
+	})
+}

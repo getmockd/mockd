@@ -2,8 +2,8 @@ package admin
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -68,8 +68,7 @@ func (pm *ProxyManager) handleListRecordings(w http.ResponseWriter, r *http.Requ
 		filter.Path = path
 	}
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		var limit int
-		if _, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil {
+		if limit, err := strconv.Atoi(limitStr); err == nil {
 			filter.Limit = limit
 		}
 	}
