@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-02-22
+
+### Fixed
+
+- **MQTT broker deadlock** — `Broker.Stop()` held the write lock while calling `simulator.Stop()`, which waits for goroutines that need the read lock via mochi hooks. Moved simulator shutdown outside the lock so in-flight publishes can drain
+- Benchmark workflow port collision on CI runners (moved to non-colliding ports 14280/14290)
+- Binary size test threshold bumped to 45 MB for Cobra + Charmbracelet huh dependencies
+
+## [0.3.1] - 2026-02-22
+
+### Added
+
+- Full Cobra CLI migration — all commands use `spf13/cobra` with `charmbracelet/huh` interactive forms (zero remaining `flag.NewFlagSet` or `DisableFlagParsing`)
+- Native Go e2e and integration test suites replacing BATS scripts
+- Engine heartbeat protocol for `up` orchestration with split registration
+- Dynamic version detection via `debug.ReadBuildInfo`
+
+### Fixed
+
+- **30+ engine/admin/protocol bug fixes** — chaos probability, SSE race, file store lock, MQTT ACL, validation middleware, nil guards, error codes
+- Admin-url flag shadowing removed across 15+ CLI subcommands
+- Engine startup teardown leak, client.go URL concatenation, workspace port validation
+- SSE `recordingHookFactory` race condition (added mutex)
+- Admin pagination negative offset/limit handling
+- Workspace 409 conflict handling in `up.go`
+- ~55 `time.Sleep` readiness waits replaced with polling helpers in tests
+- HTTP client errors no longer swallowed in 32 test helpers
+- Resolved all golangci-lint warnings (11→0 issues): perfsprint, bodyclose, copyloopvar, gocritic, unparam, gocyclo
+
+### Changed
+
+- `start --admin-url` renamed to `--register-url` to avoid shadowing root persistent flag
+- CLI `serve` and `start` follow Docker patterns: `serve` = foreground, `start` = background/detached, `stop` = shutdown
+- Removed dead code: `export.go` reorderArgs, SSE Graceful dead field, stale CLI bridge functions
+- Moved `parseOptionalBool` to shared `query_parse.go`
+
+## [0.3.0] - 2026-02-20
+
 ### Added
 
 - `--cors-origins` flag on `serve` command
@@ -205,7 +243,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial public release (pre-1.0)
 - Licensed under Apache 2.0
 
-[Unreleased]: https://github.com/getmockd/mockd/compare/v0.2.9...HEAD
+[Unreleased]: https://github.com/getmockd/mockd/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/getmockd/mockd/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/getmockd/mockd/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/getmockd/mockd/compare/v0.2.9...v0.3.0
 [0.2.9]: https://github.com/getmockd/mockd/compare/v0.2.8...v0.2.9
 [0.2.8]: https://github.com/getmockd/mockd/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/getmockd/mockd/compare/v0.2.6...v0.2.7
