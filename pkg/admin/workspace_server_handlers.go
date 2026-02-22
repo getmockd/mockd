@@ -72,6 +72,12 @@ func (a *API) handleStartWorkspaceServer(w http.ResponseWriter, r *http.Request)
 	// Set up mock fetcher if not already configured
 	a.workspaceManager.SetMockFetcher(a.fetchMocksForWorkspace)
 
+	// Avoid treating "already running" as a server error.
+	if server := a.workspaceManager.GetWorkspace(workspaceID); server != nil && server.Status() == workspace.ServerStatusRunning {
+		writeError(w, http.StatusConflict, "already_running", "Workspace server is already running")
+		return
+	}
+
 	// Start the workspace server
 	if err := a.workspaceManager.StartWorkspace(r.Context(), ws); err != nil {
 		a.logger().Error("failed to start workspace server", "error", err, "workspaceID", workspaceID, "engineID", engineID)
@@ -138,6 +144,12 @@ func (a *API) handleStopWorkspaceServer(w http.ResponseWriter, r *http.Request) 
 
 	if a.workspaceManager == nil {
 		writeError(w, http.StatusServiceUnavailable, "not_configured", "Workspace manager not configured")
+		return
+	}
+
+	// Assigned but not currently running should be a client/state error, not 500.
+	if server := a.workspaceManager.GetWorkspace(workspaceID); server == nil || server.Status() != workspace.ServerStatusRunning {
+		writeError(w, http.StatusBadRequest, "not_running", "Workspace server is not running")
 		return
 	}
 

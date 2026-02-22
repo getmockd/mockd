@@ -141,11 +141,31 @@ func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 // getAllMocksForExport gets mocks from engine or dataStore for export
 func (a *API) getAllMocksForExport(ctx context.Context) ([]*config.MockConfiguration, error) {
 	if engine := a.localEngine.Load(); engine != nil {
-		return engine.ListMocks(ctx)
+		mocks, err := engine.ListMocks(ctx)
+		if err == nil {
+			if mocks == nil {
+				return []*config.MockConfiguration{}, nil
+			}
+			return mocks, nil
+		}
+		// Fall back to persistent data if available so export still works when the
+		// local engine is temporarily unavailable.
+		if a.dataStore != nil {
+			a.logger().Warn("falling back to datastore for export after engine list failure", "error", err)
+		} else {
+			return nil, err
+		}
 	}
 	// Fall back to dataStore
 	if a.dataStore != nil {
-		return a.dataStore.Mocks().List(ctx, nil)
+		mocks, err := a.dataStore.Mocks().List(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		if mocks == nil {
+			return []*config.MockConfiguration{}, nil
+		}
+		return mocks, nil
 	}
 	return nil, errors.New("no mock source available")
 }
