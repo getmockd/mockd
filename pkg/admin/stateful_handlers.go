@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -87,7 +88,8 @@ func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, eng
 
 	resource, err := engine.GetStateResource(ctx, name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "Resource not found")
+		status, code, msg := mapStatefulResourceError(err, a.logger(), "Resource not found", "get state resource")
+		writeError(w, status, code, msg)
 		return
 	}
 
@@ -105,7 +107,8 @@ func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, e
 	}
 
 	if err := engine.ClearStateResource(ctx, name); err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "Resource not found")
+		status, code, msg := mapStatefulResourceError(err, a.logger(), "Resource not found", "clear state resource")
+		writeError(w, status, code, msg)
 		return
 	}
 
@@ -202,21 +205,30 @@ func (a *API) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request, e
 
 	item, err := engine.CreateStatefulItem(ctx, name, data)
 	if err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Resource not found")
-			return
-		}
-		if errors.Is(err, engineclient.ErrConflict) {
-			writeError(w, http.StatusConflict, "conflict", sanitizeEngineError(err, a.logger(), "create stateful item"))
-			return
-		}
-		if errors.Is(err, engineclient.ErrCapacity) {
-			writeError(w, http.StatusInsufficientStorage, "capacity_exceeded", sanitizeEngineError(err, a.logger(), "create stateful item"))
-			return
-		}
-		writeError(w, http.StatusBadRequest, "create_failed", sanitizeEngineError(err, a.logger(), "create stateful item"))
+		status, code, msg := mapCreateStatefulItemError(err, a.logger())
+		writeError(w, status, code, msg)
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, item)
+}
+
+func mapCreateStatefulItemError(err error, log *slog.Logger) (int, string, string) {
+	if errors.Is(err, engineclient.ErrNotFound) {
+		return http.StatusNotFound, "not_found", "Resource not found"
+	}
+	if errors.Is(err, engineclient.ErrConflict) {
+		return http.StatusConflict, "conflict", "Item already exists"
+	}
+	if errors.Is(err, engineclient.ErrCapacity) {
+		return http.StatusInsufficientStorage, "capacity_exceeded", "Resource capacity exceeded"
+	}
+	return http.StatusBadRequest, "create_failed", sanitizeError(err, log, "create stateful item")
+}
+
+func mapStatefulResourceError(err error, log *slog.Logger, notFoundMsg, operation string) (int, string, string) {
+	if errors.Is(err, engineclient.ErrNotFound) {
+		return http.StatusNotFound, "not_found", notFoundMsg
+	}
+	return http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, log, operation)
 }
