@@ -264,16 +264,23 @@ func (b *Broker) Stop(ctx context.Context, timeout time.Duration) error {
 		return nil
 	}
 
-	// Stop simulator first
-	if b.simulator != nil {
-		b.simulator.Stop()
-		b.simulator = nil
-	}
+	// Grab the simulator reference and nil it under the lock, but do NOT call
+	// simulator.Stop() while holding the write lock. Simulator goroutines that
+	// are mid-publish go through mochi hooks which call notifySubscribers and
+	// other methods that need b.mu.RLock — holding the write lock here would
+	// deadlock.
+	sim := b.simulator
+	b.simulator = nil
 
 	// Signal that we're stopping so hook callbacks (OnUnsubscribed, OnSubscribed)
 	// skip acquiring b.mu, which would deadlock with server.Close().
 	b.stopping.Store(1)
 	b.mu.Unlock()
+
+	// Stop simulator outside the lock so in-flight publishes can complete.
+	if sim != nil {
+		sim.Stop()
+	}
 
 	// Create a timeout context for graceful shutdown
 	shutdownCtx, cancel := context.WithTimeout(ctx, timeout)
