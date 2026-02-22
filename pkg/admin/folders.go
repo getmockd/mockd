@@ -60,6 +60,9 @@ func (a *API) handleListFolders(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 		return
 	}
+	if folders == nil {
+		folders = []*config.Folder{}
+	}
 	writeJSON(w, http.StatusOK, folders)
 }
 
@@ -101,7 +104,7 @@ func (a *API) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateFolderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
@@ -199,7 +202,7 @@ func (a *API) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 
 	var req UpdateFolderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 
