@@ -135,6 +135,27 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reject duplicate workspace names so repeated creates (e.g. `mockd up`)
+	// are idempotent instead of silently creating duplicates.
+	wsStore := a.getWorkspaceStore()
+	ctx := r.Context()
+	existing, err := wsStore.List(ctx)
+	if err != nil {
+		a.logger().Error("failed to list workspaces for duplicate check", "error", err)
+		writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
+		return
+	}
+	for _, ws := range existing {
+		if ws.Name == input.Name {
+			writeJSON(w, http.StatusConflict, ErrorResponse{
+				Error:   "already_exists",
+				Message: fmt.Sprintf("Workspace with name %q already exists", input.Name),
+				Details: map[string]string{"existingId": ws.ID},
+			})
+			return
+		}
+	}
+
 	// Generate ID and timestamps
 	now := time.Now()
 	id := "ws_" + idgen.Short()
@@ -173,11 +194,7 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get workspace store
-	wsStore := a.getWorkspaceStore()
-
-	// Persist workspace
-	ctx := r.Context()
+	// Persist workspace (wsStore and ctx already initialized for duplicate check above)
 	if err := wsStore.Create(ctx, ws); err != nil {
 		if errors.Is(err, store.ErrAlreadyExists) {
 			writeError(w, http.StatusConflict, "already_exists", "Workspace with this ID already exists")
