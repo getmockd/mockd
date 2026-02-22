@@ -21,6 +21,7 @@ Examples:
   mockd help matching      Show help on request matching rules
   mockd help graphql       Show help on GraphQL mocking`,
 	ValidArgs: []string{"config", "matching", "templating", "formats", "websocket", "graphql", "grpc", "mqtt", "soap", "sse"},
+	Args:      cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			// No topic specified, show available topics

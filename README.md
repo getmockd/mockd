@@ -95,6 +95,9 @@ mockd tunnel-quic --port 4280 --mqtt 1883
 
 # Protect with token auth
 mockd tunnel-quic --port 4280 --auth-token secret123
+
+# Note: auth modes are mutually exclusive
+# Use exactly one of: --auth-token, --auth-basic, --allow-ips
 ```
 
 All seven protocols work through the tunnel automatically:

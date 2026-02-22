@@ -14,6 +14,7 @@ var mcpCmd = &cobra.Command{
 
 This is used by AI assistants (Claude Desktop, Cursor, etc.) to
 interact with mockd through the MCP protocol over stdin/stdout.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if MCPRunStdioFunc == nil {
 			return errors.New("MCP support not available (binary was built without MCP wiring)")

@@ -131,3 +131,138 @@ func TestMQTTFlag_String(t *testing.T) {
 		t.Errorf("String() = %q, want %q", got, want)
 	}
 }
+
+func TestValidateTunnelQUICAuthInputs(t *testing.T) {
+	tests := []struct {
+		name      string
+		authToken string
+		authBasic string
+		allowIPs  string
+		authHeader string
+		wantErr   bool
+	}{
+		{
+			name:      "no auth flags",
+			authToken: "",
+			authBasic: "",
+			allowIPs:  "",
+			authHeader: "",
+			wantErr:   false,
+		},
+		{
+			name:      "token only",
+			authToken: "secret123",
+			authBasic: "",
+			allowIPs:  "",
+			authHeader: "",
+			wantErr:   false,
+		},
+		{
+			name:      "basic only",
+			authToken: "",
+			authBasic: "user:pass",
+			allowIPs:  "",
+			authHeader: "",
+			wantErr:   false,
+		},
+		{
+			name:      "allow ips only",
+			authToken: "",
+			authBasic: "",
+			allowIPs:  "10.0.0.0/8",
+			authHeader: "",
+			wantErr:   false,
+		},
+		{
+			name:      "token with custom header",
+			authToken: "secret123",
+			authBasic: "",
+			allowIPs:  "",
+			authHeader: "X-Custom-Token",
+			wantErr:   false,
+		},
+		{
+			name:      "token and basic",
+			authToken: "secret123",
+			authBasic: "user:pass",
+			allowIPs:  "",
+			authHeader: "",
+			wantErr:   true,
+		},
+		{
+			name:      "token and allow ips",
+			authToken: "secret123",
+			authBasic: "",
+			allowIPs:  "10.0.0.0/8",
+			authHeader: "",
+			wantErr:   true,
+		},
+		{
+			name:      "basic and allow ips",
+			authToken: "",
+			authBasic: "user:pass",
+			allowIPs:  "10.0.0.0/8",
+			authHeader: "",
+			wantErr:   true,
+		},
+		{
+			name:      "all three",
+			authToken: "secret123",
+			authBasic: "user:pass",
+			allowIPs:  "10.0.0.0/8",
+			authHeader: "",
+			wantErr:   true,
+		},
+		{
+			name:      "auth header without token",
+			authToken: "",
+			authBasic: "",
+			allowIPs:  "",
+			authHeader: "X-Custom-Token",
+			wantErr:   true,
+		},
+		{
+			name:      "auth header with basic only",
+			authToken: "",
+			authBasic: "user:pass",
+			allowIPs:  "",
+			authHeader: "X-Custom-Token",
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateTunnelQUICAuthInputs(tt.authToken, tt.authBasic, tt.allowIPs, tt.authHeader)
+			if tt.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestResetTunnelQUICMQTTState(t *testing.T) {
+	var f mqttPortFlag
+	if err := f.Set("1883:sensors"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	tqMQTTPorts = f
+
+	mqttFlag := tunnelQUICCmd.Flags().Lookup("mqtt")
+	if mqttFlag == nil {
+		t.Fatal("mqtt flag not found")
+	}
+	mqttFlag.Changed = true
+
+	resetTunnelQUICMQTTState(tunnelQUICCmd)
+
+	if len(tqMQTTPorts) != 0 {
+		t.Fatalf("expected tqMQTTPorts to be reset, got %d entries", len(tqMQTTPorts))
+	}
+	if mqttFlag.Changed {
+		t.Fatal("expected mqtt flag Changed=false after reset")
+	}
+}

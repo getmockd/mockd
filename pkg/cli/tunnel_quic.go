@@ -111,6 +111,10 @@ Examples:
   # Protect tunnel URL with token auth
   mockd tunnel-quic --auth-token SECRET123
 
+Auth note:
+  --auth-token, --auth-basic, and --allow-ips are mutually exclusive.
+  Choose exactly one auth mode.
+
   # For local testing with self-signed certs
   mockd tunnel-quic --relay localhost:4443 --insecure
 
@@ -132,9 +136,9 @@ func init() {
 	f.StringVar(&tqLocalHost, "local-host", "localhost", "Local host to forward to")
 
 	// Tunnel auth (incoming request protection)
-	f.StringVar(&tqAuthToken, "auth-token", "", "Require token from callers (X-Tunnel-Token header or ?token= param)")
-	f.StringVar(&tqAuthBasic, "auth-basic", "", "Require HTTP Basic auth (format: user:pass)")
-	f.StringVar(&tqAllowIPs, "allow-ips", "", "Restrict to IPs/CIDRs (comma-separated)")
+	f.StringVar(&tqAuthToken, "auth-token", "", "Require token from callers (X-Tunnel-Token header or ?token= param). Mutually exclusive with --auth-basic and --allow-ips")
+	f.StringVar(&tqAuthBasic, "auth-basic", "", "Require HTTP Basic auth (format: user:pass). Mutually exclusive with --auth-token and --allow-ips")
+	f.StringVar(&tqAllowIPs, "allow-ips", "", "Restrict to IPs/CIDRs (comma-separated). Mutually exclusive with --auth-token and --auth-basic")
 	f.StringVar(&tqAuthHeader, "auth-header", "", "Custom header name for token auth (default: X-Tunnel-Token)")
 
 	// MQTT broker ports (repeatable)
@@ -147,8 +151,14 @@ func init() {
 }
 
 func runTunnelQUIC(cmd *cobra.Command, args []string) error {
+	defer resetTunnelQUICMQTTState(cmd)
+
 	relayAddr := tqRelayAddr
 	token := tqToken
+
+	if err := validateTunnelQUICAuthInputs(tqAuthToken, tqAuthBasic, tqAllowIPs, tqAuthHeader); err != nil {
+		return err
+	}
 
 	// Default to port 443 if no port specified
 	if !strings.Contains(relayAddr, ":") {
@@ -182,7 +192,7 @@ func runTunnelQUIC(cmd *cobra.Command, args []string) error {
 
 	// Setup logger
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: slog.LevelInfo,
 	}))
 
 	// Build tunnel auth config from flags
@@ -317,6 +327,36 @@ func runTunnelQUIC(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Requests served: %d\n", client.RequestCount())
 
 	fmt.Println("Goodbye!")
+	return nil
+}
+
+func resetTunnelQUICMQTTState(cmd *cobra.Command) {
+	tqMQTTPorts = nil
+	if cmd == nil {
+		return
+	}
+	if f := cmd.Flags().Lookup("mqtt"); f != nil {
+		f.Changed = false
+	}
+}
+
+func validateTunnelQUICAuthInputs(authToken, authBasic, allowIPs, authHeader string) error {
+	authModeCount := 0
+	if strings.TrimSpace(authToken) != "" {
+		authModeCount++
+	}
+	if strings.TrimSpace(authBasic) != "" {
+		authModeCount++
+	}
+	if strings.TrimSpace(allowIPs) != "" {
+		authModeCount++
+	}
+	if authModeCount > 1 {
+		return errors.New("flags --auth-token, --auth-basic, and --allow-ips are mutually exclusive; choose exactly one")
+	}
+	if strings.TrimSpace(authHeader) != "" && strings.TrimSpace(authToken) == "" {
+		return errors.New("--auth-header requires --auth-token")
+	}
 	return nil
 }
 

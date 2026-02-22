@@ -215,9 +215,22 @@ func (a *API) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid_parent", "cannot move folder to its own descendant")
 			return
 		}
-		// Parent must exist
-		if _, err := folderStore.Get(ctx, *req.ParentID); err != nil {
+		// Parent must exist and remain in the same workspace.
+		parent, err := folderStore.Get(ctx, *req.ParentID)
+		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_parent", "parent folder not found")
+			return
+		}
+		parentWsID := parent.WorkspaceID
+		if parentWsID == "" {
+			parentWsID = store.DefaultWorkspaceID
+		}
+		existingWsID := existing.WorkspaceID
+		if existingWsID == "" {
+			existingWsID = store.DefaultWorkspaceID
+		}
+		if parentWsID != existingWsID {
+			writeError(w, http.StatusBadRequest, "invalid_parent", "parent folder must be in the same workspace")
 			return
 		}
 	}

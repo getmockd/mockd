@@ -78,6 +78,8 @@ mosquitto_pub -h a1b2c3d4.tunnel.mockd.io -p 443 --alpn mqtt \
 
 Protect your tunnel from unauthorized access:
 
+Use exactly one auth mode per tunnel. `--auth-token`, `--auth-basic`, and `--allow-ips` are mutually exclusive.
+
 ```bash
 # Require bearer token
 mockd tunnel-quic --port 4280 --auth-token secret123
