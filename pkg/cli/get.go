@@ -3,62 +3,10 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/spf13/cobra"
 )
-
-// reorderArgs moves flags before positional arguments to work around
-// Go's flag package behavior of stopping at the first non-flag argument.
-// Keep it in case other files use it still, but mockd get no longer needs it for cobra.
-func reorderArgs(args []string, knownFlags []string) []string {
-	var flags, positional []string
-
-	i := 0
-	for i < len(args) {
-		arg := args[i]
-
-		// Check if it's a known flag
-		isFlag := false
-		for _, f := range knownFlags {
-			if arg == "--"+f || arg == "-"+f {
-				// Flag with separate value
-				flags = append(flags, arg)
-				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-					i++
-					flags = append(flags, args[i])
-				}
-				isFlag = true
-				break
-			}
-			if strings.HasPrefix(arg, "--"+f+"=") || strings.HasPrefix(arg, "-"+f+"=") {
-				// Flag with = value
-				flags = append(flags, arg)
-				isFlag = true
-				break
-			}
-		}
-
-		// Check for boolean flags (no value)
-		if !isFlag && (arg == "--json" || arg == "-json") {
-			flags = append(flags, arg)
-			isFlag = true
-		}
-
-		if !isFlag {
-			if strings.HasPrefix(arg, "-") && arg != "-" {
-				// Unknown flag, still treat as flag
-				flags = append(flags, arg)
-			} else {
-				positional = append(positional, arg)
-			}
-		}
-		i++
-	}
-
-	return append(flags, positional...)
-}
 
 var getCmd = &cobra.Command{
 	Use:   "get <mock-id>",

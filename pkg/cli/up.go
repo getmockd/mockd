@@ -464,10 +464,19 @@ func (uctx *upContext) createWorkspaces() error {
 		if err != nil {
 			// If workspace already exists (409), try to continue
 			if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == 409 {
-				uctx.log.Debug("workspace already exists, continuing", "name", wsCfg.Name)
-				continue
+				existingID, lookupErr := uctx.findWorkspaceIDByName(client, wsCfg.Name)
+				if lookupErr != nil {
+					return fmt.Errorf("workspace '%s' already exists but could not resolve ID: %w", wsCfg.Name, lookupErr)
+				}
+				if existingID == "" {
+					return fmt.Errorf("workspace '%s' already exists but ID could not be resolved", wsCfg.Name)
+				}
+				uctx.workspaceIDs[wsCfg.Name] = existingID
+				uctx.log.Debug("workspace already exists, reusing", "name", wsCfg.Name, "id", existingID)
+				result = &WorkspaceResult{ID: existingID, Name: wsCfg.Name}
+			} else {
+				return fmt.Errorf("creating workspace '%s': %w", wsCfg.Name, err)
 			}
-			return fmt.Errorf("creating workspace '%s': %w", wsCfg.Name, err)
 		}
 		uctx.workspaceIDs[wsCfg.Name] = result.ID
 		fmt.Printf("Created workspace '%s' (id=%s)\n", wsCfg.Name, result.ID)
@@ -506,6 +515,21 @@ func (uctx *upContext) createWorkspaces() error {
 	}
 
 	return nil
+}
+
+func (uctx *upContext) findWorkspaceIDByName(client interface {
+	ListWorkspaces() ([]*WorkspaceDTO, error)
+}, name string) (string, error) {
+	workspaces, err := client.ListWorkspaces()
+	if err != nil {
+		return "", err
+	}
+	for _, ws := range workspaces {
+		if ws != nil && ws.Name == name {
+			return ws.ID, nil
+		}
+	}
+	return "", nil
 }
 
 // findAdminForWorkspace finds an appropriate admin name for creating a workspace.

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -18,7 +19,7 @@ func RunUp(args []string) error {
 	upDetach = false
 	upLogLevel = ""
 	jsonOutput = false
-	
+
 	if f := rootCmd.Flags().Lookup("help"); f != nil {
 		f.Changed = false
 		f.Value.Set("false")
@@ -446,4 +447,55 @@ func TestUpContext_RunEngineHeartbeatLoop(t *testing.T) {
 	case <-time.After(250 * time.Millisecond):
 		t.Fatal("heartbeat loop did not stop after context cancellation")
 	}
+}
+
+type fakeWorkspaceLister struct {
+	workspaces []*WorkspaceDTO
+	err        error
+}
+
+func (f *fakeWorkspaceLister) ListWorkspaces() ([]*WorkspaceDTO, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.workspaces, nil
+}
+
+func TestUpContext_FindWorkspaceIDByName(t *testing.T) {
+	uctx := &upContext{}
+
+	t.Run("found", func(t *testing.T) {
+		client := &fakeWorkspaceLister{
+			workspaces: []*WorkspaceDTO{
+				{ID: "ws-1", Name: "alpha"},
+				{ID: "ws-2", Name: "beta"},
+			},
+		}
+		got, err := uctx.findWorkspaceIDByName(client, "beta")
+		if err != nil {
+			t.Fatalf("findWorkspaceIDByName returned error: %v", err)
+		}
+		if got != "ws-2" {
+			t.Fatalf("id=%q want %q", got, "ws-2")
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		client := &fakeWorkspaceLister{workspaces: []*WorkspaceDTO{{ID: "ws-1", Name: "alpha"}}}
+		got, err := uctx.findWorkspaceIDByName(client, "missing")
+		if err != nil {
+			t.Fatalf("findWorkspaceIDByName returned error: %v", err)
+		}
+		if got != "" {
+			t.Fatalf("id=%q want empty", got)
+		}
+	})
+
+	t.Run("list error", func(t *testing.T) {
+		client := &fakeWorkspaceLister{err: errors.New("boom")}
+		_, err := uctx.findWorkspaceIDByName(client, "alpha")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
 }

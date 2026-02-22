@@ -9,6 +9,49 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func reorderArgs(args []string, knownFlags []string) []string {
+	var flags, positional []string
+
+	i := 0
+	for i < len(args) {
+		arg := args[i]
+
+		isFlag := false
+		for _, f := range knownFlags {
+			if arg == "--"+f || arg == "-"+f {
+				flags = append(flags, arg)
+				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					i++
+					flags = append(flags, args[i])
+				}
+				isFlag = true
+				break
+			}
+			if strings.HasPrefix(arg, "--"+f+"=") || strings.HasPrefix(arg, "-"+f+"=") {
+				flags = append(flags, arg)
+				isFlag = true
+				break
+			}
+		}
+
+		if !isFlag && (arg == "--json" || arg == "-json") {
+			flags = append(flags, arg)
+			isFlag = true
+		}
+
+		if !isFlag {
+			if strings.HasPrefix(arg, "-") && arg != "-" {
+				flags = append(flags, arg)
+			} else {
+				positional = append(positional, arg)
+			}
+		}
+		i++
+	}
+
+	return append(flags, positional...)
+}
+
 // setImportFlags sets package-level import flags for testing and returns cleanup via t.Cleanup.
 func setImportFlags(t *testing.T, format string, replace, dryRun, includeStatic bool) {
 	t.Helper()
