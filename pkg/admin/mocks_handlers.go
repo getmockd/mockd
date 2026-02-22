@@ -47,6 +47,17 @@ type MockFilter struct {
 	WorkspaceID string
 }
 
+func parseOptionalBool(v string) *bool {
+	if v == "" {
+		return nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return nil
+	}
+	return &b
+}
+
 // applyPagination applies offset and limit query parameters to a mock slice.
 func applyPagination(mocks []*mock.Mock, query interface{ Get(string) string }) []*mock.Mock {
 	offset := 0
@@ -66,7 +77,7 @@ func applyPagination(mocks []*mock.Mock, query interface{ Get(string) string }) 
 	}
 	if offset > 0 {
 		if offset >= len(mocks) {
-			return nil
+			return []*mock.Mock{}
 		}
 		mocks = mocks[offset:]
 	}
@@ -567,10 +578,7 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 			FolderID:    query.Get("folderId"),
 			WorkspaceID: query.Get("workspaceId"),
 		}
-		if enabled := query.Get("enabled"); enabled != "" {
-			b := enabled == "true"
-			filter.Enabled = &b
-		}
+		filter.Enabled = parseOptionalBool(query.Get("enabled"))
 		mocks = applyMockFilter(mocks, filter)
 
 		// Apply pagination
@@ -620,10 +628,7 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Filter by enabled state
-	if enabled := query.Get("enabled"); enabled != "" {
-		b := enabled == "true"
-		filter.Enabled = &b
-	}
+	filter.Enabled = parseOptionalBool(query.Get("enabled"))
 
 	// Filter by search query
 	if search := query.Get("search"); search != "" {
@@ -1408,7 +1413,7 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 
 	// If replace=true, delete existing mocks with matching IDs first.
 	// This enables idempotent `mockd up` — re-running with the same config works.
-	if r.URL.Query().Get("replace") == "true" {
+	if replace := parseOptionalBool(r.URL.Query().Get("replace")); replace != nil && *replace {
 		for _, m := range mocks {
 			if m.ID != "" {
 				_ = mockStore.Delete(r.Context(), m.ID) // Ignore not-found errors

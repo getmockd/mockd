@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -293,6 +294,50 @@ func TestApplyMockPatch(t *testing.T) {
 		// Port should remain unchanged
 		assert.Equal(t, 50051, m.GRPC.Port, "PATCH should not change gRPC port - use PUT instead")
 	})
+}
+
+func TestParseOptionalBool(t *testing.T) {
+	t.Run("empty returns nil", func(t *testing.T) {
+		assert.Nil(t, parseOptionalBool(""))
+	})
+
+	t.Run("true parses", func(t *testing.T) {
+		v := parseOptionalBool("true")
+		if assert.NotNil(t, v) {
+			assert.True(t, *v)
+		}
+	})
+
+	t.Run("false parses", func(t *testing.T) {
+		v := parseOptionalBool("false")
+		if assert.NotNil(t, v) {
+			assert.False(t, *v)
+		}
+	})
+
+	t.Run("one parses", func(t *testing.T) {
+		v := parseOptionalBool("1")
+		if assert.NotNil(t, v) {
+			assert.True(t, *v)
+		}
+	})
+
+	t.Run("invalid returns nil", func(t *testing.T) {
+		assert.Nil(t, parseOptionalBool("maybe"))
+	})
+}
+
+func TestApplyPagination_OffsetBeyondLengthReturnsEmptySlice(t *testing.T) {
+	mocks := []*mock.Mock{
+		{ID: "m1"},
+		{ID: "m2"},
+	}
+	q := url.Values{}
+	q.Set("offset", "10")
+
+	got := applyPagination(mocks, q)
+	assert.NotNil(t, got)
+	assert.Len(t, got, 0)
 }
 
 func TestPortConflict(t *testing.T) {
