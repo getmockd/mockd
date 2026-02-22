@@ -83,18 +83,22 @@ func (pm *ProxyManager) handleCreateSession(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Convert filters if provided
-	var metadata map[string]interface{}
+	// Preserve filter snapshot for later retrieval.
+	var filters *recording.FilterSnapshot
 	if req.Filters != nil {
-		metadata = map[string]interface{}{
-			"includePaths": req.Filters.IncludePaths,
-			"excludePaths": req.Filters.ExcludePaths,
-			"includeHosts": req.Filters.IncludeHosts,
-			"excludeHosts": req.Filters.ExcludeHosts,
+		filters = &recording.FilterSnapshot{
+			IncludePaths: append([]string(nil), req.Filters.IncludePaths...),
+			ExcludePaths: append([]string(nil), req.Filters.ExcludePaths...),
+			IncludeHosts: append([]string(nil), req.Filters.IncludeHosts...),
+			ExcludeHosts: append([]string(nil), req.Filters.ExcludeHosts...),
 		}
 	}
 
-	session := pm.store.CreateSession(req.Name, metadata)
+	session := pm.store.CreateSession(req.Name, filters)
+	if filters != nil {
+		// recording.Store currently ignores the filters argument, so persist on the session directly.
+		session.Filters = filters
+	}
 
 	summary := SessionSummary{
 		ID:             session.ID,
@@ -153,6 +157,14 @@ func (pm *ProxyManager) handleGetSession(w http.ResponseWriter, r *http.Request)
 		Name:       session.Name,
 		StartTime:  session.StartTime.Format(time.RFC3339),
 		Recordings: session.Recordings(),
+	}
+	if session.Filters != nil {
+		resp.Filters = &FilterConfigUpdate{
+			IncludePaths: append([]string(nil), session.Filters.IncludePaths...),
+			ExcludePaths: append([]string(nil), session.Filters.ExcludePaths...),
+			IncludeHosts: append([]string(nil), session.Filters.IncludeHosts...),
+			ExcludeHosts: append([]string(nil), session.Filters.ExcludeHosts...),
+		}
 	}
 	if session.EndTime != nil && !session.EndTime.IsZero() {
 		resp.EndTime = session.EndTime.Format(time.RFC3339)
