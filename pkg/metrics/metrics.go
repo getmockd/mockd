@@ -316,6 +316,13 @@ func (g *Gauge) Collect() []Sample {
 	return samples
 }
 
+// Reset removes all labeled values from the gauge.
+func (g *Gauge) Reset() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.values = make(map[string]*gaugeValue)
+}
+
 // GaugeVec provides methods for a specific label combination.
 type GaugeVec struct {
 	gv *gaugeValue

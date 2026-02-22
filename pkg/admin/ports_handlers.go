@@ -162,6 +162,7 @@ func updatePortMetrics(ports []PortInfo) {
 	if metrics.PortInfo == nil {
 		return
 	}
+	metrics.PortInfo.Reset()
 
 	// Set gauge values for each port
 	for _, p := range ports {

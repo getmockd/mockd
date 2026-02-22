@@ -141,3 +141,28 @@ func TestPortInfo_JSON_WithoutTLS(t *testing.T) {
 		t.Error("expected 'tls' field to be omitted when TLS is false")
 	}
 }
+
+func TestUpdatePortMetrics_ClearsStaleSamples(t *testing.T) {
+	metrics.Reset()
+	metrics.Init()
+	defer metrics.Reset()
+
+	updatePortMetrics([]PortInfo{
+		{Port: 1111, Protocol: "HTTP", Component: "A", Status: "running"},
+		{Port: 2222, Protocol: "HTTP", Component: "B", Status: "running"},
+	})
+	if got := len(metrics.PortInfo.Collect()); got != 2 {
+		t.Fatalf("expected 2 metric samples, got %d", got)
+	}
+
+	updatePortMetrics([]PortInfo{
+		{Port: 3333, Protocol: "HTTP", Component: "C", Status: "running"},
+	})
+	samples := metrics.PortInfo.Collect()
+	if got := len(samples); got != 1 {
+		t.Fatalf("expected stale samples to be cleared; got %d samples", got)
+	}
+	if samples[0].Labels["port"] != "3333" {
+		t.Fatalf("expected remaining sample for port 3333, got %+v", samples[0].Labels)
+	}
+}

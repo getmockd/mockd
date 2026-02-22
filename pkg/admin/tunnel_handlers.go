@@ -123,10 +123,7 @@ func (a *API) handleEnableTunnel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate exposure mode
-	switch req.Expose.Mode {
-	case "all", "selected", "none":
-		// ok
-	default:
+	if err := validateTunnelExposureMode(req.Expose.Mode); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_mode", "Exposure mode must be 'all', 'selected', or 'none'")
 		return
 	}
@@ -248,11 +245,19 @@ func (a *API) handleUpdateTunnelConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Apply partial updates
 	if req.Expose != nil {
+		if err := validateTunnelExposureMode(req.Expose.Mode); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_mode", "Exposure mode must be 'all', 'selected', or 'none'")
+			return
+		}
 		existing.Expose = *req.Expose
 	}
 	if req.Subdomain != nil {
+		if *req.Subdomain == "" && existing.CustomDomain == "" && (req.CustomDomain == nil || *req.CustomDomain == "") {
+			writeError(w, http.StatusBadRequest, "invalid_subdomain", "subdomain cannot be empty unless customDomain is set")
+			return
+		}
 		existing.Subdomain = *req.Subdomain
-		if existing.CustomDomain == "" {
+		if existing.CustomDomain == "" && existing.Subdomain != "" {
 			existing.PublicURL = fmt.Sprintf("https://%s.tunnel.mockd.io", existing.Subdomain)
 		}
 	}
@@ -260,6 +265,11 @@ func (a *API) handleUpdateTunnelConfig(w http.ResponseWriter, r *http.Request) {
 		existing.CustomDomain = *req.CustomDomain
 		if *req.CustomDomain != "" {
 			existing.PublicURL = "https://" + *req.CustomDomain
+		} else if existing.Subdomain != "" {
+			existing.PublicURL = fmt.Sprintf("https://%s.tunnel.mockd.io", existing.Subdomain)
+		} else {
+			writeError(w, http.StatusBadRequest, "invalid_subdomain", "subdomain cannot be empty unless customDomain is set")
+			return
 		}
 	}
 	if req.Auth != nil {
@@ -343,6 +353,10 @@ func (a *API) handleTunnelPreview(w http.ResponseWriter, r *http.Request) {
 	if req.Expose.Mode == "" {
 		req.Expose.Mode = "all"
 	}
+	if err := validateTunnelExposureMode(req.Expose.Mode); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_mode", "Exposure mode must be 'all', 'selected', or 'none'")
+		return
+	}
 
 	// For now, return a summary of what would be exposed.
 	// Full mock enumeration requires the engine's mock inventory.
@@ -363,7 +377,7 @@ func (a *API) handleTunnelPreview(w http.ResponseWriter, r *http.Request) {
 
 // handleListTunnels handles GET /tunnels.
 func (a *API) handleListTunnels(w http.ResponseWriter, r *http.Request) {
-	var items []TunnelListItem
+	items := make([]TunnelListItem, 0)
 
 	// Check local engine tunnel
 	if a.localEngine.Load() != nil {
@@ -482,12 +496,29 @@ func (a *API) previewExposedMocks(r *http.Request, expose store.TunnelExposure) 
 		return []TunnelPreviewMock{}
 	}
 
-	var result []TunnelPreviewMock
+	workspaceNames := map[string]string{}
+	if (len(expose.Workspaces) > 0 || (expose.Exclude != nil && len(expose.Exclude.Workspaces) > 0)) && a.workspaceStore != nil {
+		if workspaces, err := a.workspaceStore.List(r.Context()); err == nil {
+			for _, ws := range workspaces {
+				if ws == nil {
+					continue
+				}
+				workspaceNames[ws.ID] = ws.Name
+			}
+		}
+	}
+
+	result := make([]TunnelPreviewMock, 0)
 	for _, m := range allMocks {
 		mockType := "http"
 		if m.Type != "" {
 			mockType = string(m.Type)
 		}
+		workspaceID := m.WorkspaceID
+		if workspaceID == "" {
+			workspaceID = store.DefaultWorkspaceID
+		}
+		workspaceName := workspaceNames[workspaceID]
 
 		// For "selected" mode, apply include filters first
 		if expose.Mode == "selected" {
@@ -496,7 +527,7 @@ func (a *API) previewExposedMocks(r *http.Request, expose store.TunnelExposure) 
 			// Check workspace filter
 			if len(expose.Workspaces) > 0 {
 				for _, ws := range expose.Workspaces {
-					if m.WorkspaceID == ws {
+					if workspaceSelectorMatches(ws, workspaceID, workspaceName) {
 						included = true
 						break
 					}
@@ -541,7 +572,7 @@ func (a *API) previewExposedMocks(r *http.Request, expose store.TunnelExposure) 
 
 		// Apply exclusions (for both "all" and "selected" modes)
 		if expose.Exclude != nil {
-			if isExcluded(expose.Exclude, m.WorkspaceID, m.ParentID, m.ID) {
+			if isExcluded(expose.Exclude, workspaceID, workspaceName, m.ParentID, m.ID) {
 				continue
 			}
 		}
@@ -550,7 +581,7 @@ func (a *API) previewExposedMocks(r *http.Request, expose store.TunnelExposure) 
 			ID:        m.ID,
 			Type:      mockType,
 			Name:      m.Name,
-			Workspace: m.WorkspaceID,
+			Workspace: workspaceID,
 			Folder:    m.ParentID,
 		})
 	}
@@ -559,9 +590,9 @@ func (a *API) previewExposedMocks(r *http.Request, expose store.TunnelExposure) 
 }
 
 // isExcluded checks whether a mock matches any exclusion rule.
-func isExcluded(excl *store.TunnelExclude, workspaceID, parentID, mockID string) bool {
+func isExcluded(excl *store.TunnelExclude, workspaceID, workspaceName, parentID, mockID string) bool {
 	for _, ws := range excl.Workspaces {
-		if workspaceID == ws {
+		if workspaceSelectorMatches(ws, workspaceID, workspaceName) {
 			return true
 		}
 	}
@@ -576,4 +607,17 @@ func isExcluded(excl *store.TunnelExclude, workspaceID, parentID, mockID string)
 		}
 	}
 	return false
+}
+
+func workspaceSelectorMatches(selector, workspaceID, workspaceName string) bool {
+	return selector == workspaceID || (workspaceName != "" && selector == workspaceName)
+}
+
+func validateTunnelExposureMode(mode string) error {
+	switch mode {
+	case "all", "selected", "none":
+		return nil
+	default:
+		return fmt.Errorf("invalid exposure mode: %s", mode)
+	}
 }
