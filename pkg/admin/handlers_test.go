@@ -41,10 +41,18 @@ func newMockEngineServer() *mockEngineServer {
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
 		resp := engineclient.StatusResponse{
 			ID:           "test-engine",
+			Name:         "Test Engine",
 			Status:       "running",
 			Uptime:       mes.uptime,
 			MockCount:    len(mes.mocks),
 			RequestCount: mes.requestCount,
+			Protocols: map[string]engineclient.ProtocolStatus{
+				"http": {
+					Enabled: true,
+					Port:    4280,
+				},
+			},
+			StartedAt: time.Unix(1700000000, 0).UTC(),
 		}
 		json.NewEncoder(w).Encode(resp)
 	})
@@ -258,7 +266,12 @@ func TestHandleGetStatus(t *testing.T) {
 		var resp ServerStatus
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
+		assert.Equal(t, "test-engine", resp.ID)
+		assert.Equal(t, "Test Engine", resp.Name)
 		assert.Equal(t, "running", resp.Status)
+		assert.Equal(t, int64(100), resp.Uptime)
+		assert.Equal(t, 4280, resp.HTTPPort)
+		assert.False(t, resp.StartedAt.IsZero())
 		assert.Equal(t, 2, resp.MockCount)
 		assert.Equal(t, 1, resp.ActiveMocks)
 		assert.Equal(t, 8080, resp.AdminPort)

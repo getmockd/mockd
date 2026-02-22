@@ -81,17 +81,35 @@ func (a *API) handleGetStatus(w http.ResponseWriter, r *http.Request, engine *en
 	}
 
 	writeJSON(w, http.StatusOK, ServerStatus{
+		ID:           engineStatus.ID,
+		Name:         engineStatus.Name,
 		Status:       engineStatus.Status,
-		HTTPPort:     0, // TODO: Get from engine config when available via HTTP
-		HTTPSPort:    0,
+		HTTPPort:     protocolPort(engineStatus.Protocols, "http"),
+		HTTPSPort:    protocolPort(engineStatus.Protocols, "https"),
 		AdminPort:    a.port,
 		Uptime:       engineStatus.Uptime,
 		MockCount:    engineStatus.MockCount,
 		ActiveMocks:  activeMocks,
 		RequestCount: engineStatus.RequestCount,
-		TLSEnabled:   false,
+		TLSEnabled:   protocolEnabled(engineStatus.Protocols, "https"),
 		Version:      version,
+		Protocols:    engineStatus.Protocols,
+		StartedAt:    engineStatus.StartedAt,
 	})
+}
+
+func protocolPort(protocols map[string]types.ProtocolStatus, name string) int {
+	if p, ok := protocols[name]; ok {
+		return p.Port
+	}
+	return 0
+}
+
+func protocolEnabled(protocols map[string]types.ProtocolStatus, name string) bool {
+	if p, ok := protocols[name]; ok {
+		return p.Enabled
+	}
+	return false
 }
 
 // ConfigImportRequest represents a config import request.

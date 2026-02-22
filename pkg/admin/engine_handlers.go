@@ -419,6 +419,10 @@ func (a *API) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
+	if req.WorkspaceID == "" {
+		writeError(w, http.StatusBadRequest, "missing_workspace_id", "Workspace ID is required")
+		return
+	}
 
 	if err := a.engineRegistry.AssignWorkspace(id, req.WorkspaceID); err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "Engine not found")
