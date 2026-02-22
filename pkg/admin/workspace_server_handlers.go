@@ -148,7 +148,8 @@ func (a *API) handleStopWorkspaceServer(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Assigned but not currently running should be a client/state error, not 500.
-	if server := a.workspaceManager.GetWorkspace(workspaceID); server == nil || server.Status() != workspace.ServerStatusRunning {
+	if server := a.workspaceManager.GetWorkspace(workspaceID); server == nil ||
+		(server.Status() != workspace.ServerStatusRunning && server.Status() != workspace.ServerStatusStarting) {
 		writeError(w, http.StatusBadRequest, "not_running", "Workspace server is not running")
 		return
 	}

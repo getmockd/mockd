@@ -82,3 +82,25 @@ func TestHandleStartWorkspaceServer_AlreadyRunningReturns409(t *testing.T) {
 		t.Fatalf("expected status 409, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestHandleStopWorkspaceServer_StartingIsStoppable(t *testing.T) {
+	api := NewAPI(0)
+	defer api.Stop()
+
+	engine := &store.Engine{ID: "eng-1", Workspaces: []store.EngineWorkspace{{WorkspaceID: "ws-1"}}}
+	if err := api.engineRegistry.Register(engine); err != nil {
+		t.Fatalf("register engine: %v", err)
+	}
+	api.workspaceManager = &stubWorkspaceManager{server: &stubWorkspaceServer{status: workspace.ServerStatusStarting}}
+
+	req := httptest.NewRequest(http.MethodPost, "/engines/eng-1/workspaces/ws-1/stop", nil)
+	req.SetPathValue("id", "eng-1")
+	req.SetPathValue("workspaceId", "ws-1")
+	rec := httptest.NewRecorder()
+
+	api.handleStopWorkspaceServer(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
