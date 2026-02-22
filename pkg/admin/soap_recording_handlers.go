@@ -437,7 +437,7 @@ func (m *SOAPRecordingManager) handleConvertSOAPRecording(w http.ResponseWriter,
 	var req SOAPConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+			writeJSONDecodeError(w, err, m.log)
 			return
 		}
 	}
@@ -472,7 +472,7 @@ func (m *SOAPRecordingManager) handleConvertSOAPRecordings(w http.ResponseWriter
 	// Parse request
 	var req SOAPConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+		writeJSONDecodeError(w, err, m.log)
 		return
 	}
 

@@ -103,7 +103,7 @@ func (pm *ProxyManager) handleProxyStart(w http.ResponseWriter, r *http.Request)
 
 	var req ProxyStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+		writeJSONDecodeError(w, err, pm.log)
 		return
 	}
 
@@ -266,7 +266,7 @@ func (pm *ProxyManager) handleProxyMode(w http.ResponseWriter, r *http.Request) 
 
 	var req ModeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+		writeJSONDecodeError(w, err, pm.log)
 		return
 	}
 
@@ -314,7 +314,7 @@ func (pm *ProxyManager) handleSetFilters(w http.ResponseWriter, r *http.Request)
 
 	var req FilterConfigUpdate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+		writeJSONDecodeError(w, err, pm.log)
 		return
 	}
 

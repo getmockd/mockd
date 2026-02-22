@@ -199,7 +199,7 @@ func (a *API) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request, e
 
 	var data map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "Invalid JSON in request body")
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 

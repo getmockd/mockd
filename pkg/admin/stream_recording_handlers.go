@@ -319,7 +319,7 @@ func (m *StreamRecordingManager) handleStartRecording(w http.ResponseWriter, r *
 
 	var req StartRecordingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+		writeJSONDecodeError(w, err, m.log)
 		return
 	}
 
@@ -439,7 +439,7 @@ func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWri
 
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+			writeJSONDecodeError(w, err, m.log)
 			return
 		}
 
@@ -609,7 +609,7 @@ func (m *StreamRecordingManager) handleStartReplay(w http.ResponseWriter, r *htt
 
 	var req StartReplayRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+		writeJSONDecodeError(w, err, m.log)
 		return
 	}
 
@@ -724,7 +724,7 @@ func (m *StreamRecordingManager) handleAdvanceReplay(w http.ResponseWriter, r *h
 
 	var req AdvanceReplayRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+		writeJSONDecodeError(w, err, m.log)
 		return
 	}
 

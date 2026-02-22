@@ -74,7 +74,7 @@ func (pm *ProxyManager) handleCreateSession(w http.ResponseWriter, r *http.Reque
 
 	var req SessionCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+		writeJSONDecodeError(w, err, pm.log)
 		return
 	}
 

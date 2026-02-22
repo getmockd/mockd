@@ -565,7 +565,7 @@ func (m *MQTTRecordingManager) handleConvertMQTTRecording(w http.ResponseWriter,
 	var req MQTTConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+			writeJSONDecodeError(w, err, m.log)
 			return
 		}
 	}
@@ -601,7 +601,7 @@ func (m *MQTTRecordingManager) handleConvertMQTTRecordings(w http.ResponseWriter
 	// Parse request
 	var req MQTTConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+		writeJSONDecodeError(w, err, m.log)
 		return
 	}
 

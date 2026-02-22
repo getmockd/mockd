@@ -161,7 +161,7 @@ func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.R
 
 	var req ConvertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+		writeJSONDecodeError(w, err, pm.log)
 		return
 	}
 
@@ -228,7 +228,7 @@ func (pm *ProxyManager) handleExportRecordings(w http.ResponseWriter, r *http.Re
 	var req ExportRequest
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+			writeJSONDecodeError(w, err, pm.log)
 			return
 		}
 	}
@@ -312,7 +312,7 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 	var req SingleConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+			writeJSONDecodeError(w, err, pm.log)
 			return
 		}
 	}
@@ -423,7 +423,7 @@ func (pm *ProxyManager) handleConvertSession(w http.ResponseWriter, r *http.Requ
 	var req SessionConvertRequest
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+			writeJSONDecodeError(w, err, pm.log)
 			return
 		}
 		if req.AddToServer && client == nil {
