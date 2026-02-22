@@ -136,6 +136,12 @@ func (m *WorkspaceManager) StartWorkspace(ctx context.Context, ws *store.EngineW
 	if ws.HTTPPort <= 0 || ws.HTTPPort > 65535 {
 		return fmt.Errorf("invalid HTTP port %d for workspace %s", ws.HTTPPort, ws.WorkspaceID)
 	}
+	if ws.GRPCPort != 0 && (ws.GRPCPort < 1 || ws.GRPCPort > 65535) {
+		return fmt.Errorf("invalid gRPC port %d for workspace %s", ws.GRPCPort, ws.WorkspaceID)
+	}
+	if ws.MQTTPort != 0 && (ws.MQTTPort < 1 || ws.MQTTPort > 65535) {
+		return fmt.Errorf("invalid MQTT port %d for workspace %s", ws.MQTTPort, ws.WorkspaceID)
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()

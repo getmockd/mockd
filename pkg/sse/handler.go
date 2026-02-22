@@ -24,17 +24,18 @@ type SSERecordingHookFactory func(streamID string, mockID string, path string) (
 
 // SSEHandler handles SSE streaming responses for mock endpoints.
 type SSEHandler struct {
-	encoder              *Encoder
-	manager              *SSEConnectionManager
-	buffersMu            sync.RWMutex            // mutex for thread-safe buffers access
-	buffers              map[string]*EventBuffer // buffers by mock ID
-	templates            *TemplateRegistry
-	templateEngine       *template.Engine // template engine for processing expressions like {{uuid}}, {{now}}
-	nextConnID           atomic.Int64
-	recordingHookFactory SSERecordingHookFactory // factory to create per-connection hooks
-	id                   string                  // handler ID for protocol.Handler interface
-	requestLoggerMu      sync.RWMutex            // mutex for thread-safe requestLogger access
-	requestLogger        requestlog.Logger       // logger for SSE request events
+	encoder                *Encoder
+	manager                *SSEConnectionManager
+	buffersMu              sync.RWMutex            // mutex for thread-safe buffers access
+	buffers                map[string]*EventBuffer // buffers by mock ID
+	templates              *TemplateRegistry
+	templateEngine         *template.Engine // template engine for processing expressions like {{uuid}}, {{now}}
+	nextConnID             atomic.Int64
+	recordingHookFactoryMu sync.RWMutex
+	recordingHookFactory   SSERecordingHookFactory // factory to create per-connection hooks
+	id                     string                  // handler ID for protocol.Handler interface
+	requestLoggerMu        sync.RWMutex            // mutex for thread-safe requestLogger access
+	requestLogger          requestlog.Logger       // logger for SSE request events
 }
 
 // NewSSEHandler creates a new SSE handler.
@@ -50,11 +51,15 @@ func NewSSEHandler(maxConnections int) *SSEHandler {
 
 // SetRecordingHookFactory sets a factory for creating per-connection recording hooks.
 func (h *SSEHandler) SetRecordingHookFactory(factory SSERecordingHookFactory) {
+	h.recordingHookFactoryMu.Lock()
+	defer h.recordingHookFactoryMu.Unlock()
 	h.recordingHookFactory = factory
 }
 
 // GetRecordingHookFactory returns the current recording hook factory.
 func (h *SSEHandler) GetRecordingHookFactory() SSERecordingHookFactory {
+	h.recordingHookFactoryMu.RLock()
+	defer h.recordingHookFactoryMu.RUnlock()
 	return h.recordingHookFactory
 }
 
@@ -256,8 +261,8 @@ func (h *SSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, m *config
 	}
 
 	// Set up recording if hook factory is configured
-	if h.recordingHookFactory != nil {
-		hook, err := h.recordingHookFactory(stream.ID, m.ID, stream.Path)
+	if hookFactory := h.GetRecordingHookFactory(); hookFactory != nil {
+		hook, err := hookFactory(stream.ID, m.ID, stream.Path)
 		if err == nil && hook != nil {
 			stream.recorder = NewStreamRecorder(stream, hook)
 			defer func() {

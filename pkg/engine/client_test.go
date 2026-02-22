@@ -45,6 +45,18 @@ func TestBuildMocksURL_HandlesTrailingSlashAndBasePath(t *testing.T) {
 	}
 }
 
+func TestBuildAdminURL_JoinsAndEscapesSegments(t *testing.T) {
+	t.Parallel()
+
+	got, err := buildAdminURL("http://admin.example/api/", "engines", "id with/slash", "heartbeat")
+	if err != nil {
+		t.Fatalf("buildAdminURL returned error: %v", err)
+	}
+	if got != "http://admin.example/api/engines/id%20with%2Fslash/heartbeat" {
+		t.Fatalf("unexpected URL: %q", got)
+	}
+}
+
 func TestSyncWorkspaces_RemovesUnassignedWorkspace(t *testing.T) {
 	t.Parallel()
 

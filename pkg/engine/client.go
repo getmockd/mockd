@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -101,7 +101,12 @@ func (c *EngineClient) Register(ctx context.Context) error {
 		return fmt.Errorf("failed to marshal registration request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.adminURL+"/engines/register", bytes.NewReader(jsonBody))
+	registerURL, err := buildAdminURL(c.adminURL, "engines", "register")
+	if err != nil {
+		return fmt.Errorf("failed to build registration URL: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", registerURL, bytes.NewReader(jsonBody))
 	if err != nil {
 		return fmt.Errorf("failed to create registration request: %w", err)
 	}
@@ -197,7 +202,11 @@ func (c *EngineClient) sendHeartbeat(ctx context.Context) error {
 		return nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.adminURL+"/engines/"+engineID+"/heartbeat", nil)
+	heartbeatURL, err := buildAdminURL(c.adminURL, "engines", engineID, "heartbeat")
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", heartbeatURL, nil)
 	if err != nil {
 		return err
 	}
@@ -235,7 +244,11 @@ func (c *EngineClient) syncWorkspaces(ctx context.Context) error {
 	}
 
 	// Fetch engine details to get workspaces
-	req, err := http.NewRequestWithContext(ctx, "GET", c.adminURL+"/engines/"+engineID, nil)
+	engineURL, err := buildAdminURL(c.adminURL, "engines", engineID)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", engineURL, nil)
 	if err != nil {
 		return err
 	}
@@ -344,15 +357,44 @@ func (c *EngineClient) fetchMocks(ctx context.Context, workspaceID string) ([]*c
 }
 
 func buildMocksURL(adminURL, workspaceID string) (string, error) {
-	u, err := url.Parse(adminURL)
+	u, err := buildAdminURLParsed(adminURL, "mocks")
 	if err != nil {
-		return "", fmt.Errorf("invalid admin URL: %w", err)
+		return "", err
 	}
-	u.Path = strings.TrimRight(u.Path, "/") + "/mocks"
 	q := u.Query()
 	q.Set("workspaceId", workspaceID)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
+}
+
+func buildAdminURL(adminURL string, segments ...string) (string, error) {
+	u, err := buildAdminURLParsed(adminURL, segments...)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
+func buildAdminURLParsed(adminURL string, segments ...string) (*url.URL, error) {
+	u, err := url.Parse(adminURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid admin URL: %w", err)
+	}
+	basePath := strings.TrimRight(u.Path, "/")
+	baseRawPath := strings.TrimRight(u.EscapedPath(), "/")
+	for _, seg := range segments {
+		basePath += "/" + seg
+		baseRawPath += "/" + url.PathEscape(seg)
+	}
+	u.Path = basePath
+	if baseRawPath != basePath {
+		u.RawPath = baseRawPath
+	} else {
+		u.RawPath = ""
+	}
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u, nil
 }
 
 // EngineID returns the registered engine ID.

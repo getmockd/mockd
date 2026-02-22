@@ -319,8 +319,9 @@ func (s *Server) Start() error {
 			s.log.Info("connection limit enabled", "maxConnections", s.cfg.MaxConnections)
 		}
 		s.log.Info("starting HTTP server", "port", s.cfg.HTTPPort)
+		httpServer := s.httpServer
 		go func() {
-			if err := s.httpServer.Serve(httpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := httpServer.Serve(httpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				s.log.Error("HTTP server error", "error", err)
 			}
 		}()
@@ -352,8 +353,9 @@ func (s *Server) Start() error {
 			httpsLn = netutil.LimitListener(httpsLn, s.cfg.MaxConnections)
 		}
 		tlsLn := tls.NewListener(httpsLn, s.tlsConfig)
+		httpsServer := s.httpsServer
 		go func() {
-			if err := s.httpsServer.Serve(tlsLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := httpsServer.Serve(tlsLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				s.log.Error("HTTPS server error", "error", err)
 			}
 		}()
@@ -365,6 +367,11 @@ func (s *Server) Start() error {
 			s.log.Error("control API server error", "error", err)
 			// Control API is required for admin/CLI orchestration; fail startup and
 			// tear down already-started listeners to avoid a half-running server.
+			if protocolErrs := s.protocolManager.StopAll(context.Background(), 5*time.Second); len(protocolErrs) > 0 {
+				for _, stopErr := range protocolErrs {
+					s.log.Warn("failed to stop protocol handler after startup error", "error", stopErr)
+				}
+			}
 			if s.httpServer != nil {
 				_ = s.httpServer.Close()
 				s.httpServer = nil
@@ -837,11 +844,11 @@ func (s *Server) ProtocolStatus() map[string]ProtocolStatusInfo {
 	// HTTPS status
 	if s.cfg.HTTPSPort > 0 {
 		httpsStatus := "stopped"
-		if s.running {
+		if running {
 			httpsStatus = "running"
 		}
 		status["https"] = ProtocolStatusInfo{
-			Enabled: s.running && s.cfg.HTTPSPort > 0,
+			Enabled: running && s.cfg.HTTPSPort > 0,
 			Port:    s.cfg.HTTPSPort,
 			Status:  httpsStatus,
 		}
@@ -849,7 +856,7 @@ func (s *Server) ProtocolStatus() map[string]ProtocolStatusInfo {
 
 	// WebSocket status (shares HTTP port)
 	status["websocket"] = ProtocolStatusInfo{
-		Enabled:     s.running,
+		Enabled:     running,
 		Port:        s.cfg.HTTPPort,
 		Connections: s.handler.WebSocketManager().ConnectionCount(),
 		Status:      httpStatus,
@@ -857,7 +864,7 @@ func (s *Server) ProtocolStatus() map[string]ProtocolStatusInfo {
 
 	// SSE status (shares HTTP port)
 	status["sse"] = ProtocolStatusInfo{
-		Enabled:     s.running,
+		Enabled:     running,
 		Port:        s.cfg.HTTPPort,
 		Connections: s.handler.SSEHandler().ConnectionCount(),
 		Status:      httpStatus,
@@ -893,7 +900,7 @@ func (s *Server) ProtocolStatus() map[string]ProtocolStatusInfo {
 
 	// GraphQL status (shares HTTP port)
 	graphqlHandlers := s.protocolManager.GraphQLHandlers()
-	if len(graphqlHandlers) > 0 && s.running {
+	if len(graphqlHandlers) > 0 && running {
 		status["graphql"] = ProtocolStatusInfo{
 			Enabled: true,
 			Port:    s.cfg.HTTPPort,
@@ -903,7 +910,7 @@ func (s *Server) ProtocolStatus() map[string]ProtocolStatusInfo {
 
 	// SOAP status (shares HTTP port)
 	soapHandlers := s.protocolManager.SOAPHandlers()
-	if len(soapHandlers) > 0 && s.running {
+	if len(soapHandlers) > 0 && running {
 		status["soap"] = ProtocolStatusInfo{
 			Enabled: true,
 			Port:    s.cfg.HTTPPort,
@@ -913,7 +920,7 @@ func (s *Server) ProtocolStatus() map[string]ProtocolStatusInfo {
 
 	// OAuth status (shares HTTP port)
 	oauthHandlers := s.protocolManager.OAuthHandlers()
-	if len(oauthHandlers) > 0 && s.running {
+	if len(oauthHandlers) > 0 && running {
 		status["oauth"] = ProtocolStatusInfo{
 			Enabled: true,
 			Port:    s.cfg.HTTPPort,

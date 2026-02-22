@@ -41,6 +41,22 @@ func TestStartWorkspace_ValidatesInput(t *testing.T) {
 				HTTPPort:    70000,
 			},
 		},
+		{
+			name: "invalid gRPC port",
+			ws: &store.EngineWorkspace{
+				WorkspaceID: "ws-1",
+				HTTPPort:    9000,
+				GRPCPort:    -1,
+			},
+		},
+		{
+			name: "invalid MQTT port",
+			ws: &store.EngineWorkspace{
+				WorkspaceID: "ws-1",
+				HTTPPort:    9000,
+				MQTTPort:    70000,
+			},
+		},
 	}
 
 	for _, tt := range tests {

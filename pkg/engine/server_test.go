@@ -14,6 +14,7 @@ import (
 	"github.com/getmockd/mockd/internal/storage"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
+	mqttcfg "github.com/getmockd/mockd/pkg/mqtt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1460,6 +1461,49 @@ func TestServerStartsOnCorrectPorts(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		_, reqErr := http.Get(fmt.Sprintf("http://localhost:%d/__mockd/health", httpPort))
 		require.Error(t, reqErr)
+	})
+
+	t.Run("startup failure cleans up protocol listeners", func(t *testing.T) {
+		occupiedMgmtLn, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		defer occupiedMgmtLn.Close()
+
+		mgmtPort := occupiedMgmtLn.Addr().(*net.TCPAddr).Port
+		httpPort := getFreePort()
+		mqttPort := getFreePort()
+
+		cfg := &config.ServerConfiguration{
+			HTTPPort:       httpPort,
+			ManagementPort: mgmtPort,
+			MaxLogEntries:  100,
+			ReadTimeout:    5,
+			WriteTimeout:   5,
+			MQTT: []*mqttcfg.MQTTConfig{{
+				ID:      "mqtt-test",
+				Port:    mqttPort,
+				Enabled: true,
+			}},
+		}
+
+		srv := NewServer(cfg)
+		err = srv.Start()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to start control API")
+		assert.False(t, srv.IsRunning())
+
+		// MQTT listener should be released when startup fails.
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			ln, listenErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", mqttPort))
+			if listenErr == nil {
+				_ = ln.Close()
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("MQTT port %d still in use after startup failure: %v", mqttPort, listenErr)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
 	})
 }
 
