@@ -13,6 +13,7 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/requestlog"
+	"github.com/getmockd/mockd/pkg/stateful"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,9 +36,10 @@ type mockEngine struct {
 	protocols      map[string]ProtocolStatusInfo
 
 	// Error injection for testing error paths
-	addMockErr    error
-	updateMockErr error
-	deleteMockErr error
+	addMockErr            error
+	updateMockErr         error
+	deleteMockErr         error
+	createStatefulItemErr error
 }
 
 func newMockEngine() *mockEngine {
@@ -203,6 +205,9 @@ func (m *mockEngine) GetStatefulItem(resourceName, itemID string) (map[string]in
 }
 
 func (m *mockEngine) CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
+	if m.createStatefulItemErr != nil {
+		return nil, m.createStatefulItemErr
+	}
 	return data, nil
 }
 
@@ -511,6 +516,108 @@ func TestHandleCreateMock(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "validation_error", resp.Error)
 	})
+
+	t.Run("returns 413 for oversized body", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		oversizedPayload := map[string]interface{}{
+			"name": "oversized",
+			"type": "http",
+			"http": map[string]interface{}{
+				"matcher": map[string]interface{}{"method": "GET", "path": "/x"},
+				"response": map[string]interface{}{
+					"statusCode": 200,
+					"body":       strings.Repeat("a", maxRequestBodySize),
+				},
+			},
+		}
+		oversized, err := json.Marshal(oversizedPayload)
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "/mocks", bytes.NewReader(oversized))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleCreateMock(rec, req)
+
+		assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+		var resp ErrorResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "body_too_large", resp.Error)
+	})
+}
+
+func TestHandleCreateStatefulItem_ErrorMapping(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		engineErr  error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "maps not found",
+			engineErr:  &stateful.NotFoundError{Resource: "users"},
+			wantStatus: http.StatusNotFound,
+			wantCode:   "not_found",
+		},
+		{
+			name:       "maps conflict",
+			engineErr:  &stateful.ConflictError{Resource: "users", ID: "u1"},
+			wantStatus: http.StatusConflict,
+			wantCode:   "conflict",
+		},
+		{
+			name:       "maps capacity",
+			engineErr:  &stateful.CapacityError{Resource: "users", MaxItems: 1},
+			wantStatus: http.StatusInsufficientStorage,
+			wantCode:   "capacity_exceeded",
+		},
+		{
+			name:       "maps validation",
+			engineErr:  &stateful.ValidationError{Message: "invalid email", Field: "email"},
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "validation_error",
+		},
+		{
+			name:       "maps legacy not found message",
+			engineErr:  errors.New("stateful resource not found: users"),
+			wantStatus: http.StatusNotFound,
+			wantCode:   "not_found",
+		},
+		{
+			name:       "fallback create failed",
+			engineErr:  errors.New("boom"),
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "create_failed",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			engine := newMockEngine()
+			engine.createStatefulItemErr = tt.engineErr
+			server := newTestServer(engine)
+
+			req := httptest.NewRequest(http.MethodPost, "/state/resources/users/items", strings.NewReader(`{"id":"u1"}`))
+			req.SetPathValue("name", "users")
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			server.handleCreateStatefulItem(rec, req)
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			var resp ErrorResponse
+			err := json.Unmarshal(rec.Body.Bytes(), &resp)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantCode, resp.Error)
+		})
+	}
 }
 
 // TestHandleListMocks tests the GET /mocks handler.

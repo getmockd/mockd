@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"net/http"
 	"os"
 	"sync"
@@ -288,8 +289,10 @@ func (c *EngineClient) syncWorkspaces(ctx context.Context) error {
 	for _, server := range c.manager.ListWorkspaces() {
 		info := server.StatusInfo()
 		if !currentWorkspaces[info.WorkspaceID] {
-			c.log.Info("stopping workspace (no longer assigned)", "workspace", info.WorkspaceName)
-			_ = c.manager.StopWorkspace(info.WorkspaceID)
+			c.log.Info("removing workspace (no longer assigned)", "workspace", info.WorkspaceName)
+			if err := c.manager.RemoveWorkspace(info.WorkspaceID); err != nil {
+				c.log.Warn("failed to remove unassigned workspace", "workspace", info.WorkspaceName, "error", err)
+			}
 		}
 	}
 
@@ -308,7 +311,12 @@ func (c *EngineClient) fetchMocks(ctx context.Context, workspaceID string) ([]*c
 	token := c.token
 	c.mu.RUnlock()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", c.adminURL+"/mocks?workspaceId="+workspaceID, nil)
+	mocksURL, err := buildMocksURL(c.adminURL, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", mocksURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -332,6 +340,17 @@ func (c *EngineClient) fetchMocks(ctx context.Context, workspaceID string) ([]*c
 	}
 
 	return mocksResp.Mocks, nil
+}
+
+func buildMocksURL(adminURL, workspaceID string) (string, error) {
+	u, err := url.Parse(adminURL + "/mocks")
+	if err != nil {
+		return "", fmt.Errorf("invalid admin URL: %w", err)
+	}
+	q := u.Query()
+	q.Set("workspaceId", workspaceID)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 // EngineID returns the registered engine ID.

@@ -197,12 +197,10 @@ func (pm *ProtocolManager) startGraphQL(cfg *ProtocolConfig, handler *Handler) e
 			subHandler := graphql.NewSubscriptionHandler(schema, gqlCfg)
 			pm.graphqlSubHandlers = append(pm.graphqlSubHandlers, subHandler)
 
-			// Register subscription handler at path/ws or path with WebSocket upgrade
-			wsPath := gqlCfg.Path
-			if wsPath[len(wsPath)-1] != '/' {
-				wsPath += "/ws"
-			} else {
-				wsPath += "ws"
+			// Register subscription handler at path/ws or path + ws when path ends with slash.
+			wsPath, err := buildGraphQLSubscriptionPath(gqlCfg.Path)
+			if err != nil {
+				return fmt.Errorf("invalid GraphQL path for subscriptions: %w", err)
 			}
 			handler.RegisterGraphQLSubscriptionHandler(wsPath, subHandler)
 		}

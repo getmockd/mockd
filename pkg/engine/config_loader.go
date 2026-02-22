@@ -196,12 +196,10 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 				subHandler := graphql.NewSubscriptionHandler(schema, gqlCfg)
 				cl.server.protocolManager.AddGraphQLSubscriptionHandler(subHandler)
 
-				// Register subscription handler at path/ws
-				wsPath := gqlCfg.Path
-				if wsPath[len(wsPath)-1] != '/' {
-					wsPath += "/ws"
-				} else {
-					wsPath += "ws"
+				// Register subscription handler at path/ws (or path + ws when path ends with slash).
+				wsPath, pathErr := buildGraphQLSubscriptionPath(gqlCfg.Path)
+				if pathErr != nil {
+					return fmt.Errorf("invalid GraphQL path for subscriptions: %w", pathErr)
 				}
 				cl.server.handler.RegisterGraphQLSubscriptionHandler(wsPath, subHandler)
 			}
