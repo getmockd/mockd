@@ -583,3 +583,22 @@ func TestHandleConvertRecording_AddRequestedWithoutEngine(t *testing.T) {
 		t.Fatalf("expected engine_error, got %q", resp.Error)
 	}
 }
+
+func TestHandleConvertRecording_ChunkedBodyIsParsed(t *testing.T) {
+	store, _ := createTestStoreWithRecordings(
+		createTestRecording("rec-1", "session-1", "GET", "/api/users"),
+	)
+	pm := &ProxyManager{store: store}
+
+	req := httptest.NewRequest(http.MethodPost, "/recordings/rec-1/convert", strings.NewReader(`{"addToServer":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.ContentLength = -1 // simulate chunked transfer (unknown length)
+	req.SetPathValue("id", "rec-1")
+	rec := httptest.NewRecorder()
+
+	pm.handleConvertSingleRecording(rec, req, nil)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503 when chunked body requests addToServer without engine, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}

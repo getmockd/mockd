@@ -563,11 +563,9 @@ func (m *MQTTRecordingManager) handleConvertMQTTRecording(w http.ResponseWriter,
 
 	// Parse options
 	var req MQTTConvertRequest
-	if r.Body != nil && r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONDecodeError(w, err, m.log)
-			return
-		}
+	if err := decodeOptionalJSONBody(r, &req); err != nil {
+		writeJSONDecodeError(w, err, m.log)
+		return
 	}
 
 	opts := recording.MQTTConvertOptions{

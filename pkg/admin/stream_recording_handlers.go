@@ -437,31 +437,29 @@ func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWri
 	opts := recording.DefaultStreamConvertOptions()
 	var req ConvertRecordingRequest
 
-	if r.Body != nil && r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONDecodeError(w, err, m.log)
-			return
-		}
+	if err := decodeOptionalJSONBody(r, &req); err != nil {
+		writeJSONDecodeError(w, err, m.log)
+		return
+	}
 
-		// Only override defaults if values are explicitly set (using pointers)
-		if req.SimplifyTiming != nil {
-			opts.SimplifyTiming = *req.SimplifyTiming
-		}
-		if req.MinDelay > 0 {
-			opts.MinDelay = req.MinDelay
-		}
-		if req.MaxDelay > 0 {
-			opts.MaxDelay = req.MaxDelay
-		}
-		if req.IncludeClientMessages != nil {
-			opts.IncludeClientMessages = *req.IncludeClientMessages
-		}
-		if req.DeduplicateMessages != nil {
-			opts.DeduplicateMessages = *req.DeduplicateMessages
-		}
-		if req.Format != "" {
-			opts.Format = req.Format
-		}
+	// Only override defaults if values are explicitly set (using pointers)
+	if req.SimplifyTiming != nil {
+		opts.SimplifyTiming = *req.SimplifyTiming
+	}
+	if req.MinDelay > 0 {
+		opts.MinDelay = req.MinDelay
+	}
+	if req.MaxDelay > 0 {
+		opts.MaxDelay = req.MaxDelay
+	}
+	if req.IncludeClientMessages != nil {
+		opts.IncludeClientMessages = *req.IncludeClientMessages
+	}
+	if req.DeduplicateMessages != nil {
+		opts.DeduplicateMessages = *req.DeduplicateMessages
+	}
+	if req.Format != "" {
+		opts.Format = req.Format
 	}
 
 	// Convert

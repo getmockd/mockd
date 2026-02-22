@@ -310,11 +310,9 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 
 	// Parse request body for options
 	var req SingleConvertRequest
-	if r.Body != nil && r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONDecodeError(w, err, pm.log)
-			return
-		}
+	if err := decodeOptionalJSONBody(r, &req); err != nil {
+		writeJSONDecodeError(w, err, pm.log)
+		return
 	}
 
 	opts := recording.ConvertOptions{
@@ -421,15 +419,13 @@ func (pm *ProxyManager) handleConvertSession(w http.ResponseWriter, r *http.Requ
 
 	// Parse request body for options
 	var req SessionConvertRequest
-	if r.Body != nil && r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONDecodeError(w, err, pm.log)
-			return
-		}
-		if req.AddToServer && client == nil {
-			writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
-			return
-		}
+	if err := decodeOptionalJSONBody(r, &req); err != nil {
+		writeJSONDecodeError(w, err, pm.log)
+		return
+	}
+	if req.AddToServer && client == nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
+		return
 	}
 
 	// Build filter options

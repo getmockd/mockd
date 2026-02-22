@@ -358,11 +358,9 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// Optionally parse status from request body
 	var req HeartbeatRequest
-	if r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONDecodeError(w, err, a.logger())
-			return
-		}
+	if err := decodeOptionalJSONBody(r, &req); err != nil {
+		writeJSONDecodeError(w, err, a.logger())
+		return
 	}
 
 	// Update heartbeat

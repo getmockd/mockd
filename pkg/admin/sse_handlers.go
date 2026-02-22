@@ -1,9 +1,7 @@
 package admin
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -130,13 +128,9 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 
 	// Parse optional request body
 	var req CloseConnectionRequest
-	if r.Body != nil && r.Body != http.NoBody {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			if !errors.Is(err, io.EOF) {
-				writeJSONDecodeError(w, err, a.logger())
-				return
-			}
-		}
+	if err := decodeOptionalJSONBody(r, &req); err != nil {
+		writeJSONDecodeError(w, err, a.logger())
+		return
 	}
 
 	err := engine.CloseSSEConnection(ctx, id)

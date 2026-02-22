@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
@@ -178,7 +177,11 @@ func (a *API) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	var req GenerateFromTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeOptionalJSONBody(r, &req); err != nil {
+		writeJSONDecodeError(w, err, a.logger())
+		return
+	}
+	if req.Parameters == nil {
 		// Allow empty body - use defaults
 		req.Parameters = make(map[string]string)
 	}
@@ -191,7 +194,7 @@ func (a *API) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request,
 
 	// Import the generated mocks into the engine via HTTP client
 	if _, err := engine.ImportConfig(r.Context(), collection, false); err != nil {
-		writeError(w, http.StatusInternalServerError, "import_error", sanitizeError(err, a.logger(), "import template mocks"))
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "import template mocks"))
 		return
 	}
 

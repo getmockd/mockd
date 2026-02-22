@@ -435,11 +435,9 @@ func (m *SOAPRecordingManager) handleConvertSOAPRecording(w http.ResponseWriter,
 
 	// Parse options
 	var req SOAPConvertRequest
-	if r.Body != nil && r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONDecodeError(w, err, m.log)
-			return
-		}
+	if err := decodeOptionalJSONBody(r, &req); err != nil {
+		writeJSONDecodeError(w, err, m.log)
+		return
 	}
 
 	opts := recording.SOAPConvertOptions{
