@@ -44,7 +44,7 @@ func RunInit(args []string) error {
 }
 
 // runInitWithIO is the testable version of RunInit that accepts custom I/O.
-func runInitWithIO(stdin io.Reader, stdout, stderr io.Writer) error {
+func runInitWithIO(stdin io.Reader, stdout, _ io.Writer) error {
 	// Determine output format
 	outputFormat := strings.ToLower(initFormat)
 	if outputFormat == "" {

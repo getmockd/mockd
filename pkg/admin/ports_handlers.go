@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/metrics"
 )
 
@@ -101,53 +102,7 @@ func (a *API) handleListPorts(w http.ResponseWriter, r *http.Request) {
 		// Also check protocol handlers list for additional ports
 		handlers, err := engine.ListHandlers(ctx)
 		if err == nil {
-			for _, h := range handlers {
-				if h.Port > 0 {
-					// Avoid duplicates - check if we already have this port
-					found := false
-					for _, p := range ports {
-						if p.Port == h.Port {
-							found = true
-							break
-						}
-					}
-					if !found {
-						protocol := h.Type
-						component := h.Type + " Server"
-						switch h.Type {
-						case "websocket":
-							protocol = "WebSocket"
-							component = "WebSocket Server"
-						case "sse":
-							protocol = "HTTP"
-							component = "SSE Server"
-						case "graphql":
-							protocol = "HTTP"
-							component = "GraphQL Server"
-						case "soap":
-							protocol = "HTTP"
-							component = "SOAP Server"
-						case "mqtt":
-							protocol = "MQTT"
-							component = "MQTT Broker"
-						case "grpc":
-							protocol = "gRPC"
-							component = "gRPC Server"
-						}
-						p := PortInfo{
-							Port:      h.Port,
-							Protocol:  protocol,
-							Component: component,
-							Status:    h.Status,
-						}
-						if verbose {
-							p.EngineID = engineID
-							p.EngineName = engineName
-						}
-						ports = append(ports, p)
-					}
-				}
-			}
+			ports = appendHandlerPorts(ports, handlers, verbose, engineID, engineName)
 		}
 	}
 
@@ -155,6 +110,58 @@ func (a *API) handleListPorts(w http.ResponseWriter, r *http.Request) {
 	updatePortMetrics(ports)
 
 	writeJSON(w, http.StatusOK, PortsResponse{Ports: ports})
+}
+
+// appendHandlerPorts adds protocol handler ports that aren't already in the list.
+func appendHandlerPorts(ports []PortInfo, handlers []*types.ProtocolHandler, verbose bool, engineID, engineName string) []PortInfo {
+	for _, h := range handlers {
+		if h.Port <= 0 || portExists(ports, h.Port) {
+			continue
+		}
+		protocol, component := handlerDisplayInfo(h.Type)
+		p := PortInfo{
+			Port:      h.Port,
+			Protocol:  protocol,
+			Component: component,
+			Status:    h.Status,
+		}
+		if verbose {
+			p.EngineID = engineID
+			p.EngineName = engineName
+		}
+		ports = append(ports, p)
+	}
+	return ports
+}
+
+// portExists checks whether a port is already present in the list.
+func portExists(ports []PortInfo, port int) bool {
+	for _, p := range ports {
+		if p.Port == port {
+			return true
+		}
+	}
+	return false
+}
+
+// handlerDisplayInfo maps a handler type string to its display protocol and component names.
+func handlerDisplayInfo(handlerType string) (protocol, component string) {
+	switch handlerType {
+	case "websocket":
+		return "WebSocket", "WebSocket Server"
+	case "sse":
+		return "HTTP", "SSE Server"
+	case "graphql":
+		return "HTTP", "GraphQL Server"
+	case "soap":
+		return "HTTP", "SOAP Server"
+	case "mqtt":
+		return "MQTT", "MQTT Broker"
+	case "grpc":
+		return "gRPC", "gRPC Server"
+	default:
+		return handlerType, handlerType + " Server"
+	}
 }
 
 // updatePortMetrics updates the mockd_port_info Prometheus metric.

@@ -263,11 +263,12 @@ func (a *API) handleUpdateTunnelConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.CustomDomain != nil {
 		existing.CustomDomain = *req.CustomDomain
-		if *req.CustomDomain != "" {
+		switch {
+		case *req.CustomDomain != "":
 			existing.PublicURL = "https://" + *req.CustomDomain
-		} else if existing.Subdomain != "" {
+		case existing.Subdomain != "":
 			existing.PublicURL = fmt.Sprintf("https://%s.tunnel.mockd.io", existing.Subdomain)
-		} else {
+		default:
 			writeError(w, http.StatusBadRequest, "invalid_subdomain", "subdomain cannot be empty unless customDomain is set")
 			return
 		}
@@ -522,50 +523,7 @@ func (a *API) previewExposedMocks(r *http.Request, expose store.TunnelExposure) 
 
 		// For "selected" mode, apply include filters first
 		if expose.Mode == "selected" {
-			included := false
-
-			// Check workspace filter
-			if len(expose.Workspaces) > 0 {
-				for _, ws := range expose.Workspaces {
-					if workspaceSelectorMatches(ws, workspaceID, workspaceName) {
-						included = true
-						break
-					}
-				}
-			}
-
-			// Check folder filter
-			if !included && len(expose.Folders) > 0 {
-				for _, f := range expose.Folders {
-					if m.ParentID == f {
-						included = true
-						break
-					}
-				}
-			}
-
-			// Check mock ID filter
-			if !included && len(expose.Mocks) > 0 {
-				for _, id := range expose.Mocks {
-					if m.ID == id {
-						included = true
-						break
-					}
-				}
-			}
-
-			// Check type filter
-			if !included && len(expose.Types) > 0 {
-				for _, t := range expose.Types {
-					if mockType == t {
-						included = true
-						break
-					}
-				}
-			}
-
-			// If no include filters matched, skip this mock
-			if !included {
+			if !isIncluded(expose, workspaceID, workspaceName, m.ParentID, m.ID, mockType) {
 				continue
 			}
 		}
@@ -587,6 +545,31 @@ func (a *API) previewExposedMocks(r *http.Request, expose store.TunnelExposure) 
 	}
 
 	return result
+}
+
+// isIncluded checks whether a mock matches any inclusion filter for "selected" mode.
+func isIncluded(expose store.TunnelExposure, workspaceID, workspaceName, parentID, mockID, mockType string) bool {
+	for _, ws := range expose.Workspaces {
+		if workspaceSelectorMatches(ws, workspaceID, workspaceName) {
+			return true
+		}
+	}
+	for _, f := range expose.Folders {
+		if parentID == f {
+			return true
+		}
+	}
+	for _, id := range expose.Mocks {
+		if mockID == id {
+			return true
+		}
+	}
+	for _, t := range expose.Types {
+		if mockType == t {
+			return true
+		}
+	}
+	return false
 }
 
 // isExcluded checks whether a mock matches any exclusion rule.

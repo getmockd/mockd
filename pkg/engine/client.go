@@ -380,15 +380,16 @@ func buildAdminURLParsed(adminURL string, segments ...string) (*url.URL, error) 
 	if err != nil {
 		return nil, fmt.Errorf("invalid admin URL: %w", err)
 	}
-	basePath := strings.TrimRight(u.Path, "/")
-	baseRawPath := strings.TrimRight(u.EscapedPath(), "/")
+	parts := []string{strings.TrimRight(u.Path, "/")}
+	rawParts := []string{strings.TrimRight(u.EscapedPath(), "/")}
 	for _, seg := range segments {
-		basePath += "/" + seg
-		baseRawPath += "/" + url.PathEscape(seg)
+		parts = append(parts, seg)
+		rawParts = append(rawParts, url.PathEscape(seg))
 	}
-	u.Path = basePath
-	if baseRawPath != basePath {
-		u.RawPath = baseRawPath
+	u.Path = strings.Join(parts, "/")
+	rawPath := strings.Join(rawParts, "/")
+	if rawPath != u.Path {
+		u.RawPath = rawPath
 	} else {
 		u.RawPath = ""
 	}

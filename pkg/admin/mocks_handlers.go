@@ -56,7 +56,7 @@ func applyPagination(mocks []*mock.Mock, query interface{ Get(string) string }) 
 	if v := query.Get("offset"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			if n < 0 {
-				return nil, fmt.Errorf("offset must be non-negative")
+				return nil, errors.New("offset must be non-negative")
 			}
 			offset = n
 		}
@@ -64,7 +64,7 @@ func applyPagination(mocks []*mock.Mock, query interface{ Get(string) string }) 
 	if v := query.Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			if n < 0 {
-				return nil, fmt.Errorf("limit must be non-negative")
+				return nil, errors.New("limit must be non-negative")
 			}
 			limit = n
 		}

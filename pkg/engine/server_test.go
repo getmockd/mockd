@@ -1459,7 +1459,10 @@ func TestServerStartsOnCorrectPorts(t *testing.T) {
 
 		// Ensure the HTTP listener was torn down after startup failure.
 		time.Sleep(50 * time.Millisecond)
-		_, reqErr := http.Get(fmt.Sprintf("http://localhost:%d/__mockd/health", httpPort))
+		resp, reqErr := http.Get(fmt.Sprintf("http://localhost:%d/__mockd/health", httpPort))
+		if resp != nil {
+			resp.Body.Close()
+		}
 		require.Error(t, reqErr)
 	})
 

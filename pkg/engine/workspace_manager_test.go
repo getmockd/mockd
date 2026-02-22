@@ -60,7 +60,6 @@ func TestStartWorkspace_ValidatesInput(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if err := mgr.StartWorkspace(context.Background(), tt.ws); err == nil {
