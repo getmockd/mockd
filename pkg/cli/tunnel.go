@@ -340,17 +340,18 @@ var tunnelEnableCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		fmt.Printf("Tunnel enabled!\n")
-		if url, ok := result["publicUrl"].(string); ok && url != "" {
-			fmt.Printf("Public URL: %s\n", url)
-		}
-		if sub, ok := result["subdomain"].(string); ok && sub != "" {
-			fmt.Printf("Subdomain:  %s\n", sub)
-		}
-		if status, ok := result["status"].(string); ok {
-			fmt.Printf("Status:     %s\n", status)
-		}
-
+		printResult(result, func() {
+			fmt.Printf("Tunnel enabled!\n")
+			if u, ok := result["publicUrl"].(string); ok && u != "" {
+				fmt.Printf("Public URL: %s\n", u)
+			}
+			if sub, ok := result["subdomain"].(string); ok && sub != "" {
+				fmt.Printf("Subdomain:  %s\n", sub)
+			}
+			if s, ok := result["status"].(string); ok {
+				fmt.Printf("Status:     %s\n", s)
+			}
+		})
 		return nil
 	},
 }
@@ -378,7 +379,9 @@ var tunnelDisableCmd = &cobra.Command{
 			return parseHTTPError(resp)
 		}
 
-		fmt.Println("Tunnel disabled.")
+		printResult(map[string]any{"disabled": true}, func() {
+			fmt.Println("Tunnel disabled.")
+		})
 		return nil
 	},
 }
@@ -411,36 +414,33 @@ var tunnelStatusCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		if jsonOutput {
-			return output.JSON(status)
-		}
+		printResult(status, func() {
+			enabled, _ := status["enabled"].(bool)
+			if !enabled {
+				fmt.Printf("Engine %s: tunnel not enabled\n", *engineID)
+				return
+			}
 
-		enabled, _ := status["enabled"].(bool)
-		if !enabled {
-			fmt.Printf("Engine %s: tunnel not enabled\n", *engineID)
-			return nil
-		}
-
-		fmt.Printf("Engine:      %s\n", *engineID)
-		if s, ok := status["status"].(string); ok {
-			fmt.Printf("Status:      %s\n", s)
-		}
-		if url, ok := status["publicUrl"].(string); ok && url != "" {
-			fmt.Printf("Public URL:  %s\n", url)
-		}
-		if sub, ok := status["subdomain"].(string); ok && sub != "" {
-			fmt.Printf("Subdomain:   %s\n", sub)
-		}
-		if t, ok := status["transport"].(string); ok && t != "" {
-			fmt.Printf("Transport:   %s\n", t)
-		}
-		if sid, ok := status["sessionId"].(string); ok && sid != "" {
-			fmt.Printf("Session:     %s\n", sid)
-		}
-		if ct, ok := status["connectedAt"].(string); ok && ct != "" {
-			fmt.Printf("Connected:   %s\n", ct)
-		}
-
+			fmt.Printf("Engine:      %s\n", *engineID)
+			if s, ok := status["status"].(string); ok {
+				fmt.Printf("Status:      %s\n", s)
+			}
+			if u, ok := status["publicUrl"].(string); ok && u != "" {
+				fmt.Printf("Public URL:  %s\n", u)
+			}
+			if sub, ok := status["subdomain"].(string); ok && sub != "" {
+				fmt.Printf("Subdomain:   %s\n", sub)
+			}
+			if t, ok := status["transport"].(string); ok && t != "" {
+				fmt.Printf("Transport:   %s\n", t)
+			}
+			if sid, ok := status["sessionId"].(string); ok && sid != "" {
+				fmt.Printf("Session:     %s\n", sid)
+			}
+			if ct, ok := status["connectedAt"].(string); ok && ct != "" {
+				fmt.Printf("Connected:   %s\n", ct)
+			}
+		})
 		return nil
 	},
 }
@@ -479,33 +479,30 @@ var tunnelListCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		if jsonOutput {
-			return output.JSON(result)
-		}
+		printList(result, func() {
+			if result.Total == 0 {
+				fmt.Println("No active tunnels.")
+				fmt.Println("Use 'mockd tunnel enable' to enable a tunnel.")
+				return
+			}
 
-		if result.Total == 0 {
-			fmt.Println("No active tunnels.")
-			fmt.Println("Use 'mockd tunnel enable' to enable a tunnel.")
-			return nil
-		}
-
-		fmt.Printf("Active tunnels (%d):\n\n", result.Total)
-		fmt.Printf("%-12s %-15s %-40s %-12s %-10s %s\n",
-			"ENGINE ID", "NAME", "PUBLIC URL", "STATUS", "TRANSPORT", "UPTIME")
-		fmt.Println(strings.Repeat("-", 100))
-
-		for _, t := range result.Tunnels {
-			id, _ := t["engineId"].(string)
-			name, _ := t["engineName"].(string)
-			url, _ := t["publicUrl"].(string)
-			status, _ := t["status"].(string)
-			transport, _ := t["transport"].(string)
-			uptime, _ := t["uptime"].(string)
-
+			fmt.Printf("Active tunnels (%d):\n\n", result.Total)
 			fmt.Printf("%-12s %-15s %-40s %-12s %-10s %s\n",
-				id, name, url, status, transport, uptime)
-		}
+				"ENGINE ID", "NAME", "PUBLIC URL", "STATUS", "TRANSPORT", "UPTIME")
+			fmt.Println(strings.Repeat("-", 100))
 
+			for _, t := range result.Tunnels {
+				id, _ := t["engineId"].(string)
+				name, _ := t["engineName"].(string)
+				u, _ := t["publicUrl"].(string)
+				st, _ := t["status"].(string)
+				transport, _ := t["transport"].(string)
+				uptime, _ := t["uptime"].(string)
+
+				fmt.Printf("%-12s %-15s %-40s %-12s %-10s %s\n",
+					id, name, u, st, transport, uptime)
+			}
+		})
 		return nil
 	},
 }
@@ -586,41 +583,38 @@ var tunnelPreviewCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		if jsonOutput {
-			return output.JSON(result)
-		}
+		printResult(result, func() {
+			fmt.Printf("Tunnel preview (engine: %s, mode: %s)\n\n", *engineID, *mode)
 
-		fmt.Printf("Tunnel preview (engine: %s, mode: %s)\n\n", *engineID, *mode)
-
-		if result.MockCount == 0 {
-			fmt.Println("No mocks would be exposed with these settings.")
-			return nil
-		}
-
-		fmt.Printf("Total mocks: %d\n", result.MockCount)
-		fmt.Printf("Protocols:   ")
-		first := true
-		for proto, count := range result.Protocols {
-			if !first {
-				fmt.Print(", ")
+			if result.MockCount == 0 {
+				fmt.Println("No mocks would be exposed with these settings.")
+				return
 			}
-			fmt.Printf("%s (%d)", proto, count)
-			first = false
-		}
-		fmt.Println()
 
-		if len(result.Mocks) > 0 {
-			fmt.Printf("\n%-36s %-10s %-30s %s\n", "ID", "TYPE", "NAME", "WORKSPACE")
-			fmt.Println(strings.Repeat("-", 85))
-			for _, m := range result.Mocks {
-				id, _ := m["id"].(string)
-				mType, _ := m["type"].(string)
-				name, _ := m["name"].(string)
-				ws, _ := m["workspace"].(string)
-				fmt.Printf("%-36s %-10s %-30s %s\n", id, mType, name, ws)
+			fmt.Printf("Total mocks: %d\n", result.MockCount)
+			fmt.Printf("Protocols:   ")
+			first := true
+			for proto, count := range result.Protocols {
+				if !first {
+					fmt.Print(", ")
+				}
+				fmt.Printf("%s (%d)", proto, count)
+				first = false
 			}
-		}
+			fmt.Println()
 
+			if len(result.Mocks) > 0 {
+				fmt.Printf("\n%-36s %-10s %-30s %s\n", "ID", "TYPE", "NAME", "WORKSPACE")
+				fmt.Println(strings.Repeat("-", 85))
+				for _, m := range result.Mocks {
+					id, _ := m["id"].(string)
+					mType, _ := m["type"].(string)
+					name, _ := m["name"].(string)
+					ws, _ := m["workspace"].(string)
+					fmt.Printf("%-36s %-10s %-30s %s\n", id, mType, name, ws)
+				}
+			}
+		})
 		return nil
 	},
 }

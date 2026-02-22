@@ -134,44 +134,61 @@ func runGRPCList(_ *cobra.Command, args []string) error {
 	// List services
 	serviceNames := schema.ListServices()
 	if len(serviceNames) == 0 {
-		fmt.Println("No services found in proto file")
+		printResult(map[string]any{"file": protoFile, "services": []any{}}, func() {
+			fmt.Println("No services found in proto file")
+		})
 		return nil
 	}
 
-	fmt.Printf("Proto: %s\n\n", protoFile)
-
+	// Build structured result for JSON
+	type methodInfo struct {
+		Name       string `json:"name"`
+		InputType  string `json:"inputType"`
+		OutputType string `json:"outputType"`
+		Streaming  string `json:"streaming,omitempty"`
+	}
+	type serviceInfo struct {
+		Name    string       `json:"name"`
+		Methods []methodInfo `json:"methods"`
+	}
+	var services []serviceInfo
 	for _, svcName := range serviceNames {
 		svc := schema.GetService(svcName)
-		fmt.Printf("Service: %s\n", svc.Name)
-
+		si := serviceInfo{Name: svc.Name}
 		for _, methodName := range svc.ListMethods() {
 			method := svc.GetMethod(methodName)
-
-			// Determine stream type
-			var streamInfo string
+			mi := methodInfo{
+				Name:       method.Name,
+				InputType:  extractTypeName(method.InputType),
+				OutputType: extractTypeName(method.OutputType),
+			}
 			switch {
 			case method.IsBidirectional():
-				streamInfo = " [bidirectional streaming]"
+				mi.Streaming = "bidirectional"
 			case method.IsClientStreaming():
-				streamInfo = " [client streaming]"
+				mi.Streaming = "client"
 			case method.IsServerStreaming():
-				streamInfo = " [server streaming]"
+				mi.Streaming = "server"
 			}
-
-			// Extract simple type names from fully qualified names
-			inputType := extractTypeName(method.InputType)
-			outputType := extractTypeName(method.OutputType)
-
-			fmt.Printf("  %s(%s) → %s%s\n",
-				method.Name,
-				inputType,
-				outputType,
-				streamInfo,
-			)
+			si.Methods = append(si.Methods, mi)
 		}
-		fmt.Println()
+		services = append(services, si)
 	}
 
+	printResult(map[string]any{"file": protoFile, "services": services}, func() {
+		fmt.Printf("Proto: %s\n\n", protoFile)
+		for _, si := range services {
+			fmt.Printf("Service: %s\n", si.Name)
+			for _, mi := range si.Methods {
+				streamInfo := ""
+				if mi.Streaming != "" {
+					streamInfo = fmt.Sprintf(" [%s streaming]", mi.Streaming)
+				}
+				fmt.Printf("  %s(%s) → %s%s\n", mi.Name, mi.InputType, mi.OutputType, streamInfo)
+			}
+			fmt.Println()
+		}
+	})
 	return nil
 }
 

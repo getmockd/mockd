@@ -69,33 +69,48 @@ func runWorkspaceShow() error {
 
 	ctx := cfg.GetCurrentContext()
 	if ctx == nil {
-		fmt.Println("No current context set")
+		printResult(map[string]any{"context": nil}, func() {
+			fmt.Println("No current context set")
+		})
 		return nil
 	}
 
-	fmt.Printf("Current context: %s\n", cfg.CurrentContext)
-	fmt.Printf("  Admin URL: %s\n", ctx.AdminURL)
-
-	if ctx.Workspace == "" {
-		fmt.Println("  Workspace: (default)")
-		return nil
+	result := map[string]any{
+		"context":   cfg.CurrentContext,
+		"adminUrl":  ctx.AdminURL,
+		"workspace": ctx.Workspace,
 	}
-
-	fmt.Printf("  Workspace: %s\n", ctx.Workspace)
 
 	// Try to fetch workspace details from server
-	client := NewWorkspaceClient(ctx.AdminURL, &WorkspaceClientOptions{
-		AuthToken:   ctx.AuthToken,
-		TLSInsecure: ctx.TLSInsecure,
-	})
-	ws, err := client.GetWorkspace(ctx.Workspace)
-	if err == nil && ws != nil {
-		fmt.Printf("    Name: %s\n", ws.Name)
-		if ws.Description != "" {
-			fmt.Printf("    Description: %s\n", ws.Description)
+	if ctx.Workspace != "" {
+		client := NewWorkspaceClient(ctx.AdminURL, &WorkspaceClientOptions{
+			AuthToken:   ctx.AuthToken,
+			TLSInsecure: ctx.TLSInsecure,
+		})
+		ws, err := client.GetWorkspace(ctx.Workspace)
+		if err == nil && ws != nil {
+			result["workspaceName"] = ws.Name
+			if ws.Description != "" {
+				result["workspaceDescription"] = ws.Description
+			}
 		}
 	}
 
+	printResult(result, func() {
+		fmt.Printf("Current context: %s\n", cfg.CurrentContext)
+		fmt.Printf("  Admin URL: %s\n", ctx.AdminURL)
+		if ctx.Workspace == "" {
+			fmt.Println("  Workspace: (default)")
+			return
+		}
+		fmt.Printf("  Workspace: %s\n", ctx.Workspace)
+		if name, ok := result["workspaceName"].(string); ok {
+			fmt.Printf("    Name: %s\n", name)
+		}
+		if desc, ok := result["workspaceDescription"].(string); ok {
+			fmt.Printf("    Description: %s\n", desc)
+		}
+	})
 	return nil
 }
 
@@ -135,11 +150,16 @@ var workspaceUseCmd = &cobra.Command{
 			return fmt.Errorf("failed to save context config: %w", err)
 		}
 
-		fmt.Printf("Switched to workspace %q\n", workspaceID)
+		result := map[string]any{"workspace": workspaceID, "switched": true}
 		if ws != nil {
-			fmt.Printf("  Name: %s\n", ws.Name)
+			result["name"] = ws.Name
 		}
-
+		printResult(result, func() {
+			fmt.Printf("Switched to workspace %q\n", workspaceID)
+			if ws != nil {
+				fmt.Printf("  Name: %s\n", ws.Name)
+			}
+		})
 		return nil
 	},
 }
@@ -175,50 +195,48 @@ var workspaceListCmd = &cobra.Command{
 		// Get current workspace for marking
 		currentWorkspace := cliconfig.GetWorkspaceFromContext()
 
-		if jsonOutput {
-			result := struct {
-				CurrentWorkspace string          `json:"currentWorkspace"`
-				Workspaces       []*WorkspaceDTO `json:"workspaces"`
-				Count            int             `json:"count"`
-			}{
-				CurrentWorkspace: currentWorkspace,
-				Workspaces:       workspaces,
-				Count:            len(workspaces),
-			}
-			return output.JSON(result)
-		}
-
-		if len(workspaces) == 0 {
-			fmt.Println("No workspaces found")
-			return nil
-		}
-
-		w := output.Table()
-		_, _ = fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tDESCRIPTION")
-
-		for _, ws := range workspaces {
-			current := ""
-			if ws.ID == currentWorkspace {
-				current = "*"
+		printList(struct {
+			CurrentWorkspace string          `json:"currentWorkspace"`
+			Workspaces       []*WorkspaceDTO `json:"workspaces"`
+			Count            int             `json:"count"`
+		}{
+			CurrentWorkspace: currentWorkspace,
+			Workspaces:       workspaces,
+			Count:            len(workspaces),
+		}, func() {
+			if len(workspaces) == 0 {
+				fmt.Println("No workspaces found")
+				return
 			}
 
-			description := ws.Description
-			if len(description) > 30 {
-				description = description[:27] + "..."
-			}
-			if description == "" {
-				description = "-"
+			w := output.Table()
+			_, _ = fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tDESCRIPTION")
+
+			for _, ws := range workspaces {
+				current := ""
+				if ws.ID == currentWorkspace {
+					current = "*"
+				}
+
+				description := ws.Description
+				if len(description) > 30 {
+					description = description[:27] + "..."
+				}
+				if description == "" {
+					description = "-"
+				}
+
+				id := ws.ID
+				if len(id) > 20 {
+					id = id[:17] + "..."
+				}
+
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, id, ws.Name, ws.Type, description)
 			}
 
-			id := ws.ID
-			if len(id) > 20 {
-				id = id[:17] + "..."
-			}
-
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, id, ws.Name, ws.Type, description)
-		}
-
-		return w.Flush()
+			_ = w.Flush()
+		})
+		return nil
 	},
 }
 
@@ -272,15 +290,12 @@ var workspaceCreateCmd = &cobra.Command{
 			}
 		}
 
-		if jsonOutput {
-			return output.JSON(ws)
-		}
-
-		fmt.Printf("Created workspace %q (ID: %s)\n", ws.Name, ws.ID)
-		if workspaceCreateUseCurrent {
-			fmt.Printf("Switched to workspace %q\n", ws.ID)
-		}
-
+		printResult(ws, func() {
+			fmt.Printf("Created workspace %q (ID: %s)\n", ws.Name, ws.ID)
+			if workspaceCreateUseCurrent {
+				fmt.Printf("Switched to workspace %q\n", ws.ID)
+			}
+		})
 		return nil
 	},
 }
@@ -347,17 +362,23 @@ var workspaceDeleteCmd = &cobra.Command{
 		}
 
 		// Clear from context if it was the current workspace
+		contextCleared := false
 		cfg, err := cliconfig.LoadContextConfig()
 		if err == nil {
 			ctx := cfg.GetCurrentContext()
 			if ctx != nil && ctx.Workspace == workspaceID {
 				ctx.Workspace = ""
 				_ = cliconfig.SaveContextConfig(cfg)
-				fmt.Println("Cleared workspace from current context")
+				contextCleared = true
 			}
 		}
 
-		fmt.Printf("Deleted workspace %q\n", workspaceID)
+		printResult(map[string]any{"id": workspaceID, "deleted": true, "contextCleared": contextCleared}, func() {
+			if contextCleared {
+				fmt.Println("Cleared workspace from current context")
+			}
+			fmt.Printf("Deleted workspace %q\n", workspaceID)
+		})
 		return nil
 	},
 }
@@ -382,7 +403,9 @@ var workspaceClearCmd = &cobra.Command{
 		}
 
 		if ctx.Workspace == "" {
-			fmt.Println("No workspace was selected")
+			printResult(map[string]any{"cleared": false, "reason": "no workspace was selected"}, func() {
+				fmt.Println("No workspace was selected")
+			})
 			return nil
 		}
 
@@ -393,7 +416,9 @@ var workspaceClearCmd = &cobra.Command{
 			return fmt.Errorf("failed to save context config: %w", err)
 		}
 
-		fmt.Printf("Cleared workspace selection (was: %s)\n", oldWorkspace)
+		printResult(map[string]any{"cleared": true, "previousWorkspace": oldWorkspace}, func() {
+			fmt.Printf("Cleared workspace selection (was: %s)\n", oldWorkspace)
+		})
 		return nil
 	},
 }

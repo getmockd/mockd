@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"runtime/debug"
 
-	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -58,16 +57,14 @@ var versionCmd = &cobra.Command{
 			Arch:    runtime.GOARCH,
 		}
 
-		if jsonOutput {
-			return output.JSON(out)
-		}
-
-		v := out.Version
-		if len(v) > 0 && v[0] != 'v' && v != "dev" && v != "(devel)" {
-			v = "v" + v
-		}
-		fmt.Printf("mockd %s (%s, %s)\n", v, out.Commit, out.Date)
-		fmt.Printf("%s %s/%s\n", out.Go, out.OS, out.Arch)
+		printResult(out, func() {
+			v := out.Version
+			if len(v) > 0 && v[0] != 'v' && v != "dev" && v != "(devel)" {
+				v = "v" + v
+			}
+			fmt.Printf("mockd %s (%s, %s)\n", v, out.Commit, out.Date)
+			fmt.Printf("%s %s/%s\n", out.Go, out.OS, out.Arch)
+		})
 		return nil
 	},
 }

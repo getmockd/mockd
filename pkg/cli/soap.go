@@ -188,50 +188,64 @@ func runSOAPValidate(cmd *cobra.Command, args []string) error {
 		messages = doc.FindElements("//*[local-name()='message']")
 	}
 
-	// Print validation result
-	fmt.Printf("WSDL valid: %s\n", wsdlFile)
-	fmt.Printf("  Services: %d\n", len(services))
-	fmt.Printf("  Port Types: %d\n", len(portTypes))
-	fmt.Printf("  Bindings: %d\n", len(bindings))
-	fmt.Printf("  Operations: %d\n", len(operations))
-	fmt.Printf("  Messages: %d\n", len(messages))
-
-	// List services and their operations
-	if len(services) > 0 {
-		fmt.Println("\nServices:")
-		for _, svc := range services {
-			svcName := svc.SelectAttrValue("name", "unnamed")
-			fmt.Printf("  %s\n", svcName)
-
-			// Find ports
-			ports := svc.FindElements("port")
-			if len(ports) == 0 {
-				ports = svc.FindElements("*[local-name()='port']")
-			}
-			for _, port := range ports {
-				portName := port.SelectAttrValue("name", "unnamed")
-				binding := port.SelectAttrValue("binding", "")
-				fmt.Printf("    Port: %s (binding: %s)\n", portName, binding)
-			}
+	// Build structured result
+	serviceNames := make([]string, 0, len(services))
+	for _, svc := range services {
+		serviceNames = append(serviceNames, svc.SelectAttrValue("name", "unnamed"))
+	}
+	opNames := make([]string, 0, len(operations))
+	for _, pt := range portTypes {
+		ptName := pt.SelectAttrValue("name", "unnamed")
+		ops := pt.FindElements("operation")
+		if len(ops) == 0 {
+			ops = pt.FindElements("*[local-name()='operation']")
+		}
+		for _, op := range ops {
+			opNames = append(opNames, ptName+"."+op.SelectAttrValue("name", "unnamed"))
 		}
 	}
 
-	// List operations from port types
-	if len(portTypes) > 0 {
-		fmt.Println("\nOperations:")
-		for _, pt := range portTypes {
-			ptName := pt.SelectAttrValue("name", "unnamed")
-			ops := pt.FindElements("operation")
-			if len(ops) == 0 {
-				ops = pt.FindElements("*[local-name()='operation']")
-			}
-			for _, op := range ops {
-				opName := op.SelectAttrValue("name", "unnamed")
-				fmt.Printf("  %s.%s\n", ptName, opName)
+	printResult(map[string]any{
+		"valid":      true,
+		"file":       wsdlFile,
+		"services":   len(services),
+		"portTypes":  len(portTypes),
+		"bindings":   len(bindings),
+		"operations": len(operations),
+		"messages":   len(messages),
+	}, func() {
+		fmt.Printf("WSDL valid: %s\n", wsdlFile)
+		fmt.Printf("  Services: %d\n", len(services))
+		fmt.Printf("  Port Types: %d\n", len(portTypes))
+		fmt.Printf("  Bindings: %d\n", len(bindings))
+		fmt.Printf("  Operations: %d\n", len(operations))
+		fmt.Printf("  Messages: %d\n", len(messages))
+
+		if len(serviceNames) > 0 {
+			fmt.Println("\nServices:")
+			for _, svc := range services {
+				svcName := svc.SelectAttrValue("name", "unnamed")
+				fmt.Printf("  %s\n", svcName)
+
+				ports := svc.FindElements("port")
+				if len(ports) == 0 {
+					ports = svc.FindElements("*[local-name()='port']")
+				}
+				for _, port := range ports {
+					portName := port.SelectAttrValue("name", "unnamed")
+					binding := port.SelectAttrValue("binding", "")
+					fmt.Printf("    Port: %s (binding: %s)\n", portName, binding)
+				}
 			}
 		}
-	}
 
+		if len(opNames) > 0 {
+			fmt.Println("\nOperations:")
+			for _, name := range opNames {
+				fmt.Printf("  %s\n", name)
+			}
+		}
+	})
 	return nil
 }
 

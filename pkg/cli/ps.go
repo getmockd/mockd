@@ -20,11 +20,9 @@ var psCmd = &cobra.Command{
 		pidInfo, err := readUpPIDFile(psPidFile)
 		if err != nil {
 			if os.IsNotExist(err) {
-				if jsonOutput {
-					fmt.Println(`{"running":false,"services":[]}`)
-				} else {
+				printResult(map[string]any{"running": false, "services": []any{}}, func() {
 					fmt.Println("No running mockd services.")
-				}
+				})
 				return nil
 			}
 			return fmt.Errorf("reading PID file: %w", err)
@@ -33,11 +31,10 @@ var psCmd = &cobra.Command{
 		// Check if main process is running
 		running := processExists(pidInfo.PID)
 
-		if jsonOutput {
-			return printPsJSON(pidInfo, running)
-		}
-
-		return printPsTable(pidInfo, running)
+		printResult(buildPsResult(pidInfo, running), func() {
+			printPsTable(pidInfo, running)
+		})
+		return nil
 	},
 }
 
@@ -46,8 +43,8 @@ func init() {
 	rootCmd.AddCommand(psCmd)
 }
 
-func printPsJSON(pidInfo *config.PIDFile, running bool) error {
-	result := struct {
+func buildPsResult(pidInfo *config.PIDFile, running bool) any {
+	return struct {
 		Running   bool                    `json:"running"`
 		PID       int                     `json:"pid"`
 		StartedAt string                  `json:"startedAt"`
@@ -60,11 +57,9 @@ func printPsJSON(pidInfo *config.PIDFile, running bool) error {
 		Config:    pidInfo.Config,
 		Services:  pidInfo.Services,
 	}
-
-	return output.JSON(result)
 }
 
-func printPsTable(pidInfo *config.PIDFile, running bool) error {
+func printPsTable(pidInfo *config.PIDFile, running bool) {
 	status := "running"
 	if !running {
 		status = "stopped (stale PID file)"
@@ -77,7 +72,7 @@ func printPsTable(pidInfo *config.PIDFile, running bool) error {
 
 	if len(pidInfo.Services) == 0 {
 		fmt.Println("No services recorded.")
-		return nil
+		return
 	}
 
 	w := output.Table()
@@ -93,5 +88,5 @@ func printPsTable(pidInfo *config.PIDFile, running bool) error {
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", svc.Name, svc.Type, svc.Port, svcStatus)
 	}
 
-	return w.Flush()
+	_ = w.Flush()
 }

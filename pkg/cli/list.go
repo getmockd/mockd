@@ -89,16 +89,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		mocks = filtered
 	}
 
-	// Output result
-	if jsonOutput {
-		return outputMocksJSON(mocks)
-	}
-
-	return outputMocksTable(mocks, noTruncate)
-}
-
-// outputMocksJSON outputs mocks in JSON format.
-func outputMocksJSON(mocks []*mock.Mock) error {
+	// Build summaries (used by both JSON and table output)
 	type mockSummary struct {
 		ID      string `json:"id"`
 		Name    string `json:"name,omitempty"`
@@ -116,21 +107,24 @@ func outputMocksJSON(mocks []*mock.Mock) error {
 			Type:    string(m.Type),
 			Enabled: m.Enabled == nil || *m.Enabled,
 		}
-		// Extract path/method/status based on type
 		path, method, status := extractMockDetails(m)
 		summary.Path = path
 		summary.Method = method
 		summary.Status = status
 		summaries = append(summaries, summary)
 	}
-	return output.JSON(summaries)
+
+	printList(summaries, func() {
+		outputMocksTable(mocks, noTruncate)
+	})
+	return nil
 }
 
 // outputMocksTable outputs mocks in table format.
-func outputMocksTable(mocks []*mock.Mock, noTruncate bool) error {
+func outputMocksTable(mocks []*mock.Mock, noTruncate bool) {
 	if len(mocks) == 0 {
 		fmt.Println("No mocks configured")
-		return nil
+		return
 	}
 
 	w := output.Table()
@@ -166,7 +160,7 @@ func outputMocksTable(mocks []*mock.Mock, noTruncate bool) error {
 			id, mockType, path, method, statusStr, m.Enabled == nil || *m.Enabled)
 	}
 
-	return w.Flush()
+	_ = w.Flush()
 }
 
 // extractMockDetails extracts path, method, and status from a mock based on its type.

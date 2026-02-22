@@ -385,34 +385,34 @@ func runMQTTStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get MQTT status: %s", FormatConnectionError(err))
 	}
 
-	// Pretty print status
-	running, _ := status["running"].(bool)
-	if !running {
-		fmt.Println("MQTT broker: not running")
-		return nil
-	}
+	printResult(status, func() {
+		running, _ := status["running"].(bool)
+		if !running {
+			fmt.Println("MQTT broker: not running")
+			return
+		}
 
-	fmt.Println("MQTT broker: running")
+		fmt.Println("MQTT broker: running")
 
-	if port, ok := status["port"].(float64); ok {
-		fmt.Printf("  Port: %d\n", int(port))
-	}
+		if port, ok := status["port"].(float64); ok {
+			fmt.Printf("  Port: %d\n", int(port))
+		}
 
-	if clientCount, ok := status["clientCount"].(float64); ok {
-		fmt.Printf("  Connected clients: %d\n", int(clientCount))
-	}
+		if clientCount, ok := status["clientCount"].(float64); ok {
+			fmt.Printf("  Connected clients: %d\n", int(clientCount))
+		}
 
-	if topicCount, ok := status["topicCount"].(float64); ok {
-		fmt.Printf("  Configured topics: %d\n", int(topicCount))
-	}
+		if topicCount, ok := status["topicCount"].(float64); ok {
+			fmt.Printf("  Configured topics: %d\n", int(topicCount))
+		}
 
-	if tlsEnabled, ok := status["tlsEnabled"].(bool); ok && tlsEnabled {
-		fmt.Println("  TLS: enabled")
-	}
+		if tlsEnabled, ok := status["tlsEnabled"].(bool); ok && tlsEnabled {
+			fmt.Println("  TLS: enabled")
+		}
 
-	if authEnabled, ok := status["authEnabled"].(bool); ok && authEnabled {
-		fmt.Println("  Authentication: enabled")
-	}
-
+		if authEnabled, ok := status["authEnabled"].(bool); ok && authEnabled {
+			fmt.Println("  Authentication: enabled")
+		}
+	})
 	return nil
 }

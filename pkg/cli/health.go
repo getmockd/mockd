@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -24,30 +23,22 @@ var healthCmd = &cobra.Command{
 
 		err := client.Health()
 		if err != nil {
-			result := healthResult{
+			printResult(healthResult{
 				Status:   "unhealthy",
 				AdminURL: adminURL,
 				Error:    err.Error(),
-			}
-			if jsonOutput {
-				data, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(data))
-			} else {
+			}, func() {
 				fmt.Fprintf(os.Stderr, "unhealthy: %s\n", FormatConnectionError(err))
-			}
+			})
 			return errors.New("server is not healthy")
 		}
 
-		result := healthResult{
+		printResult(healthResult{
 			Status:   "healthy",
 			AdminURL: adminURL,
-		}
-		if jsonOutput {
-			data, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(data))
-		} else {
+		}, func() {
 			fmt.Println("healthy")
-		}
+		})
 		return nil
 	},
 }

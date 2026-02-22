@@ -11,7 +11,7 @@ import (
 func RunPs(args []string) error {
 	psPidFile = ""
 	jsonOutput = false
-	
+
 	if f := rootCmd.Flags().Lookup("help"); f != nil {
 		f.Changed = false
 		f.Value.Set("false")
@@ -100,9 +100,12 @@ func TestRunPs_NoPIDFile_JSON(t *testing.T) {
 	n, _ := r.Read(buf)
 	output := string(buf[:n])
 
-	expected := `{"running":false,"services":[]}`
-	if output != expected+"\n" {
-		t.Errorf("output = %q, want %q", output, expected)
+	// Verify JSON contains expected fields (output.JSON uses pretty-print)
+	if !contains(output, `"running": false`) {
+		t.Errorf("output should contain '\"running\": false': %s", output)
+	}
+	if !contains(output, `"services": []`) {
+		t.Errorf("output should contain '\"services\": []': %s", output)
 	}
 }
 
@@ -266,14 +269,10 @@ func TestPrintPsTable(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := printPsTable(pidInfo, false)
+	printPsTable(pidInfo, false)
 
 	w.Close()
 	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Errorf("printPsTable returned error: %v", err)
-	}
 
 	// Read output
 	buf := make([]byte, 2048)
@@ -295,7 +294,7 @@ func TestPrintPsTable(t *testing.T) {
 	}
 }
 
-func TestPrintPsJSON(t *testing.T) {
+func TestBuildPsResult(t *testing.T) {
 	pidInfo := &config.PIDFile{
 		PID:       12345,
 		StartedAt: "2024-01-01T00:00:00Z",
@@ -305,19 +304,19 @@ func TestPrintPsJSON(t *testing.T) {
 		},
 	}
 
-	// Capture stdout
+	// Capture stdout — printResult with jsonOutput=true writes JSON to stdout
+	oldJSONOutput := jsonOutput
+	jsonOutput = true
+	defer func() { jsonOutput = oldJSONOutput }()
+
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := printPsJSON(pidInfo, true)
+	printResult(buildPsResult(pidInfo, true), nil)
 
 	w.Close()
 	os.Stdout = oldStdout
-
-	if err != nil {
-		t.Errorf("printPsJSON returned error: %v", err)
-	}
 
 	// Read output
 	buf := make([]byte, 2048)

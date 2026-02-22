@@ -164,16 +164,24 @@ func runGraphQLValidate(cmd *cobra.Command, args []string) error {
 	mutationCount := len(schema.ListMutations())
 	subscriptionCount := len(schema.ListSubscriptions())
 
-	fmt.Printf("Schema valid: %s\n", schemaFile)
-	fmt.Printf("  Types: %d\n", typeCount)
-	fmt.Printf("  Queries: %d\n", queryCount)
-	if mutationCount > 0 {
-		fmt.Printf("  Mutations: %d\n", mutationCount)
-	}
-	if subscriptionCount > 0 {
-		fmt.Printf("  Subscriptions: %d\n", subscriptionCount)
-	}
-
+	printResult(map[string]any{
+		"valid":         true,
+		"file":          schemaFile,
+		"types":         typeCount,
+		"queries":       queryCount,
+		"mutations":     mutationCount,
+		"subscriptions": subscriptionCount,
+	}, func() {
+		fmt.Printf("Schema valid: %s\n", schemaFile)
+		fmt.Printf("  Types: %d\n", typeCount)
+		fmt.Printf("  Queries: %d\n", queryCount)
+		if mutationCount > 0 {
+			fmt.Printf("  Mutations: %d\n", mutationCount)
+		}
+		if subscriptionCount > 0 {
+			fmt.Printf("  Subscriptions: %d\n", subscriptionCount)
+		}
+	})
 	return nil
 }
 

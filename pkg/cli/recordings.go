@@ -50,37 +50,34 @@ var recordingsSessionsCmd = &cobra.Command{
 			return err
 		}
 
-		if len(sessions) == 0 {
-			fmt.Println("No recording sessions found")
-			fmt.Println("Run 'mockd proxy start' to capture traffic")
-			return nil
-		}
-
-		if jsonOutput {
-			return output.JSON(sessions)
-		}
-
-		w := output.Table()
-		_, _ = fmt.Fprintln(w, "SESSION\tNAME\tSTART\tRECORDINGS\tHOSTS")
-		for _, s := range sessions {
-			startTime := s.Meta.StartTime
-			if len(startTime) > 19 {
-				startTime = startTime[:19] // Trim timezone for display
+		printList(sessions, func() {
+			if len(sessions) == 0 {
+				fmt.Println("No recording sessions found")
+				fmt.Println("Run 'mockd proxy start' to capture traffic")
+				return
 			}
-			hosts := ""
-			if len(s.Meta.Hosts) > 0 {
-				hosts = fmt.Sprintf("%d hosts", len(s.Meta.Hosts))
-			}
-			count := s.Meta.RecordingCount
-			if count == 0 {
-				// Count from disk if meta doesn't have it
-				count = recording.CountRecordingsInDir(s.Path)
-			}
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n",
-				s.DirName, s.Meta.Name, startTime, count, hosts)
-		}
-		_ = w.Flush()
 
+			w := output.Table()
+			_, _ = fmt.Fprintln(w, "SESSION\tNAME\tSTART\tRECORDINGS\tHOSTS")
+			for _, s := range sessions {
+				startTime := s.Meta.StartTime
+				if len(startTime) > 19 {
+					startTime = startTime[:19] // Trim timezone for display
+				}
+				hosts := ""
+				if len(s.Meta.Hosts) > 0 {
+					hosts = fmt.Sprintf("%d hosts", len(s.Meta.Hosts))
+				}
+				count := s.Meta.RecordingCount
+				if count == 0 {
+					// Count from disk if meta doesn't have it
+					count = recording.CountRecordingsInDir(s.Path)
+				}
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n",
+					s.DirName, s.Meta.Name, startTime, count, hosts)
+			}
+			_ = w.Flush()
+		})
 		return nil
 	},
 }
@@ -122,32 +119,29 @@ var recordingsListCmd = &cobra.Command{
 			recordings = recordings[:*limit]
 		}
 
-		if jsonOutput {
-			return output.JSON(recordings)
-		}
-
-		if len(recordings) == 0 {
-			fmt.Println("No recordings found")
-			return nil
-		}
-
-		w := output.Table()
-		_, _ = fmt.Fprintln(w, "ID\tMETHOD\tHOST\tPATH\tSTATUS\tDURATION")
-		for _, r := range recordings {
-			idShort := r.ID
-			if len(idShort) > 8 {
-				idShort = idShort[:8]
+		printList(recordings, func() {
+			if len(recordings) == 0 {
+				fmt.Println("No recordings found")
+				return
 			}
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%v\n",
-				idShort, r.Request.Method, r.Request.Host, r.Request.Path,
-				r.Response.StatusCode, r.Duration)
-		}
-		_ = w.Flush()
 
-		if len(recordings) < total {
-			fmt.Printf("\nShowing %d of %d recordings\n", len(recordings), total)
-		}
+			w := output.Table()
+			_, _ = fmt.Fprintln(w, "ID\tMETHOD\tHOST\tPATH\tSTATUS\tDURATION")
+			for _, r := range recordings {
+				idShort := r.ID
+				if len(idShort) > 8 {
+					idShort = idShort[:8]
+				}
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%v\n",
+					idShort, r.Request.Method, r.Request.Host, r.Request.Path,
+					r.Response.StatusCode, r.Duration)
+			}
+			_ = w.Flush()
 
+			if len(recordings) < total {
+				fmt.Printf("\nShowing %d of %d recordings\n", len(recordings), total)
+			}
+		})
 		return nil
 	},
 }

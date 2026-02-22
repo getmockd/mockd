@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -67,17 +66,18 @@ var chaosEnableCmd = &cobra.Command{
 			return fmt.Errorf("failed to enable chaos: %s", FormatConnectionError(err))
 		}
 
-		fmt.Println("Chaos injection enabled")
-		if chaosEnableLatency != "" {
-			fmt.Printf("  Latency: %s\n", chaosEnableLatency)
-		}
-		if chaosEnableErrorRate > 0 {
-			fmt.Printf("  Error rate: %.1f%% (HTTP %d)\n", chaosEnableErrorRate*100, chaosEnableErrorCode)
-		}
-		if chaosEnablePath != "" {
-			fmt.Printf("  Path pattern: %s\n", chaosEnablePath)
-		}
-
+		printResult(map[string]any{"enabled": true, "config": chaosConfig}, func() {
+			fmt.Println("Chaos injection enabled")
+			if chaosEnableLatency != "" {
+				fmt.Printf("  Latency: %s\n", chaosEnableLatency)
+			}
+			if chaosEnableErrorRate > 0 {
+				fmt.Printf("  Error rate: %.1f%% (HTTP %d)\n", chaosEnableErrorRate*100, chaosEnableErrorCode)
+			}
+			if chaosEnablePath != "" {
+				fmt.Printf("  Path pattern: %s\n", chaosEnablePath)
+			}
+		})
 		return nil
 	},
 }
@@ -96,7 +96,9 @@ var chaosDisableCmd = &cobra.Command{
 			return fmt.Errorf("failed to disable chaos: %s", FormatConnectionError(err))
 		}
 
-		fmt.Println("Chaos injection disabled")
+		printResult(map[string]any{"enabled": false}, func() {
+			fmt.Println("Chaos injection disabled")
+		})
 		return nil
 	},
 }
@@ -112,44 +114,41 @@ var chaosStatusCmd = &cobra.Command{
 			return fmt.Errorf("failed to get chaos status: %s", FormatConnectionError(err))
 		}
 
-		if jsonOutput {
-			return output.JSON(config)
-		}
-
-		// Pretty print status
-		enabled, _ := config["enabled"].(bool)
-		if !enabled {
-			fmt.Println("Chaos injection: disabled")
-			return nil
-		}
-
-		fmt.Println("Chaos injection: enabled")
-
-		if global, ok := config["global"].(map[string]interface{}); ok {
-			if latency, ok := global["latency"].(map[string]interface{}); ok {
-				min, _ := latency["min"].(string)
-				max, _ := latency["max"].(string)
-				prob, _ := latency["probability"].(float64)
-				fmt.Printf("  Latency: %s-%s (%.0f%% probability)\n", min, max, prob*100)
+		printResult(config, func() {
+			// Pretty print status
+			enabled, _ := config["enabled"].(bool)
+			if !enabled {
+				fmt.Println("Chaos injection: disabled")
+				return
 			}
-			if errorRate, ok := global["errorRate"].(map[string]interface{}); ok {
-				prob, _ := errorRate["probability"].(float64)
-				code, _ := errorRate["defaultCode"].(float64)
-				fmt.Printf("  Error rate: %.1f%% (HTTP %d)\n", prob*100, int(code))
-			}
-		}
 
-		if rules, ok := config["rules"].([]interface{}); ok && len(rules) > 0 {
-			fmt.Println("  Rules:")
-			for _, r := range rules {
-				if rule, ok := r.(map[string]interface{}); ok {
-					pattern, _ := rule["pathPattern"].(string)
-					prob, _ := rule["probability"].(float64)
-					fmt.Printf("    - %s (%.0f%% probability)\n", pattern, prob*100)
+			fmt.Println("Chaos injection: enabled")
+
+			if global, ok := config["global"].(map[string]interface{}); ok {
+				if latency, ok := global["latency"].(map[string]interface{}); ok {
+					min, _ := latency["min"].(string)
+					max, _ := latency["max"].(string)
+					prob, _ := latency["probability"].(float64)
+					fmt.Printf("  Latency: %s-%s (%.0f%% probability)\n", min, max, prob*100)
+				}
+				if errorRate, ok := global["errorRate"].(map[string]interface{}); ok {
+					prob, _ := errorRate["probability"].(float64)
+					code, _ := errorRate["defaultCode"].(float64)
+					fmt.Printf("  Error rate: %.1f%% (HTTP %d)\n", prob*100, int(code))
 				}
 			}
-		}
 
+			if rules, ok := config["rules"].([]interface{}); ok && len(rules) > 0 {
+				fmt.Println("  Rules:")
+				for _, r := range rules {
+					if rule, ok := r.(map[string]interface{}); ok {
+						pattern, _ := rule["pathPattern"].(string)
+						prob, _ := rule["probability"].(float64)
+						fmt.Printf("    - %s (%.0f%% probability)\n", pattern, prob*100)
+					}
+				}
+			}
+		})
 		return nil
 	},
 }

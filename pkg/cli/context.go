@@ -88,32 +88,45 @@ func runContextShow() error {
 		if envOverride {
 			return fmt.Errorf("context %q (from MOCKD_CONTEXT) not found", envContext)
 		}
-		fmt.Println("No current context set")
-		fmt.Println("\nRun 'mockd context add <name>' to create a context")
+		printResult(map[string]any{"context": nil}, func() {
+			fmt.Println("No current context set")
+			fmt.Println("\nRun 'mockd context add <name>' to create a context")
+		})
 		return nil
 	}
 
-	fmt.Printf("Current context: %s", effectiveContext)
-	if envOverride {
-		fmt.Print("  (from MOCKD_CONTEXT)")
+	result := map[string]any{
+		"name":        effectiveContext,
+		"envOverride": envOverride,
+		"context":     sanitizeContextForJSON(ctx),
 	}
-	fmt.Println()
 
-	fmt.Printf("  Admin URL:  %s\n", ctx.AdminURL)
-
-	// Check for workspace env override
 	envWorkspace := cliconfig.GetWorkspaceFromEnv()
 	if envWorkspace != "" {
-		fmt.Printf("  Workspace:  %s  (from MOCKD_WORKSPACE)\n", envWorkspace)
-	} else if ctx.Workspace != "" {
-		fmt.Printf("  Workspace:  %s\n", ctx.Workspace)
+		result["workspaceOverride"] = envWorkspace
 	}
 
-	if ctx.Description != "" {
-		fmt.Printf("  Description: %s\n", ctx.Description)
-	}
+	printResult(result, func() {
+		fmt.Printf("Current context: %s", effectiveContext)
+		if envOverride {
+			fmt.Print("  (from MOCKD_CONTEXT)")
+		}
+		fmt.Println()
 
-	fmt.Println("\nRun 'mockd context list' to see all contexts")
+		fmt.Printf("  Admin URL:  %s\n", ctx.AdminURL)
+
+		if envWorkspace != "" {
+			fmt.Printf("  Workspace:  %s  (from MOCKD_WORKSPACE)\n", envWorkspace)
+		} else if ctx.Workspace != "" {
+			fmt.Printf("  Workspace:  %s\n", ctx.Workspace)
+		}
+
+		if ctx.Description != "" {
+			fmt.Printf("  Description: %s\n", ctx.Description)
+		}
+
+		fmt.Println("\nRun 'mockd context list' to see all contexts")
+	})
 	return nil
 }
 
@@ -144,12 +157,17 @@ var contextUseCmd = &cobra.Command{
 		}
 
 		ctx := cfg.Contexts[name]
-		fmt.Printf("Switched to context %q\n", name)
-		fmt.Printf("  Admin URL: %s\n", ctx.AdminURL)
-		if ctx.Workspace != "" {
-			fmt.Printf("  Workspace: %s\n", ctx.Workspace)
-		}
-
+		printResult(map[string]any{
+			"name":     name,
+			"switched": true,
+			"context":  sanitizeContextForJSON(ctx),
+		}, func() {
+			fmt.Printf("Switched to context %q\n", name)
+			fmt.Printf("  Admin URL: %s\n", ctx.AdminURL)
+			if ctx.Workspace != "" {
+				fmt.Printf("  Workspace: %s\n", ctx.Workspace)
+			}
+		})
 		return nil
 	},
 }
@@ -244,24 +262,20 @@ var contextAddCmd = &cobra.Command{
 			return fmt.Errorf("failed to save context config: %w", err)
 		}
 
-		if jsonOutput {
-			result := struct {
-				Name    string          `json:"name"`
-				Context *contextForJSON `json:"context"`
-				Current bool            `json:"current"`
-			}{
-				Name:    name,
-				Context: sanitizeContextForJSON(ctx),
-				Current: cfg.CurrentContext == name,
+		printResult(struct {
+			Name    string          `json:"name"`
+			Context *contextForJSON `json:"context"`
+			Current bool            `json:"current"`
+		}{
+			Name:    name,
+			Context: sanitizeContextForJSON(ctx),
+			Current: cfg.CurrentContext == name,
+		}, func() {
+			fmt.Printf("Added context %q\n", name)
+			if contextAddUseCurrent {
+				fmt.Printf("Switched to context %q\n", name)
 			}
-			return output.JSON(result)
-		}
-
-		fmt.Printf("Added context %q\n", name)
-		if contextAddUseCurrent {
-			fmt.Printf("Switched to context %q\n", name)
-		}
-
+		})
 		return nil
 	},
 }
@@ -286,62 +300,60 @@ var contextListCmd = &cobra.Command{
 			return fmt.Errorf("failed to load context config: %w", err)
 		}
 
-		if jsonOutput {
-			result := struct {
-				CurrentContext string                     `json:"currentContext"`
-				Contexts       map[string]*contextForJSON `json:"contexts"`
-			}{
-				CurrentContext: cfg.CurrentContext,
-				Contexts:       sanitizeContextsForJSON(cfg.Contexts),
-			}
-			return output.JSON(result)
-		}
-
-		if len(cfg.Contexts) == 0 {
-			fmt.Println("No contexts configured")
-			fmt.Println("\nRun 'mockd context add <name>' to create a context")
-			return nil
-		}
-
-		// Sort context names for consistent output
-		names := make([]string, 0, len(cfg.Contexts))
-		for name := range cfg.Contexts {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-
-		w := output.Table()
-		_, _ = fmt.Fprintln(w, "CURRENT\tNAME\tADMIN URL\tWORKSPACE\tDESCRIPTION")
-
-		for _, name := range names {
-			ctx := cfg.Contexts[name]
-			current := ""
-			if name == cfg.CurrentContext {
-				current = "*"
+		printList(struct {
+			CurrentContext string                     `json:"currentContext"`
+			Contexts       map[string]*contextForJSON `json:"contexts"`
+		}{
+			CurrentContext: cfg.CurrentContext,
+			Contexts:       sanitizeContextsForJSON(cfg.Contexts),
+		}, func() {
+			if len(cfg.Contexts) == 0 {
+				fmt.Println("No contexts configured")
+				fmt.Println("\nRun 'mockd context add <name>' to create a context")
+				return
 			}
 
-			workspace := ctx.Workspace
-			if workspace == "" {
-				workspace = "-"
+			// Sort context names for consistent output
+			names := make([]string, 0, len(cfg.Contexts))
+			for name := range cfg.Contexts {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+
+			w := output.Table()
+			_, _ = fmt.Fprintln(w, "CURRENT\tNAME\tADMIN URL\tWORKSPACE\tDESCRIPTION")
+
+			for _, name := range names {
+				ctx := cfg.Contexts[name]
+				current := ""
+				if name == cfg.CurrentContext {
+					current = "*"
+				}
+
+				workspace := ctx.Workspace
+				if workspace == "" {
+					workspace = "-"
+				}
+
+				description := ctx.Description
+				if len(description) > 30 {
+					description = description[:27] + "..."
+				}
+				if description == "" {
+					description = "-"
+				}
+
+				ctxAdminURL := ctx.AdminURL
+				if len(ctxAdminURL) > 35 {
+					ctxAdminURL = ctxAdminURL[:32] + "..."
+				}
+
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, name, ctxAdminURL, workspace, description)
 			}
 
-			description := ctx.Description
-			if len(description) > 30 {
-				description = description[:27] + "..."
-			}
-			if description == "" {
-				description = "-"
-			}
-
-			adminURL := ctx.AdminURL
-			if len(adminURL) > 35 {
-				adminURL = adminURL[:32] + "..."
-			}
-
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, name, adminURL, workspace, description)
-		}
-
-		return w.Flush()
+			_ = w.Flush()
+		})
+		return nil
 	},
 }
 
@@ -398,7 +410,9 @@ var contextRemoveCmd = &cobra.Command{
 			return fmt.Errorf("failed to save context config: %w", err)
 		}
 
-		fmt.Printf("Removed context %q\n", name)
+		printResult(map[string]any{"name": name, "removed": true}, func() {
+			fmt.Printf("Removed context %q\n", name)
+		})
 		return nil
 	},
 }
