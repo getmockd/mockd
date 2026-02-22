@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -22,7 +23,9 @@ func boolPtr(b bool) *bool { return &b }
 // mockEngineServer creates a test server that simulates the engine API.
 // It allows tests to control responses for various endpoints.
 type mockEngineServer struct {
-	*httptest.Server
+	URL          string
+	server       *http.Server
+	ln           net.Listener
 	mocks        map[string]*config.MockConfiguration
 	requestCount int64
 	uptime       int64
@@ -198,8 +201,27 @@ func newMockEngineServer() *mockEngineServer {
 		json.NewEncoder(w).Encode(map[string]int{"cleared": 0})
 	})
 
-	mes.Server = httptest.NewServer(mux)
+	mes.server, mes.ln, mes.URL = newIPv4Server(mux)
 	return mes
+}
+
+func (mes *mockEngineServer) Close() {
+	if mes.server != nil {
+		_ = mes.server.Close()
+	}
+	if mes.ln != nil {
+		_ = mes.ln.Close()
+	}
+}
+
+func newIPv4Server(handler http.Handler) (*http.Server, net.Listener, string) {
+	srv := &http.Server{Handler: handler}
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		panic(err)
+	}
+	go func() { _ = srv.Serve(ln) }()
+	return srv, ln, "http://" + ln.Addr().String()
 }
 
 func (mes *mockEngineServer) addMock(m *config.MockConfiguration) {

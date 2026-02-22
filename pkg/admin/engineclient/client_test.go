@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -14,14 +14,44 @@ import (
 )
 
 // --- Helpers ---
+type testHTTPServer struct {
+	URL    string
+	server *http.Server
+	ln     net.Listener
+}
+
+func (s *testHTTPServer) Close() {
+	if s == nil || s.server == nil {
+		return
+	}
+	_ = s.server.Close()
+	if s.ln != nil {
+		_ = s.ln.Close()
+	}
+}
 
 // mockServer creates a test server that responds to a specific method+path with a handler.
-func mockServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *Client) {
+func mockServer(t *testing.T, handler http.HandlerFunc) (*testHTTPServer, *Client) {
 	t.Helper()
-	ts := httptest.NewServer(handler)
+	ts := newIPv4TestServer(t, handler)
 	t.Cleanup(ts.Close)
 	c := New(ts.URL)
 	return ts, c
+}
+
+func newIPv4TestServer(t *testing.T, handler http.Handler) *testHTTPServer {
+	t.Helper()
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to create ipv4 listener: %v", err)
+	}
+	srv := &http.Server{Handler: handler}
+	go func() { _ = srv.Serve(ln) }()
+	return &testHTTPServer{
+		URL:    "http://" + ln.Addr().String(),
+		server: srv,
+		ln:     ln,
+	}
 }
 
 func jsonHandler(t *testing.T, statusCode int, body interface{}) http.HandlerFunc {
@@ -263,7 +293,7 @@ func TestListRequests_NoFilter(t *testing.T) {
 
 func TestListRequests_WithFilter(t *testing.T) {
 	var capturedPath string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.String()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(RequestListResponse{Count: 0})
@@ -436,7 +466,7 @@ func TestResetState_Success(t *testing.T) {
 
 func TestResetState_AllResources(t *testing.T) {
 	var capturedBody map[string]string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 		w.WriteHeader(200)
 	}))
@@ -561,7 +591,7 @@ func TestExportConfig_Success(t *testing.T) {
 
 func TestExportConfig_EmptyName(t *testing.T) {
 	var capturedPath string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.String()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(config.MockCollection{})
@@ -603,7 +633,7 @@ func TestImportConfig_Error(t *testing.T) {
 
 func TestAuthToken_SentInRequests(t *testing.T) {
 	var capturedAuth string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedAuth = r.Header.Get("Authorization")
 		w.WriteHeader(200)
 	}))
@@ -618,7 +648,7 @@ func TestAuthToken_SentInRequests(t *testing.T) {
 
 func TestNoToken_NoAuthHeader(t *testing.T) {
 	var capturedAuth string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedAuth = r.Header.Get("Authorization")
 		w.WriteHeader(200)
 	}))
@@ -647,7 +677,7 @@ func TestParseError_StructuredError(t *testing.T) {
 }
 
 func TestParseError_PlainTextError(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		_, _ = w.Write([]byte("plain text error"))
 	}))
@@ -667,7 +697,7 @@ func TestParseError_PlainTextError(t *testing.T) {
 
 func TestPost_SetsContentType(t *testing.T) {
 	var capturedCT string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedCT = r.Header.Get("Content-Type")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(201)
@@ -685,7 +715,7 @@ func TestPost_SetsContentType(t *testing.T) {
 // --- Context Cancellation Tests ---
 
 func TestHealth_ContextCancelled(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(500 * time.Millisecond) // simulate slow server
 		w.WriteHeader(200)
 	}))
@@ -705,7 +735,7 @@ func TestHealth_ContextCancelled(t *testing.T) {
 
 func TestHTTPMethods(t *testing.T) {
 	var capturedMethod string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedMethod = r.Method
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {

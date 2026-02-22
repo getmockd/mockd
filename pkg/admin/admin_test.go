@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -305,7 +306,9 @@ func TestBulkCreate_PortConflictWithinBatch_ReturnsError(t *testing.T) {
 
 // mockFailingEngineServer creates a test server that fails on certain operations.
 type mockFailingEngineServer struct {
-	*httptest.Server
+	URL         string
+	server      *http.Server
+	ln          net.Listener
 	mocks       map[string]*config.MockConfiguration
 	failOnMock  string // ID of mock to fail on
 	failMessage string
@@ -373,8 +376,27 @@ func newMockFailingEngineServer(failOnMock, failMessage string) *mockFailingEngi
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	mes.Server = httptest.NewServer(mux)
+	mes.server, mes.ln, mes.URL = newIPv4ServerForAdminTests(mux)
 	return mes
+}
+
+func (mes *mockFailingEngineServer) Close() {
+	if mes.server != nil {
+		_ = mes.server.Close()
+	}
+	if mes.ln != nil {
+		_ = mes.ln.Close()
+	}
+}
+
+func newIPv4ServerForAdminTests(handler http.Handler) (*http.Server, net.Listener, string) {
+	srv := &http.Server{Handler: handler}
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		panic(err)
+	}
+	go func() { _ = srv.Serve(ln) }()
+	return srv, ln, "http://" + ln.Addr().String()
 }
 
 func (mes *mockFailingEngineServer) client() *engineclient.Client {
