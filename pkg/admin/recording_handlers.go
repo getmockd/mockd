@@ -331,7 +331,7 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 	}
 
 	// Check if we should add to engine (from JSON body or query param)
-	addToServer := req.AddToServer || r.URL.Query().Get("add") == "true"
+	addToServer := shouldAddToServer(req.AddToServer, r.URL.Query().Get("add"))
 	if addToServer && client != nil {
 		if _, err := client.CreateMock(r.Context(), mock); err != nil {
 			pm.log.Error("failed to add mock to engine", "error", err)
@@ -344,6 +344,16 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 		Mock:     mock,
 		Warnings: warnings,
 	})
+}
+
+func shouldAddToServer(bodyFlag bool, addQuery string) bool {
+	if bodyFlag {
+		return true
+	}
+	if parsed := parseOptionalBool(addQuery); parsed != nil {
+		return *parsed
+	}
+	return false
 }
 
 // SessionConvertRequest represents a request to convert session recordings.

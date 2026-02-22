@@ -32,7 +32,10 @@ type PortsResponse struct {
 // Query params:
 //   - verbose=true: include engine ID, name, workspace, PID
 func (a *API) handleListPorts(w http.ResponseWriter, r *http.Request) {
-	verbose := r.URL.Query().Get("verbose") == "true"
+	verbose := false
+	if v := parseOptionalBool(r.URL.Query().Get("verbose")); v != nil {
+		verbose = *v
+	}
 	var ports []PortInfo
 
 	// Admin API port (always running if we're handling this request)

@@ -411,3 +411,28 @@ func TestHandleExportRecordings_InvalidJSON(t *testing.T) {
 		}
 	})
 }
+
+func TestShouldAddToServer(t *testing.T) {
+	tests := []struct {
+		name     string
+		bodyFlag bool
+		query    string
+		want     bool
+	}{
+		{name: "body true wins", bodyFlag: true, query: "false", want: true},
+		{name: "query true", bodyFlag: false, query: "true", want: true},
+		{name: "query one", bodyFlag: false, query: "1", want: true},
+		{name: "query false", bodyFlag: false, query: "false", want: false},
+		{name: "invalid query ignored", bodyFlag: false, query: "maybe", want: false},
+		{name: "empty", bodyFlag: false, query: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldAddToServer(tt.bodyFlag, tt.query)
+			if got != tt.want {
+				t.Fatalf("shouldAddToServer(%v, %q)=%v want %v", tt.bodyFlag, tt.query, got, tt.want)
+			}
+		})
+	}
+}
