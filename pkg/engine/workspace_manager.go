@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -126,6 +127,16 @@ func (m *WorkspaceManager) SetCentralStore(store storage.MockStore) {
 
 // StartWorkspace creates and starts a server for the given workspace.
 func (m *WorkspaceManager) StartWorkspace(ctx context.Context, ws *store.EngineWorkspace) error {
+	if ws == nil {
+		return errors.New("workspace is required")
+	}
+	if strings.TrimSpace(ws.WorkspaceID) == "" {
+		return errors.New("workspace ID is required")
+	}
+	if ws.HTTPPort <= 0 || ws.HTTPPort > 65535 {
+		return fmt.Errorf("invalid HTTP port %d for workspace %s", ws.HTTPPort, ws.WorkspaceID)
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
