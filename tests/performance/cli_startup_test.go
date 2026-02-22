@@ -116,16 +116,16 @@ func TestCLIBinarySize(t *testing.T) {
 	sizeMB := float64(size) / (1024 * 1024)
 	t.Logf("Binary size: %.2f MB", sizeMB)
 
-	// Binary size is ~33MB due to:
+	// Binary size is ~41MB due to:
 	// - gRPC/protobuf support (~6000 symbols)
 	// - OpenAPI validator
 	// - Protocol compiler for gRPC reflection
-
 	// - MQTT broker
 	// - JSONPath parser
+	// - Cobra + Charmbracelet TUI (huh, bubbletea, lipgloss) for interactive CLI
 	// This is expected for a feature-rich mock server.
-	// A stripped binary (-ldflags="-s -w") is ~24MB.
-	if sizeMB > 40 {
-		t.Errorf("Binary size %.2f MB seems excessive (expected < 40MB)", sizeMB)
+	// A stripped binary (-ldflags="-s -w") is ~29MB.
+	if sizeMB > 45 {
+		t.Errorf("Binary size %.2f MB seems excessive (expected < 45MB)", sizeMB)
 	}
 }
