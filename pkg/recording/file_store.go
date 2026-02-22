@@ -444,7 +444,7 @@ func (s *FileStore) List(filter StreamRecordingFilter) ([]*RecordingSummary, int
 	// Apply pagination
 	if filter.Offset > 0 {
 		if filter.Offset >= len(summaries) {
-			return nil, total, nil
+			return []*RecordingSummary{}, total, nil
 		}
 		summaries = summaries[filter.Offset:]
 	}

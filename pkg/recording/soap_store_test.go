@@ -362,6 +362,9 @@ func TestSOAPStoreList(t *testing.T) {
 		if len(recordings) != 0 {
 			t.Errorf("Expected 0 recordings, got %d", len(recordings))
 		}
+		if recordings == nil {
+			t.Error("Expected empty slice, got nil")
+		}
 	})
 }
 

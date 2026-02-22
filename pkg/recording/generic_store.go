@@ -196,7 +196,7 @@ func (s *RecordingStore[T]) ListFiltered(predicate func(*T) bool, offset, limit 
 	// Apply pagination
 	if offset > 0 {
 		if offset >= len(result) {
-			return nil, total
+			return []*T{}, total
 		}
 		result = result[offset:]
 	}

@@ -725,6 +725,9 @@ func TestList(t *testing.T) {
 		if len(summaries) != 0 {
 			t.Errorf("expected 0 summaries for large offset, got %d", len(summaries))
 		}
+		if summaries == nil {
+			t.Error("expected empty slice, got nil")
+		}
 	})
 }
 

@@ -264,6 +264,9 @@ func TestMQTTStoreList(t *testing.T) {
 		if len(recordings) != 0 {
 			t.Errorf("Expected 0 recordings for offset beyond total, got %d", len(recordings))
 		}
+		if recordings == nil {
+			t.Error("Expected empty slice, got nil")
+		}
 	})
 
 	t.Run("combines multiple filters", func(t *testing.T) {
