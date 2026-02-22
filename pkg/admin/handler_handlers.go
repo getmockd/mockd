@@ -24,7 +24,7 @@ func (a *API) handleListHandlers(w http.ResponseWriter, r *http.Request) {
 	handlers, err := engine.ListHandlers(r.Context())
 	if err != nil {
 		a.logger().Error("failed to list handlers", "error", err)
-		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list handlers"))
 		return
 	}
 

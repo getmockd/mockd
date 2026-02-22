@@ -996,8 +996,8 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			// For other engine errors, also fail — store and engine must stay in sync
-			writeError(w, http.StatusInternalServerError, "engine_error",
-				"Failed to update mock in engine: "+errMsg)
+			writeError(w, http.StatusServiceUnavailable, "engine_error",
+				sanitizeEngineError(err, a.logger(), "update mock in engine"))
 			return
 		}
 	}
@@ -1066,8 +1066,8 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 			if rollbackErr := mockStore.Update(r.Context(), &prePatch); rollbackErr != nil {
 				a.logger().Warn("failed to rollback mock patch after engine error", "id", id, "error", rollbackErr)
 			}
-			writeError(w, http.StatusInternalServerError, "engine_error",
-				"Failed to apply mock patch in engine: "+err.Error())
+			writeError(w, http.StatusServiceUnavailable, "engine_error",
+				sanitizeEngineError(err, a.logger(), "apply mock patch in engine"))
 			return
 		}
 	}
@@ -1127,8 +1127,8 @@ func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 			if rollbackErr := mockStore.Create(r.Context(), existing); rollbackErr != nil {
 				a.logger().Warn("failed to rollback mock deletion after engine error", "id", id, "error", rollbackErr)
 			}
-			writeError(w, http.StatusInternalServerError, "engine_error",
-				"Failed to delete mock from engine: "+err.Error())
+			writeError(w, http.StatusServiceUnavailable, "engine_error",
+				sanitizeEngineError(err, a.logger(), "delete mock from engine"))
 			return
 		}
 	}
