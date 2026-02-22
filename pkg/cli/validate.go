@@ -83,7 +83,29 @@ This command checks:
 		allErrors = append(allErrors, portResult.Errors...)
 		hasErrors := len(allErrors) > 0
 
-		// Print results
+		if jsonOutput {
+			errorStrings := make([]string, len(allErrors))
+			for i, e := range allErrors {
+				errorStrings[i] = e.Error()
+			}
+			printResult(map[string]any{
+				"valid":      !hasErrors,
+				"errors":     errorStrings,
+				"errorCount": len(allErrors),
+				"summary": map[string]int{
+					"admins":     len(cfg.Admins),
+					"engines":    len(cfg.Engines),
+					"workspaces": len(cfg.Workspaces),
+					"mocks":      len(cfg.Mocks),
+				},
+			}, nil)
+			if hasErrors {
+				return fmt.Errorf("validation failed with %d error(s)", len(allErrors))
+			}
+			return nil
+		}
+
+		// Text output
 		switch {
 		case *verbose:
 			printVerboseValidation(cfg, allErrors)

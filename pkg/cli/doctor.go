@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
@@ -38,94 +39,103 @@ func init() {
 	doctorCmd.Flags().IntVarP(&doctorAdminPort, "admin-port", "a", 4290, "Admin API port to check")
 }
 
+// doctorCheck holds the result of a single doctor check.
+type doctorCheck struct {
+	Name   string `json:"name"`
+	Status string `json:"status"` // "ok", "fail", "info"
+	Detail string `json:"detail"`
+}
+
 func runDoctor(cmd *cobra.Command, args []string) error {
 	configFile := doctorConfigFile
 	port := doctorPort
 	adminPort := doctorAdminPort
 
-	fmt.Println("mockd doctor")
-	fmt.Println("============")
-	fmt.Println()
-
 	allPassed := true
+	var checks []doctorCheck
 
-	// Check 1: Port availability
-	fmt.Printf("Checking port %d (mock server)... ", port)
+	// Check 1: Mock server port availability
 	if ports.IsAvailable(port) {
-		fmt.Println("available")
+		checks = append(checks, doctorCheck{Name: fmt.Sprintf("port_%d_mock_server", port), Status: "ok", Detail: "available"})
 	} else {
-		fmt.Println("IN USE")
+		checks = append(checks, doctorCheck{Name: fmt.Sprintf("port_%d_mock_server", port), Status: "fail", Detail: "in use"})
 		allPassed = false
 	}
 
-	fmt.Printf("Checking port %d (admin API)... ", adminPort)
+	// Check 2: Admin API port availability
 	if ports.IsAvailable(adminPort) {
-		fmt.Println("available")
+		checks = append(checks, doctorCheck{Name: fmt.Sprintf("port_%d_admin_api", adminPort), Status: "ok", Detail: "available"})
 	} else {
-		fmt.Println("IN USE")
+		checks = append(checks, doctorCheck{Name: fmt.Sprintf("port_%d_admin_api", adminPort), Status: "fail", Detail: "in use"})
 		allPassed = false
 	}
 
-	// Check 2: Config file validation
+	// Check 3: Config file validation
 	if configFile != "" {
-		fmt.Printf("Validating config file %s... ", configFile)
 		if err := validateConfigFile(configFile); err != nil {
-			fmt.Printf("FAILED\n  %s\n", err)
+			checks = append(checks, doctorCheck{Name: "config_file", Status: "fail", Detail: err.Error()})
 			allPassed = false
 		} else {
-			fmt.Println("valid")
+			checks = append(checks, doctorCheck{Name: "config_file", Status: "ok", Detail: configFile})
 		}
 	}
 
-	// Check 3: Check if mockd is already running
-	fmt.Printf("Checking for running mockd on :%d... ", adminPort)
+	// Check 4: Check if mockd is already running
 	if checkMockdRunning(adminPort) {
-		fmt.Println("running")
+		checks = append(checks, doctorCheck{Name: "mockd_running", Status: "ok", Detail: fmt.Sprintf("responding on :%d", adminPort)})
 	} else {
-		fmt.Println("not running")
+		checks = append(checks, doctorCheck{Name: "mockd_running", Status: "info", Detail: fmt.Sprintf("not running on :%d", adminPort)})
 	}
 
-	// Check 4: Check default config locations
-	fmt.Print("Checking for default config files... ")
+	// Check 5: Check default config locations
 	foundConfigs := findDefaultConfigs()
 	if len(foundConfigs) > 0 {
-		fmt.Printf("found %d\n", len(foundConfigs))
-		for _, f := range foundConfigs {
-			fmt.Printf("  - %s\n", f)
-		}
+		checks = append(checks, doctorCheck{Name: "default_configs", Status: "ok", Detail: fmt.Sprintf("found %d: %s", len(foundConfigs), strings.Join(foundConfigs, ", "))})
 	} else {
-		fmt.Println("none found")
+		checks = append(checks, doctorCheck{Name: "default_configs", Status: "info", Detail: "none found"})
 	}
 
-	// Check 5: Check PID file
-	fmt.Print("Checking PID file... ")
+	// Check 6: Check PID file
 	pidPath := DefaultPIDPath()
 	if info, err := ReadPIDFile(pidPath); err == nil {
 		if info.IsRunning() {
-			fmt.Printf("found (PID %d, running)\n", info.PID)
+			checks = append(checks, doctorCheck{Name: "pid_file", Status: "ok", Detail: fmt.Sprintf("PID %d, running", info.PID)})
 		} else {
-			fmt.Printf("found (PID %d, stale)\n", info.PID)
+			checks = append(checks, doctorCheck{Name: "pid_file", Status: "info", Detail: fmt.Sprintf("PID %d, stale", info.PID)})
 		}
 	} else {
-		fmt.Println("not found")
+		checks = append(checks, doctorCheck{Name: "pid_file", Status: "info", Detail: "not found"})
 	}
 
-	// Check 6: Check data directory
-	fmt.Print("Checking data directory... ")
+	// Check 7: Check data directory
 	dataDir := getDataDir()
 	if info, err := os.Stat(dataDir); err == nil && info.IsDir() {
-		fmt.Printf("exists (%s)\n", dataDir)
+		checks = append(checks, doctorCheck{Name: "data_directory", Status: "ok", Detail: dataDir})
 	} else {
-		// Output as info rather than a failure, since it will be created on demand
-		fmt.Printf("not found (will be created automatically at %s)\n", dataDir)
+		checks = append(checks, doctorCheck{Name: "data_directory", Status: "info", Detail: fmt.Sprintf("not found (will be created at %s)", dataDir)})
 	}
 
-	fmt.Println()
-	if allPassed {
-		fmt.Println("All checks passed!")
-	} else {
-		fmt.Println("Some checks failed. See above for details.")
-	}
+	printResult(map[string]any{"checks": checks, "allPassed": allPassed}, func() {
+		fmt.Println("mockd doctor")
+		fmt.Println("============")
+		fmt.Println()
+		for _, c := range checks {
+			switch c.Status {
+			case "ok":
+				fmt.Printf("  ✓ %s: %s\n", c.Name, c.Detail)
+			case "fail":
+				fmt.Printf("  ✗ %s: %s\n", c.Name, c.Detail)
+			default:
+				fmt.Printf("  • %s: %s\n", c.Name, c.Detail)
+			}
+		}
+		fmt.Println()
+		if allPassed {
+			fmt.Println("All checks passed!")
+		} else {
+			fmt.Println("Some checks failed. See above for details.")
+		}
+	})
 
 	return nil
 }

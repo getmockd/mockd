@@ -76,7 +76,9 @@ func deleteByID(client AdminClient, idPrefix string) error {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
 
-	fmt.Printf("Deleted mock: %s\n", idPrefix)
+	printResult(map[string]any{"id": idPrefix, "deleted": true}, func() {
+		fmt.Printf("Deleted mock: %s\n", idPrefix)
+	})
 	return nil
 }
 
@@ -102,7 +104,9 @@ func deleteByPrefix(client AdminClient, prefix string) error {
 			return fmt.Errorf("failed to delete mock: %s", FormatConnectionError(err))
 		}
 		path, method, status := extractMockDetails(matches[0])
-		fmt.Printf("Deleted mock: %s (%s %s → %d)\n", matches[0].ID, method, path, status)
+		printResult(map[string]any{"id": matches[0].ID, "method": method, "path": path, "statusCode": status, "deleted": true}, func() {
+			fmt.Printf("Deleted mock: %s (%s %s → %d)\n", matches[0].ID, method, path, status)
+		})
 		return nil
 	default:
 		fmt.Fprintf(os.Stderr, "Ambiguous ID prefix '%s' matches %d mocks:\n\n", prefix, len(matches))
@@ -153,7 +157,9 @@ func deleteByPath(client AdminClient, path, method string, skipConfirm bool) err
 			return fmt.Errorf("failed to delete mock: %s", FormatConnectionError(err))
 		}
 		_, mockMethod, mockStatus := extractMockDetails(matches[0])
-		fmt.Printf("Deleted mock: %s (%s %s → %d)\n", matches[0].ID, mockMethod, path, mockStatus)
+		printResult(map[string]any{"id": matches[0].ID, "method": mockMethod, "path": path, "statusCode": mockStatus, "deleted": true}, func() {
+			fmt.Printf("Deleted mock: %s (%s %s → %d)\n", matches[0].ID, mockMethod, path, mockStatus)
+		})
 		return nil
 	}
 
@@ -181,14 +187,18 @@ func deleteByPath(client AdminClient, path, method string, skipConfirm bool) err
 	}
 
 	deleted := 0
+	deletedIDs := make([]string, 0, len(matches))
 	for _, m := range matches {
 		if err := client.DeleteMock(m.ID); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to delete %s: %v\n", m.ID, err)
 			continue
 		}
 		deleted++
+		deletedIDs = append(deletedIDs, m.ID)
 	}
 
-	fmt.Printf("Deleted %d mock(s)\n", deleted)
+	printResult(map[string]any{"deleted": true, "count": deleted, "ids": deletedIDs}, func() {
+		fmt.Printf("Deleted %d mock(s)\n", deleted)
+	})
 	return nil
 }

@@ -28,7 +28,9 @@ var downCmd = &cobra.Command{
 		pidInfo, err := readUpPIDFile(*pidFile)
 		if err != nil {
 			if os.IsNotExist(err) {
-				fmt.Println("No running mockd services found.")
+				printResult(map[string]any{"stopped": false, "reason": "no running services found"}, func() {
+					fmt.Println("No running mockd services found.")
+				})
 				return nil
 			}
 			return fmt.Errorf("reading PID file: %w", err)
@@ -36,12 +38,16 @@ var downCmd = &cobra.Command{
 
 		// Check if main process is running
 		if !processExists(pidInfo.PID) {
-			fmt.Println("mockd is not running (stale PID file)")
+			printResult(map[string]any{"stopped": false, "reason": "not running (stale PID file)"}, func() {
+				fmt.Println("mockd is not running (stale PID file)")
+			})
 			_ = os.Remove(*pidFile)
 			return nil
 		}
 
-		fmt.Printf("Stopping mockd (PID %d)...\n", pidInfo.PID)
+		if !jsonOutput {
+			fmt.Printf("Stopping mockd (PID %d)...\n", pidInfo.PID)
+		}
 
 		// Send SIGTERM to main process
 		proc, err := os.FindProcess(pidInfo.PID)
@@ -57,21 +63,27 @@ var downCmd = &cobra.Command{
 		deadline := time.Now().Add(*timeout)
 		for time.Now().Before(deadline) {
 			if !processExists(pidInfo.PID) {
-				fmt.Println("mockd stopped")
 				_ = os.Remove(*pidFile)
+				printResult(map[string]any{"stopped": true, "pid": pidInfo.PID, "forced": false}, func() {
+					fmt.Println("mockd stopped")
+				})
 				return nil
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
 
 		// Force kill if still running
-		fmt.Println("Timeout reached, force killing...")
+		if !jsonOutput {
+			fmt.Println("Timeout reached, force killing...")
+		}
 		if err := proc.Signal(syscall.SIGKILL); err != nil {
 			return fmt.Errorf("force kill: %w", err)
 		}
 
 		_ = os.Remove(*pidFile)
-		fmt.Println("mockd stopped (forced)")
+		printResult(map[string]any{"stopped": true, "pid": pidInfo.PID, "forced": true}, func() {
+			fmt.Println("mockd stopped (forced)")
+		})
 		return nil
 	},
 }

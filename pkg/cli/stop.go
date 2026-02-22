@@ -82,20 +82,26 @@ var stopCmd = &cobra.Command{
 			sigName = signalKillName()
 		}
 
-		fmt.Printf("Stopping mockd (PID %d) with %s... ", info.PID, sigName)
+		if !jsonOutput {
+			fmt.Printf("Stopping mockd (PID %d) with %s... ", info.PID, sigName)
+		}
 
 		// Send signal
 		if err := process.Signal(sig); err != nil {
-			fmt.Println("failed")
+			if !jsonOutput {
+				fmt.Println("failed")
+			}
 			return fmt.Errorf("failed to send signal: %w", err)
 		}
 
 		// For SIGKILL, we don't wait gracefully
 		if stopForce {
-			fmt.Println("done")
 			// Wait a moment then clean up PID file
 			time.Sleep(100 * time.Millisecond)
 			_ = RemovePIDFile(pidPath)
+			printResult(map[string]any{"stopped": true, "pid": info.PID, "signal": sigName}, func() {
+				fmt.Println("done")
+			})
 			return nil
 		}
 
@@ -105,17 +111,21 @@ var stopCmd = &cobra.Command{
 
 		for time.Now().Before(deadline) {
 			if !checkProcessRunning(info.PID) {
-				fmt.Println("done")
 				_ = RemovePIDFile(pidPath)
+				printResult(map[string]any{"stopped": true, "pid": info.PID, "signal": sigName}, func() {
+					fmt.Println("done")
+				})
 				return nil
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
 
 		// Timeout reached - process didn't stop
-		fmt.Println("timeout")
-		fmt.Printf("\nProcess did not stop within %d seconds.\n", stopTimeout)
-		fmt.Println("Try: mockd stop --force")
+		if !jsonOutput {
+			fmt.Println("timeout")
+			fmt.Printf("\nProcess did not stop within %d seconds.\n", stopTimeout)
+			fmt.Println("Try: mockd stop --force")
+		}
 		return errors.New("timeout waiting for process to stop")
 	},
 }

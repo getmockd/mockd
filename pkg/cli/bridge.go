@@ -224,24 +224,37 @@ func runImportCobra(cmd *cobra.Command, args []string) error {
 		return formatImportError(err, impFormat, source)
 	}
 
-	fmt.Printf("Parsed %d mocks from %s (format: %s)\n", len(collection.Mocks), source, impFormat)
+	if !jsonOutput {
+		fmt.Printf("Parsed %d mocks from %s (format: %s)\n", len(collection.Mocks), source, impFormat)
+	}
 
 	// Dry run - just show what would be imported
 	if importDryRun {
-		fmt.Println("\nDry run - mocks would be imported:")
-		for _, mock := range collection.Mocks {
-			method := "???"
-			path := "???"
-			if mock.HTTP != nil && mock.HTTP.Matcher != nil {
-				method = mock.HTTP.Matcher.Method
-				path = mock.HTTP.Matcher.Path
-			}
-			name := mock.Name
-			if name == "" {
-				name = mock.ID
-			}
-			fmt.Printf("  • %s %s (%s)\n", method, path, name)
+		type dryRunMock struct {
+			ID     string `json:"id,omitempty"`
+			Name   string `json:"name,omitempty"`
+			Method string `json:"method"`
+			Path   string `json:"path"`
 		}
+		mocks := make([]dryRunMock, 0, len(collection.Mocks))
+		for _, m := range collection.Mocks {
+			method, path := "???", "???"
+			if m.HTTP != nil && m.HTTP.Matcher != nil {
+				method = m.HTTP.Matcher.Method
+				path = m.HTTP.Matcher.Path
+			}
+			name := m.Name
+			if name == "" {
+				name = m.ID
+			}
+			mocks = append(mocks, dryRunMock{ID: m.ID, Name: name, Method: method, Path: path})
+		}
+		printResult(map[string]any{"dryRun": true, "format": impFormat.String(), "count": len(mocks), "mocks": mocks}, func() {
+			fmt.Println("\nDry run - mocks would be imported:")
+			for _, m := range mocks {
+				fmt.Printf("  • %s %s (%s)\n", m.Method, m.Path, m.Name)
+			}
+		})
 		return nil
 	}
 
@@ -252,10 +265,12 @@ func runImportCobra(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
 
-	fmt.Printf("Imported %d mocks to server\n", result.Imported)
-	if importReplace {
-		fmt.Printf("Total mocks: %d\n", result.Total)
-	}
+	printResult(map[string]any{"imported": result.Imported, "total": result.Total, "format": impFormat.String(), "replace": importReplace}, func() {
+		fmt.Printf("Imported %d mocks to server\n", result.Imported)
+		if importReplace {
+			fmt.Printf("Total mocks: %d\n", result.Total)
+		}
+	})
 
 	return nil
 }
@@ -322,9 +337,25 @@ func runExportCobra(cmd *cobra.Command, args []string) error {
 		if err := os.WriteFile(exportOutput, data, 0644); err != nil {
 			return fmt.Errorf("failed to write file: %w", err)
 		}
-		fmt.Printf("Exported %d mocks to %s (format: %s)\n", len(collection.Mocks), exportOutput, expFormat)
+		printResult(map[string]any{
+			"exported": len(collection.Mocks),
+			"format":   expFormat.String(),
+			"path":     exportOutput,
+		}, func() {
+			fmt.Printf("Exported %d mocks to %s (format: %s)\n", len(collection.Mocks), exportOutput, expFormat)
+		})
 	} else {
-		fmt.Print(string(data))
+		// Stdout: in JSON mode, wrap the raw config in a result envelope;
+		// in text mode, print the raw YAML/JSON data directly.
+		if jsonOutput {
+			printResult(map[string]any{
+				"exported": len(collection.Mocks),
+				"format":   expFormat.String(),
+				"data":     string(data),
+			}, nil)
+		} else {
+			fmt.Print(string(data))
+		}
 	}
 
 	return nil
