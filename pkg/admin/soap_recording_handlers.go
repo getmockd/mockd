@@ -194,8 +194,7 @@ func (m *SOAPRecordingManager) handleListSOAPRecordings(w http.ResponseWriter, r
 		filter.SOAPAction = soapAction
 	}
 	if hasFault := r.URL.Query().Get("hasFault"); hasFault != "" {
-		b := hasFault == "true"
-		filter.HasFault = &b
+		filter.HasFault = parseOptionalBool(hasFault)
 	}
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if limit, err := strconv.Atoi(limitStr); err == nil {

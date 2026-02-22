@@ -523,6 +523,16 @@ func TestBuildRequestFilter_IgnoresInvalidHasError(t *testing.T) {
 	assert.Nil(t, filter.HasError)
 }
 
+func TestBuildRequestFilter_IgnoresInvalidLimitOffset(t *testing.T) {
+	q := url.Values{}
+	q.Set("limit", "10x")
+	q.Set("offset", "5x")
+
+	filter := buildRequestFilter(q)
+	assert.Equal(t, 0, filter.Limit)
+	assert.Equal(t, 0, filter.Offset)
+}
+
 // TestHandleGetRequest tests the GET /requests/{id} handler.
 func TestHandleGetRequest(t *testing.T) {
 	t.Run("returns 404 for non-existent request", func(t *testing.T) {
