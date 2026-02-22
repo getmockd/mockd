@@ -3,7 +3,6 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -67,15 +66,11 @@ func (pm *ProxyManager) handleListRecordings(w http.ResponseWriter, r *http.Requ
 	if path := r.URL.Query().Get("path"); path != "" {
 		filter.Path = path
 	}
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if limit, err := strconv.Atoi(limitStr); err == nil {
-			filter.Limit = limit
-		}
+	if limit, ok := parsePositiveInt(r.URL.Query().Get("limit")); ok {
+		filter.Limit = limit
 	}
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if offset, err := strconv.Atoi(offsetStr); err == nil {
-			filter.Offset = offset
-		}
+	if offset, ok := parseNonNegativeInt(r.URL.Query().Get("offset")); ok {
+		filter.Offset = offset
 	}
 
 	recordings, total := pm.store.ListRecordings(filter)
@@ -340,10 +335,15 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 
 	// Check if we should add to engine (from JSON body or query param)
 	addToServer := shouldAddToServer(req.AddToServer, r.URL.Query().Get("add"))
-	if addToServer && client != nil {
+	if addToServer && client == nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
+		return
+	}
+	if addToServer {
 		if _, err := client.CreateMock(r.Context(), mock); err != nil {
 			pm.log.Error("failed to add mock to engine", "error", err)
-			writeError(w, http.StatusInternalServerError, "add_error", ErrMsgInternalError)
+			status, code, msg := mapCreateMockAddError(err, pm.log, "add converted recording mock")
+			writeError(w, status, code, msg)
 			return
 		}
 	}
@@ -424,6 +424,10 @@ func (pm *ProxyManager) handleConvertSession(w http.ResponseWriter, r *http.Requ
 	if r.Body != nil && r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_json", ErrMsgInvalidJSON)
+			return
+		}
+		if req.AddToServer && client == nil {
+			writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
 			return
 		}
 	}

@@ -530,4 +530,56 @@ func TestHandleListRecordings_LimitParsing(t *testing.T) {
 			t.Fatalf("expected 0 recordings after large offset, got %d", len(resp.Recordings))
 		}
 	})
+
+	t.Run("negative limit and offset are ignored", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/recordings?limit=-1&offset=-2", nil)
+		rec := httptest.NewRecorder()
+
+		pm.handleListRecordings(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+
+		var resp RecordingListResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Limit != 0 {
+			t.Fatalf("expected limit=0 for invalid negative limit, got %d", resp.Limit)
+		}
+		if resp.Offset != 0 {
+			t.Fatalf("expected offset=0 for invalid negative offset, got %d", resp.Offset)
+		}
+		if len(resp.Recordings) != 2 {
+			t.Fatalf("expected all recordings when negative pagination ignored, got %d", len(resp.Recordings))
+		}
+	})
+}
+
+func TestHandleConvertRecording_AddRequestedWithoutEngine(t *testing.T) {
+	store, _ := createTestStoreWithRecordings(
+		createTestRecording("rec-1", "session-1", "GET", "/api/users"),
+	)
+	pm := &ProxyManager{store: store}
+
+	req := httptest.NewRequest(http.MethodPost, "/recordings/rec-1/convert?add=1", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "rec-1")
+	rec := httptest.NewRecorder()
+
+	pm.handleConvertSingleRecording(rec, req, nil)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if resp.Error != "engine_error" {
+		t.Fatalf("expected engine_error, got %q", resp.Error)
+	}
 }

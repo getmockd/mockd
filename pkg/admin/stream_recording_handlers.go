@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
@@ -208,15 +207,11 @@ func (m *StreamRecordingManager) handleListStreamRecordings(w http.ResponseWrite
 	if status := r.URL.Query().Get("status"); status != "" {
 		filter.Status = status
 	}
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if limit, err := strconv.Atoi(limitStr); err == nil {
-			filter.Limit = limit
-		}
+	if limit, ok := parsePositiveInt(r.URL.Query().Get("limit")); ok {
+		filter.Limit = limit
 	}
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if offset, err := strconv.Atoi(offsetStr); err == nil {
-			filter.Offset = offset
-		}
+	if offset, ok := parseNonNegativeInt(r.URL.Query().Get("offset")); ok {
+		filter.Offset = offset
 	}
 	if sortBy := r.URL.Query().Get("sortBy"); sortBy != "" {
 		filter.SortBy = sortBy
@@ -483,11 +478,16 @@ func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWri
 	}
 
 	// Add to engine if requested
-	if req.AddToServer && client != nil {
+	if req.AddToServer && client == nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
+		return
+	}
+	if req.AddToServer {
 		mockID, addErr := m.addStreamMockToEngine(r.Context(), rec.Protocol, result, req, client)
 		if addErr != nil {
 			m.log.Error("failed to add stream mock to engine", "error", addErr)
-			writeError(w, http.StatusInternalServerError, "add_error", ErrMsgInternalError)
+			status, code, msg := mapStreamAddError(addErr, m.log)
+			writeError(w, status, code, msg)
 			return
 		}
 		response.MockID = mockID

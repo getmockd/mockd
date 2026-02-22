@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"github.com/getmockd/mockd/pkg/logging"
@@ -203,15 +202,11 @@ func (m *MQTTRecordingManager) handleListMQTTRecordings(w http.ResponseWriter, r
 	if direction := r.URL.Query().Get("direction"); direction != "" {
 		filter.Direction = recording.MQTTDirection(direction)
 	}
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if limit, err := strconv.Atoi(limitStr); err == nil {
-			filter.Limit = limit
-		}
+	if limit, ok := parsePositiveInt(r.URL.Query().Get("limit")); ok {
+		filter.Limit = limit
 	}
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if offset, err := strconv.Atoi(offsetStr); err == nil {
-			filter.Offset = offset
-		}
+	if offset, ok := parseNonNegativeInt(r.URL.Query().Get("offset")); ok {
+		filter.Offset = offset
 	}
 
 	recordings, total := m.store.List(filter)
