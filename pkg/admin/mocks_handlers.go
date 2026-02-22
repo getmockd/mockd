@@ -49,44 +49,39 @@ type MockFilter struct {
 	WorkspaceID string
 }
 
-func parseOptionalBool(v string) *bool {
-	if v == "" {
-		return nil
-	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return nil
-	}
-	return &b
-}
-
 // applyPagination applies offset and limit query parameters to a mock slice.
-func applyPagination(mocks []*mock.Mock, query interface{ Get(string) string }) []*mock.Mock {
+func applyPagination(mocks []*mock.Mock, query interface{ Get(string) string }) ([]*mock.Mock, error) {
 	offset := 0
 	limit := 0
 	if v := query.Get("offset"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
+			if n < 0 {
+				return nil, fmt.Errorf("offset must be non-negative")
+			}
 			offset = n
 		}
 	}
 	if v := query.Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
+			if n < 0 {
+				return nil, fmt.Errorf("limit must be non-negative")
+			}
 			limit = n
 		}
 	}
 	if offset <= 0 && limit <= 0 {
-		return mocks
+		return mocks, nil
 	}
 	if offset > 0 {
 		if offset >= len(mocks) {
-			return []*mock.Mock{}
+			return []*mock.Mock{}, nil
 		}
 		mocks = mocks[offset:]
 	}
 	if limit > 0 && limit < len(mocks) {
 		mocks = mocks[:limit]
 	}
-	return mocks
+	return mocks, nil
 }
 
 // applyMockFilter filters mocks in-memory based on filter criteria.
@@ -585,7 +580,11 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 
 		// Apply pagination
 		total := len(mocks)
-		mocks = applyPagination(mocks, query)
+		mocks, err = applyPagination(mocks, query)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+			return
+		}
 
 		writeJSON(w, http.StatusOK, MocksListResponse{
 			Mocks: mocks,
@@ -650,7 +649,11 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	total := len(mocks)
-	mocks = applyPagination(mocks, query)
+	mocks, err = applyPagination(mocks, query)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
 
 	writeJSON(w, http.StatusOK, MocksListResponse{
 		Mocks: mocks,

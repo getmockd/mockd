@@ -106,11 +106,6 @@ func (a *API) handleGetSSEConnection(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
-// CloseConnectionRequest represents a request to close an SSE connection.
-type CloseConnectionRequest struct {
-	Graceful bool `json:"graceful,omitempty"`
-}
-
 // handleCloseSSEConnection handles DELETE /sse/connections/{id}.
 func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -127,7 +122,7 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse optional request body
-	var req CloseConnectionRequest
+	var req struct{}
 	if err := decodeOptionalJSONBody(r, &req); err != nil {
 		writeJSONDecodeError(w, err, a.logger())
 		return
@@ -148,7 +143,6 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"message":    "Connection closed",
 		"connection": id,
-		"graceful":   req.Graceful,
 	})
 }
 

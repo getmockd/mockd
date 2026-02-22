@@ -337,9 +337,26 @@ func TestApplyPagination_OffsetBeyondLengthReturnsEmptySlice(t *testing.T) {
 	q := url.Values{}
 	q.Set("offset", "10")
 
-	got := applyPagination(mocks, q)
+	got, err := applyPagination(mocks, q)
+	assert.NoError(t, err)
 	assert.NotNil(t, got)
 	assert.Len(t, got, 0)
+}
+
+func TestApplyPagination_NegativeValuesReturnError(t *testing.T) {
+	mocks := []*mock.Mock{{ID: "m1"}}
+	q := url.Values{}
+	q.Set("offset", "-1")
+
+	got, err := applyPagination(mocks, q)
+	assert.Error(t, err)
+	assert.Nil(t, got)
+
+	q = url.Values{}
+	q.Set("limit", "-2")
+	got, err = applyPagination(mocks, q)
+	assert.Error(t, err)
+	assert.Nil(t, got)
 }
 
 func TestMapMockLookupError(t *testing.T) {

@@ -25,3 +25,14 @@ func parseNonNegativeInt(v string) (int, bool) {
 	}
 	return n, true
 }
+
+func parseOptionalBool(v string) *bool {
+	if v == "" {
+		return nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return nil
+	}
+	return &b
+}
