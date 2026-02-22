@@ -72,13 +72,22 @@ func (pm *ProxyManager) handleListRecordings(w http.ResponseWriter, r *http.Requ
 			filter.Limit = limit
 		}
 	}
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if offset, err := strconv.Atoi(offsetStr); err == nil {
+			filter.Offset = offset
+		}
+	}
 
 	recordings, total := pm.store.ListRecordings(filter)
+	if recordings == nil {
+		recordings = []*recording.Recording{}
+	}
 
 	writeJSON(w, http.StatusOK, RecordingListResponse{
 		Recordings: recordings,
 		Total:      total,
 		Limit:      filter.Limit,
+		Offset:     filter.Offset,
 	})
 }
 

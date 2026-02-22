@@ -485,4 +485,49 @@ func TestHandleListRecordings_LimitParsing(t *testing.T) {
 			t.Fatalf("expected 1 recording, got %d", len(resp.Recordings))
 		}
 	})
+
+	t.Run("offset is applied", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/recordings?offset=1", nil)
+		rec := httptest.NewRecorder()
+
+		pm.handleListRecordings(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		var resp RecordingListResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.Offset != 1 {
+			t.Fatalf("expected offset=1, got %d", resp.Offset)
+		}
+		if len(resp.Recordings) != 1 {
+			t.Fatalf("expected 1 recording after offset, got %d", len(resp.Recordings))
+		}
+	})
+
+	t.Run("offset beyond total returns empty array", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/recordings?offset=99", nil)
+		rec := httptest.NewRecorder()
+
+		pm.handleListRecordings(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		var resp RecordingListResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.Offset != 99 {
+			t.Fatalf("expected offset=99, got %d", resp.Offset)
+		}
+		if resp.Recordings == nil {
+			t.Fatalf("expected empty array, got nil")
+		}
+		if len(resp.Recordings) != 0 {
+			t.Fatalf("expected 0 recordings after large offset, got %d", len(resp.Recordings))
+		}
+	})
 }

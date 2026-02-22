@@ -155,7 +155,7 @@ func (s *Store) ListRecordings(filter RecordingFilter) ([]*Recording, int) {
 	// Apply pagination
 	if filter.Offset > 0 {
 		if filter.Offset >= len(all) {
-			return nil, total
+			return []*Recording{}, total
 		}
 		all = all[filter.Offset:]
 	}
