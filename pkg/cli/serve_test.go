@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -246,6 +250,30 @@ func TestFormatPortError(t *testing.T) {
 		msg := err.Error()
 		if msg == "" {
 			t.Error("expected non-empty error message")
+		}
+	})
+
+	t.Run("permission denied is not reported as in use", func(t *testing.T) {
+		err := formatPortError(3000, fmt.Errorf("listen tcp :3000: bind: %w", syscall.EPERM))
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "already in use") {
+			t.Fatalf("unexpected in-use message: %q", err.Error())
+		}
+		if !strings.Contains(msg, "could not bind port 3000") {
+			t.Fatalf("unexpected message: %q", err.Error())
+		}
+	})
+
+	t.Run("unexpected port check error is surfaced", func(t *testing.T) {
+		err := formatPortError(3000, errors.New("network namespace unavailable"))
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "failed to check port 3000 availability") {
+			t.Fatalf("unexpected message: %q", err.Error())
 		}
 	})
 }

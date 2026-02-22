@@ -377,8 +377,17 @@ func runStart(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// formatPortError formats a port conflict error with suggestions.
-func formatPortError(port int, _ error) error {
+// formatPortError formats a port availability error with suggestions.
+func formatPortError(port int, err error) error {
+	if err != nil {
+		if isPermissionDeniedError(err) {
+			return fmt.Errorf("could not bind port %d to check availability: %v", port, err)
+		}
+		if !isAddrInUseError(err) {
+			return fmt.Errorf("failed to check port %d availability: %w", port, err)
+		}
+	}
+
 	return fmt.Errorf(`port %d already in use
 
 Suggestions:

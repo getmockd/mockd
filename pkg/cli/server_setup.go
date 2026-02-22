@@ -413,3 +413,12 @@ func isAddrInUseError(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "address already in use") || strings.Contains(msg, "eaddrinuse")
 }
+
+// isPermissionDeniedError checks if an error indicates bind/listen was blocked by permissions.
+func isPermissionDeniedError(err error) bool {
+	if errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "permission denied") || strings.Contains(msg, "operation not permitted")
+}
