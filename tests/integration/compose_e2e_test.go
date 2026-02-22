@@ -18,6 +18,16 @@ import (
 	"time"
 )
 
+type adminEnginesResponse struct {
+	Engines []struct {
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		Port     int    `json:"port"`
+		Status   string `json:"status"`
+		LastSeen string `json:"lastSeen"`
+	} `json:"engines"`
+}
+
 // ============================================================================
 // Test: mockd validate
 // ============================================================================
@@ -168,6 +178,148 @@ engines:
 				err, stdout.String(), stderr.String())
 		}
 	})
+}
+
+func TestBinaryE2E_SplitRegistrationHeartbeatFast(t *testing.T) {
+	binaryPath := buildBinary(t)
+
+	adminPort := GetFreePortSafe()
+	engineHTTPPort := GetFreePortSafe()
+
+	tmpDir := t.TempDir()
+	adminCfgPath := filepath.Join(tmpDir, "admin.yaml")
+	engineCfgPath := filepath.Join(tmpDir, "engine.yaml")
+
+	adminCfg := fmt.Sprintf(`version: "1.0"
+admins:
+  - name: main
+    port: %d
+    auth:
+      type: none
+    persistence:
+      path: %s
+`, adminPort, filepath.Join(tmpDir, "admin-data"))
+
+	engineCfg := fmt.Sprintf(`version: "1.0"
+admins:
+  - name: main
+    url: http://127.0.0.1:%d
+engines:
+  - name: worker
+    httpPort: %d
+    admin: main
+`, adminPort, engineHTTPPort)
+
+	if err := os.WriteFile(adminCfgPath, []byte(adminCfg), 0644); err != nil {
+		t.Fatalf("write admin config: %v", err)
+	}
+	if err := os.WriteFile(engineCfgPath, []byte(engineCfg), 0644); err != nil {
+		t.Fatalf("write engine config: %v", err)
+	}
+
+	startUp := func(t *testing.T, cfgPath string, home string) (*exec.Cmd, *bytes.Buffer, *bytes.Buffer) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		t.Cleanup(cancel)
+
+		cmd := exec.CommandContext(ctx, binaryPath, "up", "-f", cfgPath)
+		cmd.Dir = "../.."
+		cmd.Env = append(os.Environ(),
+			"HOME="+home,
+			"XDG_DATA_HOME="+filepath.Join(home, ".local", "share"),
+			"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
+		)
+
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		if err := cmd.Start(); err != nil {
+			t.Fatalf("start mockd up (%s): %v", cfgPath, err)
+		}
+		t.Cleanup(func() {
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			_, _ = cmd.Process.Wait()
+		})
+		return cmd, &stdout, &stderr
+	}
+
+	adminHome := filepath.Join(tmpDir, "admin-home")
+	engineHome := filepath.Join(tmpDir, "engine-home")
+	_ = os.MkdirAll(adminHome, 0755)
+	_ = os.MkdirAll(engineHome, 0755)
+
+	adminCmd, adminStdout, adminStderr := startUp(t, adminCfgPath, adminHome)
+	_ = adminCmd
+	adminURL := fmt.Sprintf("http://127.0.0.1:%d", adminPort)
+	if !waitForServer(adminURL+"/health", 15*time.Second) {
+		t.Fatalf("admin did not become ready\nstdout: %s\nstderr: %s", adminStdout.String(), adminStderr.String())
+	}
+
+	engineCmd, engineStdout, engineStderr := startUp(t, engineCfgPath, engineHome)
+	_ = engineCmd
+	engineURL := fmt.Sprintf("http://127.0.0.1:%d", engineHTTPPort)
+	if !waitForServer(engineURL+"/__mockd/health", 15*time.Second) {
+		t.Fatalf("engine did not become ready\nstdout: %s\nstderr: %s", engineStdout.String(), engineStderr.String())
+	}
+
+	getWorker := func(t *testing.T) (port int, status string, lastSeen time.Time) {
+		t.Helper()
+		resp, err := http.Get(adminURL + "/engines")
+		if err != nil {
+			t.Fatalf("GET /engines failed: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("GET /engines status=%d body=%s", resp.StatusCode, string(body))
+		}
+		var out adminEnginesResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode /engines: %v", err)
+		}
+		for _, e := range out.Engines {
+			if e.Name != "worker" {
+				continue
+			}
+			parsed, err := time.Parse(time.RFC3339Nano, e.LastSeen)
+			if err != nil {
+				t.Fatalf("parse worker lastSeen %q: %v", e.LastSeen, err)
+			}
+			return e.Port, e.Status, parsed
+		}
+		t.Fatalf("worker engine not found in /engines response")
+		return 0, "", time.Time{}
+	}
+
+	workerControlPort, status1, lastSeen1 := getWorker(t)
+	if status1 != "online" {
+		t.Fatalf("worker status=%q, want online", status1)
+	}
+	if workerControlPort <= 0 {
+		t.Fatalf("worker control port invalid: %d", workerControlPort)
+	}
+	if workerControlPort == engineHTTPPort {
+		t.Fatalf("worker registered port=%d should be control API port, not HTTP port=%d", workerControlPort, engineHTTPPort)
+	}
+
+	// The registered port should be the engine control API and expose /health.
+	if !waitForServer(fmt.Sprintf("http://127.0.0.1:%d/health", workerControlPort), 5*time.Second) {
+		t.Fatalf("worker control API port %d not reachable", workerControlPort)
+	}
+
+	// Heartbeat interval is ~10s in `mockd up`; wait a bit longer and ensure lastSeen advances
+	// without waiting for the full 30s offline timeout.
+	time.Sleep(12 * time.Second)
+	_, status2, lastSeen2 := getWorker(t)
+	if status2 != "online" {
+		t.Fatalf("worker status after heartbeat window=%q, want online", status2)
+	}
+	if !lastSeen2.After(lastSeen1) {
+		t.Fatalf("worker lastSeen did not advance: before=%s after=%s", lastSeen1, lastSeen2)
+	}
 }
 
 // ============================================================================
