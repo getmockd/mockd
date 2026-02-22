@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -343,10 +344,11 @@ func (c *EngineClient) fetchMocks(ctx context.Context, workspaceID string) ([]*c
 }
 
 func buildMocksURL(adminURL, workspaceID string) (string, error) {
-	u, err := url.Parse(adminURL + "/mocks")
+	u, err := url.Parse(adminURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid admin URL: %w", err)
 	}
+	u.Path = strings.TrimRight(u.Path, "/") + "/mocks"
 	q := u.Query()
 	q.Set("workspaceId", workspaceID)
 	u.RawQuery = q.Encode()

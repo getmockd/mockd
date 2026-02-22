@@ -33,6 +33,18 @@ func TestBuildMocksURL_EncodesWorkspaceID(t *testing.T) {
 	}
 }
 
+func TestBuildMocksURL_HandlesTrailingSlashAndBasePath(t *testing.T) {
+	t.Parallel()
+
+	got, err := buildMocksURL("http://admin.example/api/", "ws-1")
+	if err != nil {
+		t.Fatalf("buildMocksURL returned error: %v", err)
+	}
+	if got != "http://admin.example/api/mocks?workspaceId=ws-1" {
+		t.Fatalf("unexpected URL: %q", got)
+	}
+}
+
 func TestSyncWorkspaces_RemovesUnassignedWorkspace(t *testing.T) {
 	t.Parallel()
 
