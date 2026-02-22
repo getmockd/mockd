@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -419,6 +420,38 @@ func TestHandleImportConfig(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
+	t.Run("supports dryRun query bool variants", func(t *testing.T) {
+		api := NewAPI(0)
+
+		importData := map[string]interface{}{
+			"config": map[string]interface{}{
+				"version": "1.0",
+				"mocks": []map[string]interface{}{
+					{
+						"id":      "imported-mock",
+						"name":    "Imported Mock",
+						"enabled": true,
+						"type":    "http",
+					},
+				},
+			},
+		}
+		body, _ := json.Marshal(importData)
+
+		req := httptest.NewRequest("POST", "/config?dryRun=1", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		// dryRun should short-circuit before engine use
+		api.handleImportConfig(rec, req, nil)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp map[string]any
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, true, resp["dryRun"])
+	})
+
 	t.Run("returns error when no engine connected", func(t *testing.T) {
 		api := NewAPI(0)
 
@@ -465,6 +498,29 @@ func TestHandleListRequests(t *testing.T) {
 
 		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
+
+}
+
+func TestBuildRequestFilter_ParsesStatusAndHasError(t *testing.T) {
+	q := url.Values{}
+	q.Set("status", "500")
+	q.Set("hasError", "1")
+	q.Set("method", "GET")
+
+	filter := buildRequestFilter(q)
+	assert.Equal(t, 500, filter.StatusCode)
+	if assert.NotNil(t, filter.HasError) {
+		assert.True(t, *filter.HasError)
+	}
+	assert.Equal(t, "GET", filter.Method)
+}
+
+func TestBuildRequestFilter_IgnoresInvalidHasError(t *testing.T) {
+	q := url.Values{}
+	q.Set("hasError", "sometimes")
+
+	filter := buildRequestFilter(q)
+	assert.Nil(t, filter.HasError)
 }
 
 // TestHandleGetRequest tests the GET /requests/{id} handler.

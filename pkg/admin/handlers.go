@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -253,12 +254,12 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	}
 
 	// Allow replace=true via query param (in addition to JSON body field).
-	if r.URL.Query().Get("replace") == "true" {
+	if replace := parseOptionalBool(r.URL.Query().Get("replace")); replace != nil && *replace {
 		req.Replace = true
 	}
 
 	// If dryRun=true, validate and return a preview without applying changes.
-	if r.URL.Query().Get("dryRun") == "true" {
+	if dryRun := parseOptionalBool(r.URL.Query().Get("dryRun")); dryRun != nil && *dryRun {
 		mockCount := 0
 		for _, m := range req.Config.Mocks {
 			if m != nil {
@@ -398,60 +399,74 @@ func (a *API) handleListRequests(w http.ResponseWriter, r *http.Request, engine 
 	ctx := r.Context()
 
 	// Build filter from query parameters
-	clientFilter := &requestlog.Filter{}
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		var limit int
-		if _, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil {
-			clientFilter.Limit = limit
-		}
-	}
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		var offset int
-		if _, err := fmt.Sscanf(offsetStr, "%d", &offset); err == nil {
-			clientFilter.Offset = offset
-		}
-	}
-	if protocol := r.URL.Query().Get("protocol"); protocol != "" {
-		clientFilter.Protocol = protocol
-	}
-	if method := r.URL.Query().Get("method"); method != "" {
-		clientFilter.Method = method
-	}
-	if path := r.URL.Query().Get("path"); path != "" {
-		clientFilter.Path = path
-	}
-	if matched := r.URL.Query().Get("matched"); matched != "" {
-		clientFilter.MatchedID = matched
-	}
-	// Protocol-specific filters
-	if v := r.URL.Query().Get("grpcService"); v != "" {
-		clientFilter.GRPCService = v
-	}
-	if v := r.URL.Query().Get("mqttTopic"); v != "" {
-		clientFilter.MQTTTopic = v
-	}
-	if v := r.URL.Query().Get("mqttClientId"); v != "" {
-		clientFilter.MQTTClientID = v
-	}
-	if v := r.URL.Query().Get("soapOperation"); v != "" {
-		clientFilter.SOAPOperation = v
-	}
-	if v := r.URL.Query().Get("graphqlOpType"); v != "" {
-		clientFilter.GraphQLOpType = v
-	}
-	if v := r.URL.Query().Get("wsConnectionId"); v != "" {
-		clientFilter.WSConnectionID = v
-	}
-	if v := r.URL.Query().Get("sseConnectionId"); v != "" {
-		clientFilter.SSEConnectionID = v
-	}
-
+	clientFilter := buildRequestFilter(r.URL.Query())
 	result, err := engine.ListRequests(ctx, clientFilter)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.logger(), "list requests"))
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func buildRequestFilter(query interface{ Get(string) string }) *requestlog.Filter {
+	clientFilter := &requestlog.Filter{}
+	if limitStr := query.Get("limit"); limitStr != "" {
+		var limit int
+		if _, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil {
+			clientFilter.Limit = limit
+		}
+	}
+	if offsetStr := query.Get("offset"); offsetStr != "" {
+		var offset int
+		if _, err := fmt.Sscanf(offsetStr, "%d", &offset); err == nil {
+			clientFilter.Offset = offset
+		}
+	}
+	if protocol := query.Get("protocol"); protocol != "" {
+		clientFilter.Protocol = protocol
+	}
+	if method := query.Get("method"); method != "" {
+		clientFilter.Method = method
+	}
+	if path := query.Get("path"); path != "" {
+		clientFilter.Path = path
+	}
+	if matched := query.Get("matched"); matched != "" {
+		clientFilter.MatchedID = matched
+	}
+	if status := query.Get("status"); status != "" {
+		if code, err := strconv.Atoi(status); err == nil {
+			clientFilter.StatusCode = code
+		}
+	}
+	if hasError := query.Get("hasError"); hasError != "" {
+		if parsed, err := strconv.ParseBool(hasError); err == nil {
+			clientFilter.HasError = &parsed
+		}
+	}
+	// Protocol-specific filters
+	if v := query.Get("grpcService"); v != "" {
+		clientFilter.GRPCService = v
+	}
+	if v := query.Get("mqttTopic"); v != "" {
+		clientFilter.MQTTTopic = v
+	}
+	if v := query.Get("mqttClientId"); v != "" {
+		clientFilter.MQTTClientID = v
+	}
+	if v := query.Get("soapOperation"); v != "" {
+		clientFilter.SOAPOperation = v
+	}
+	if v := query.Get("graphqlOpType"); v != "" {
+		clientFilter.GraphQLOpType = v
+	}
+	if v := query.Get("wsConnectionId"); v != "" {
+		clientFilter.WSConnectionID = v
+	}
+	if v := query.Get("sseConnectionId"); v != "" {
+		clientFilter.SSEConnectionID = v
+	}
+	return clientFilter
 }
 
 // handleGetRequest handles GET /requests/{id}.
