@@ -359,16 +359,36 @@ func (s *Server) Start() error {
 		}()
 	}
 
-	s.running = true
-	s.startTime = time.Now()
-
 	// Start the control API
 	if s.controlAPI != nil {
 		if err := s.controlAPI.Start(); err != nil {
 			s.log.Error("control API server error", "error", err)
-			// Non-fatal: log but continue
+			// Control API is required for admin/CLI orchestration; fail startup and
+			// tear down already-started listeners to avoid a half-running server.
+			if s.httpServer != nil {
+				_ = s.httpServer.Close()
+				s.httpServer = nil
+			}
+			if s.httpsServer != nil {
+				_ = s.httpsServer.Close()
+				s.httpsServer = nil
+			}
+			if s.rateLimiter != nil {
+				s.rateLimiter.Stop()
+				s.rateLimiter = nil
+			}
+			if s.middlewareChain != nil {
+				if closeErr := s.middlewareChain.Close(); closeErr != nil {
+					s.log.Warn("failed to close middleware chain after startup error", "error", closeErr)
+				}
+				s.middlewareChain = nil
+			}
+			return fmt.Errorf("failed to start control API: %w", err)
 		}
 	}
+
+	s.running = true
+	s.startTime = time.Now()
 	s.log.Info("engine started", "http_port", s.cfg.HTTPPort, "https_port", s.cfg.HTTPSPort)
 	return nil
 }

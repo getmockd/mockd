@@ -1434,6 +1434,33 @@ func TestServerStartsOnCorrectPorts(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
+
+	t.Run("startup fails when management port is already in use", func(t *testing.T) {
+		occupiedMgmtLn, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		defer occupiedMgmtLn.Close()
+
+		mgmtPort := occupiedMgmtLn.Addr().(*net.TCPAddr).Port
+		httpPort := getFreePort()
+		cfg := &config.ServerConfiguration{
+			HTTPPort:       httpPort,
+			ManagementPort: mgmtPort,
+			MaxLogEntries:  100,
+			ReadTimeout:    5,
+			WriteTimeout:   5,
+		}
+		srv := NewServer(cfg)
+
+		err = srv.Start()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to start control API")
+		assert.False(t, srv.IsRunning())
+
+		// Ensure the HTTP listener was torn down after startup failure.
+		time.Sleep(50 * time.Millisecond)
+		_, reqErr := http.Get(fmt.Sprintf("http://localhost:%d/__mockd/health", httpPort))
+		require.Error(t, reqErr)
+	})
 }
 
 func TestServerGracefulShutdown(t *testing.T) {
