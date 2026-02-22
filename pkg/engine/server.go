@@ -311,6 +311,7 @@ func (s *Server) Start() error {
 		// Use synchronous Listen to catch port-in-use errors immediately
 		httpLn, err := net.Listen("tcp", s.httpServer.Addr)
 		if err != nil {
+			s.teardownOnStartupFailure()
 			return fmt.Errorf("failed to listen on HTTP port %d: %w", s.cfg.HTTPPort, err)
 		}
 		// Apply connection limit if configured
@@ -332,6 +333,7 @@ func (s *Server) Start() error {
 		var err error
 		s.tlsConfig, err = s.tlsManager.BuildConfig()
 		if err != nil {
+			s.teardownOnStartupFailure()
 			return fmt.Errorf("failed to setup TLS: %w", err)
 		}
 
@@ -346,6 +348,7 @@ func (s *Server) Start() error {
 		// Use synchronous Listen to catch port-in-use errors immediately
 		httpsLn, err := net.Listen("tcp", s.httpsServer.Addr)
 		if err != nil {
+			s.teardownOnStartupFailure()
 			return fmt.Errorf("failed to listen on HTTPS port %d: %w", s.cfg.HTTPSPort, err)
 		}
 		// Apply connection limit if configured
@@ -365,31 +368,7 @@ func (s *Server) Start() error {
 	if s.controlAPI != nil {
 		if err := s.controlAPI.Start(); err != nil {
 			s.log.Error("control API server error", "error", err)
-			// Control API is required for admin/CLI orchestration; fail startup and
-			// tear down already-started listeners to avoid a half-running server.
-			if protocolErrs := s.protocolManager.StopAll(context.Background(), 5*time.Second); len(protocolErrs) > 0 {
-				for _, stopErr := range protocolErrs {
-					s.log.Warn("failed to stop protocol handler after startup error", "error", stopErr)
-				}
-			}
-			if s.httpServer != nil {
-				_ = s.httpServer.Close()
-				s.httpServer = nil
-			}
-			if s.httpsServer != nil {
-				_ = s.httpsServer.Close()
-				s.httpsServer = nil
-			}
-			if s.rateLimiter != nil {
-				s.rateLimiter.Stop()
-				s.rateLimiter = nil
-			}
-			if s.middlewareChain != nil {
-				if closeErr := s.middlewareChain.Close(); closeErr != nil {
-					s.log.Warn("failed to close middleware chain after startup error", "error", closeErr)
-				}
-				s.middlewareChain = nil
-			}
+			s.teardownOnStartupFailure()
 			return fmt.Errorf("failed to start control API: %w", err)
 		}
 	}
@@ -398,6 +377,36 @@ func (s *Server) Start() error {
 	s.startTime = time.Now()
 	s.log.Info("engine started", "http_port", s.cfg.HTTPPort, "https_port", s.cfg.HTTPSPort)
 	return nil
+}
+
+// teardownOnStartupFailure cleans up resources that were already started when
+// a later step in Start() fails. This prevents protocol handlers, HTTP servers,
+// and middleware from leaking ports and goroutines on partial startup.
+// The caller must hold s.mu.
+func (s *Server) teardownOnStartupFailure() {
+	if protocolErrs := s.protocolManager.StopAll(context.Background(), 5*time.Second); len(protocolErrs) > 0 {
+		for _, stopErr := range protocolErrs {
+			s.log.Warn("failed to stop protocol handler after startup error", "error", stopErr)
+		}
+	}
+	if s.httpServer != nil {
+		_ = s.httpServer.Close()
+		s.httpServer = nil
+	}
+	if s.httpsServer != nil {
+		_ = s.httpsServer.Close()
+		s.httpsServer = nil
+	}
+	if s.rateLimiter != nil {
+		s.rateLimiter.Stop()
+		s.rateLimiter = nil
+	}
+	if s.middlewareChain != nil {
+		if closeErr := s.middlewareChain.Close(); closeErr != nil {
+			s.log.Warn("failed to close middleware chain after startup error", "error", closeErr)
+		}
+		s.middlewareChain = nil
+	}
 }
 
 // Stop gracefully shuts down the server.
