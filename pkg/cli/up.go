@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -43,9 +44,14 @@ type upContext struct {
 
 	// Engine registration info (populated after HTTP registration)
 	engineIDs map[string]string // engine name -> registered engine ID
+	// Engine auth tokens returned by registration (used for heartbeat/unregister on remote admins)
+	engineTokens map[string]string // engine name -> engine token
 
 	// Workspace IDs created via HTTP (workspace config name -> workspace ID)
 	workspaceIDs map[string]string
+
+	heartbeatWG       sync.WaitGroup
+	heartbeatInterval time.Duration
 }
 
 var (
@@ -112,8 +118,10 @@ This command:
 			tunnels:      make(map[string]*tunnel.TunnelManager),
 			adminClients: make(map[string]AdminClient),
 			engineIDs:    make(map[string]string),
+			engineTokens: make(map[string]string),
 			workspaceIDs: make(map[string]string),
 		}
+		uctx.heartbeatInterval = 10 * time.Second
 
 		// Initialize logger
 		uctx.log = logging.New(logging.Config{
@@ -255,18 +263,21 @@ func (uctx *upContext) run() error {
 
 	// Start all services
 	if err := uctx.startAll(); err != nil {
+		uctx.cancel()
 		uctx.stopAll()
 		return err
 	}
 
 	// Load and apply mocks from config (including file references and globs)
 	if err := uctx.loadAndApplyMocks(); err != nil {
+		uctx.cancel()
 		uctx.stopAll()
 		return fmt.Errorf("loading mocks: %w", err)
 	}
 
 	// Load and apply stateful resources from config
 	if err := uctx.loadAndApplyStatefulResources(); err != nil {
+		uctx.cancel()
 		uctx.stopAll()
 		return fmt.Errorf("loading stateful resources: %w", err)
 	}
@@ -290,6 +301,9 @@ func (uctx *upContext) run() error {
 	// Wait for shutdown signal
 	<-sigCh
 	fmt.Println("\nShutting down...")
+
+	// Stop background loops before tearing down services.
+	uctx.cancel()
 
 	// Graceful shutdown
 	uctx.stopAll()
@@ -633,12 +647,63 @@ func (uctx *upContext) connectEngineToAdmin(engineCfg config.EngineConfig) error
 	}
 
 	uctx.engineIDs[engineCfg.Name] = result.ID
+	uctx.engineTokens[engineCfg.Name] = result.Token
+	uctx.startEngineHeartbeatLoop(engineCfg)
 
 	fmt.Printf("Registered engine '%s' with admin '%s' (id=%s)\n", engineCfg.Name, engineCfg.Admin, result.ID)
 	return nil
 }
 
+func (uctx *upContext) startEngineHeartbeatLoop(engineCfg config.EngineConfig) {
+	engineID := uctx.engineIDs[engineCfg.Name]
+	if engineID == "" {
+		return
+	}
+	client, ok := uctx.adminClients[engineCfg.Admin]
+	if !ok {
+		return
+	}
+	token := uctx.engineTokens[engineCfg.Name]
+	interval := uctx.heartbeatInterval
+	if interval <= 0 {
+		interval = 10 * time.Second
+	}
+
+	uctx.heartbeatWG.Add(1)
+	go func() {
+		defer uctx.heartbeatWG.Done()
+		uctx.runEngineHeartbeatLoop(client, engineCfg, engineID, token, interval)
+	}()
+}
+
+type engineHeartbeatClient interface {
+	HeartbeatEngine(engineID, token string) error
+}
+
+func (uctx *upContext) runEngineHeartbeatLoop(client engineHeartbeatClient, engineCfg config.EngineConfig, engineID, token string, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-uctx.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := client.HeartbeatEngine(engineID, token); err != nil {
+				uctx.log.Warn("engine heartbeat failed",
+					"engine", engineCfg.Name,
+					"engineId", engineID,
+					"admin", engineCfg.Admin,
+					"error", err,
+				)
+			}
+		}
+	}
+}
+
 func (uctx *upContext) stopAll() {
+	uctx.heartbeatWG.Wait()
+
 	// Stop tunnels first
 	for name, tm := range uctx.tunnels {
 		fmt.Printf("Stopping tunnel '%s'... ", name)

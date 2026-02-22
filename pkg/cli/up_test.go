@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
 )
@@ -377,5 +381,69 @@ func TestUpContext_WritePIDFile(t *testing.T) {
 	}
 	if pidInfo.Services[1].Port != 4280 {
 		t.Errorf("Services[1].Port = %d, want %d", pidInfo.Services[1].Port, 4280)
+	}
+}
+
+type heartbeatCall struct {
+	engineID string
+	token    string
+}
+
+type fakeHeartbeatAdminClient struct {
+	mu    sync.Mutex
+	calls []heartbeatCall
+	ch    chan heartbeatCall
+}
+
+func (f *fakeHeartbeatAdminClient) HeartbeatEngine(engineID, token string) error {
+	call := heartbeatCall{engineID: engineID, token: token}
+	f.mu.Lock()
+	f.calls = append(f.calls, call)
+	f.mu.Unlock()
+	if f.ch != nil {
+		select {
+		case f.ch <- call:
+		default:
+		}
+	}
+	return nil
+}
+
+func TestUpContext_RunEngineHeartbeatLoop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	uctx := &upContext{
+		ctx: ctx,
+		log: slog.Default(),
+	}
+
+	fake := &fakeHeartbeatAdminClient{ch: make(chan heartbeatCall, 4)}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		uctx.runEngineHeartbeatLoop(fake, config.EngineConfig{Name: "worker", Admin: "main"}, "eng-123", "tok-abc", 10*time.Millisecond)
+	}()
+
+	var got heartbeatCall
+	select {
+	case got = <-fake.ch:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("timed out waiting for heartbeat")
+	}
+
+	if got.engineID != "eng-123" {
+		t.Fatalf("engineID=%q want %q", got.engineID, "eng-123")
+	}
+	if got.token != "tok-abc" {
+		t.Fatalf("token=%q want %q", got.token, "tok-abc")
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("heartbeat loop did not stop after context cancellation")
 	}
 }

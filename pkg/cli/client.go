@@ -76,6 +76,8 @@ type AdminClient interface {
 	CreateWorkspace(name string) (*WorkspaceResult, error)
 	// RegisterEngine registers an engine with the admin.
 	RegisterEngine(name, host string, port int) (*RegisterEngineResult, error)
+	// HeartbeatEngine updates engine liveness on the admin.
+	HeartbeatEngine(engineID, token string) error
 	// AddEngineWorkspace assigns a workspace to an engine.
 	AddEngineWorkspace(engineID, workspaceID, workspaceName string) error
 	// BulkCreateMocks creates multiple mocks in a single request.
@@ -907,6 +909,37 @@ func (c *adminClient) RegisterEngine(name, host string, port int) (*RegisterEngi
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	return &result, nil
+}
+
+// HeartbeatEngine sends an engine heartbeat to the admin.
+// If token is provided, it is sent as a Bearer token (used for remote admins).
+func (c *adminClient) HeartbeatEngine(engineID, token string) error {
+	req, err := http.NewRequest(http.MethodPost, c.baseURL+"/engines/"+url.PathEscape(engineID)+"/heartbeat", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set(APIKeyHeader, c.apiKey)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return &APIError{
+			StatusCode: 0,
+			ErrorCode:  "connection_error",
+			Message:    fmt.Sprintf("cannot connect to admin API at %s: %v", c.baseURL, err),
+		}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
 }
 
 // AddEngineWorkspace assigns a workspace to an engine.
