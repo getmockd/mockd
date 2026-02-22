@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
@@ -31,14 +32,16 @@ func (a *API) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 	stats, err := engine.GetSSEStats(ctx)
 	if err != nil {
 		a.logger().Error("failed to get SSE stats", "error", err)
-		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
+		status, code, msg := mapSSEEngineError(err, a.logger(), "get SSE stats")
+		writeError(w, status, code, msg)
 		return
 	}
 
 	connections, err := engine.ListSSEConnections(ctx)
 	if err != nil {
 		a.logger().Error("failed to list SSE connections", "error", err)
-		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
+		status, code, msg := mapSSEEngineError(err, a.logger(), "list SSE connections")
+		writeError(w, status, code, msg)
 		return
 	}
 
@@ -91,7 +94,8 @@ func (a *API) handleGetSSEConnection(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.logger().Error("failed to get SSE connection", "error", err, "connectionID", id)
-		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
+		status, code, msg := mapSSEEngineError(err, a.logger(), "get SSE connection")
+		writeError(w, status, code, msg)
 		return
 	}
 
@@ -134,7 +138,8 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.logger().Error("failed to close SSE connection", "error", err, "connectionID", id)
-		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
+		status, code, msg := mapSSEEngineError(err, a.logger(), "close SSE connection")
+		writeError(w, status, code, msg)
 		return
 	}
 
@@ -160,7 +165,8 @@ func (a *API) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := engine.GetSSEStats(ctx)
 	if err != nil {
 		a.logger().Error("failed to get SSE stats", "error", err)
-		writeError(w, http.StatusInternalServerError, "engine_error", ErrMsgEngineUnavailable)
+		status, code, msg := mapSSEEngineError(err, a.logger(), "get SSE stats")
+		writeError(w, status, code, msg)
 		return
 	}
 
@@ -286,4 +292,8 @@ func (a *API) handleClearMockSSEBuffer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeError(w, http.StatusNotImplemented, "not_implemented", "SSE buffer access requires direct engine access - coming soon")
+}
+
+func mapSSEEngineError(err error, log *slog.Logger, operation string) (int, string, string) {
+	return http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, log, operation)
 }

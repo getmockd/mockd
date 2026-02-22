@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -65,6 +66,30 @@ func TestAPIKeyMiddleware_DoesNotAcceptQueryParam(t *testing.T) {
 	api.httpServer.Handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rec.Code)
+	}
+}
+
+func TestHandleGetAPIKey_ShowKeyBoolParsing(t *testing.T) {
+	api := NewAPI(0, WithAPIKey("mk_test_key"))
+	defer api.Stop()
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/api-key?show_key=1", nil)
+	rec := httptest.NewRecorder()
+
+	api.handleGetAPIKey(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var info APIKeyInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &info); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if info.Key == "" {
+		t.Fatalf("expected full key to be included when show_key=1")
+	}
+	if !strings.HasPrefix(info.Key, "mk_") {
+		t.Fatalf("unexpected key format: %q", info.Key)
 	}
 }
 
@@ -159,5 +184,18 @@ func TestMapStatefulResourceError(t *testing.T) {
 				t.Fatalf("msg=%q want=%q", msg, tt.wantMsg)
 			}
 		})
+	}
+}
+
+func TestMapSSEEngineError(t *testing.T) {
+	status, code, msg := mapSSEEngineError(errors.New("dial tcp 127.0.0.1:9999: connect: connection refused"), nil, "get SSE stats")
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d want=%d", status, http.StatusServiceUnavailable)
+	}
+	if code != "engine_error" {
+		t.Fatalf("code=%q want=%q", code, "engine_error")
+	}
+	if msg != ErrMsgEngineUnavailable {
+		t.Fatalf("msg=%q want=%q", msg, ErrMsgEngineUnavailable)
 	}
 }
