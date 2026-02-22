@@ -418,7 +418,8 @@ func (s *Server) handleResetState(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.engine.ResetState(req.Resource)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "resource not found")
+		status, code := mapStatefulLookupError(err)
+		writeError(w, status, code, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -428,7 +429,8 @@ func (s *Server) handleGetStateResource(w http.ResponseWriter, r *http.Request) 
 	name := r.PathValue("name")
 	resource, err := s.engine.GetStateResource(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "resource not found")
+		status, code := mapStatefulLookupError(err)
+		writeError(w, status, code, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, resource)
@@ -438,7 +440,8 @@ func (s *Server) handleClearStateResource(w http.ResponseWriter, r *http.Request
 	name := r.PathValue("name")
 	count, err := s.engine.ClearStateResource(name)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "resource not found")
+		status, code := mapStatefulLookupError(err)
+		writeError(w, status, code, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -478,7 +481,8 @@ func (s *Server) handleListStatefulItems(w http.ResponseWriter, r *http.Request)
 
 	resp, err := s.engine.ListStatefulItems(name, limit, offset, sort, order)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "resource not found")
+		status, code := mapStatefulLookupError(err)
+		writeError(w, status, code, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -490,7 +494,8 @@ func (s *Server) handleGetStatefulItem(w http.ResponseWriter, r *http.Request) {
 
 	item, err := s.engine.GetStatefulItem(name, id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		status, code := mapStatefulLookupError(err)
+		writeError(w, status, code, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
@@ -759,6 +764,13 @@ func mapCreateStatefulItemError(err error) (int, string) {
 	default:
 		return http.StatusBadRequest, "create_failed"
 	}
+}
+
+func mapStatefulLookupError(err error) (int, string) {
+	if strings.Contains(strings.ToLower(err.Error()), "not found") {
+		return http.StatusNotFound, "not_found"
+	}
+	return http.StatusInternalServerError, "state_error"
 }
 
 // writeJSON writes a JSON response using the shared httputil package.

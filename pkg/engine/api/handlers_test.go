@@ -40,6 +40,11 @@ type mockEngine struct {
 	updateMockErr         error
 	deleteMockErr         error
 	createStatefulItemErr error
+	getStateResourceErr   error
+	clearStateResourceErr error
+	resetStateErr         error
+	listStatefulItemsErr  error
+	getStatefulItemErr    error
 }
 
 func newMockEngine() *mockEngine {
@@ -179,14 +184,23 @@ func (m *mockEngine) GetStateOverview() *StateOverview {
 }
 
 func (m *mockEngine) GetStateResource(name string) (*StatefulResource, error) {
+	if m.getStateResourceErr != nil {
+		return nil, m.getStateResourceErr
+	}
 	return nil, errors.New("resource not found")
 }
 
 func (m *mockEngine) ClearStateResource(name string) (int, error) {
+	if m.clearStateResourceErr != nil {
+		return 0, m.clearStateResourceErr
+	}
 	return 0, errors.New("resource not found")
 }
 
 func (m *mockEngine) ResetState(resourceName string) (*ResetStateResponse, error) {
+	if m.resetStateErr != nil {
+		return nil, m.resetStateErr
+	}
 	return &ResetStateResponse{Reset: true, Resources: []string{}, Message: "state reset"}, nil
 }
 
@@ -195,12 +209,18 @@ func (m *mockEngine) RegisterStatefulResource(cfg *config.StatefulResourceConfig
 }
 
 func (m *mockEngine) ListStatefulItems(name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error) {
+	if m.listStatefulItemsErr != nil {
+		return nil, m.listStatefulItemsErr
+	}
 	return &StatefulItemsResponse{
 		Data: []map[string]interface{}{},
 	}, nil
 }
 
 func (m *mockEngine) GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error) {
+	if m.getStatefulItemErr != nil {
+		return nil, m.getStatefulItemErr
+	}
 	return nil, errors.New("item not found")
 }
 
@@ -618,6 +638,46 @@ func TestHandleCreateStatefulItem_ErrorMapping(t *testing.T) {
 			assert.Equal(t, tt.wantCode, resp.Error)
 		})
 	}
+}
+
+func TestStatefulLookupHandlers_Return500ForInternalErrors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("get state resource", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.getStateResourceErr = errors.New("stateful store not initialized")
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/state/resources/users", nil)
+		req.SetPathValue("name", "users")
+		rec := httptest.NewRecorder()
+
+		server.handleGetStateResource(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		var resp ErrorResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "state_error", resp.Error)
+	})
+
+	t.Run("list stateful items", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.listStatefulItemsErr = errors.New("stateful store not initialized")
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/state/resources/users/items", nil)
+		req.SetPathValue("name", "users")
+		rec := httptest.NewRecorder()
+
+		server.handleListStatefulItems(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		var resp ErrorResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "state_error", resp.Error)
+	})
 }
 
 // TestHandleListMocks tests the GET /mocks handler.
