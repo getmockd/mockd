@@ -529,6 +529,10 @@ func (uctx *upContext) startAdmin(adminCfg config.AdminConfig) error {
 	if adminCfg.Auth != nil && adminCfg.Auth.Type == "none" {
 		opts = append(opts, admin.WithAPIKeyDisabled())
 	}
+	// Honor admin persistence path when configured so `mockd up` projects can be isolated.
+	if adminCfg.Persistence != nil && adminCfg.Persistence.Path != "" {
+		opts = append(opts, admin.WithDataDir(adminCfg.Persistence.Path))
+	}
 
 	// Create admin API
 	adminAPI := admin.NewAPI(adminCfg.Port, opts...)

@@ -157,7 +157,10 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	// For local workspaces, set default path if not provided
 	if wsType == store.WorkspaceTypeLocal && ws.Path == "" {
-		dataDir := store.DefaultDataDir()
+		dataDir := a.dataDir
+		if dataDir == "" {
+			dataDir = store.DefaultDataDir()
+		}
 		ws.Path = filepath.Join(dataDir, "workspaces", id)
 	}
 
