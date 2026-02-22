@@ -246,9 +246,7 @@ func validateMock(mock *MockEntry, path string, ids map[string]bool, workspaceNa
 
 	// Validate inline mock
 	if mock.IsInline() {
-		if mock.ID == "" {
-			result.AddError(path+".id", "required for inline mock")
-		} else {
+		if mock.ID != "" {
 			if ids[mock.ID] {
 				result.AddError(path+".id", fmt.Sprintf("duplicate mock id %q", mock.ID))
 			}

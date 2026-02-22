@@ -425,6 +425,32 @@ func TestValidateProjectConfig_MockGlob(t *testing.T) {
 	}
 }
 
+func TestValidateProjectConfig_InlineMockWithoutID(t *testing.T) {
+	cfg := &ProjectConfig{
+		Version: "1.0",
+		Admins: []AdminConfig{
+			{Name: "local", Port: 4290},
+		},
+		Engines: []EngineConfig{
+			{Name: "default", HTTPPort: 4280, Admin: "local"},
+		},
+		Mocks: []MockEntry{
+			{
+				Type: "http",
+				HTTP: &HTTPMockConfig{
+					Matcher:  HTTPMatcher{Method: "GET", Path: "/hello"},
+					Response: HTTPResponse{StatusCode: 200, Body: "ok"},
+				},
+			},
+		},
+	}
+
+	result := ValidateProjectConfig(cfg)
+	if !result.IsValid() {
+		t.Fatalf("ValidateProjectConfig returned errors for inline mock without ID: %v", result.Errors)
+	}
+}
+
 func TestValidatePortConflicts(t *testing.T) {
 	cfg := &ProjectConfig{
 		Version: "1.0",
