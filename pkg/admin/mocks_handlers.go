@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/store"
 )
@@ -670,7 +672,8 @@ func (a *API) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	if engine := a.localEngine.Load(); engine != nil {
 		m, err := engine.GetMock(r.Context(), id)
 		if err != nil {
-			writeError(w, http.StatusNotFound, "not_found", "mock not found")
+			status, code, msg := mapMockLookupError(err, a.logger(), "get mock")
+			writeError(w, status, code, msg)
 			return
 		}
 		writeJSON(w, http.StatusOK, m)
@@ -1195,7 +1198,8 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		// Get current state to determine new state
 		existing, err := engine.GetMock(r.Context(), id)
 		if err != nil {
-			writeError(w, http.StatusNotFound, "not_found", "mock not found")
+			status, code, msg := mapMockLookupError(err, a.logger(), "get mock for toggle")
+			writeError(w, status, code, msg)
 			return
 		}
 
@@ -1537,4 +1541,11 @@ func generateShortID() string {
 		return fmt.Sprintf("%x", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b)
+}
+
+func mapMockLookupError(err error, log *slog.Logger, operation string) (int, string, string) {
+	if errors.Is(err, engineclient.ErrNotFound) {
+		return http.StatusNotFound, "not_found", "mock not found"
+	}
+	return http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, log, operation)
 }

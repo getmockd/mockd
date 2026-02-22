@@ -2,10 +2,12 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"testing"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/stretchr/testify/assert"
 )
@@ -338,6 +340,23 @@ func TestApplyPagination_OffsetBeyondLengthReturnsEmptySlice(t *testing.T) {
 	got := applyPagination(mocks, q)
 	assert.NotNil(t, got)
 	assert.Len(t, got, 0)
+}
+
+func TestMapMockLookupError(t *testing.T) {
+	t.Run("not found", func(t *testing.T) {
+		status, code, msg := mapMockLookupError(engineclient.ErrNotFound, nil, "get mock")
+		assert.Equal(t, 404, status)
+		assert.Equal(t, "not_found", code)
+		assert.Equal(t, "mock not found", msg)
+	})
+
+	t.Run("engine unavailable", func(t *testing.T) {
+		err := errors.New("dial tcp 127.0.0.1:9999: connect: connection refused")
+		status, code, msg := mapMockLookupError(err, nil, "get mock")
+		assert.Equal(t, 503, status)
+		assert.Equal(t, "engine_error", code)
+		assert.Equal(t, ErrMsgEngineUnavailable, msg)
+	})
 }
 
 func TestPortConflict(t *testing.T) {
