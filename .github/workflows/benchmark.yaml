@@ -91,21 +91,25 @@ jobs:
           }
           EOF
 
-          # Cleanup
+          # Cleanup — wait for port release before next step
           kill $SERVER_PID 2>/dev/null || true
+          sleep 2
           rm -rf /tmp/mockd-bench
 
       # ── Memory measurement ────────────────────────────────────────
       - name: Measure memory usage
         run: |
-          ./mockd start --port 4281 --admin-port 4291 --no-auth --data-dir /tmp/mockd-mem &
+          # Wait for any previous mockd to fully release ports
           sleep 2
-          PID=$(lsof -ti :4291)
+          ./mockd start --port 14280 --admin-port 14290 --no-auth --data-dir /tmp/mockd-mem &
+          sleep 2
+          PID=$(lsof -ti :14290)
           RSS_KB=$(ps -o rss= -p $PID)
           RSS_MB=$(echo "scale=1; $RSS_KB / 1024" | bc)
           echo "RSS: ${RSS_MB} MB"
           echo "{\"rss_mb\": $RSS_MB}" > /tmp/memory_benchmark.json
           kill $PID 2>/dev/null || true
+          sleep 1
           rm -rf /tmp/mockd-mem
 
       # ── Validate claims ───────────────────────────────────────────
