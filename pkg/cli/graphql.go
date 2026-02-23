@@ -90,6 +90,7 @@ func init() {
 	graphqlAddCmd.Flags().StringVar(&addPath, "path", "", "URL path to match")
 	graphqlAddCmd.Flags().StringVar(&addOperation, "operation", "", "Operation name")
 	graphqlAddCmd.Flags().StringVar(&addOpType, "op-type", "query", "GraphQL operation type (query/mutation)")
+	graphqlAddCmd.Flags().BoolVar(&addMutation, "mutation", false, "Create a Mutation resolver instead of Query")
 	graphqlAddCmd.Flags().StringVar(&addResponse, "response", "", "JSON response data")
 
 	// Add list/get/delete generic aliases

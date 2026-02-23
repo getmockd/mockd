@@ -58,7 +58,9 @@ var (
 	addQoS      int
 	addMQTTPort int
 
-	addSoapAction string
+	addSoapAction  string
+	addActionAlias string
+	addMutation    bool
 
 	addIssuer        string
 	addClientID      string
@@ -115,7 +117,9 @@ func init() {
 	addCmd.Flags().BoolVar(&addEcho, "echo", false, "Enable echo mode for WebSocket")
 
 	addCmd.Flags().StringVar(&addOperation, "operation", "", "Operation name (required for graphql, soap)")
+	addCmd.Flags().StringVar(&addActionAlias, "action", "", "SOAP action name (alias for --operation)")
 	addCmd.Flags().StringVar(&addOpType, "op-type", "query", "GraphQL operation type (query/mutation)")
+	addCmd.Flags().BoolVar(&addMutation, "mutation", false, "Create a Mutation resolver instead of Query (GraphQL)")
 	addCmd.Flags().StringVar(&addResponse, "response", "", "JSON response data (for graphql, grpc)")
 
 	addCmd.Flags().StringVar(&addService, "service", "", "gRPC service name (e.g., greeter.Greeter)")
@@ -143,6 +147,16 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	// Only override if --type wasn't explicitly set by the user
 	if len(args) == 1 && !cmd.Flags().Changed("type") {
 		addMockType = args[0]
+	}
+
+	// Resolve flag aliases:
+	// --action is an alias for --operation (SOAP compatibility)
+	if addActionAlias != "" && addOperation == "" {
+		addOperation = addActionAlias
+	}
+	// --mutation sets op-type to "mutation" (GraphQL shorthand)
+	if addMutation {
+		addOpType = "mutation"
 	}
 
 	// Normalize mock type

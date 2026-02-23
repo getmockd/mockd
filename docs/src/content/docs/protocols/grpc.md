@@ -917,10 +917,8 @@ Output:
 ```
 Created mock: grpc_1dc8695005df8cde
   Type: grpc
-  Added:
-    - helloworld.Greeter/SayHello
-  Total services:
-    - helloworld.Greeter/SayHello
+  Service: helloworld.Greeter
+  Method: SayHello
 ```
 
 When adding multiple methods to the same port, mocks are automatically merged:
