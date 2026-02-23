@@ -66,8 +66,8 @@ brews:
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
-    homepage: "https://mockd.dev"
-    description: "High-performance, local-first HTTP/HTTPS mock server"
+    homepage: "https://mockd.io"
+    description: "High-performance multi-protocol API mocking server"
     license: "Apache-2.0"
     test: |
       system "#{bin}/mockd", "--version"
