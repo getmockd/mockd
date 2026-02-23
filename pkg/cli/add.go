@@ -68,9 +68,20 @@ var (
 )
 
 var addCmd = &cobra.Command{
-	Use:   "add",
+	Use:   "add [type]",
 	Short: "Add a new mock endpoint",
-	RunE:  runAdd,
+	Long: `Add a new mock endpoint.
+
+The mock type can be specified as a positional argument, a flag, or via
+the protocol subcommands:
+
+  mockd add http --path /api/hello          # positional type
+  mockd add --type http --path /api/hello   # flag type
+  mockd http add --path /api/hello          # subcommand
+
+Valid types: http, websocket, graphql, grpc, mqtt, soap, oauth`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runAdd,
 }
 
 func init() {
@@ -128,6 +139,12 @@ func init() {
 }
 
 func runAdd(cmd *cobra.Command, args []string) error {
+	// Accept positional type: "mockd add http --path ..."
+	// Only override if --type wasn't explicitly set by the user
+	if len(args) == 1 && !cmd.Flags().Changed("type") {
+		addMockType = args[0]
+	}
+
 	// Normalize mock type
 	mt := strings.ToLower(addMockType)
 
@@ -1104,4 +1121,3 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 	// Fallback for unknown types
 	return output.JSON(created)
 }
-

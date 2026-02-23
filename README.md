@@ -57,21 +57,19 @@ Pre-built binaries for Linux, macOS, and Windows are available on the [Releases]
 mockd start
 
 # Mock an HTTP endpoint
-mockd add http --method GET --path /api/users \
-  --status 200 --body '[{"id": 1, "name": "Alice"}]'
+mockd add http --path /api/users --body '[{"id": 1, "name": "Alice"}]'
 
 # Test it
 curl http://localhost:4280/api/users
 # → [{"id": 1, "name": "Alice"}]
 
 # Mock a GraphQL API
-mockd add graphql --path /graphql \
-  --schema 'type Query { users: [User] } type User { id: Int, name: String }' \
-  --resolver 'Query.users=[{"id": 1, "name": "Alice"}]'
+mockd add graphql --path /graphql --operation users \
+  --response '[{"id": 1, "name": "Alice"}]'
 
 # Mock a gRPC service
-mockd add grpc --port 50051 --proto ./service.proto \
-  --service myapp.UserService --method GetUser \
+mockd add grpc --proto ./service.proto \
+  --service myapp.UserService --rpc-method GetUser \
   --response '{"id": 1, "name": "Alice"}'
 
 # Mock a WebSocket endpoint
@@ -80,7 +78,7 @@ mockd add websocket --path /ws/chat --echo
 # Import from OpenAPI, Postman, or cURL
 mockd import openapi.yaml
 mockd import collection.json
-echo 'curl -X GET https://api.example.com/users' | mockd import --format curl
+mockd import "curl -X GET https://api.example.com/users"
 ```
 
 ## Features
@@ -93,7 +91,7 @@ Mock **seven protocols** from a single tool with a unified CLI and Admin API:
 |----------|------|---------|
 | HTTP/HTTPS | 4280 | `mockd add http --path /api/hello --body '{"msg":"hi"}'` |
 | gRPC | 50051 | `mockd add grpc --proto service.proto --service Greeter` |
-| GraphQL | 4280 | `mockd add graphql --schema schema.graphql` |
+| GraphQL | 4280 | `mockd add graphql --path /graphql --operation hello` |
 | WebSocket | 4280 | `mockd add websocket --path /ws --echo` |
 | MQTT | 1883 | `mockd add mqtt --topic sensors/temp --payload '{"temp":72}'` |
 | SSE | 4280 | `mockd add http --path /events --sse --sse-event 'data: hello'` |
