@@ -34,7 +34,7 @@ mockd http add --path /stream --sse \
 # SSE with keepalive pings every 15 seconds
 mockd http add --path /long-poll --sse \
   --sse-event 'data:{"value":1}' \
-  --sse-keepalive 15000
+  --sse-keepalive 15
 ```
 
 **CLI SSE Flags:**
@@ -46,7 +46,7 @@ mockd http add --path /long-poll --sse \
 | `--sse-delay` | Delay between events (ms) | `100` |
 | `--sse-template` | Built-in template | |
 | `--sse-repeat` | Repeat count (0 = infinite) | `1` |
-| `--sse-keepalive` | Keepalive interval (ms) | `0` |
+| `--sse-keepalive` | Keepalive interval in seconds (min 5) | `0` |
 
 ### Using Configuration File (YAML)
 
@@ -306,18 +306,18 @@ Use placeholders in event data for dynamic values:
 
 | Placeholder | Description | Example |
 |-------------|-------------|---------|
-| `$random:min:max` | Random integer | `$random:1:100` |
+| `$random(min,max)` | Random integer | `$random(1,100)` |
 | `$uuid` | UUID v4 | `550e8400-e29b-41d4-a716-446655440000` |
 | `$timestamp` | ISO 8601 timestamp | `2024-01-15T10:30:00Z` |
-| `$pick:a,b,c` | Random choice | `$pick:red,green,blue` |
+| `$pick(a,b,c)` | Random choice | `$pick(red,green,blue)` |
 
 Example:
 ```json
 {
   "data": {
     "id": "$uuid",
-    "value": "$random:1:100",
-    "status": "$pick:active,pending,complete",
+    "value": "$random(1,100)",
+    "status": "$pick(active,pending,complete)",
     "timestamp": "$timestamp"
   }
 }

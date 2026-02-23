@@ -766,10 +766,11 @@ mockd mqtt publish <broker> <topic> <message> [flags]
 
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
+| `--message` | `-m` | Message to publish (alternative to positional arg) | |
 | `--qos` | `-q` | QoS level (0, 1, 2) | `0` |
 | `--retain` | `-r` | Retain message | `false` |
 | `--username` | `-u` | MQTT username | |
-| `--password` | `-p` | MQTT password | |
+| `--password` | `-P` | MQTT password | |
 
 ---
 
@@ -787,7 +788,7 @@ mockd mqtt subscribe <broker> <topic> [flags]
 |------|-------|-------------|---------|
 | `--qos` | `-q` | QoS level (0, 1, 2) | `0` |
 | `--username` | `-u` | MQTT username | |
-| `--password` | `-p` | MQTT password | |
+| `--password` | `-P` | MQTT password | |
 | `--count` | `-c` | Number of messages to receive before exiting (0 = infinite) | `0` |
 
 ---
@@ -856,10 +857,16 @@ mockd soap call <endpoint> <action> <body> [flags]
 |------|-------|-------------|---------|
 | `--header` | `-H` | Additional headers (key:value,key2:value2) | |
 | `--pretty` | | Pretty print output | `true` |
+| `--action` | | SOAPAction header value | |
+| `--soap12` | | Use SOAP 1.2 envelope format | `false` |
+| `--timeout` | | Request timeout in seconds | `30` |
 
 **Examples:**
 ```bash
 mockd soap call http://localhost:4280/soap "http://example.com/GetWeather" '<soapenv:Envelope>...</soapenv:Envelope>'
+
+# SOAP 1.2 with custom action
+mockd soap call --soap12 --action "http://example.com/GetWeather" http://localhost:4280/soap GetWeather
 ```
 
 ---
@@ -886,6 +893,46 @@ mockd oauth add [flags]
 ```bash
 mockd oauth add
 mockd oauth add --name "Auth Server" --issuer http://localhost:4280/auth --client-id my-app --client-secret s3cret --oauth-user admin --oauth-password admin123
+```
+
+---
+
+### mockd oauth list
+
+List all OAuth mocks.
+
+```bash
+mockd oauth list [flags]
+```
+
+---
+
+### mockd oauth get
+
+Get details of a specific OAuth mock.
+
+```bash
+mockd oauth get <id> [flags]
+```
+
+---
+
+### mockd oauth delete
+
+Delete an OAuth mock.
+
+```bash
+mockd oauth delete <id> [flags]
+```
+
+---
+
+### mockd oauth status
+
+Show the OAuth provider status.
+
+```bash
+mockd oauth status [flags]
 ```
 
 ---

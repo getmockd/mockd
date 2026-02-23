@@ -857,33 +857,33 @@ Publish a message to an MQTT topic:
 
 ```bash
 # Publish a simple message
-mockd mqtt publish sensors/temperature "25.5"
+mockd mqtt publish localhost:1883 sensors/temperature "25.5"
 
-# Publish with custom broker
-mockd mqtt publish -b mqtt.example.com:1883 sensors/temp "25.5"
+# Publish to a custom broker
+mockd mqtt publish mqtt.example.com:1883 sensors/temp "25.5"
 
 # Publish with authentication
-mockd mqtt publish -u user -P pass sensors/temp "25.5"
+mockd mqtt publish -u user -P pass localhost:1883 sensors/temp "25.5"
 
 # Publish with QoS 1 and retain
-mockd mqtt publish --qos 1 --retain sensors/temp "25.5"
+mockd mqtt publish --qos 1 --retain localhost:1883 sensors/temp "25.5"
 
 # Publish JSON payload
-mockd mqtt publish sensors/data '{"temp": 25.5, "humidity": 60}'
+mockd mqtt publish localhost:1883 sensors/data '{"temp": 25.5, "humidity": 60}'
 
 # Publish from file
-mockd mqtt publish sensors/config @config.json
+mockd mqtt publish localhost:1883 sensors/config @config.json
 ```
 
 Flags:
 
 | Flag | Description |
 |------|-------------|
-| `-b, --broker` | MQTT broker address (default: localhost:1883) |
+| `-m, --message` | Message to publish (alternative to positional arg) |
 | `-u, --username` | MQTT username |
 | `-P, --password` | MQTT password |
-| `--qos` | QoS level 0, 1, or 2 (default: 0) |
-| `--retain` | Retain message on broker |
+| `-q, --qos` | QoS level 0, 1, or 2 (default: 0) |
+| `-r, --retain` | Retain message on broker |
 
 ### mqtt subscribe
 
@@ -900,7 +900,7 @@ mockd mqtt subscribe "sensors/#"
 mockd mqtt subscribe "sensors/+/temperature"
 
 # Receive only 5 messages then exit
-mockd mqtt subscribe -n 5 sensors/temperature
+mockd mqtt subscribe -c 5 sensors/temperature
 
 # Subscribe with timeout
 mockd mqtt subscribe -t 30s sensors/temperature
@@ -916,11 +916,10 @@ Flags:
 
 | Flag | Description |
 |------|-------------|
-| `-b, --broker` | MQTT broker address (default: localhost:1883) |
 | `-u, --username` | MQTT username |
 | `-P, --password` | MQTT password |
-| `--qos` | QoS level 0, 1, or 2 (default: 0) |
-| `-n, --count` | Number of messages to receive (0 = unlimited) |
+| `-q, --qos` | QoS level 0, 1, or 2 (default: 0) |
+| `-c, --count` | Number of messages to receive (0 = unlimited) |
 | `-t, --timeout` | Timeout duration (e.g., 30s, 5m) |
 
 ### mqtt status
@@ -957,12 +956,12 @@ mockd serve --config mockd.yaml &
 mockd mqtt subscribe "sensors/#" &
 
 # Publish test messages
-mockd mqtt publish sensors/temperature '{"value": 25.5}'
-mockd mqtt publish sensors/humidity '{"value": 65}'
+mockd mqtt publish localhost:1883 sensors/temperature '{"value": 25.5}'
+mockd mqtt publish localhost:1883 sensors/humidity '{"value": 65}'
 
 # Test command/response
 mockd mqtt subscribe responses/device &
-mockd mqtt publish commands/device/001 '{"action": "restart"}'
+mockd mqtt publish localhost:1883 commands/device/001 '{"action": "restart"}'
 ```
 
 ### Using Mosquitto Clients

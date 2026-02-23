@@ -520,6 +520,8 @@ services:
 
 ### Error with Details
 
+Error details use structured type keys (`bad_request`, `error_info`, `retry_info`):
+
 ```yaml
 services:
   UserService:
@@ -529,9 +531,15 @@ services:
           code: NOT_FOUND
           message: "User not found"
           details:
-            type: "UserError"
-            user_id: "123"
-            reason: "No user exists with this ID"
+            error_info:
+              reason: "USER_NOT_FOUND"
+              domain: "user-service"
+            bad_request:
+              violations:
+                - field: "user_id"
+                  description: "No user exists with ID 123"
+            retry_info:
+              retry_delay: "5s"
 ```
 
 ### Common gRPC Status Codes

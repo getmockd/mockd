@@ -1016,7 +1016,7 @@ mockd graphql add --path /graphql --operation createUser \
 Output:
 
 ```
-Created mock: graphql_3c1df10ed1566392
+Created mock: gql_3c1df10ed1566392
   Type: graphql
   Path: /graphql
   Operation: Query.users

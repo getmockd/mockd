@@ -442,12 +442,12 @@ Send a message to the client:
       data: "Hello!"
 ```
 
-#### Wait Step
+#### Expect Step
 
-Wait for a client message:
+Wait for a client message matching specific criteria:
 
 ```yaml
-- type: wait
+- type: expect
   match:
     type: json
     path: "$.type"
@@ -456,12 +456,12 @@ Wait for a client message:
   optional: false  # Fail if timeout expires (default)
 ```
 
-#### Delay Step
+#### Wait Step
 
 Pause for a duration:
 
 ```yaml
-- type: delay
+- type: wait
   duration: "2s"
 ```
 
@@ -474,7 +474,7 @@ scenario:
   name: heartbeat-loop
   loop: true
   steps:
-    - type: delay
+    - type: wait
       duration: "5s"
     - type: send
       message:
@@ -642,7 +642,7 @@ mocks:
         name: notification-stream
         loop: true
         steps:
-          - type: delay
+          - type: wait
             duration: "10s"
           - type: send
             message:
@@ -686,7 +686,7 @@ mocks:
         name: price-updates
         loop: true
         steps:
-          - type: delay
+          - type: wait
             duration: "1s"
           - type: send
             message:

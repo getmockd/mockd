@@ -22,7 +22,7 @@ version: "1.0"
 mocks:
   - id: string
     name: string
-    type: http | websocket | graphql | grpc | mqtt | soap
+    type: http | websocket | graphql | grpc | mqtt | soap | oauth
     enabled: boolean
     http: { ... }      # if type: http
     websocket: { ... } # if type: websocket
@@ -30,6 +30,7 @@ mocks:
     grpc: { ... }      # if type: grpc
     mqtt: { ... }      # if type: mqtt
     soap: { ... }      # if type: soap
+    oauth: { ... }     # if type: oauth
 
 serverConfig: { ... }       # Optional server settings
 statefulResources: [ ... ]  # Optional CRUD resources
@@ -189,7 +190,7 @@ http:
     lifecycle:
       maxEvents: 10             # max events before closing
       timeout: 60000            # connection timeout ms
-      keepaliveInterval: 15000  # keepalive interval ms
+      keepaliveInterval: 15     # keepalive interval in seconds
     resume:
       enabled: true             # support Last-Event-ID
       bufferSize: 100           # events to buffer
@@ -318,7 +319,7 @@ websocket:
           value: {"type": "welcome"}
       - type: wait
         duration: "1s"
-      - type: waitFor
+      - type: expect
         match:
           type: json
           path: "$.type"
@@ -586,7 +587,7 @@ mocks:
           soapAction: "http://example.com/Add"
           response: |
             <AddResponse>
-              <AddResult>{{add request.a request.b}}</AddResult>
+              <AddResult>{{xpath://Add/a}}</AddResult>
             </AddResponse>
           delay: "50ms"
           match:
