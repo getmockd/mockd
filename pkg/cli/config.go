@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 
-	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
 )
@@ -21,61 +20,59 @@ Shows parameters loaded from flags, environment variables, or config files.`,
 			return fmt.Errorf("failed to load configuration: %w", err)
 		}
 
-		if jsonOutput {
-			return output.JSON(cfg)
-		}
+		printResult(cfg, func() {
+			// Human-readable output with source annotations
+			fmt.Println("Effective Configuration:")
+			fmt.Println()
 
-		// Human-readable output with source annotations
-		fmt.Println("Effective Configuration:")
-		fmt.Println()
-
-		printConfigValue("port", cfg.Port, cfg.Sources["port"])
-		printConfigValue("adminPort", cfg.AdminPort, cfg.Sources["adminPort"])
-		printConfigValue("adminUrl", cfg.AdminURL, cfg.Sources["adminUrl"])
-		printConfigValue("httpsPort", cfg.HTTPSPort, cfg.Sources["httpsPort"])
-		if cfg.ConfigFile != "" {
-			printConfigValue("configFile", cfg.ConfigFile, cfg.Sources["configFile"])
-		}
-		printConfigValue("readTimeout", cfg.ReadTimeout, cfg.Sources["readTimeout"])
-		printConfigValue("writeTimeout", cfg.WriteTimeout, cfg.Sources["writeTimeout"])
-		printConfigValue("maxLogEntries", cfg.MaxLogEntries, cfg.Sources["maxLogEntries"])
-		printConfigValue("autoGenerateCert", cfg.AutoCert, cfg.Sources["autoCert"])
-		printConfigValue("verbose", cfg.Verbose, cfg.Sources["verbose"])
-
-		// Show loaded sources
-		fmt.Println()
-		globalPath, _ := cliconfig.FindGlobalConfig()
-		localPath, _ := cliconfig.FindLocalConfig()
-
-		if globalPath != "" || localPath != "" {
-			fmt.Println("Sources loaded:")
-			if globalPath != "" {
-				fmt.Printf("  • %s (global)\n", globalPath)
+			printConfigValue("port", cfg.Port, cfg.Sources["port"])
+			printConfigValue("adminPort", cfg.AdminPort, cfg.Sources["adminPort"])
+			printConfigValue("adminUrl", cfg.AdminURL, cfg.Sources["adminUrl"])
+			printConfigValue("httpsPort", cfg.HTTPSPort, cfg.Sources["httpsPort"])
+			if cfg.ConfigFile != "" {
+				printConfigValue("configFile", cfg.ConfigFile, cfg.Sources["configFile"])
 			}
-			if localPath != "" {
-				fmt.Printf("  • %s (local)\n", localPath)
-			}
-		} else {
-			fmt.Println("Sources loaded: (none)")
-		}
+			printConfigValue("readTimeout", cfg.ReadTimeout, cfg.Sources["readTimeout"])
+			printConfigValue("writeTimeout", cfg.WriteTimeout, cfg.Sources["writeTimeout"])
+			printConfigValue("maxLogEntries", cfg.MaxLogEntries, cfg.Sources["maxLogEntries"])
+			printConfigValue("autoGenerateCert", cfg.AutoCert, cfg.Sources["autoCert"])
+			printConfigValue("verbose", cfg.Verbose, cfg.Sources["verbose"])
 
-		// Show searched locations
-		fmt.Println()
-		fmt.Println("Searched:")
-		for _, p := range cliconfig.GetGlobalConfigSearchPaths() {
-			if p == globalPath {
-				fmt.Printf("  ✓ %s\n", p)
+			// Show loaded sources
+			fmt.Println()
+			globalPath, _ := cliconfig.FindGlobalConfig()
+			localPath, _ := cliconfig.FindLocalConfig()
+
+			if globalPath != "" || localPath != "" {
+				fmt.Println("Sources loaded:")
+				if globalPath != "" {
+					fmt.Printf("  • %s (global)\n", globalPath)
+				}
+				if localPath != "" {
+					fmt.Printf("  • %s (local)\n", localPath)
+				}
 			} else {
-				fmt.Printf("  ✗ %s\n", p)
+				fmt.Println("Sources loaded: (none)")
 			}
-		}
-		for _, p := range cliconfig.GetLocalConfigSearchPaths() {
-			if p == localPath {
-				fmt.Printf("  ✓ %s\n", p)
-			} else {
-				fmt.Printf("  ✗ %s\n", p)
+
+			// Show searched locations
+			fmt.Println()
+			fmt.Println("Searched:")
+			for _, p := range cliconfig.GetGlobalConfigSearchPaths() {
+				if p == globalPath {
+					fmt.Printf("  ✓ %s\n", p)
+				} else {
+					fmt.Printf("  ✗ %s\n", p)
+				}
 			}
-		}
+			for _, p := range cliconfig.GetLocalConfigSearchPaths() {
+				if p == localPath {
+					fmt.Printf("  ✓ %s\n", p)
+				} else {
+					fmt.Printf("  ✗ %s\n", p)
+				}
+			}
+		})
 
 		return nil
 	},

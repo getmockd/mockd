@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
 )
@@ -78,12 +77,12 @@ listeners (gRPC, MQTT, etc.).`,
 		if err != nil {
 			// Fall back to PID file information
 			if pidInfo != nil && pidInfo.IsRunning() {
-				return printPortsFromPIDFile(pidInfo, jsonOutput, portsVerbose)
+				return printPortsFromPIDFile(pidInfo, portsVerbose)
 			}
-			return printNotRunningPorts(jsonOutput)
+			return printNotRunningPorts()
 		}
 
-		return printPorts(ports, jsonOutput, portsVerbose)
+		return printPortsList(ports, portsVerbose)
 	},
 }
 
@@ -94,7 +93,7 @@ func init() {
 }
 
 // printPortsFromPIDFile prints port information from the PID file.
-func printPortsFromPIDFile(info *PIDFile, jsonOut, verbose bool) error {
+func printPortsFromPIDFile(info *PIDFile, verbose bool) error {
 	var ports []PortInfo
 
 	// Add engine HTTP port
@@ -140,85 +139,80 @@ func printPortsFromPIDFile(info *PIDFile, jsonOut, verbose bool) error {
 		ports = append(ports, p)
 	}
 
-	return printPorts(ports, jsonOut, verbose)
+	return printPortsList(ports, verbose)
 }
 
-// printPorts prints the port information in the requested format.
-func printPorts(ports []PortInfo, jsonOut, verbose bool) error {
-	if jsonOut {
-		result := PortsOutput{
-			Ports:   ports,
-			Running: len(ports) > 0,
+// printPortsList prints the port information in the requested format.
+func printPortsList(ports []PortInfo, verbose bool) error {
+	result := PortsOutput{
+		Ports:   ports,
+		Running: len(ports) > 0,
+	}
+	printResult(result, func() {
+		if len(ports) == 0 {
+			fmt.Println("No ports in use by mockd")
+			return
 		}
-		return output.JSON(result)
-	}
 
-	if len(ports) == 0 {
-		fmt.Println("No ports in use by mockd")
-		return nil
-	}
+		// Sort ports by port number
+		sort.Slice(ports, func(i, j int) bool {
+			return ports[i].Port < ports[j].Port
+		})
 
-	// Sort ports by port number
-	sort.Slice(ports, func(i, j int) bool {
-		return ports[i].Port < ports[j].Port
+		fmt.Println()
+
+		if verbose {
+			// Verbose output with engine info
+			fmt.Printf("%-7s %-10s %-15s %-10s %-20s %s\n", "PORT", "PROTOCOL", "COMPONENT", "STATUS", "ENGINE", "ID")
+			fmt.Println("------- ---------- --------------- ---------- -------------------- --------")
+
+			for _, p := range ports {
+				status := p.Status
+				if p.TLS {
+					status += " (TLS)"
+				}
+				engineName := p.EngineName
+				if engineName == "" {
+					engineName = "-"
+				}
+				engineID := p.EngineID
+				if engineID == "" {
+					engineID = "-"
+				}
+				// Truncate long IDs
+				if len(engineID) > 8 {
+					engineID = engineID[:8]
+				}
+				fmt.Printf("%-7d %-10s %-15s %-10s %-20s %s\n", p.Port, p.Protocol, p.Component, status, engineName, engineID)
+			}
+		} else {
+			// Standard output
+			fmt.Printf("%-7s %-10s %-15s %s\n", "PORT", "PROTOCOL", "COMPONENT", "STATUS")
+			fmt.Println("------- ---------- --------------- --------")
+
+			for _, p := range ports {
+				status := p.Status
+				if p.TLS {
+					status += " (TLS)"
+				}
+				fmt.Printf("%-7d %-10s %-15s %s\n", p.Port, p.Protocol, p.Component, status)
+			}
+		}
+		fmt.Println()
 	})
-
-	fmt.Println()
-
-	if verbose {
-		// Verbose output with engine info
-		fmt.Printf("%-7s %-10s %-15s %-10s %-20s %s\n", "PORT", "PROTOCOL", "COMPONENT", "STATUS", "ENGINE", "ID")
-		fmt.Println("------- ---------- --------------- ---------- -------------------- --------")
-
-		for _, p := range ports {
-			status := p.Status
-			if p.TLS {
-				status += " (TLS)"
-			}
-			engineName := p.EngineName
-			if engineName == "" {
-				engineName = "-"
-			}
-			engineID := p.EngineID
-			if engineID == "" {
-				engineID = "-"
-			}
-			// Truncate long IDs
-			if len(engineID) > 8 {
-				engineID = engineID[:8]
-			}
-			fmt.Printf("%-7d %-10s %-15s %-10s %-20s %s\n", p.Port, p.Protocol, p.Component, status, engineName, engineID)
-		}
-	} else {
-		// Standard output
-		fmt.Printf("%-7s %-10s %-15s %s\n", "PORT", "PROTOCOL", "COMPONENT", "STATUS")
-		fmt.Println("------- ---------- --------------- --------")
-
-		for _, p := range ports {
-			status := p.Status
-			if p.TLS {
-				status += " (TLS)"
-			}
-			fmt.Printf("%-7d %-10s %-15s %s\n", p.Port, p.Protocol, p.Component, status)
-		}
-	}
-	fmt.Println()
-
 	return nil
 }
 
 // printNotRunningPorts prints a message when mockd is not running.
-func printNotRunningPorts(jsonOut bool) error {
-	if jsonOut {
-		result := PortsOutput{
-			Ports:   []PortInfo{},
-			Running: false,
-		}
-		return output.JSON(result)
+func printNotRunningPorts() error {
+	result := PortsOutput{
+		Ports:   []PortInfo{},
+		Running: false,
 	}
-
-	fmt.Println("mockd is not running")
-	fmt.Println()
-	fmt.Println("To start: mockd serve")
+	printResult(result, func() {
+		fmt.Println("mockd is not running")
+		fmt.Println()
+		fmt.Println("To start: mockd serve")
+	})
 	return nil
 }

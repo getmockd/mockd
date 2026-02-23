@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 
-	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -26,11 +25,11 @@ var configShowCmd = &cobra.Command{
 
 		// If --service is specified, filter to just that service
 		if configShowService != "" {
-			return printServiceConfig(cfg, configShowService, configPath, jsonOutput)
+			return printServiceConfig(cfg, configShowService, configPath)
 		}
 
 		// Print full config
-		return printFullConfig(cfg, configPath, jsonOutput)
+		return printFullConfig(cfg, configPath)
 	},
 }
 
@@ -41,46 +40,30 @@ func init() {
 }
 
 // printFullConfig outputs the full resolved configuration.
-func printFullConfig(cfg *config.ProjectConfig, configPath string, isJSON bool) error {
-	if isJSON {
-		return printConfigAsJSON(cfg)
-	}
-	return printConfigAsYAML(cfg, configPath)
+func printFullConfig(cfg *config.ProjectConfig, configPath string) error {
+	printResult(cfg, func() { _ = printConfigAsYAML(cfg, configPath) })
+	return nil
 }
 
 // printServiceConfig outputs configuration for a specific service.
-func printServiceConfig(cfg *config.ProjectConfig, serviceName, configPath string, isJSON bool) error {
+func printServiceConfig(cfg *config.ProjectConfig, serviceName, configPath string) error {
 	// Try to find the service in admins
 	for _, admin := range cfg.Admins {
 		if admin.Name == serviceName {
-			if isJSON {
-				return printAsJSON(admin)
-			}
-			return printServiceAsYAML("admin", admin, configPath)
+			printResult(admin, func() { _ = printServiceAsYAML("admin", admin, configPath) })
+			return nil
 		}
 	}
 
 	// Try to find the service in engines
 	for _, engine := range cfg.Engines {
 		if engine.Name == serviceName {
-			if isJSON {
-				return printAsJSON(engine)
-			}
-			return printServiceAsYAML("engine", engine, configPath)
+			printResult(engine, func() { _ = printServiceAsYAML("engine", engine, configPath) })
+			return nil
 		}
 	}
 
 	return fmt.Errorf("service '%s' not found in admins or engines", serviceName)
-}
-
-// printConfigAsJSON outputs the config as JSON.
-func printConfigAsJSON(cfg *config.ProjectConfig) error {
-	return output.JSON(cfg)
-}
-
-// printAsJSON outputs any value as JSON.
-func printAsJSON(v interface{}) error {
-	return output.JSON(v)
 }
 
 // printConfigAsYAML outputs the config as YAML with a header comment.

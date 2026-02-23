@@ -30,7 +30,7 @@ func runConfigShowTest(args []string) (string, error) {
 	if f := configShowCmd.Flags().Lookup("config"); f != nil {
 		f.Changed = false
 	}
-	
+
 	if f := rootCmd.Flags().Lookup("json"); f != nil {
 		f.Changed = false
 		f.Value.Set("false")
@@ -39,7 +39,7 @@ func runConfigShowTest(args []string) (string, error) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	
+
 	oldStderr := os.Stderr
 	rErr, wErr, _ := os.Pipe()
 	os.Stderr = wErr
@@ -49,7 +49,7 @@ func runConfigShowTest(args []string) (string, error) {
 
 	w.Close()
 	os.Stdout = oldStdout
-	
+
 	wErr.Close()
 	os.Stderr = oldStderr
 
@@ -57,7 +57,7 @@ func runConfigShowTest(args []string) (string, error) {
 
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
-	
+
 	// Print any stderr that might have occurred during the test for debug visibility
 	var errBuf bytes.Buffer
 	errBuf.ReadFrom(rErr)
@@ -426,12 +426,17 @@ func TestRunConfigShow_NoConfigFile(t *testing.T) {
 }
 
 func printFullConfigTestHelper(cfg *config.ProjectConfig, configPath string, isJSON bool) (string, error) {
+	// Set the package-level jsonOutput flag
+	oldJSON := jsonOutput
+	jsonOutput = isJSON
+	defer func() { jsonOutput = oldJSON }()
+
 	// Capture stdout using os.Pipe since this directly tests the print function not cobra
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := printFullConfig(cfg, configPath, isJSON)
+	err := printFullConfig(cfg, configPath)
 
 	w.Close()
 	os.Stdout = oldStdout

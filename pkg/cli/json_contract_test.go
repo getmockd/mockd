@@ -549,3 +549,183 @@ func TestContextUse_JSONContract(t *testing.T) {
 		t.Errorf("name = %v, want staging", obj["name"])
 	}
 }
+
+// ─── status contract ────────────────────────────────────────────────────────
+
+func TestStatus_JSONContract_NotRunning(t *testing.T) {
+	// Use a PID file path that doesn't exist
+	oldPidFile := statusPidFile
+	statusPidFile = filepath.Join(t.TempDir(), "nonexistent.pid")
+	defer func() { statusPidFile = oldPidFile }()
+
+	// Use ports that are definitely not listening
+	oldAdminPort := statusAdminPort
+	oldPort := statusPort
+	statusAdminPort = 19999
+	statusPort = 19998
+	defer func() { statusAdminPort = oldAdminPort; statusPort = oldPort }()
+
+	data, err := captureJSONOutput(t, func() error {
+		return statusCmd.RunE(statusCmd, []string{})
+	})
+
+	if err != nil {
+		t.Fatalf("status --json returned error: %v", err)
+	}
+
+	obj := assertValidJSON(t, data)
+	assertNoProseOnStdout(t, data)
+	assertHasKeys(t, obj, "running", "components")
+
+	if obj["running"] != false {
+		t.Errorf("running = %v, want false", obj["running"])
+	}
+
+	// Verify components structure
+	components, ok := obj["components"].(map[string]any)
+	if !ok {
+		t.Fatal("components should be an object")
+	}
+	for _, name := range []string{"admin", "engine"} {
+		comp, ok := components[name].(map[string]any)
+		if !ok {
+			t.Fatalf("components.%s should be an object", name)
+		}
+		if comp["status"] != "stopped" {
+			t.Errorf("components.%s.status = %v, want stopped", name, comp["status"])
+		}
+	}
+}
+
+func TestStatus_JSONContract_WithPIDFile(t *testing.T) {
+	// Create a fake PID file for a non-running process (PID 1 is init, won't match)
+	tmpDir := t.TempDir()
+	pidPath := filepath.Join(tmpDir, "mockd.pid")
+	pidFile := &PIDFile{
+		PID:       99999999, // Definitely not running
+		Version:   "0.3.2",
+		Commit:    "abc1234",
+		StartTime: time.Now().Add(-10 * time.Minute),
+		Components: ComponentsInfo{
+			Admin:  ComponentStatus{Enabled: true, Port: 19999},
+			Engine: ComponentStatus{Enabled: true, Port: 19998},
+		},
+	}
+	if err := WritePIDFile(pidPath, pidFile); err != nil {
+		t.Fatal(err)
+	}
+
+	// Since PID 99999999 won't be running, this falls through to port detection
+	// which also won't find anything → not running
+	oldPidFile := statusPidFile
+	statusPidFile = pidPath
+	defer func() { statusPidFile = oldPidFile }()
+
+	oldAdminPort := statusAdminPort
+	oldPort := statusPort
+	statusAdminPort = 19999
+	statusPort = 19998
+	defer func() { statusAdminPort = oldAdminPort; statusPort = oldPort }()
+
+	data, err := captureJSONOutput(t, func() error {
+		return statusCmd.RunE(statusCmd, []string{})
+	})
+
+	if err != nil {
+		t.Fatalf("status --json returned error: %v", err)
+	}
+
+	obj := assertValidJSON(t, data)
+	assertNoProseOnStdout(t, data)
+	assertHasKeys(t, obj, "running", "components")
+
+	// Process won't be running, so falls back to not-running path
+	if obj["running"] != false {
+		t.Errorf("running = %v, want false (stale PID)", obj["running"])
+	}
+}
+
+// ─── ports contract ─────────────────────────────────────────────────────────
+
+func TestPorts_JSONContract_NotRunning(t *testing.T) {
+	// Use admin URL that won't connect
+	oldAdminURL := adminURL
+	adminURL = "http://localhost:19999"
+	defer func() { adminURL = oldAdminURL }()
+
+	oldPidFile := portsPIDFile
+	portsPIDFile = filepath.Join(t.TempDir(), "nonexistent.pid")
+	defer func() { portsPIDFile = oldPidFile }()
+
+	data, err := captureJSONOutput(t, func() error {
+		return portsCmd.RunE(portsCmd, []string{})
+	})
+
+	if err != nil {
+		t.Fatalf("ports --json returned error: %v", err)
+	}
+
+	obj := assertValidJSON(t, data)
+	assertNoProseOnStdout(t, data)
+	assertHasKeys(t, obj, "ports", "running")
+
+	if obj["running"] != false {
+		t.Errorf("running = %v, want false", obj["running"])
+	}
+
+	ports, ok := obj["ports"].([]any)
+	if !ok {
+		t.Fatal("ports should be an array")
+	}
+	if len(ports) != 0 {
+		t.Errorf("expected 0 ports, got %d", len(ports))
+	}
+}
+
+func TestPorts_JSONContract_FromPIDFile(t *testing.T) {
+	// printPortsFromPIDFile builds ports from PID file info
+	info := &PIDFile{
+		PID: 12345,
+		Components: ComponentsInfo{
+			Engine: ComponentStatus{Enabled: true, Port: 4280, HTTPSPort: 5280},
+			Admin:  ComponentStatus{Enabled: true, Port: 4290},
+		},
+	}
+
+	data, err := captureJSONOutput(t, func() error {
+		return printPortsFromPIDFile(info, false)
+	})
+
+	if err != nil {
+		t.Fatalf("printPortsFromPIDFile --json returned error: %v", err)
+	}
+
+	obj := assertValidJSON(t, data)
+	assertNoProseOnStdout(t, data)
+	assertHasKeys(t, obj, "ports", "running")
+
+	if obj["running"] != true {
+		t.Errorf("running = %v, want true", obj["running"])
+	}
+
+	ports, ok := obj["ports"].([]any)
+	if !ok {
+		t.Fatal("ports should be an array")
+	}
+	if len(ports) != 3 {
+		t.Errorf("expected 3 ports (HTTP, HTTPS, Admin), got %d", len(ports))
+	}
+
+	// Verify port objects have required keys
+	for i, p := range ports {
+		pm, ok := p.(map[string]any)
+		if !ok {
+			t.Fatalf("ports[%d] should be an object", i)
+		}
+		for _, key := range []string{"port", "protocol", "component", "status"} {
+			if _, exists := pm[key]; !exists {
+				t.Errorf("ports[%d] missing key %q", i, key)
+			}
+		}
+	}
+}

@@ -18,9 +18,7 @@ func printResult(data any, textFn func()) {
 // printList outputs a collection of items.
 //
 // Same contract as printResult. textFn typically uses output.Table() for
-// aligned columns. Used in Pass B to DRY-refactor list/get commands.
-var _ = printList // keep available for Pass B
-
+// aligned columns.
 func printList(data any, textFn func()) {
 	if jsonOutput {
 		_ = output.JSON(data)

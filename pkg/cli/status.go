@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
 )
@@ -68,17 +67,17 @@ var statusCmd = &cobra.Command{
 		info, err := ReadPIDFile(pidPath)
 		if err == nil && info.IsRunning() {
 			// PID file exists and process is running - use it
-			return printRunningFromPIDFile(info, jsonOutput)
+			return printRunningFromPIDFile(info)
 		}
 
 		// No PID file or stale PID file - try port detection
 		detected := detectRunningServer(statusAdminPort, statusPort)
 		if detected != nil {
-			return printRunningFromDetection(detected, jsonOutput)
+			return printRunningFromDetection(detected)
 		}
 
 		// Nothing found
-		return printNotRunning(jsonOutput)
+		return printNotRunning()
 	},
 }
 
@@ -90,26 +89,23 @@ func init() {
 }
 
 // printRunningFromPIDFile prints status when we have PID file info.
-func printRunningFromPIDFile(info *PIDFile, jsonOutput bool) error {
-	output := buildStatusOutput(info)
+func printRunningFromPIDFile(info *PIDFile) error {
+	result := buildStatusOutput(info)
 
 	// Try to fetch live stats from admin API
 	if info.Components.Admin.Enabled {
 		stats, healthInfo := fetchLiveStats(info.AdminURL())
 		if stats != nil {
-			output.Stats = stats
+			result.Stats = stats
 		}
 		// Update uptime from live health check if available
 		if healthInfo != nil && healthInfo.Uptime > 0 {
-			output.Uptime = formatDuration(time.Duration(healthInfo.Uptime) * time.Second)
+			result.Uptime = formatDuration(time.Duration(healthInfo.Uptime) * time.Second)
 		}
 	}
 
-	if jsonOutput {
-		return printJSONStatus(output)
-	}
-
-	return printHumanStatus(output, info)
+	printResult(result, func() { printHumanStatus(result, info) })
+	return nil
 }
 
 // DetectedServer contains information about a server detected via port probing.
@@ -166,8 +162,8 @@ func detectRunningServer(adminPort, enginePort int) *DetectedServer {
 }
 
 // printRunningFromDetection prints status based on port detection (no PID file).
-func printRunningFromDetection(detected *DetectedServer, jsonOutput bool) error {
-	output := StatusOutput{
+func printRunningFromDetection(detected *DetectedServer) error {
+	result := StatusOutput{
 		Running: true,
 		Components: StatusComponents{
 			Admin: StatusComponentInfo{
@@ -180,37 +176,34 @@ func printRunningFromDetection(detected *DetectedServer, jsonOutput bool) error 
 	}
 
 	if detected.AdminRunning {
-		output.Components.Admin = StatusComponentInfo{
+		result.Components.Admin = StatusComponentInfo{
 			Status: "running",
 			URL:    detected.AdminURL,
 		}
 	}
 
 	if detected.EngineRunning {
-		output.Components.Engine = StatusComponentInfo{
+		result.Components.Engine = StatusComponentInfo{
 			Status: "running",
 			URL:    detected.EngineURL,
 		}
 	}
 
 	if detected.Stats != nil {
-		output.Stats = detected.Stats
+		result.Stats = detected.Stats
 	}
 
 	// Get uptime from health info
 	if detected.HealthInfo != nil && detected.HealthInfo.Uptime > 0 {
-		output.Uptime = formatDuration(time.Duration(detected.HealthInfo.Uptime) * time.Second)
+		result.Uptime = formatDuration(time.Duration(detected.HealthInfo.Uptime) * time.Second)
 	}
 
-	if jsonOutput {
-		return printJSONStatus(output)
-	}
-
-	return printHumanStatusDetected(output)
+	printResult(result, func() { printHumanStatusDetected(result) })
+	return nil
 }
 
 // printHumanStatusDetected prints human-readable status for detected server (no PID file).
-func printHumanStatusDetected(output StatusOutput) error {
+func printHumanStatusDetected(output StatusOutput) {
 	fmt.Println("mockd (detected via port)")
 	fmt.Println()
 
@@ -254,8 +247,6 @@ func printHumanStatusDetected(output StatusOutput) error {
 	fmt.Println()
 	fmt.Printf("%s No PID file found. Server may have been started manually.\n",
 		colorYellow("Note:"))
-
-	return nil
 }
 
 // colorYellow returns text wrapped in ANSI yellow color codes.
@@ -285,21 +276,19 @@ func formatDuration(d time.Duration) string {
 }
 
 // printNotRunning prints the "not running" status.
-func printNotRunning(jsonOutput bool) error {
-	if jsonOutput {
-		result := StatusOutput{
-			Running: false,
-			Components: StatusComponents{
-				Admin:  StatusComponentInfo{Status: "stopped"},
-				Engine: StatusComponentInfo{Status: "stopped"},
-			},
-		}
-		return output.JSON(result)
+func printNotRunning() error {
+	result := StatusOutput{
+		Running: false,
+		Components: StatusComponents{
+			Admin:  StatusComponentInfo{Status: "stopped"},
+			Engine: StatusComponentInfo{Status: "stopped"},
+		},
 	}
-
-	fmt.Println("mockd is not running")
-	fmt.Println()
-	fmt.Println("To start: mockd serve")
+	printResult(result, func() {
+		fmt.Println("mockd is not running")
+		fmt.Println()
+		fmt.Println("To start: mockd serve")
+	})
 	return nil
 }
 
@@ -382,13 +371,8 @@ func fetchLiveStats(adminURL string) (*StatusStats, *HealthInfo) {
 	return stats, healthInfo
 }
 
-// printJSONStatus prints status in JSON format.
-func printJSONStatus(status StatusOutput) error {
-	return output.JSON(status)
-}
-
 // printHumanStatus prints status in human-readable format.
-func printHumanStatus(output StatusOutput, _ *PIDFile) error {
+func printHumanStatus(output StatusOutput, _ *PIDFile) {
 	// Header
 	if output.Commit != "" {
 		fmt.Printf("mockd v%s (%s)\n", output.Version, output.Commit)
@@ -438,8 +422,6 @@ func printHumanStatus(output StatusOutput, _ *PIDFile) error {
 				matchRate)
 		}
 	}
-
-	return nil
 }
 
 // colorGreen returns text wrapped in ANSI green color codes.

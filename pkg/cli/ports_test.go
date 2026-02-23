@@ -15,18 +15,22 @@ func TestPrintPorts_JSON(t *testing.T) {
 		{Port: 5280, Protocol: "HTTPS", Component: "Mock Engine", Status: "running", TLS: true},
 	}
 
+	oldJSON := jsonOutput
+	jsonOutput = true
+	defer func() { jsonOutput = oldJSON }()
+
 	// Capture stdout
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := printPorts(ports, true, false)
+	err := printPortsList(ports, false)
 
 	w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
-		t.Fatalf("printPorts returned error: %v", err)
+		t.Fatalf("printPortsList returned error: %v", err)
 	}
 
 	// Read captured output
@@ -55,18 +59,22 @@ func TestPrintPorts_Table(t *testing.T) {
 		{Port: 4280, Protocol: "HTTP", Component: "Mock Engine", Status: "running"},
 	}
 
+	oldJSON := jsonOutput
+	jsonOutput = false
+	defer func() { jsonOutput = oldJSON }()
+
 	// Capture stdout
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := printPorts(ports, false, false)
+	err := printPortsList(ports, false)
 
 	w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
-		t.Fatalf("printPorts returned error: %v", err)
+		t.Fatalf("printPortsList returned error: %v", err)
 	}
 
 	// Read captured output
@@ -100,18 +108,22 @@ func TestPrintPorts_Table(t *testing.T) {
 }
 
 func TestPrintPorts_Empty(t *testing.T) {
+	oldJSON := jsonOutput
+	jsonOutput = false
+	defer func() { jsonOutput = oldJSON }()
+
 	// Capture stdout
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := printPorts([]PortInfo{}, false, false)
+	err := printPortsList([]PortInfo{}, false)
 
 	w.Close()
 	os.Stdout = oldStdout
 
 	if err != nil {
-		t.Fatalf("printPorts returned error: %v", err)
+		t.Fatalf("printPortsList returned error: %v", err)
 	}
 
 	// Read captured output
@@ -125,12 +137,16 @@ func TestPrintPorts_Empty(t *testing.T) {
 }
 
 func TestPrintNotRunningPorts_JSON(t *testing.T) {
+	oldJSON := jsonOutput
+	jsonOutput = true
+	defer func() { jsonOutput = oldJSON }()
+
 	// Capture stdout
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := printNotRunningPorts(true)
+	err := printNotRunningPorts()
 
 	w.Close()
 	os.Stdout = oldStdout
