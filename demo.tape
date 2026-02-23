@@ -3,7 +3,6 @@
 # Requires: mockd binary in PATH, ports 4280/4290 free
 
 Output demo.gif
-Output demo.webm
 
 Set Shell "bash"
 Set FontSize 16
@@ -26,7 +25,7 @@ Sleep 1.5s
 
 # ── Start the server ───────────────────────────────────────────────
 
-Type "mockd start"
+Type "mockd start -d"
 Enter
 Sleep 2s
 

@@ -9,8 +9,9 @@
 
 Mock HTTP, gRPC, GraphQL, WebSocket, MQTT, SSE, and SOAP APIs from a single CLI tool. Import from OpenAPI, Postman, WireMock, HAR, or cURL. Share mocks instantly via built-in cloud tunneling.
 
-<!-- TODO: Add demo GIF here -->
-<!-- ![mockd demo](https://mockd.io/assets/demo.gif) -->
+<p align="center">
+  <img src="demo.gif" alt="mockd demo" width="800">
+</p>
 
 ## Why mockd?
 
@@ -90,12 +91,12 @@ Mock **seven protocols** from a single tool with a unified CLI and Admin API:
 | Protocol | Port | Example |
 |----------|------|---------|
 | HTTP/HTTPS | 4280 | `mockd add http --path /api/hello --body '{"msg":"hi"}'` |
-| gRPC | 50051 | `mockd add grpc --proto service.proto --service Greeter` |
+| gRPC | 50051 | `mockd add grpc --proto svc.proto --service Greeter --rpc-method Greet` |
 | GraphQL | 4280 | `mockd add graphql --path /graphql --operation hello` |
 | WebSocket | 4280 | `mockd add websocket --path /ws --echo` |
 | MQTT | 1883 | `mockd add mqtt --topic sensors/temp --payload '{"temp":72}'` |
 | SSE | 4280 | `mockd add http --path /events --sse --sse-event 'data: hello'` |
-| SOAP | 4280 | `mockd add soap --path /soap --operation GetWeather` |
+| SOAP | 4280 | `mockd add soap --path /soap --operation GetWeather --response '<OK/>'` |
 
 ### Import & Export
 
