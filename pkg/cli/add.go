@@ -111,7 +111,7 @@ func init() {
 	addCmd.Flags().IntVar(&addSSEDelay, "sse-delay", 100, "Delay between SSE events in milliseconds")
 	addCmd.Flags().StringVar(&addSSETemplate, "sse-template", "", "SSE template: openai, notification")
 	addCmd.Flags().IntVar(&addSSERepeat, "sse-repeat", 1, "Number of times to repeat SSE events (0 = infinite)")
-	addCmd.Flags().IntVar(&addSSEKeepalive, "sse-keepalive", 0, "SSE keepalive interval in milliseconds (0 = disabled)")
+	addCmd.Flags().IntVar(&addSSEKeepalive, "sse-keepalive", 0, "SSE keepalive interval in seconds (0 = disabled, min 5)")
 
 	addCmd.Flags().StringVar(&addMessage, "message", "", "Default response message (JSON) for WebSocket")
 	addCmd.Flags().BoolVar(&addEcho, "echo", false, "Enable echo mode for WebSocket")
@@ -785,7 +785,7 @@ func buildOAuthMock(name, issuer, clientID, clientSecret, username, password str
 				{
 					Username: username,
 					Password: password,
-					Claims: map[string]string{
+					Claims: map[string]interface{}{
 						"sub":   username,
 						"email": username + "@example.com",
 						"name":  username,

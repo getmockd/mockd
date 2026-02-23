@@ -70,8 +70,11 @@ var soapAddCmd = &cobra.Command{
 }
 
 var (
-	soapHeaders string
-	soapPretty  bool
+	soapHeaders     string
+	soapPretty      bool
+	soapCallAction  string
+	soapCallSOAP12  bool
+	soapCallTimeout int
 )
 
 func init() {
@@ -106,6 +109,9 @@ func init() {
 
 	soapCallCmd.Flags().StringVarP(&soapHeaders, "header", "H", "", "Additional headers (key:value,key2:value2)")
 	soapCallCmd.Flags().BoolVar(&soapPretty, "pretty", true, "Pretty print output")
+	soapCallCmd.Flags().StringVar(&soapCallAction, "action", "", "SOAPAction header value")
+	soapCallCmd.Flags().BoolVar(&soapCallSOAP12, "soap12", false, "Use SOAP 1.2 envelope format")
+	soapCallCmd.Flags().IntVar(&soapCallTimeout, "timeout", 30, "Request timeout in seconds")
 	soapCmd.AddCommand(soapCallCmd)
 }
 
@@ -262,18 +268,9 @@ func runSOAPCall(cmd *cobra.Command, args []string) error {
 		body = args[2]
 	}
 
-	soapAction := ""
-	if cmd.Flags().Changed("action") {
-		soapAction, _ = cmd.Flags().GetString("action")
-	}
-	soap12 := false
-	if cmd.Flags().Changed("soap12") {
-		soap12, _ = cmd.Flags().GetBool("soap12")
-	}
-	timeout := 30
-	if cmd.Flags().Changed("timeout") {
-		timeout, _ = cmd.Flags().GetInt("timeout")
-	}
+	soapAction := soapCallAction
+	soap12 := soapCallSOAP12
+	timeout := soapCallTimeout
 
 	// Build SOAP body
 	var soapBody string

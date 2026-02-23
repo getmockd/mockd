@@ -62,6 +62,7 @@ func init() {
 	grpcAddCmd.Flags().StringVar(&addRPCMethod, "rpc-method", "", "gRPC method name")
 	grpcAddCmd.Flags().IntVar(&addGRPCPort, "grpc-port", 50051, "gRPC server port")
 	grpcAddCmd.Flags().Var(&addProtoFiles, "proto", "Path to .proto file")
+	grpcAddCmd.Flags().Var(&addProtoPaths, "proto-path", "Import path for proto dependencies (repeatable)")
 	grpcAddCmd.Flags().StringVar(&addResponse, "response", "", "JSON response data")
 
 	// Add list/get/delete generic aliases

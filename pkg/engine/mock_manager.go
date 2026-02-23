@@ -709,6 +709,7 @@ func (mm *MockManager) registerOAuthMock(m *mock.Mock) error {
 		TokenExpiry:   oauthSpec.TokenExpiry,
 		RefreshExpiry: oauthSpec.RefreshExpiry,
 		DefaultScopes: oauthSpec.DefaultScopes,
+		DefaultClaims: oauthSpec.DefaultClaims,
 		Enabled:       m.Enabled == nil || *m.Enabled,
 	}
 
@@ -735,14 +736,10 @@ func (mm *MockManager) registerOAuthMock(m *mock.Mock) error {
 
 	// Convert users
 	for _, user := range oauthSpec.Users {
-		claims := make(map[string]interface{})
-		for k, v := range user.Claims {
-			claims[k] = v
-		}
 		cfg.Users = append(cfg.Users, oauth.UserConfig{
 			Username: user.Username,
 			Password: user.Password,
-			Claims:   claims,
+			Claims:   user.Claims,
 		})
 	}
 

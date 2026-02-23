@@ -171,7 +171,7 @@ func setupOAuthServer(t *testing.T) *oauthTestBundle {
 				{
 					Username: "testuser",
 					Password: "testpass",
-					Claims: map[string]string{
+					Claims: map[string]interface{}{
 						"sub":   "user-123",
 						"name":  "Test User",
 						"email": "test@example.com",
@@ -180,7 +180,7 @@ func setupOAuthServer(t *testing.T) *oauthTestBundle {
 				{
 					Username: "admin",
 					Password: "adminpass",
-					Claims: map[string]string{
+					Claims: map[string]interface{}{
 						"sub":   "admin-456",
 						"name":  "Admin User",
 						"email": "admin@example.com",

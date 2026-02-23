@@ -701,6 +701,9 @@ type OAuthSpec struct {
 	// DefaultScopes are the default scopes to include if none requested
 	DefaultScopes []string `json:"defaultScopes,omitempty" yaml:"defaultScopes,omitempty"`
 
+	// DefaultClaims are claims added to all tokens (e.g., iss, aud)
+	DefaultClaims map[string]interface{} `json:"defaultClaims,omitempty" yaml:"defaultClaims,omitempty"`
+
 	// Clients are the registered OAuth clients
 	Clients []OAuthClient `json:"clients,omitempty" yaml:"clients,omitempty"`
 
@@ -718,7 +721,7 @@ type OAuthClient struct {
 
 // OAuthUser defines a test user for the resource owner password credentials flow.
 type OAuthUser struct {
-	Username string            `json:"username" yaml:"username"`
-	Password string            `json:"password" yaml:"password"`
-	Claims   map[string]string `json:"claims,omitempty" yaml:"claims,omitempty"`
+	Username string                 `json:"username" yaml:"username"`
+	Password string                 `json:"password" yaml:"password"`
+	Claims   map[string]interface{} `json:"claims,omitempty" yaml:"claims,omitempty"`
 }

@@ -2534,7 +2534,7 @@ func TestMock_Validate_OAuth(t *testing.T) {
 						{
 							Username: "alice",
 							Password: "password",
-							Claims:   map[string]string{"role": "admin"},
+							Claims:   map[string]interface{}{"role": "admin"},
 						},
 					},
 				},
@@ -3081,12 +3081,12 @@ func TestMock_JSON_RoundTrip_OAuth(t *testing.T) {
 				{
 					Username: "alice",
 					Password: "password123",
-					Claims:   map[string]string{"role": "admin", "dept": "engineering"},
+					Claims:   map[string]interface{}{"role": "admin", "dept": "engineering"},
 				},
 				{
 					Username: "bob",
 					Password: "hunter2",
-					Claims:   map[string]string{"role": "viewer"},
+					Claims:   map[string]interface{}{"role": "viewer"},
 				},
 			},
 		},
