@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-02-23
+
+### Added
+
+- **Positional type argument** for `mockd add` — `mockd add http --path /api` now works alongside `mockd add --type http` and `mockd http add` syntax forms
+- `--mutation` shorthand flag for GraphQL `add` commands (both `mockd add graphql` and `mockd graphql add`)
+- `--action` flag alias for `--operation` on the unified `add` command (SOAP consistency)
+- `--json` output standardization across all non-streaming CLI commands via `printResult`/`printList` helpers
+- 18 `--json` contract tests ensuring structured output compliance
+- Comprehensive docs overhaul: expanded all 7 protocol pages with CLI `add` sections, new chaos engineering and import/export guides, rewritten quickstart, expanded troubleshooting
+
+### Fixed
+
+- `mockd ps` now handles both PID file formats (serve/start vs up/down) without crashing
+- Duplicate workspace name creation now correctly returns 409 Conflict
+- Engine startup rollback on HTTP/HTTPS listen failures no longer leaks resources
+- gRPC docs output example corrected (was showing merge format for initial creation)
+- Broken links in sharing-mocks guide fixed
+- Installation docs updated with Homebrew tap and get.mockd.io script
+
+### Changed
+
+- README overhauled with comparison table, demo GIF, and tighter structure (369→212 lines)
+- goreleaser homepage corrected to mockd.io, description updated
+- Homebrew auto-update job enabled in release workflow
+
 ## [0.3.2] - 2026-02-22
 
 ### Fixed
