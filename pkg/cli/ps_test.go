@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
 )
@@ -250,6 +251,111 @@ func TestRunPs_StalePIDFile(t *testing.T) {
 	// Should show as stopped
 	if !contains(output, "stopped") {
 		t.Errorf("output should contain 'stopped' for stale PID: %s", output)
+	}
+}
+
+func TestRunPs_WithServePIDFile(t *testing.T) {
+	// Test that ps can read the serve/start PID file format (cli.PIDFile)
+	tmpDir := t.TempDir()
+	pidPath := filepath.Join(tmpDir, "serve.pid")
+
+	serveInfo := &PIDFile{
+		PID:     os.Getpid(),
+		Version: "v0.3.2",
+		Components: ComponentsInfo{
+			Admin:  ComponentStatus{Enabled: true, Port: 4290, Host: "localhost"},
+			Engine: ComponentStatus{Enabled: true, Port: 4280, Host: "localhost"},
+		},
+	}
+	serveInfo.StartTime = time.Now().Add(-5 * time.Minute)
+
+	if err := WritePIDFile(pidPath, serveInfo); err != nil {
+		t.Fatalf("failed to write serve PID file: %v", err)
+	}
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := RunPs([]string{"--pid-file", pidPath})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Errorf("RunPs with serve PID file returned error: %v", err)
+	}
+
+	buf := make([]byte, 2048)
+	n, _ := r.Read(buf)
+	output := string(buf[:n])
+
+	// Should display admin and engine from the serve PID file format
+	if !contains(output, "admin") {
+		t.Errorf("output should contain 'admin': %s", output)
+	}
+	if !contains(output, "engine") {
+		t.Errorf("output should contain 'engine': %s", output)
+	}
+	if !contains(output, "4290") {
+		t.Errorf("output should contain '4290': %s", output)
+	}
+	if !contains(output, "4280") {
+		t.Errorf("output should contain '4280': %s", output)
+	}
+	if !contains(output, "running") {
+		t.Errorf("output should contain 'running': %s", output)
+	}
+}
+
+func TestRunPs_WithServePIDFile_JSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	pidPath := filepath.Join(tmpDir, "serve.pid")
+
+	serveInfo := &PIDFile{
+		PID:     os.Getpid(),
+		Version: "v0.3.2",
+		Components: ComponentsInfo{
+			Admin:  ComponentStatus{Enabled: true, Port: 4290, Host: "localhost"},
+			Engine: ComponentStatus{Enabled: true, Port: 4280, Host: "localhost"},
+		},
+	}
+	serveInfo.StartTime = time.Now().Add(-5 * time.Minute)
+
+	if err := WritePIDFile(pidPath, serveInfo); err != nil {
+		t.Fatalf("failed to write serve PID file: %v", err)
+	}
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := RunPs([]string{"--pid-file", pidPath, "--json"})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Errorf("RunPs --json with serve PID file returned error: %v", err)
+	}
+
+	buf := make([]byte, 2048)
+	n, _ := r.Read(buf)
+	output := string(buf[:n])
+
+	if !contains(output, `"running": true`) {
+		t.Errorf("output should contain running true: %s", output)
+	}
+	if !contains(output, `"version": "v0.3.2"`) {
+		t.Errorf("output should contain version: %s", output)
+	}
+	if !contains(output, `"name": "admin"`) {
+		t.Errorf("output should contain admin service: %s", output)
+	}
+	if !contains(output, `"name": "engine"`) {
+		t.Errorf("output should contain engine service: %s", output)
 	}
 }
 
