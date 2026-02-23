@@ -11,50 +11,35 @@ Get your first mock API running in under 5 minutes.
 - A terminal
 - curl or any HTTP client
 
-## Step 1: Create a Mock Configuration
+## Option A: CLI-First (No Config File)
 
-Create a file called `mocks.json` in your current directory:
+The fastest way to start — add mocks directly from the command line.
 
-```json
-{
-  "mocks": [
-    {
-      "id": "hello-world",
-      "name": "Hello World Endpoint",
-      "enabled": true,
-      "matcher": {
-        "method": "GET",
-        "path": "/api/hello"
-      },
-      "response": {
-        "statusCode": 200,
-        "headers": {
-          "Content-Type": "application/json"
-        },
-        "body": "{\"message\": \"Hello, World!\"}"
-      }
-    }
-  ]
-}
-```
-
-## Step 2: Start the Mock Server
+### Start an Empty Server
 
 ```bash
-mockd start --config mocks.json
+mockd start -d
 ```
 
-You should see output like:
+This starts mockd in the background on port 4280 (mock server) and 4290 (admin API).
+
+### Add a Mock
+
+```bash
+mockd add http --path /api/hello --body '{"message": "Hello, World!"}'
+```
+
+Output:
 
 ```
-mockd server starting...
-Listening on http://localhost:4280
-Loaded 1 mock(s) from mocks.json
+Created mock: http_abc123
+  Type: http
+  Method: GET
+  Path:   /api/hello
+  Status: 200
 ```
 
-## Step 3: Test Your Mock
-
-Open a new terminal and make a request:
+### Test It
 
 ```bash
 curl http://localhost:4280/api/hello
@@ -66,131 +51,183 @@ Response:
 {"message": "Hello, World!"}
 ```
 
-Congratulations! You've created your first mock API.
+### Add More Mocks
+
+```bash
+# POST endpoint
+mockd add http -m POST --path /api/users --status 201 \
+  --body '{"id": 3, "message": "User created"}'
+
+# Endpoint with delay
+mockd add http --path /api/slow --delay 500 \
+  --body '{"message": "This took a while"}'
+
+# List what you've created
+mockd list
+```
+
+---
+
+## Option B: YAML Config File
+
+For version-controlled, reproducible mock setups.
+
+### Create a Config File
+
+Create `mockd.yaml`:
+
+```yaml
+version: "1.0"
+
+mocks:
+  - id: hello-world
+    name: Hello World Endpoint
+    type: http
+    enabled: true
+    http:
+      matcher:
+        method: GET
+        path: /api/hello
+      response:
+        statusCode: 200
+        headers:
+          Content-Type: application/json
+        body: '{"message": "Hello, World!"}'
+```
+
+### Start the Server
+
+```bash
+mockd serve --config mockd.yaml
+```
+
+You should see output like:
+
+```
+mockd server starting...
+Listening on http://localhost:4280
+Admin API on http://localhost:4290
+Loaded 1 mock(s) from mockd.yaml
+```
+
+### Test Your Mock
+
+```bash
+curl http://localhost:4280/api/hello
+```
+
+Response:
+
+```json
+{"message": "Hello, World!"}
+```
+
+---
+
+## Option C: Initialize a Project
+
+Use `mockd init` to scaffold a starter configuration:
+
+```bash
+mockd init
+```
+
+This creates a `mockd.yaml` with example mocks you can customize. Then start with:
+
+```bash
+mockd serve
+```
 
 ---
 
 ## Adding More Mocks
 
-Let's add a more realistic API. Update `mocks.json`:
+Expand your YAML config with a realistic REST API:
 
-```json
-{
-  "mocks": [
-    {
-      "id": "get-users",
-      "name": "Get Users List",
-      "enabled": true,
-      "matcher": {
-        "method": "GET",
-        "path": "/api/users"
-      },
-      "response": {
-        "statusCode": 200,
-        "headers": {
-          "Content-Type": "application/json"
-        },
-        "body": "{\"users\": [{\"id\": 1, \"name\": \"Alice\", \"email\": \"alice@example.com\"}, {\"id\": 2, \"name\": \"Bob\", \"email\": \"bob@example.com\"}]}"
-      }
-    },
-    {
-      "id": "get-user-1",
-      "name": "Get User 1",
-      "enabled": true,
-      "matcher": {
-        "method": "GET",
-        "path": "/api/users/1"
-      },
-      "response": {
-        "statusCode": 200,
-        "headers": {
-          "Content-Type": "application/json"
-        },
-        "body": "{\"id\": 1, \"name\": \"Alice\", \"email\": \"alice@example.com\"}"
-      }
-    },
-    {
-      "id": "create-user",
-      "name": "Create New User",
-      "enabled": true,
-      "matcher": {
-        "method": "POST",
-        "path": "/api/users"
-      },
-      "response": {
-        "statusCode": 201,
-        "headers": {
-          "Content-Type": "application/json"
-        },
-        "body": "{\"id\": 3, \"message\": \"User created\"}"
-      }
-    },
-    {
-      "id": "user-not-found",
-      "name": "User Not Found",
-      "enabled": true,
-      "matcher": {
-        "method": "GET",
-        "path": "/api/users/999"
-      },
-      "response": {
-        "statusCode": 404,
-        "headers": {
-          "Content-Type": "application/json"
-        },
-        "body": "{\"error\": \"User not found\"}"
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+
+mocks:
+  - id: get-users
+    name: Get Users List
+    type: http
+    enabled: true
+    http:
+      matcher:
+        method: GET
+        path: /api/users
+      response:
+        statusCode: 200
+        body: |
+          {
+            "users": [
+              {"id": 1, "name": "Alice", "email": "alice@example.com"},
+              {"id": 2, "name": "Bob", "email": "bob@example.com"}
+            ]
+          }
+
+  - id: get-user-by-id
+    name: Get User by ID
+    type: http
+    enabled: true
+    http:
+      matcher:
+        method: GET
+        path: /api/users/{id}
+      response:
+        statusCode: 200
+        body: |
+          {"id": "{{request.pathParam.id}}", "name": "Dynamic User"}
+
+  - id: create-user
+    name: Create New User
+    type: http
+    enabled: true
+    http:
+      matcher:
+        method: POST
+        path: /api/users
+      response:
+        statusCode: 201
+        body: '{"id": 3, "message": "User created"}'
 ```
 
 Restart the server (Ctrl+C to stop, then start again):
 
 ```bash
-mockd start --config mocks.json
+mockd serve --config mockd.yaml
 ```
 
-Test the new endpoints:
+Test the endpoints:
 
 ```bash
 # List users
 curl http://localhost:4280/api/users
 
-# Get single user
-curl http://localhost:4280/api/users/1
+# Get single user (dynamic path parameter)
+curl http://localhost:4280/api/users/42
 
 # Create user
 curl -X POST http://localhost:4280/api/users
-
-# Not found
-curl http://localhost:4280/api/users/999
 ```
 
 ---
 
 ## Using Path Parameters
 
-Match dynamic path segments with patterns:
+Match dynamic path segments:
 
-```json
-{
-  "id": "get-user-by-id",
-  "name": "Get User by ID",
-  "enabled": true,
-  "matcher": {
-    "method": "GET",
-    "path": "/api/users/*"
-  },
-  "response": {
-    "statusCode": 200,
-    "headers": {
-      "Content-Type": "application/json"
-    },
-    "body": "{\"id\": \"dynamic\", \"name\": \"Dynamic User\"}"
-  }
-}
+```yaml
+http:
+  matcher:
+    method: GET
+    path: /api/users/{id}
+  response:
+    statusCode: 200
+    body: '{"id": "{{request.pathParam.id}}", "name": "User {{request.pathParam.id}}"}'
 ```
+
+This matches `/api/users/1`, `/api/users/abc`, etc.
 
 ---
 
@@ -198,24 +235,15 @@ Match dynamic path segments with patterns:
 
 Simulate network latency:
 
-```json
-{
-  "id": "slow-endpoint",
-  "name": "Slow Endpoint",
-  "enabled": true,
-  "matcher": {
-    "method": "GET",
-    "path": "/api/slow"
-  },
-  "response": {
-    "statusCode": 200,
-    "headers": {
-      "Content-Type": "application/json"
-    },
-    "delayMs": 500,
-    "body": "{\"message\": \"This took a while\"}"
-  }
-}
+```yaml
+http:
+  matcher:
+    method: GET
+    path: /api/slow
+  response:
+    statusCode: 200
+    delayMs: 500
+    body: '{"message": "This took a while"}'
 ```
 
 ---
@@ -225,54 +253,62 @@ Simulate network latency:
 Use a different port:
 
 ```bash
-mockd start --config mocks.json --port 3000
-```
-
-Or in the config:
-
-```json
-{
-  "server": {
-    "port": 3000
-  },
-  "mocks": [...]
-}
+mockd serve --config mockd.yaml --port 3000
 ```
 
 ---
 
-## Adding Mocks with the CLI
+## Beyond HTTP
 
-You can also add mocks at runtime without editing config files:
+mockd isn't just for HTTP. Add other protocol mocks to the same config:
 
-```bash
-# Start an empty server
-mockd start
+```yaml
+version: "1.0"
 
-# Add a mock from the CLI
-mockd http add --path /api/hello --body '{"message": "Hello!"}'
-# Output: Created mock: http_abc123
+mocks:
+  # HTTP mock
+  - id: api-hello
+    type: http
+    http:
+      matcher: { method: GET, path: /api/hello }
+      response: { statusCode: 200, body: '{"msg": "hello"}' }
 
-# Update the same mock by running add again (upsert by default)
-mockd http add --path /api/hello --body '{"message": "Hello, updated!"}'
-# Output: Updated mock: http_abc123
+  # WebSocket mock
+  - id: ws-echo
+    type: websocket
+    websocket:
+      path: /ws
+      echoMode: true
 
-# List mocks (use -w to show full IDs for copy-pasting)
-mockd list
-mockd list --no-truncate
-
-# Delete a mock by ID or prefix
-mockd delete http_abc
-# Output: Deleted mock: http_abc123
+  # GraphQL mock
+  - id: graphql-api
+    type: graphql
+    graphql:
+      path: /graphql
+      schema: |
+        type Query { hello: String }
+      resolvers:
+        Query.hello:
+          response: "world"
 ```
 
-:::tip
-`mockd http add` uses **upsert behavior** — if a mock already exists with the same method and path, it updates the existing mock instead of creating a duplicate. Use `--allow-duplicate` if you need multiple mocks on the same route.
-:::
+```bash
+# Start everything
+mockd serve --config mockd.yaml
+
+# Test HTTP
+curl http://localhost:4280/api/hello
+
+# Test GraphQL
+curl -X POST http://localhost:4280/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ hello }"}'
+```
 
 ## What's Next?
 
 - **[Core Concepts](/getting-started/concepts/)** - Understand mocks, matching, and responses
 - **[Request Matching](/guides/request-matching/)** - Advanced matching patterns
 - **[Stateful Mocking](/guides/stateful-mocking/)** - Simulate CRUD APIs
+- **[Protocol Guides](/protocols/graphql/)** - GraphQL, gRPC, WebSocket, MQTT, SOAP, SSE
 - **[CLI Reference](/reference/cli/)** - All command-line options

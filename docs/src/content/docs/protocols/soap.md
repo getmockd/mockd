@@ -145,6 +145,153 @@ mocks:
 | `match` | object | XPath-based request matching |
 | `fault` | object | SOAP fault response configuration |
 
+## WSDL Configuration
+
+### Inline WSDL
+
+Define the WSDL directly in your config:
+
+```yaml
+soap:
+  path: /soap/OrderService
+  wsdl: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+                 xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+                 xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                 xmlns:tns="http://example.com/orders"
+                 targetNamespace="http://example.com/orders"
+                 name="OrderService">
+      <types>
+        <xsd:schema targetNamespace="http://example.com/orders">
+          <xsd:element name="GetOrder">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="orderId" type="xsd:string"/>
+              </xsd:sequence>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:schema>
+      </types>
+      <message name="GetOrderInput">
+        <part name="parameters" element="tns:GetOrder"/>
+      </message>
+      <message name="GetOrderOutput">
+        <part name="parameters" element="tns:GetOrderResponse"/>
+      </message>
+      <portType name="OrderPortType">
+        <operation name="GetOrder">
+          <input message="tns:GetOrderInput"/>
+          <output message="tns:GetOrderOutput"/>
+        </operation>
+      </portType>
+      <binding name="OrderBinding" type="tns:OrderPortType">
+        <soap:binding style="document"
+                      transport="http://schemas.xmlsoap.org/soap/http"/>
+        <operation name="GetOrder">
+          <soap:operation soapAction="http://example.com/GetOrder"/>
+        </operation>
+      </binding>
+      <service name="OrderService">
+        <port name="OrderPort" binding="tns:OrderBinding">
+          <soap:address location="http://localhost:4280/soap/OrderService"/>
+        </port>
+      </service>
+    </definitions>
+```
+
+### External WSDL File
+
+Reference an external WSDL file:
+
+```yaml
+soap:
+  path: /soap/OrderService
+  wsdlFile: ./wsdl/orders.wsdl
+```
+
+The WSDL is served at `http://localhost:4280/soap/OrderService?wsdl` regardless of whether it's inline or from a file.
+
+## Operations
+
+Operations define how each SOAP action is handled. Each operation maps a SOAPAction header to a response.
+
+### Basic Operation
+
+```yaml
+operations:
+  GetUser:
+    soapAction: "http://example.com/GetUser"
+    response: |
+      <GetUserResponse xmlns="http://example.com/user">
+        <User>
+          <Id>123</Id>
+          <Name>John Doe</Name>
+          <Email>john@example.com</Email>
+        </User>
+      </GetUserResponse>
+```
+
+### Multiple Operations
+
+```yaml
+operations:
+  GetUser:
+    soapAction: "http://example.com/GetUser"
+    response: |
+      <GetUserResponse xmlns="http://example.com/user">
+        <User>
+          <Id>123</Id>
+          <Name>John Doe</Name>
+        </User>
+      </GetUserResponse>
+
+  CreateUser:
+    soapAction: "http://example.com/CreateUser"
+    response: |
+      <CreateUserResponse xmlns="http://example.com/user">
+        <UserId>{{uuid}}</UserId>
+        <Status>Created</Status>
+        <CreatedAt>{{now}}</CreatedAt>
+      </CreateUserResponse>
+
+  DeleteUser:
+    soapAction: "http://example.com/DeleteUser"
+    response: |
+      <DeleteUserResponse xmlns="http://example.com/user">
+        <Success>true</Success>
+      </DeleteUserResponse>
+
+  ListUsers:
+    soapAction: "http://example.com/ListUsers"
+    response: |
+      <ListUsersResponse xmlns="http://example.com/user">
+        <Users>
+          <User><Id>1</Id><Name>Alice</Name></User>
+          <User><Id>2</Id><Name>Bob</Name></User>
+          <User><Id>3</Id><Name>Carol</Name></User>
+        </Users>
+      </ListUsersResponse>
+```
+
+### Response Delay
+
+Simulate slow backend services:
+
+```yaml
+operations:
+  GetReport:
+    soapAction: "http://example.com/GetReport"
+    delay: "2s"
+    response: |
+      <GetReportResponse xmlns="http://example.com/reports">
+        <Report>
+          <Id>report_001</Id>
+          <Status>Complete</Status>
+        </Report>
+      </GetReportResponse>
+```
+
 ## XPath Matching
 
 Use XPath expressions to match specific request elements and return conditional responses.
@@ -166,6 +313,81 @@ operations:
           <Email>john@example.com</Email>
         </User>
       </GetUserResponse>
+```
+
+### Multiple XPath Conditions
+
+Match on multiple elements simultaneously:
+
+```yaml
+operations:
+  SearchUsers:
+    soapAction: "http://example.com/SearchUsers"
+    match:
+      xpath:
+        "//Department/text()": "Engineering"
+        "//Status/text()": "active"
+    response: |
+      <SearchUsersResponse xmlns="http://example.com/user">
+        <Users>
+          <User><Name>Alice</Name><Department>Engineering</Department></User>
+          <User><Name>Bob</Name><Department>Engineering</Department></User>
+        </Users>
+      </SearchUsersResponse>
+```
+
+### Conditional Responses with Multiple Mocks
+
+Return different responses for different XPath matches by creating multiple mocks:
+
+```yaml
+mocks:
+  # Match user 123
+  - id: soap-user-123
+    type: soap
+    enabled: true
+    soap:
+      path: /soap/UserService
+      operations:
+        GetUser:
+          soapAction: "http://example.com/GetUser"
+          match:
+            xpath:
+              "//UserId/text()": "123"
+          response: |
+            <GetUserResponse xmlns="http://example.com/user">
+              <User><Id>123</Id><Name>John Doe</Name></User>
+            </GetUserResponse>
+
+  # Match user 456
+  - id: soap-user-456
+    type: soap
+    enabled: true
+    soap:
+      path: /soap/UserService
+      operations:
+        GetUser:
+          soapAction: "http://example.com/GetUser"
+          match:
+            xpath:
+              "//UserId/text()": "456"
+          response: |
+            <GetUserResponse xmlns="http://example.com/user">
+              <User><Id>456</Id><Name>Jane Smith</Name></User>
+            </GetUserResponse>
+
+  # Not found — no XPath match, acts as fallback
+  - id: soap-user-not-found
+    type: soap
+    enabled: true
+    soap:
+      path: /soap/UserService
+      operations:
+        GetUser:
+          soapAction: "http://example.com/GetUser"
+          fault:
+            code: soap:Client
+            message: "User not found"
 ```
 
 ### XPath Patterns
@@ -210,6 +432,45 @@ This generates:
 </soap:Envelope>
 ```
 
+### Fault with Detail
+
+Include structured error details:
+
+```yaml
+operations:
+  TransferFunds:
+    soapAction: "http://example.com/TransferFunds"
+    match:
+      xpath:
+        "//Amount/text()": "0"
+    fault:
+      code: soap:Client
+      message: "Invalid transfer amount"
+      detail: |
+        <TransferError xmlns="http://example.com/errors">
+          <ErrorCode>INVALID_AMOUNT</ErrorCode>
+          <MinAmount>0.01</MinAmount>
+          <MaxAmount>1000000.00</MaxAmount>
+        </TransferError>
+```
+
+### Server-Side Fault
+
+Simulate backend failures:
+
+```yaml
+operations:
+  ProcessPayment:
+    soapAction: "http://example.com/ProcessPayment"
+    fault:
+      code: soap:Server
+      message: "Payment gateway unavailable"
+      detail: |
+        <ServiceError xmlns="http://example.com/errors">
+          <RetryAfter>30</RetryAfter>
+        </ServiceError>
+```
+
 ### Common SOAP Fault Codes
 
 | Code | Description | Use Case |
@@ -245,6 +506,247 @@ Available templates:
 | `{{now}}` | Current ISO timestamp |
 | `{{timestamp}}` | Unix timestamp |
 
+## Examples
+
+### Payment Processing Service
+
+```yaml
+version: "1.0"
+
+mocks:
+  - id: payment-soap
+    name: Payment Service
+    type: soap
+    enabled: true
+    soap:
+      path: /soap/PaymentService
+      operations:
+        ProcessPayment:
+          soapAction: "http://example.com/ProcessPayment"
+          response: |
+            <ProcessPaymentResponse xmlns="http://example.com/payment">
+              <TransactionId>{{uuid}}</TransactionId>
+              <Status>APPROVED</Status>
+              <Amount>99.99</Amount>
+              <Currency>USD</Currency>
+              <Timestamp>{{now}}</Timestamp>
+            </ProcessPaymentResponse>
+
+        RefundPayment:
+          soapAction: "http://example.com/RefundPayment"
+          delay: "500ms"
+          response: |
+            <RefundPaymentResponse xmlns="http://example.com/payment">
+              <RefundId>{{uuid}}</RefundId>
+              <Status>PROCESSED</Status>
+              <Timestamp>{{now}}</Timestamp>
+            </RefundPaymentResponse>
+
+        GetTransaction:
+          soapAction: "http://example.com/GetTransaction"
+          response: |
+            <GetTransactionResponse xmlns="http://example.com/payment">
+              <Transaction>
+                <Id>txn_001</Id>
+                <Amount>99.99</Amount>
+                <Currency>USD</Currency>
+                <Status>COMPLETED</Status>
+                <CardLast4>4242</CardLast4>
+                <CreatedAt>2024-01-15T10:00:00Z</CreatedAt>
+              </Transaction>
+            </GetTransactionResponse>
+```
+
+### Weather Service with XPath Matching
+
+```yaml
+version: "1.0"
+
+mocks:
+  - id: weather-soap-nyc
+    name: Weather Service - NYC
+    type: soap
+    enabled: true
+    soap:
+      path: /soap/WeatherService
+      operations:
+        GetWeather:
+          soapAction: "http://example.com/GetWeather"
+          match:
+            xpath:
+              "//City/text()": "New York"
+          response: |
+            <GetWeatherResponse xmlns="http://example.com/weather">
+              <Weather>
+                <City>New York</City>
+                <Temperature>72</Temperature>
+                <Unit>Fahrenheit</Unit>
+                <Condition>Partly Cloudy</Condition>
+                <Humidity>65</Humidity>
+              </Weather>
+            </GetWeatherResponse>
+
+  - id: weather-soap-london
+    name: Weather Service - London
+    type: soap
+    enabled: true
+    soap:
+      path: /soap/WeatherService
+      operations:
+        GetWeather:
+          soapAction: "http://example.com/GetWeather"
+          match:
+            xpath:
+              "//City/text()": "London"
+          response: |
+            <GetWeatherResponse xmlns="http://example.com/weather">
+              <Weather>
+                <City>London</City>
+                <Temperature>18</Temperature>
+                <Unit>Celsius</Unit>
+                <Condition>Rainy</Condition>
+                <Humidity>80</Humidity>
+              </Weather>
+            </GetWeatherResponse>
+
+  - id: weather-soap-default
+    name: Weather Service - Default
+    type: soap
+    enabled: true
+    soap:
+      path: /soap/WeatherService
+      operations:
+        GetWeather:
+          soapAction: "http://example.com/GetWeather"
+          fault:
+            code: soap:Client
+            message: "City not found. Supported cities: New York, London"
+```
+
+### Enterprise Integration with Multiple Services
+
+```yaml
+version: "1.0"
+
+mocks:
+  - id: crm-soap
+    name: CRM Service
+    type: soap
+    enabled: true
+    soap:
+      path: /soap/CRMService
+      operations:
+        GetCustomer:
+          soapAction: "urn:crm:GetCustomer"
+          response: |
+            <GetCustomerResponse xmlns="urn:crm">
+              <Customer>
+                <Id>CUST-001</Id>
+                <Name>Acme Corp</Name>
+                <Type>Enterprise</Type>
+                <Status>Active</Status>
+                <AccountManager>John Smith</AccountManager>
+              </Customer>
+            </GetCustomerResponse>
+
+        CreateLead:
+          soapAction: "urn:crm:CreateLead"
+          response: |
+            <CreateLeadResponse xmlns="urn:crm">
+              <LeadId>{{uuid}}</LeadId>
+              <Status>New</Status>
+              <CreatedAt>{{now}}</CreatedAt>
+            </CreateLeadResponse>
+
+  - id: inventory-soap
+    name: Inventory Service
+    type: soap
+    enabled: true
+    soap:
+      path: /soap/InventoryService
+      operations:
+        CheckStock:
+          soapAction: "urn:inventory:CheckStock"
+          response: |
+            <CheckStockResponse xmlns="urn:inventory">
+              <Item>
+                <SKU>WIDGET-001</SKU>
+                <InStock>true</InStock>
+                <Quantity>250</Quantity>
+                <Warehouse>US-EAST-1</Warehouse>
+              </Item>
+            </CheckStockResponse>
+
+        ReserveStock:
+          soapAction: "urn:inventory:ReserveStock"
+          delay: "200ms"
+          response: |
+            <ReserveStockResponse xmlns="urn:inventory">
+              <ReservationId>{{uuid}}</ReservationId>
+              <Status>Reserved</Status>
+              <ExpiresAt>{{now}}</ExpiresAt>
+            </ReserveStockResponse>
+```
+
+## CLI Commands
+
+### Add a SOAP Mock
+
+Create SOAP mocks directly from the command line using `mockd soap add`:
+
+```bash
+# Simple operation
+mockd soap add --path /soap/weather --action GetWeather \
+  --response '<Temp>72</Temp>'
+
+# With a specific SOAPAction
+mockd soap add --path /soap/users --action GetUser \
+  --response '<User><Id>123</Id><Name>John</Name></User>'
+```
+
+Output:
+
+```
+Created mock: soap_4b349e0c7719f577
+  Type: soap
+  Path: /soap/weather
+  Operation: GetWeather
+```
+
+#### Add Command Flags
+
+| Flag | Description |
+|------|-------------|
+| `--path` | SOAP endpoint path (required) |
+| `--action` | SOAP operation/action name (required) |
+| `--response` | XML response body |
+| `--admin-url` | Admin API URL (default: `http://localhost:4290`) |
+
+:::note
+The CLI flag is `--action`, not `--operation`. This matches the SOAPAction header terminology.
+:::
+
+For complex SOAP mocks with WSDL definitions, XPath matching, or multiple operations, use a YAML config file instead of the CLI.
+
+### List SOAP Mocks
+
+```bash
+# List all mocks (includes SOAP)
+mockd list
+
+# Filter to SOAP mocks
+mockd list --type soap
+
+# JSON output
+mockd list --type soap --json
+```
+
+### Delete a SOAP Mock
+
+```bash
+mockd delete soap_4b349e0c7719f577
+```
+
 ## Testing
 
 ### Test with curl
@@ -263,6 +765,37 @@ curl -X POST http://localhost:4280/soap/UserService \
     </GetUser>
   </soap:Body>
 </soap:Envelope>'
+```
+
+### Verify WSDL Endpoint
+
+```bash
+# Fetch WSDL
+curl http://localhost:4280/soap/UserService?wsdl
+
+# Verify WSDL returns XML
+curl -sI http://localhost:4280/soap/UserService?wsdl | grep Content-Type
+# Content-Type: text/xml; charset=utf-8
+```
+
+### Test Fault Responses
+
+Trigger a SOAP fault by sending a request that matches fault conditions:
+
+```bash
+curl -X POST http://localhost:4280/soap/UserService \
+  -H "Content-Type: text/xml" \
+  -H "SOAPAction: http://example.com/GetUser" \
+  -d '<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetUser xmlns="http://example.com/user">
+      <UserId>invalid</UserId>
+    </GetUser>
+  </soap:Body>
+</soap:Envelope>'
+
+# Returns SOAP Fault with HTTP 500
 ```
 
 ### Test with SOAP Clients
@@ -285,8 +818,136 @@ result = client.service.GetUser(UserId='123')
 print(result)
 ```
 
+### Java Example
+
+```java
+import javax.xml.ws.Service;
+import java.net.URL;
+import javax.xml.namespace.QName;
+
+URL wsdlUrl = new URL("http://localhost:4280/soap/UserService?wsdl");
+QName serviceName = new QName("http://example.com/user", "UserService");
+Service service = Service.create(wsdlUrl, serviceName);
+UserPortType port = service.getPort(UserPortType.class);
+GetUserResponse response = port.getUser("123");
+```
+
+### Integration Tests (Go)
+
+```go
+package main
+
+import (
+    "bytes"
+    "io"
+    "net/http"
+    "strings"
+    "testing"
+)
+
+func TestSOAPMock(t *testing.T) {
+    soapRequest := `<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetUser xmlns="http://example.com/user">
+      <UserId>123</UserId>
+    </GetUser>
+  </soap:Body>
+</soap:Envelope>`
+
+    req, _ := http.NewRequest("POST",
+        "http://localhost:4280/soap/UserService",
+        bytes.NewBufferString(soapRequest))
+    req.Header.Set("Content-Type", "text/xml; charset=utf-8")
+    req.Header.Set("SOAPAction", "http://example.com/GetUser")
+
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        t.Fatalf("Request failed: %v", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != 200 {
+        t.Errorf("Expected 200, got %d", resp.StatusCode)
+    }
+
+    body, _ := io.ReadAll(resp.Body)
+    if !strings.Contains(string(body), "John Doe") {
+        t.Error("Response does not contain expected user name")
+    }
+}
+```
+
+## Testing Tips
+
+### Verify SOAPAction Header Matching
+
+SOAP mocks match on the `SOAPAction` header. Ensure your client sends it:
+
+```bash
+# This will match
+curl -X POST http://localhost:4280/soap/UserService \
+  -H "SOAPAction: http://example.com/GetUser" \
+  -H "Content-Type: text/xml" \
+  -d @request.xml
+
+# This will NOT match (missing SOAPAction)
+curl -X POST http://localhost:4280/soap/UserService \
+  -H "Content-Type: text/xml" \
+  -d @request.xml
+```
+
+### Test Error Handling
+
+Create mocks that return SOAP faults to verify your client's error handling:
+
+```yaml
+operations:
+  # Timeout simulation
+  SlowOperation:
+    soapAction: "http://example.com/SlowOp"
+    delay: "30s"
+    response: |
+      <SlowOpResponse><Status>done</Status></SlowOpResponse>
+
+  # Server error
+  FailingOperation:
+    soapAction: "http://example.com/FailOp"
+    fault:
+      code: soap:Server
+      message: "Internal service error"
+```
+
+### Debug with Request Logs
+
+Use mockd's request log to see incoming SOAP requests:
+
+```bash
+# View recent requests
+curl http://localhost:4290/logs?limit=5
+
+# Or via CLI
+mockd logs --limit 5
+```
+
+### Use with CI/CD
+
+Start mockd in the background for integration tests:
+
+```bash
+# Start in background
+mockd start -d --config soap-mocks.yaml
+
+# Run your SOAP client tests
+./run-soap-tests.sh
+
+# Stop when done
+mockd stop
+```
+
 ## Next Steps
 
 - [Response Templating](/guides/response-templating/) - Dynamic response values
-- [Request Matching](/guides/request-matching/) - HTTP-level matching
-- [TLS/HTTPS](/guides/tls-https/) - Secure SOAP endpoints
+- [Import/Export](/guides/import-export/) - Import existing SOAP mocks
+- [Chaos Engineering](/guides/chaos-engineering/) - Simulate failures
+- [Configuration Reference](/reference/configuration/) - Full configuration schema

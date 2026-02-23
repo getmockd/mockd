@@ -995,6 +995,45 @@ mocks:
 
 ## CLI Commands
 
+### Add a GraphQL Mock
+
+Create GraphQL mocks directly from the command line using `mockd graphql add`:
+
+```bash
+# Simple query resolver
+mockd graphql add --path /graphql --operation users \
+  --response '["Alice", "Bob"]'
+
+# Query with nested object response
+mockd graphql add --path /graphql --operation user \
+  --response '{"id":"1","name":"Alice","email":"alice@example.com"}'
+
+# Mutation resolver
+mockd graphql add --path /graphql --operation createUser \
+  --mutation --response '{"id":"new_1","name":"Created User"}'
+```
+
+Output:
+
+```
+Created mock: graphql_3c1df10ed1566392
+  Type: graphql
+  Path: /graphql
+  Operation: Query.users
+```
+
+The `--response` flag takes raw JSON that becomes the resolver data. For a query like `{ users { name } }`, the response is automatically wrapped: `{"data":{"users":["Alice","Bob"]}}`.
+
+#### Add Command Flags
+
+| Flag | Description |
+|------|-------------|
+| `--path` | GraphQL endpoint path (default: `/graphql`) |
+| `--operation` | Operation/field name (e.g., `users`, `createUser`) |
+| `--response` | JSON response data for the resolver |
+| `--mutation` | Create a Mutation resolver instead of Query |
+| `--admin-url` | Admin API URL (default: `http://localhost:4290`) |
+
 ### Validate Schema
 
 Validate a GraphQL schema file:

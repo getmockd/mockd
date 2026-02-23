@@ -1,9 +1,30 @@
 ---
 title: Troubleshooting Guide
-description: Solutions for common issues when using mockd, including mock matching problems, port conflicts, and performance optimization.
+description: Solutions for common issues when using mockd, including mock matching problems, port conflicts, and protocol-specific debugging.
 ---
 
 This guide covers common issues you may encounter when using mockd and how to resolve them.
+
+## Quick Diagnostics
+
+Before diving into specific issues, run these commands:
+
+```bash
+# Full diagnostic report
+mockd doctor
+
+# Check server health
+mockd health
+
+# Show what's running
+mockd status
+
+# List loaded mocks
+mockd list
+
+# View recent request logs
+mockd logs --limit 10
+```
 
 ## Mock Not Matching
 
@@ -53,21 +74,34 @@ lsof -i :4280
 # Check what's using the port (Windows)
 netstat -ano | findstr :4280
 
+# Check all mockd default ports
+mockd ports
+
 # Use a different port
-mockd start --port 3000
+mockd serve --port 3000
 ```
+
+### Default Ports
+
+| Port | Service | Override Flag |
+|------|---------|---------------|
+| 4280 | Mock server (HTTP, GraphQL, WebSocket, SOAP, SSE) | `--port` |
+| 4290 | Admin API | `--admin-port` |
+| 50051 | gRPC (configurable per mock) | In YAML config |
+| 1883 | MQTT (configurable per mock) | In YAML config |
 
 ### Solutions
 
 - Kill the existing process using the port
 - Choose a different port with the `--port` flag
-- Check if another mockd instance is already running
+- Check if another mockd instance is already running: `mockd ps`
+- Stop a running instance: `mockd stop`
 
 ## Server Won't Start
 
 If the server fails to start:
 
-- Check config file syntax with `mockd config validate`
+- Check config file syntax with `mockd validate mockd.yaml`
 - Run `mockd doctor` for diagnostics
 - Check permissions on data directory
 - Verify mock files are valid YAML/JSON
@@ -76,68 +110,275 @@ If the server fails to start:
 
 | Issue | Solution |
 |-------|----------|
-| Invalid YAML syntax | Use a YAML linter to validate files |
+| Invalid YAML syntax | Run `mockd validate mockd.yaml` |
 | Missing required fields | Check mock schema requirements |
 | Permission denied | Ensure write access to data directory |
 | Invalid port number | Use a port between 1024-65535 |
+| Proto file not found | Check `protoFile` path is relative to config |
+
+## HTTP Issues
+
+### Response Body Not Matching Expected
+
+```bash
+# Check the exact mock configuration
+mockd get <mock-id> --json
+
+# Check request logs for what was actually matched
+mockd logs --limit 5
+```
+
+### Wrong Mock Matched
+
+When multiple mocks could match, priority matters:
+
+1. Mocks with more specific paths win (`/api/users/1` > `/api/users/{id}`)
+2. Mocks with more matchers win (path + headers > path only)
+3. Earlier mocks in config win if priority is equal
+
+```bash
+# List all mocks and their paths
+mockd list --no-truncate
+```
+
+### Request Body Matching Not Working
+
+- Ensure `Content-Type` header is sent with the request
+- JSON body matching requires valid JSON in both request and matcher
+- Check for extra whitespace or field ordering differences
+
+## GraphQL Issues
+
+### Query Returns Empty Data
+
+- Verify the operation name matches a resolver in your config
+- Check that the schema defines the query type you're calling
+- Ensure introspection is enabled if your client requires it
+
+```bash
+# Test a GraphQL query directly
+curl -X POST http://localhost:4280/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ users { id name } }"}'
+
+# Check introspection
+curl -X POST http://localhost:4280/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ __schema { types { name } } }"}'
+```
+
+### Schema Validation Errors
+
+```bash
+# Validate a schema file
+mockd graphql validate schema.graphql
+```
+
+### Resolver Not Found
+
+- Resolver keys must be `Type.field` format: `Query.users`, `Mutation.createUser`
+- Field names are case-sensitive
+- Check that the schema defines the operation you're resolving
 
 ## gRPC Issues
 
-When working with gRPC mocks:
+### Proto File Errors
 
-- Proto files must be valid and parseable
-- Reflection must be enabled for grpcurl to work
-- Service and method names are case-sensitive
-- Check that proto import paths are correct
+- Proto files must be valid protobuf syntax
+- Check import paths if your proto references other files
+- Verify the package name matches your service configuration
 
-### Debugging gRPC
+```bash
+# List services from a proto file
+mockd grpc list api.proto
+
+# Verify gRPC server is running
+grpcurl -plaintext localhost:50051 list
+```
+
+### "Service not found" Errors
+
+- Service names must be fully qualified: `package.ServiceName` (e.g., `users.UserService`)
+- Method names are case-sensitive
+- Check that the proto file path is correct relative to your config file
+
+### Reflection Not Working
 
 ```bash
 # Test gRPC reflection
-grpcurl -plaintext localhost:4280 list
+grpcurl -plaintext localhost:50051 list
 
-# Check specific service methods
-grpcurl -plaintext localhost:4280 describe your.service.Name
+# If reflection is disabled, use the proto file directly
+grpcurl -plaintext -proto ./service.proto \
+  localhost:50051 package.Service/Method
+```
+
+Ensure `reflection: true` is set in your gRPC config.
+
+### Port Conflicts Between gRPC Mocks
+
+Multiple gRPC mocks on the same port are automatically merged. If you see conflicts:
+
+```bash
+# Check which mocks are on port 50051
+mockd list --type grpc
 ```
 
 ## WebSocket Issues
 
-For WebSocket connection problems:
+### Connection Refused
 
-- Check subprotocol matching between client and mock
-- Verify upgrade headers are correct
-- Ensure the WebSocket path matches the mock configuration
-- Check for proxy/firewall issues that may block WebSocket upgrades
+- Verify the WebSocket path matches your mock: `/ws` vs `/ws/chat`
+- Ensure you're using the correct scheme: `ws://` (not `http://`)
+- Check that mockd is running on the expected port
 
-### WebSocket Debugging Tips
+```bash
+# Test WebSocket endpoint exists
+curl -i http://localhost:4280/ws
 
-- Use browser DevTools Network tab to inspect WebSocket handshake
-- Check the `Sec-WebSocket-Protocol` header if using subprotocols
-- Verify the connection URL scheme (`ws://` vs `wss://`)
+# Connect with mockd CLI
+mockd websocket connect ws://localhost:4280/ws
+```
+
+### Subprotocol Mismatch
+
+If your client requires a specific subprotocol:
+
+```yaml
+websocket:
+  path: /ws
+  subprotocols:
+    - chat.v1
+  requireSubprotocol: true  # Rejects connections without matching subprotocol
+```
+
+Check the `Sec-WebSocket-Protocol` header in your client connection.
+
+### Messages Not Matching
+
+- Matchers are evaluated in order — first match wins
+- Check `matchType`: `exact`, `contains`, `prefix`, `regex`, `json`
+- For JSON matching, verify the JSONPath expression is correct
+
+### Connection Drops
+
+- Enable heartbeat/keepalive in your WebSocket mock config
+- Check `idleTimeout` — connections are closed after inactivity
+- Some proxies/firewalls drop idle WebSocket connections
+
+```yaml
+websocket:
+  heartbeat:
+    enabled: true
+    interval: "30s"
+    timeout: "10s"
+```
+
+## MQTT Issues
+
+### Can't Connect to Broker
+
+- Default MQTT port is **1883** (not 4280)
+- Check if authentication is required
+
+```bash
+# Test connection with mosquitto
+mosquitto_sub -h localhost -p 1883 -t "test/#" -v
+
+# With authentication
+mosquitto_sub -h localhost -p 1883 -u user -P pass -t "test/#"
+```
+
+### Not Receiving Messages
+
+- Check topic name spelling and wildcards (`+` for single level, `#` for multi-level)
+- Verify QoS level — QoS 0 messages may be lost
+- Check if retained messages are configured
+
+```bash
+# Subscribe to all topics
+mockd mqtt subscribe "#"
+
+# Subscribe with specific QoS
+mockd mqtt subscribe --qos 1 "sensors/#"
+```
+
+### Authentication Denied
+
+- Verify username/password match the `auth.users` config
+- Check ACL rules — the user may not have access to the requested topic
+- ACL access levels: `read`, `write`, `readwrite`/`all`
+
+## SOAP Issues
+
+### "No Operation Matched"
+
+- Verify the `SOAPAction` header matches the configured `soapAction` value
+- SOAPAction matching is exact (case-sensitive)
+
+```bash
+# Include the SOAPAction header
+curl -X POST http://localhost:4280/soap/UserService \
+  -H "Content-Type: text/xml" \
+  -H "SOAPAction: http://example.com/GetUser" \
+  -d @request.xml
+```
+
+### WSDL Not Serving
+
+- Access the WSDL by appending `?wsdl` to the endpoint URL
+- Check that the `wsdl` or `wsdlFile` field is set in your config
+
+```bash
+curl http://localhost:4280/soap/UserService?wsdl
+```
+
+### XPath Matching Not Working
+
+- XPath expressions are evaluated against the SOAP body (inside `<soap:Body>`)
+- Use `//Element/text()` to match element text content
+- Namespace prefixes in XPath may need to match the request
+
+## SSE Issues
+
+### Stream Ends Immediately
+
+- Check the `lifecycle.maxEvents` setting — it may be too low
+- Verify `lifecycle.timeout` is long enough for your use case
+- Ensure your client sends `Accept: text/event-stream`
+
+```bash
+# Test SSE connection
+curl -N -H "Accept: text/event-stream" http://localhost:4280/events
+```
+
+### Events Not Repeating
+
+- Set `timing.repeat` or configure lifecycle for continuous streams
+- Check if `maxEvents` is limiting the number of events sent
+
+### OpenAI Template Issues
+
+- The `openai-chat` template expects `POST` method
+- Verify `templateParams.tokens` is an array of strings
+- Check that `includeDone: true` is set if your client expects `[DONE]`
 
 ## Performance Issues
 
 If mockd is running slowly:
 
 - Check mock count (large lists slow down matching)
-- Enable metrics endpoint for monitoring
 - Consider using more specific matchers
 - Review regex patterns for efficiency
 
 ### Performance Optimization
 
 ```bash
-# Check current mock count
-mockd list | wc -l
+# Check current mock count and status
+mockd status
 
-# Show full mock IDs and paths for debugging
-mockd list --no-truncate
-
-# Enable metrics for monitoring
-mockd start --metrics
-
-# View performance metrics
-curl http://localhost:4280/__mockd/metrics
+# Show all ports in use
+mockd ports
 ```
 
 ### Best Practices
@@ -145,13 +386,21 @@ curl http://localhost:4280/__mockd/metrics
 - Use exact path matching when possible instead of regex
 - Group related mocks into separate files
 - Remove unused or disabled mocks
-- Use path parameters instead of regex for dynamic segments
+- Use path parameters (`{id}`) instead of regex for dynamic segments
 
 ## Getting Help
 
 If you're still experiencing issues:
 
 1. Run `mockd doctor` for a comprehensive diagnostic report
-2. Check the logs with `mockd logs --level debug`
-3. Search existing issues on GitHub
+2. Check the logs with `mockd logs`
+3. Search existing issues on [GitHub](https://github.com/getmockd/mockd/issues)
 4. Open a new issue with diagnostic output and reproduction steps
+
+Include this information when reporting issues:
+
+```bash
+mockd version
+mockd doctor
+mockd status --json
+```

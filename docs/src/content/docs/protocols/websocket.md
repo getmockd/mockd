@@ -756,7 +756,40 @@ mocks:
 
 ## CLI Commands
 
-mockd provides CLI tools for interacting with WebSocket endpoints.
+mockd provides CLI tools for creating WebSocket mocks and interacting with WebSocket endpoints.
+
+### Add a WebSocket Mock
+
+Create WebSocket mocks directly from the command line using `mockd websocket add`:
+
+```bash
+# Echo mode — reflects messages back to sender
+mockd websocket add --path /ws/echo --echo
+
+# With a custom path
+mockd websocket add --path /ws/chat --echo
+```
+
+Output:
+
+```
+Created mock: websocket_0b5ebb9fa569a655
+  Type: websocket
+  Path: /ws/echo
+  Echo: enabled
+```
+
+#### Add Command Flags
+
+| Flag | Description |
+|------|-------------|
+| `--path` | WebSocket endpoint path (required) |
+| `--echo` | Enable echo mode (reflect messages back) |
+| `--admin-url` | Admin API URL (default: `http://localhost:4290`) |
+
+:::tip
+For WebSocket mocks with matchers, scenarios, or complex configurations, use a YAML config file instead of the CLI. The CLI `add` command creates simple echo-mode endpoints for quick testing.
+:::
 
 ### websocket connect
 

@@ -5,6 +5,51 @@ description: Understanding the fundamental concepts of mockd
 
 Understanding the fundamental concepts of mockd will help you create effective mocks for any scenario.
 
+## Multi-Protocol Architecture
+
+mockd is not just an HTTP mock server. It supports **seven protocols** from a single binary and configuration file:
+
+| Protocol | Use Case | Default Port |
+|----------|----------|-------------|
+| **HTTP/HTTPS** | REST APIs, webhooks, file downloads | 4280 |
+| **GraphQL** | GraphQL queries, mutations, subscriptions | 4280 (path-based) |
+| **gRPC** | Protobuf-based RPC services | 50051 |
+| **WebSocket** | Real-time bidirectional communication | 4280 (path-based) |
+| **MQTT** | IoT devices, sensor networks, pub/sub | 1883 |
+| **SOAP/WSDL** | Enterprise XML web services | 4280 (path-based) |
+| **SSE** | Server-Sent Events, AI streaming | 4280 (path-based) |
+
+HTTP, GraphQL, WebSocket, SOAP, and SSE share the HTTP port (4280) and are differentiated by path or content type. gRPC and MQTT run on their own ports.
+
+All protocols are configured in the same YAML/JSON file using the `type` field:
+
+```yaml
+mocks:
+  - id: rest-api
+    type: http          # HTTP mock
+    http: { ... }
+
+  - id: graphql-api
+    type: graphql       # GraphQL mock
+    graphql: { ... }
+
+  - id: grpc-service
+    type: grpc          # gRPC mock
+    grpc: { ... }
+
+  - id: ws-endpoint
+    type: websocket     # WebSocket mock
+    websocket: { ... }
+
+  - id: mqtt-broker
+    type: mqtt          # MQTT mock
+    mqtt: { ... }
+
+  - id: soap-service
+    type: soap          # SOAP mock
+    soap: { ... }
+```
+
 ## What is a Mock?
 
 A **mock** is a rule that defines:
@@ -19,7 +64,7 @@ A **mock** is a rule that defines:
 }
 ```
 
-When an HTTP request arrives, mockd checks each mock's request matcher. The first match wins and its response is returned.
+For HTTP mocks, when a request arrives, mockd checks each mock's request matcher. The first match wins and its response is returned. Other protocols use protocol-specific matching (GraphQL operations, gRPC methods, MQTT topics, etc.).
 
 ## Request Matching
 
@@ -235,5 +280,6 @@ See [Proxy Recording Guide](/guides/proxy-recording/).
 
 - **[Request Matching](/guides/request-matching/)** - Advanced matching techniques
 - **[Response Templating](/guides/response-templating/)** - Dynamic responses
+- **[Protocol Guides](/protocols/graphql/)** - GraphQL, gRPC, WebSocket, MQTT, SOAP, SSE
 - **[CLI Reference](/reference/cli/)** - Command-line options
 - **[Configuration Reference](/reference/configuration/)** - Full config schema

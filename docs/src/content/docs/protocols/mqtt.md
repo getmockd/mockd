@@ -792,7 +792,64 @@ mocks:
 
 ## CLI Commands
 
-mockd provides CLI tools for interacting with MQTT brokers.
+mockd provides CLI tools for creating MQTT mocks and interacting with MQTT brokers.
+
+### Add an MQTT Mock
+
+Create MQTT mocks directly from the command line using `mockd mqtt add`:
+
+```bash
+# Simple topic with payload
+mockd mqtt add --topic sensors/temperature \
+  --payload '{"value": 22.5, "unit": "celsius"}'
+
+# With QoS level
+mockd mqtt add --topic sensors/humidity \
+  --payload '{"value": 65}' \
+  --qos 1
+
+# Custom MQTT port
+mockd mqtt add --topic alerts/critical \
+  --payload '{"level": "high", "message": "Temperature exceeded"}' \
+  --mqtt-port 1884
+```
+
+Output:
+
+```
+Merged into mock: mqtt_1c8177012ffef553
+  Type: mqtt
+  Added:
+    - sensors/temperature
+  Total topics:
+    - sensors/temperature
+```
+
+MQTT mocks on the same port are automatically merged. Adding more topics appends to the existing broker:
+
+```bash
+mockd mqtt add --topic sensors/humidity \
+  --payload '{"value": 65}' --qos 1
+
+# Output:
+# Merged into mock: mqtt_1c8177012ffef553
+#   Type: mqtt
+#   Added:
+#     - sensors/humidity
+#   Total topics:
+#     - sensors/temperature
+#     - sensors/humidity
+```
+
+#### Add Command Flags
+
+| Flag | Description |
+|------|-------------|
+| `--topic` | MQTT topic name (required) |
+| `--payload` | Message payload (string or JSON) |
+| `--qos` | Quality of Service level: 0, 1, or 2 (default: 0) |
+| `--mqtt-port` | MQTT broker port (default: 1883) |
+| `--admin-url` | Admin API URL (default: `http://localhost:4290`) |
 
 ### mqtt publish
 

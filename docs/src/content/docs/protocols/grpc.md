@@ -893,6 +893,66 @@ mocks:
 
 ## CLI Commands
 
+### Add a gRPC Mock
+
+Create gRPC mocks directly from the command line using `mockd grpc add`:
+
+```bash
+# Basic unary RPC
+mockd grpc add --proto ./protos/greeter.proto \
+  --service helloworld.Greeter \
+  --rpc-method SayHello \
+  --response '{"message": "Hello!"}'
+
+# With custom gRPC port
+mockd grpc add --proto ./protos/users.proto \
+  --service users.UserService \
+  --rpc-method GetUser \
+  --response '{"id": "123", "name": "John Doe"}' \
+  --grpc-port 50052
+```
+
+Output:
+
+```
+Created mock: grpc_1dc8695005df8cde
+  Type: grpc
+  Added:
+    - helloworld.Greeter/SayHello
+  Total services:
+    - helloworld.Greeter/SayHello
+```
+
+When adding multiple methods to the same port, mocks are automatically merged:
+
+```bash
+# Add another method to the same service
+mockd grpc add --proto ./protos/users.proto \
+  --service users.UserService \
+  --rpc-method CreateUser \
+  --response '{"id": "new_1", "name": "New User"}'
+
+# Output:
+# Merged into mock: grpc_1dc8695005df8cde
+#   Type: grpc
+#   Added:
+#     - users.UserService/CreateUser
+#   Total services:
+#     - users.UserService/GetUser
+#     - users.UserService/CreateUser
+```
+
+#### Add Command Flags
+
+| Flag | Description |
+|------|-------------|
+| `--proto` | Path to `.proto` file (required) |
+| `--service` | Fully qualified service name (e.g., `package.Service`) |
+| `--rpc-method` | RPC method name |
+| `--response` | JSON response body |
+| `--grpc-port` | gRPC server port (default: 50051) |
+| `--admin-url` | Admin API URL (default: `http://localhost:4290`) |
+
 ### List Services and Methods
 
 Inspect a proto file to see available services and methods:

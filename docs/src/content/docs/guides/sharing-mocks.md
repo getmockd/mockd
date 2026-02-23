@@ -303,7 +303,7 @@ mockd list
 
 - [CLI Reference: tunnel-quic](/reference/cli/#mockd-tunnel-quic)
 - [CLI Reference: tunnel](/reference/cli/#mockd-tunnel)
-- [gRPC Mocking](/guides/grpc-mocking/)
-- [MQTT Mocking](/guides/mqtt-mocking/)
-- [WebSocket Mocking](/guides/websocket-mocking/)
-- [SSE Streaming](/guides/sse-streaming/)
+- [gRPC Mocking](/protocols/grpc/)
+- [MQTT Mocking](/protocols/mqtt/)
+- [WebSocket Mocking](/protocols/websocket/)
+- [SSE Streaming](/protocols/sse/)

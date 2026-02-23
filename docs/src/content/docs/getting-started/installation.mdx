@@ -7,6 +7,22 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 mockd is distributed as a single binary with no external dependencies. Choose the installation method that works best for your environment.
 
+## Quick Install (Recommended)
+
+The fastest way to install mockd on Linux or macOS:
+
+```bash
+curl -sSL https://get.mockd.io | sh
+```
+
+This detects your OS and architecture automatically and installs the latest release.
+
+## Homebrew (macOS / Linux)
+
+```bash
+brew install getmockd/tap/mockd
+```
+
 ## Binary Download
 
 Download the latest release for your platform:
@@ -112,29 +128,31 @@ This installs mockd to your `$GOPATH/bin` directory. Make sure it's in your `PAT
 
 Pull and run the official Docker image:
 
+Port **4280** serves mock traffic. Port **4290** is the Admin API for managing mocks at runtime.
+
 ```bash
 # Pull the latest image
 docker pull ghcr.io/getmockd/mockd:latest
 
-# Run with a local mocks directory
-docker run -p 4280:4280 -v $(pwd)/mocks:/mocks ghcr.io/getmockd/mockd
+# Run with both mock and admin ports exposed
+docker run -p 4280:4280 -p 4290:4290 ghcr.io/getmockd/mockd
 
-# Run with a specific config file
-docker run -p 4280:4280 -v $(pwd)/mocks.json:/mocks.json ghcr.io/getmockd/mockd start --config /mocks.json
+# Run with a local config file
+docker run -p 4280:4280 -p 4290:4290 -v $(pwd)/mockd.yaml:/mockd.yaml ghcr.io/getmockd/mockd serve --config /mockd.yaml
 ```
 
 ### Docker Compose
 
 ```yaml
-version: '3.8'
 services:
   mockd:
     image: ghcr.io/getmockd/mockd:latest
     ports:
-      - "4280:4280"
+      - "4280:4280"  # Mock server
+      - "4290:4290"  # Admin API
     volumes:
-      - ./mocks:/mocks
-    command: start --config /mocks/config.json
+      - ./mockd.yaml:/mockd.yaml
+    command: serve --config /mockd.yaml
 ```
 
 ## Build from Source

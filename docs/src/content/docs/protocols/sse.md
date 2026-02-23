@@ -48,7 +48,29 @@ mockd http add --path /long-poll --sse \
 | `--sse-repeat` | Repeat count (0 = infinite) | `1` |
 | `--sse-keepalive` | Keepalive interval (ms) | `0` |
 
-### Using Configuration File
+### Using Configuration File (YAML)
+
+```yaml
+version: "1.0"
+
+mocks:
+  - id: basic-sse
+    name: Basic SSE Stream
+    type: http
+    enabled: true
+    http:
+      matcher:
+        method: GET
+        path: /events
+      sse:
+        events:
+          - data: "Hello"
+          - data: "World"
+        timing:
+          fixedDelay: 1000
+```
+
+Or in JSON:
 
 ```json
 {
@@ -65,6 +87,28 @@ mockd http add --path /long-poll --sse \
 ```
 
 ### OpenAI-Compatible Streaming
+
+```yaml
+mocks:
+  - id: openai-mock
+    name: OpenAI Chat Mock
+    type: http
+    enabled: true
+    http:
+      matcher:
+        method: POST
+        path: /v1/chat/completions
+      sse:
+        template: openai-chat
+        templateParams:
+          tokens: ["Hello", "!", " How", " can", " I", " help", "?"]
+          model: gpt-4
+          finishReason: stop
+          includeDone: true
+          delayPerToken: 50
+```
+
+Or in JSON:
 
 ```json
 {
@@ -88,6 +132,17 @@ mockd http add --path /long-poll --sse \
 ### Events
 
 Define events to send to clients:
+
+```yaml
+sse:
+  events:
+    - type: message
+      data: "Event payload"
+      id: event-1
+      retry: 3000
+```
+
+Or in JSON:
 
 ```json
 {
@@ -116,6 +171,23 @@ Define events to send to clients:
 
 Control event delivery timing:
 
+```yaml
+sse:
+  timing:
+    initialDelay: 100
+    fixedDelay: 500
+    randomDelay:
+      min: 100
+      max: 500
+    burst:
+      count: 5
+      interval: 10
+      pause: 1000
+    perEventDelays: [100, 200, 500]
+```
+
+Or in JSON:
+
 ```json
 {
   "sse": {
@@ -141,6 +213,23 @@ Control event delivery timing:
 ### Lifecycle Management
 
 Control connection behavior:
+
+```yaml
+sse:
+  lifecycle:
+    keepaliveInterval: 15
+    timeout: 300
+    maxEvents: 100
+    connectionTimeout: 60
+    termination:
+      type: graceful
+      finalEvent:
+        type: close
+        data: "Stream ended"
+      closeDelay: 0
+```
+
+Or in JSON:
 
 ```json
 {
