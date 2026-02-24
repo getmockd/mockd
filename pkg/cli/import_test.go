@@ -71,12 +71,17 @@ func setImportFlags(t *testing.T, format string, replace, dryRun, includeStatic 
 	importIncludeStatic = includeStatic
 }
 
-func TestImportCmd_SourceRequired(t *testing.T) {
-	// The Cobra importCmd requires exactly 1 arg (cobra.ExactArgs(1)).
-	// Cobra validates arg count before RunE, so we just verify the Args validator rejects 0 args.
-	err := cobra.ExactArgs(1)(importCmd, []string{})
-	if err == nil {
-		t.Error("expected ExactArgs(1) to reject 0 args")
+func TestImportCmd_AcceptsZeroOrOneArg(t *testing.T) {
+	// importCmd uses MaximumNArgs(1): 0 args = stdin mode, 1 arg = file/dir/curl.
+	// Verify the Args validator accepts both 0 and 1 args, rejects 2+.
+	if err := cobra.MaximumNArgs(1)(importCmd, []string{}); err != nil {
+		t.Error("should accept 0 args (stdin mode)")
+	}
+	if err := cobra.MaximumNArgs(1)(importCmd, []string{"file.yaml"}); err != nil {
+		t.Error("should accept 1 arg (file/dir/curl)")
+	}
+	if err := cobra.MaximumNArgs(1)(importCmd, []string{"a", "b"}); err == nil {
+		t.Error("should reject 2 args")
 	}
 }
 

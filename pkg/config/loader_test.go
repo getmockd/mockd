@@ -299,6 +299,329 @@ func TestLoadMocksFromFile(t *testing.T) {
 	assert.Len(t, mocks, 2)
 }
 
+// ============================================================================
+// DX-1: Auto-generate IDs and default types in config files
+// ============================================================================
+
+func TestParseYAML_AutoGeneratesID(t *testing.T) {
+	// Config with no id field — should auto-generate
+	data := []byte(`
+version: "1.0"
+mocks:
+  - type: http
+    http:
+      matcher:
+        method: GET
+        path: /test
+      response:
+        statusCode: 200
+        body: hello
+`)
+	collection, err := ParseYAML(data)
+	require.NoError(t, err)
+	require.Len(t, collection.Mocks, 1)
+
+	// ID should be auto-generated with "http_" prefix
+	assert.NotEmpty(t, collection.Mocks[0].ID)
+	assert.True(t, len(collection.Mocks[0].ID) > 5, "auto-generated ID should be longer than prefix")
+	assert.Contains(t, collection.Mocks[0].ID, "http_")
+}
+
+func TestParseJSON_AutoGeneratesID(t *testing.T) {
+	data := []byte(`{
+		"version": "1.0",
+		"mocks": [
+			{
+				"type": "http",
+				"http": {
+					"matcher": {"method": "GET", "path": "/test"},
+					"response": {"statusCode": 200, "body": "hello"}
+				}
+			}
+		]
+	}`)
+	collection, err := ParseJSON(data)
+	require.NoError(t, err)
+	require.Len(t, collection.Mocks, 1)
+
+	assert.NotEmpty(t, collection.Mocks[0].ID)
+	assert.Contains(t, collection.Mocks[0].ID, "http_")
+}
+
+func TestParseYAML_DefaultsTypeToHTTP(t *testing.T) {
+	// Config with no type field but HTTP spec present — should default to "http"
+	data := []byte(`
+version: "1.0"
+mocks:
+  - http:
+      matcher:
+        method: GET
+        path: /no-type
+      response:
+        statusCode: 200
+`)
+	collection, err := ParseYAML(data)
+	require.NoError(t, err)
+	require.Len(t, collection.Mocks, 1)
+
+	assert.Equal(t, mock.TypeHTTP, collection.Mocks[0].Type)
+	assert.NotEmpty(t, collection.Mocks[0].ID)
+	assert.Contains(t, collection.Mocks[0].ID, "http_")
+}
+
+func TestParseYAML_InfersTypeFromSpec(t *testing.T) {
+	tests := []struct {
+		name         string
+		yaml         string
+		expectedType mock.Type
+		idPrefix     string
+	}{
+		{
+			name: "graphql",
+			yaml: `
+version: "1.0"
+mocks:
+  - graphql:
+      path: /graphql
+      schema: "type Query { hello: String }"
+`,
+			expectedType: mock.TypeGraphQL,
+			idPrefix:     "gql_",
+		},
+		{
+			name: "websocket",
+			yaml: `
+version: "1.0"
+mocks:
+  - websocket:
+      path: /ws
+`,
+			expectedType: mock.TypeWebSocket,
+			idPrefix:     "ws_",
+		},
+		{
+			name: "grpc",
+			yaml: `
+version: "1.0"
+mocks:
+  - grpc:
+      port: 50051
+      protoFile: service.proto
+      services:
+        test.Svc:
+          methods:
+            Get:
+              response: {}
+`,
+			expectedType: mock.TypeGRPC,
+			idPrefix:     "grpc_",
+		},
+		{
+			name: "soap",
+			yaml: `
+version: "1.0"
+mocks:
+  - soap:
+      path: /soap
+      operations:
+        GetWeather:
+          response: "<Temp>72</Temp>"
+`,
+			expectedType: mock.TypeSOAP,
+			idPrefix:     "soap_",
+		},
+		{
+			name: "mqtt",
+			yaml: `
+version: "1.0"
+mocks:
+  - mqtt:
+      port: 1883
+      topics:
+        - topic: sensors/temp
+          messages:
+            - payload: '{"temp": 72}'
+`,
+			expectedType: mock.TypeMQTT,
+			idPrefix:     "mqtt_",
+		},
+		{
+			name: "oauth",
+			yaml: `
+version: "1.0"
+mocks:
+  - oauth:
+      issuer: http://localhost:9999
+      clients:
+        - clientId: app
+          clientSecret: secret
+`,
+			expectedType: mock.TypeOAuth,
+			idPrefix:     "oauth_",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			collection, err := ParseYAML([]byte(tt.yaml))
+			require.NoError(t, err)
+			require.Len(t, collection.Mocks, 1)
+
+			assert.Equal(t, tt.expectedType, collection.Mocks[0].Type, "type should be inferred from spec")
+			assert.NotEmpty(t, collection.Mocks[0].ID)
+			assert.Contains(t, collection.Mocks[0].ID, tt.idPrefix, "ID should have correct prefix")
+		})
+	}
+}
+
+func TestParseYAML_PreservesExplicitID(t *testing.T) {
+	// If id is provided, it should NOT be overwritten
+	data := []byte(`
+version: "1.0"
+mocks:
+  - id: my-custom-id
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /keep-id
+      response:
+        statusCode: 200
+`)
+	collection, err := ParseYAML(data)
+	require.NoError(t, err)
+	require.Len(t, collection.Mocks, 1)
+
+	assert.Equal(t, "my-custom-id", collection.Mocks[0].ID)
+}
+
+func TestParseYAML_PreservesExplicitType(t *testing.T) {
+	// If type is provided, it should NOT be overwritten
+	data := []byte(`
+version: "1.0"
+mocks:
+  - type: http
+    http:
+      matcher:
+        method: GET
+        path: /keep-type
+      response:
+        statusCode: 200
+`)
+	collection, err := ParseYAML(data)
+	require.NoError(t, err)
+	require.Len(t, collection.Mocks, 1)
+
+	assert.Equal(t, mock.TypeHTTP, collection.Mocks[0].Type)
+}
+
+func TestParseYAML_MultipleMocksGetUniqueIDs(t *testing.T) {
+	data := []byte(`
+version: "1.0"
+mocks:
+  - type: http
+    http:
+      matcher:
+        method: GET
+        path: /one
+      response:
+        statusCode: 200
+  - type: http
+    http:
+      matcher:
+        method: GET
+        path: /two
+      response:
+        statusCode: 200
+`)
+	collection, err := ParseYAML(data)
+	require.NoError(t, err)
+	require.Len(t, collection.Mocks, 2)
+
+	// Both should have IDs
+	assert.NotEmpty(t, collection.Mocks[0].ID)
+	assert.NotEmpty(t, collection.Mocks[1].ID)
+
+	// IDs should be different
+	assert.NotEqual(t, collection.Mocks[0].ID, collection.Mocks[1].ID,
+		"auto-generated IDs for different mocks should be unique")
+}
+
+func TestParseYAML_MixedExplicitAndAutoID(t *testing.T) {
+	data := []byte(`
+version: "1.0"
+mocks:
+  - id: explicit-1
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /explicit
+      response:
+        statusCode: 200
+  - type: http
+    http:
+      matcher:
+        method: GET
+        path: /auto
+      response:
+        statusCode: 200
+`)
+	collection, err := ParseYAML(data)
+	require.NoError(t, err)
+	require.Len(t, collection.Mocks, 2)
+
+	assert.Equal(t, "explicit-1", collection.Mocks[0].ID)
+	assert.NotEmpty(t, collection.Mocks[1].ID)
+	assert.NotEqual(t, "explicit-1", collection.Mocks[1].ID)
+}
+
+func TestLoadFromFile_YAML_AutoGeneratesID(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "no-id.yaml")
+
+	content := `
+version: "1.0"
+mocks:
+  - type: http
+    http:
+      matcher:
+        method: GET
+        path: /file-test
+      response:
+        statusCode: 200
+        body: works
+`
+	err := os.WriteFile(path, []byte(content), 0644)
+	require.NoError(t, err)
+
+	collection, err := LoadFromFile(path)
+	require.NoError(t, err)
+	require.Len(t, collection.Mocks, 1)
+
+	assert.NotEmpty(t, collection.Mocks[0].ID)
+	assert.Equal(t, mock.TypeHTTP, collection.Mocks[0].Type)
+}
+
+func TestFillMockDefaults_NilMock(t *testing.T) {
+	// Should not panic on nil mocks
+	collection := &MockCollection{
+		Version: "1.0",
+		Mocks:   []*MockConfiguration{nil},
+	}
+	// fillMockDefaults should skip nil entries gracefully
+	fillMockDefaults(collection)
+	// nil entry should remain nil
+	assert.Nil(t, collection.Mocks[0])
+}
+
+func TestInferMockType_NoSpec(t *testing.T) {
+	// When no spec field is set, default to HTTP
+	m := &MockConfiguration{}
+	result := inferMockType(m)
+	assert.Equal(t, mock.TypeHTTP, result)
+}
+
 func TestSaveMocksToFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "save-mocks.json")

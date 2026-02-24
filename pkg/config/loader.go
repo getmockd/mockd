@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/getmockd/mockd/pkg/mock"
 	"gopkg.in/yaml.v3"
 )
 
@@ -142,6 +143,9 @@ func ParseJSON(data []byte) (*MockCollection, error) {
 			"with 'mockd export' which now outputs the correct format", ErrNativeV1Format)
 	}
 
+	// Fill in default type and auto-generate IDs before validation
+	fillMockDefaults(&collection)
+
 	// Validate the collection
 	if err := collection.Validate(); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
@@ -165,12 +169,60 @@ func ParseYAML(data []byte) (*MockCollection, error) {
 			"with 'mockd export' which now outputs the correct format", ErrNativeV1Format)
 	}
 
+	// Fill in default type and auto-generate IDs before validation
+	fillMockDefaults(&collection)
+
 	// Validate the collection
 	if err := collection.Validate(); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
 	return &collection, nil
+}
+
+// fillMockDefaults applies default values to mocks before validation:
+//   - If Type is empty, it is inferred from whichever spec field is populated (HTTP, GraphQL, etc.).
+//     If no spec field is set, it defaults to "http".
+//   - If ID is empty, one is auto-generated using the type prefix (e.g., "http_a1b2c3...").
+//
+// This allows config files to omit "id" and "type" for convenience.
+func fillMockDefaults(collection *MockCollection) {
+	for _, m := range collection.Mocks {
+		if m == nil {
+			continue
+		}
+		// Infer type from populated spec field when type is empty
+		if m.Type == "" {
+			m.Type = inferMockType(m)
+		}
+		// Auto-generate ID when missing
+		if m.ID == "" {
+			m.ID = generateIDForType(m.Type)
+		}
+	}
+}
+
+// inferMockType determines the mock type from which spec field is populated.
+// Returns "http" as default when no spec field is set.
+func inferMockType(m *MockConfiguration) mock.Type {
+	switch {
+	case m.HTTP != nil:
+		return mock.TypeHTTP
+	case m.WebSocket != nil:
+		return mock.TypeWebSocket
+	case m.GraphQL != nil:
+		return mock.TypeGraphQL
+	case m.GRPC != nil:
+		return mock.TypeGRPC
+	case m.SOAP != nil:
+		return mock.TypeSOAP
+	case m.MQTT != nil:
+		return mock.TypeMQTT
+	case m.OAuth != nil:
+		return mock.TypeOAuth
+	default:
+		return mock.TypeHTTP
+	}
 }
 
 // looksLikeNativeV1JSON checks if JSON data has an "endpoints" top-level key,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // =============================================================================
@@ -3132,4 +3133,244 @@ func TestMock_JSON_RoundTrip_OAuth(t *testing.T) {
 	assert.Nil(t, restored.GRPC)
 	assert.Nil(t, restored.SOAP)
 	assert.Nil(t, restored.MQTT)
+}
+
+// =============================================================================
+// DX-5: HTTPResponse.Body accepts string, object, array, number, boolean
+// =============================================================================
+
+func TestHTTPResponse_UnmarshalJSON_StringBody(t *testing.T) {
+	data := []byte(`{"statusCode": 200, "body": "hello world"}`)
+	var resp HTTPResponse
+	err := json.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "hello world", resp.Body)
+	assert.Equal(t, 200, resp.StatusCode)
+}
+
+func TestHTTPResponse_UnmarshalJSON_ObjectBody(t *testing.T) {
+	data := []byte(`{"statusCode": 200, "body": {"id": 1, "name": "Alice"}}`)
+	var resp HTTPResponse
+	err := json.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	// Body stores the raw JSON (preserving whitespace from input)
+	var obj map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(resp.Body), &obj))
+	assert.Equal(t, float64(1), obj["id"])
+	assert.Equal(t, "Alice", obj["name"])
+}
+
+func TestHTTPResponse_UnmarshalJSON_ArrayBody(t *testing.T) {
+	data := []byte(`{"statusCode": 200, "body": [1, 2, 3]}`)
+	var resp HTTPResponse
+	err := json.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	var arr []float64
+	require.NoError(t, json.Unmarshal([]byte(resp.Body), &arr))
+	assert.Equal(t, []float64{1, 2, 3}, arr)
+}
+
+func TestHTTPResponse_UnmarshalJSON_NumberBody(t *testing.T) {
+	data := []byte(`{"statusCode": 200, "body": 42}`)
+	var resp HTTPResponse
+	err := json.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "42", resp.Body)
+}
+
+func TestHTTPResponse_UnmarshalJSON_BooleanBody(t *testing.T) {
+	data := []byte(`{"statusCode": 200, "body": true}`)
+	var resp HTTPResponse
+	err := json.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "true", resp.Body)
+}
+
+func TestHTTPResponse_UnmarshalJSON_NullBody(t *testing.T) {
+	data := []byte(`{"statusCode": 200, "body": null}`)
+	var resp HTTPResponse
+	err := json.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	// null body should be treated as empty (no body)
+	assert.Equal(t, "", resp.Body)
+}
+
+func TestHTTPResponse_UnmarshalJSON_EmptyBody(t *testing.T) {
+	data := []byte(`{"statusCode": 200}`)
+	var resp HTTPResponse
+	err := json.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "", resp.Body)
+}
+
+func TestHTTPResponse_UnmarshalJSON_NestedObjectBody(t *testing.T) {
+	data := []byte(`{"statusCode": 200, "body": {"users": [{"id": 1}, {"id": 2}]}}`)
+	var resp HTTPResponse
+	err := json.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	var obj map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(resp.Body), &obj))
+	users := obj["users"].([]interface{})
+	assert.Len(t, users, 2)
+}
+
+func TestHTTPResponse_UnmarshalJSON_PreservesOtherFields(t *testing.T) {
+	data := []byte(`{
+		"statusCode": 201,
+		"headers": {"Content-Type": "application/json"},
+		"body": {"created": true},
+		"bodyFile": "data.json",
+		"delayMs": 100
+	}`)
+	var resp HTTPResponse
+	err := json.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, 201, resp.StatusCode)
+	assert.Equal(t, "application/json", resp.Headers["Content-Type"])
+	assert.Contains(t, resp.Body, `"created"`)
+	assert.Contains(t, resp.Body, `true`)
+	assert.Equal(t, "data.json", resp.BodyFile)
+	assert.Equal(t, 100, resp.DelayMs)
+}
+
+func TestHTTPResponse_UnmarshalYAML_StringBody(t *testing.T) {
+	data := []byte(`
+statusCode: 200
+body: hello world
+`)
+	var resp HTTPResponse
+	err := yaml.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "hello world", resp.Body)
+}
+
+func TestHTTPResponse_UnmarshalYAML_ObjectBody(t *testing.T) {
+	data := []byte(`
+statusCode: 200
+body:
+  id: 1
+  name: Alice
+`)
+	var resp HTTPResponse
+	err := yaml.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	// YAML maps may serialize in any order, so unmarshal and check
+	var obj map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(resp.Body), &obj))
+	assert.Equal(t, float64(1), obj["id"])
+	assert.Equal(t, "Alice", obj["name"])
+}
+
+func TestHTTPResponse_UnmarshalYAML_InlineObjectBody(t *testing.T) {
+	data := []byte(`
+statusCode: 200
+body: { id: 1, name: Alice }
+`)
+	var resp HTTPResponse
+	err := yaml.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	var obj map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(resp.Body), &obj))
+	assert.Equal(t, float64(1), obj["id"])
+	assert.Equal(t, "Alice", obj["name"])
+}
+
+func TestHTTPResponse_UnmarshalYAML_ArrayBody(t *testing.T) {
+	data := []byte(`
+statusCode: 200
+body:
+  - id: 1
+  - id: 2
+`)
+	var resp HTTPResponse
+	err := yaml.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	var arr []map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(resp.Body), &arr))
+	assert.Len(t, arr, 2)
+}
+
+func TestHTTPResponse_UnmarshalYAML_QuotedJSONStringBody(t *testing.T) {
+	// This is the legacy syntax that should still work
+	data := []byte(`
+statusCode: 200
+body: '{"id": 1, "name": "Alice"}'
+`)
+	var resp HTTPResponse
+	err := yaml.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, `{"id": 1, "name": "Alice"}`, resp.Body)
+}
+
+func TestHTTPResponse_UnmarshalYAML_EmptyBody(t *testing.T) {
+	data := []byte(`
+statusCode: 200
+`)
+	var resp HTTPResponse
+	err := yaml.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "", resp.Body)
+}
+
+func TestHTTPResponse_UnmarshalYAML_PreservesOtherFields(t *testing.T) {
+	data := []byte(`
+statusCode: 201
+headers:
+  Content-Type: application/json
+body:
+  created: true
+bodyFile: data.json
+delayMs: 100
+`)
+	var resp HTTPResponse
+	err := yaml.Unmarshal(data, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, 201, resp.StatusCode)
+	assert.Equal(t, "application/json", resp.Headers["Content-Type"])
+	assert.Contains(t, resp.Body, `"created":true`)
+	assert.Equal(t, "data.json", resp.BodyFile)
+	assert.Equal(t, 100, resp.DelayMs)
+}
+
+func TestHTTPResponse_JSON_RoundTrip_WithObjectBody(t *testing.T) {
+	// Unmarshal JSON with object body
+	data := []byte(`{"statusCode": 200, "body": {"id": 1}}`)
+	var resp HTTPResponse
+	require.NoError(t, json.Unmarshal(data, &resp))
+
+	// Marshal back to JSON
+	out, err := json.Marshal(resp)
+	require.NoError(t, err)
+
+	// Body should be serialized as a string (not object) since the Go field is string.
+	// The raw JSON from the input is preserved, so it may include whitespace.
+	assert.Contains(t, string(out), `"body":`)
+	// The body value in the output should be a JSON-encoded string containing the object
+	var roundTrip HTTPResponse
+	require.NoError(t, json.Unmarshal(out, &roundTrip))
+	assert.Contains(t, roundTrip.Body, `"id"`)
+}
+
+func TestHTTPResponse_FullMock_YAML_ObjectBody(t *testing.T) {
+	// Test that a full mock with object body in YAML works end-to-end
+	data := []byte(`{
+		"version": "1.0",
+		"mocks": [{
+			"id": "test-obj-body",
+			"type": "http",
+			"http": {
+				"matcher": {"method": "GET", "path": "/test"},
+				"response": {"statusCode": 200, "body": {"message": "hello"}}
+			}
+		}]
+	}`)
+	var collection struct {
+		Version string  `json:"version"`
+		Mocks   []*Mock `json:"mocks"`
+	}
+	require.NoError(t, json.Unmarshal(data, &collection))
+	require.Len(t, collection.Mocks, 1)
+	// Body stores the raw JSON from the input
+	assert.Contains(t, collection.Mocks[0].HTTP.Response.Body, `"message"`)
+	assert.Contains(t, collection.Mocks[0].HTTP.Response.Body, `"hello"`)
 }

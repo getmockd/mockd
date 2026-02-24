@@ -7,6 +7,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -287,6 +288,91 @@ type HTTPResponse struct {
 
 	// Delay adds a fixed delay before responding (e.g., "100ms", "1s")
 	Delay string `json:"delay,omitempty" yaml:"delay,omitempty"`
+}
+
+// UnmarshalJSON handles the Body field accepting both a string and a JSON object/array.
+func (r *HTTPResponse) UnmarshalJSON(data []byte) error {
+	var proxy struct {
+		StatusCode int               `json:"statusCode,omitempty"`
+		Headers    map[string]string `json:"headers,omitempty"`
+		Body       json.RawMessage   `json:"body,omitempty"`
+		BodyFile   string            `json:"bodyFile,omitempty"`
+		Delay      string            `json:"delay,omitempty"`
+	}
+	if err := json.Unmarshal(data, &proxy); err != nil {
+		return err
+	}
+
+	r.StatusCode = proxy.StatusCode
+	r.Headers = proxy.Headers
+	r.BodyFile = proxy.BodyFile
+	r.Delay = proxy.Delay
+
+	if len(proxy.Body) == 0 {
+		r.Body = ""
+		return nil
+	}
+
+	var s string
+	if err := json.Unmarshal(proxy.Body, &s); err == nil {
+		r.Body = s
+		return nil
+	}
+
+	r.Body = string(proxy.Body)
+	return nil
+}
+
+// UnmarshalYAML handles the Body field accepting both a string and a YAML object/array.
+func (r *HTTPResponse) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping node, got %d", value.Kind)
+	}
+
+	type httpResponseAlias HTTPResponse
+	var alias httpResponseAlias
+
+	var bodyNode *yaml.Node
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		keyNode := value.Content[i]
+		if keyNode.Value == "body" {
+			bodyNode = value.Content[i+1]
+			orig := *bodyNode
+			value.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Value: "", Tag: "!!str"}
+			if err := value.Decode(&alias); err != nil {
+				return err
+			}
+			*value.Content[i+1] = orig
+			bodyNode = &orig
+			goto handleBody
+		}
+	}
+
+	if err := value.Decode(&alias); err != nil {
+		return err
+	}
+	*r = HTTPResponse(alias)
+	return nil
+
+handleBody:
+	*r = HTTPResponse(alias)
+
+	if bodyNode.Kind == yaml.ScalarNode {
+		r.Body = bodyNode.Value
+		return nil
+	}
+
+	var bodyObj interface{}
+	if err := bodyNode.Decode(&bodyObj); err != nil {
+		return fmt.Errorf("failed to decode body: %w", err)
+	}
+
+	bodyJSON, err := json.Marshal(bodyObj)
+	if err != nil {
+		return fmt.Errorf("failed to marshal body to JSON: %w", err)
+	}
+	r.Body = string(bodyJSON)
+	return nil
 }
 
 // StatefulResourceEntry is an alias for StatefulResourceConfig for backward compatibility.

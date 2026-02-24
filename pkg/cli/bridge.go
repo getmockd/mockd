@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,7 +104,7 @@ Supported Formats:
 
   # Replace all mocks with imported ones
   mockd import mocks.yaml --replace`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: runImportCobra,
 }
 
@@ -169,7 +170,18 @@ func init() {
 
 // runImportCobra is the Cobra RunE for the import command.
 func runImportCobra(cmd *cobra.Command, args []string) error {
+	// Handle no-argument case: read from stdin
+	if len(args) == 0 {
+		return runImportFromStdin()
+	}
+
 	source := args[0]
+
+	// Check if source is a directory
+	info, err := os.Stat(source)
+	if err == nil && info.IsDir() {
+		return runImportFromDirectory(source)
+	}
 
 	// Check if source is a cURL command
 	var data []byte
@@ -180,7 +192,6 @@ func runImportCobra(cmd *cobra.Command, args []string) error {
 		filename = "curl-command"
 	} else {
 		// Read file
-		var err error
 		data, err = os.ReadFile(source)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -205,20 +216,146 @@ func runImportCobra(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Get importer
+	return importData(data, source, impFormat)
+}
+
+// runImportFromStdin reads mock data from stdin when no arguments are provided.
+func runImportFromStdin() error {
+	// Check if stdin is a pipe
+	stat, _ := os.Stdin.Stat()
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		return errors.New(`no input provided
+
+Usage:
+  mockd import <file>           Import from a file
+  mockd import <directory>      Import all files from a directory
+  cat file.yaml | mockd import  Import from stdin
+
+Run 'mockd import --help' for more options`)
+	}
+
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return fmt.Errorf("failed to read stdin: %w", err)
+	}
+
+	if len(data) == 0 {
+		return errors.New("stdin is empty — nothing to import")
+	}
+
+	// Detect or use explicit format
+	var impFormat portability.Format
+	if importFormat != "" {
+		impFormat = portability.ParseFormat(importFormat)
+		if impFormat == portability.FormatUnknown {
+			return fmt.Errorf("unknown format: %s\n\nSupported formats: mockd, openapi, postman, har, wiremock, curl", importFormat)
+		}
+	} else {
+		impFormat = portability.DetectFormat(data, "stdin")
+		if impFormat == portability.FormatUnknown {
+			return errors.New("unable to detect format from stdin content\n\nSuggestions:\n  • Specify format explicitly with -f/--format\n  • Supported formats: mockd, openapi, postman, har, wiremock, curl")
+		}
+	}
+
+	return importData(data, "stdin", impFormat)
+}
+
+// runImportFromDirectory imports all .json, .yaml, .yml files from a directory.
+func runImportFromDirectory(dir string) error {
+	var files []string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(path))
+		if ext == ".json" || ext == ".yaml" || ext == ".yml" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(files) == 0 {
+		return fmt.Errorf("no .json, .yaml, or .yml files found in %s", dir)
+	}
+
+	totalImported := 0
+	totalFiles := 0
+	var importErrors []string
+
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			importErrors = append(importErrors, fmt.Sprintf("%s: %v", file, err))
+			continue
+		}
+
+		filename := filepath.Base(file)
+		impFormat := portability.DetectFormat(data, filename)
+		if impFormat == portability.FormatUnknown {
+			importErrors = append(importErrors, file+": unable to detect format")
+			continue
+		}
+
+		importer := portability.GetImporter(impFormat)
+		if importer == nil {
+			importErrors = append(importErrors, fmt.Sprintf("%s: no importer for format %s", file, impFormat))
+			continue
+		}
+
+		collection, err := importer.Import(data)
+		if err != nil {
+			importErrors = append(importErrors, fmt.Sprintf("%s: %v", file, err))
+			continue
+		}
+
+		client := NewAdminClientWithAuth(adminURL)
+		result, err := client.ImportConfig(collection, false) // never replace when importing directories
+		if err != nil {
+			importErrors = append(importErrors, fmt.Sprintf("%s: %v", file, FormatConnectionError(err)))
+			continue
+		}
+
+		totalImported += result.Imported
+		totalFiles++
+	}
+
+	printResult(map[string]any{
+		"imported": totalImported,
+		"files":    totalFiles,
+		"errors":   len(importErrors),
+		"source":   dir,
+	}, func() {
+		fmt.Printf("Imported %d mocks from %d files in %s\n", totalImported, totalFiles, dir)
+		if len(importErrors) > 0 {
+			fmt.Printf("\n%d files had errors:\n", len(importErrors))
+			for _, e := range importErrors {
+				fmt.Printf("  • %s\n", e)
+			}
+		}
+	})
+
+	return nil
+}
+
+// importData imports data with a known format and sends to the admin server.
+func importData(data []byte, source string, impFormat portability.Format) error {
 	importer := portability.GetImporter(impFormat)
 	if importer == nil {
 		return fmt.Errorf("no importer available for format: %s", impFormat)
 	}
 
-	// Handle HAR-specific options
 	if impFormat == portability.FormatHAR {
 		if harImporter, ok := importer.(*portability.HARImporter); ok {
 			harImporter.IncludeStatic = importIncludeStatic
 		}
 	}
 
-	// Import
 	collection, err := importer.Import(data)
 	if err != nil {
 		return formatImportError(err, impFormat, source)
@@ -228,7 +365,6 @@ func runImportCobra(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Parsed %d mocks from %s (format: %s)\n", len(collection.Mocks), source, impFormat)
 	}
 
-	// Dry run - just show what would be imported
 	if importDryRun {
 		type dryRunMock struct {
 			ID     string `json:"id,omitempty"`
@@ -258,7 +394,6 @@ func runImportCobra(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Create admin client and import config — uses root persistent adminURL
 	client := NewAdminClientWithAuth(adminURL)
 	result, err := client.ImportConfig(collection, importReplace)
 	if err != nil {

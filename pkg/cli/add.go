@@ -19,6 +19,7 @@ var (
 	addMockType       string
 	addName           string
 	addAllowDuplicate bool
+	addStateful       string
 
 	addMethod       string
 	addPath         string
@@ -92,6 +93,7 @@ func init() {
 	addCmd.Flags().StringVarP(&addMockType, "type", "t", "http", "Mock type (http, websocket, graphql, grpc, mqtt, soap, oauth)")
 	addCmd.Flags().StringVarP(&addName, "name", "n", "", "Mock display name")
 	addCmd.Flags().BoolVar(&addAllowDuplicate, "allow-duplicate", false, "Create a new mock even if one already exists on the same path")
+	addCmd.Flags().StringVar(&addStateful, "stateful", "", "Create a stateful CRUD resource (value is the resource name, e.g., users)")
 
 	addCmd.Flags().StringVarP(&addMethod, "method", "m", "GET", "HTTP method to match")
 	addCmd.Flags().StringVar(&addPath, "path", "", "URL path to match (required for http, websocket, graphql, soap)")
@@ -176,6 +178,11 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	mockTypeEnum, ok := validTypes[mt]
 	if !ok {
 		return fmt.Errorf("invalid mock type: %s\n\nValid types: http, websocket, graphql, grpc, mqtt, soap, oauth", addMockType)
+	}
+
+	// Handle --stateful: create a stateful CRUD resource instead of a mock
+	if addStateful != "" {
+		return runAddStateful(addStateful, addPath)
 	}
 
 	// Mutual exclusivity: --path and --path-pattern
@@ -796,6 +803,76 @@ func buildOAuthMock(name, issuer, clientID, clientSecret, username, password str
 	}
 
 	return m
+}
+
+// runAddStateful creates a stateful CRUD resource via the admin API.
+func runAddStateful(name, basePath string) error {
+	if basePath == "" {
+		// Default basePath from name: "users" -> "/api/users"
+		basePath = "/api/" + name
+	}
+
+	// Build a config with just the stateful resource
+	collection := &config.MockCollection{
+		Version: "1.0",
+		Mocks:   []*config.MockConfiguration{},
+		StatefulResources: []*config.StatefulResourceConfig{
+			{
+				Name:     name,
+				BasePath: basePath,
+			},
+		},
+	}
+
+	client := NewAdminClientWithAuth(adminURL)
+	_, err := client.ImportConfig(collection, false)
+	if err != nil {
+		return fmt.Errorf("%s", FormatConnectionError(err))
+	}
+
+	if jsonOutput {
+		return output.JSON(struct {
+			Resource  string   `json:"resource"`
+			BasePath  string   `json:"basePath"`
+			Action    string   `json:"action"`
+			Endpoints []string `json:"endpoints"`
+		}{
+			Resource: name,
+			BasePath: basePath,
+			Action:   "created",
+			Endpoints: []string{
+				"GET    " + basePath,
+				"POST   " + basePath,
+				"GET    " + basePath + "/{id}",
+				"PUT    " + basePath + "/{id}",
+				"DELETE " + basePath + "/{id}",
+			},
+		})
+	}
+
+	fmt.Printf("Created stateful resource: %s\n", name)
+	fmt.Printf("  Base path: %s\n", basePath)
+	fmt.Printf("  Endpoints:\n")
+	fmt.Printf("    GET    %s        — List all %s\n", basePath, name)
+	fmt.Printf("    POST   %s        — Create a %s\n", basePath, singularize(name))
+	fmt.Printf("    GET    %s/{id}   — Get a %s by ID\n", basePath, singularize(name))
+	fmt.Printf("    PUT    %s/{id}   — Update a %s\n", basePath, singularize(name))
+	fmt.Printf("    DELETE %s/{id}   — Delete a %s\n", basePath, singularize(name))
+	return nil
+}
+
+// singularize does a naive singularization (removes trailing "s").
+func singularize(name string) string {
+	if strings.HasSuffix(name, "ies") {
+		return name[:len(name)-3] + "y"
+	}
+	if strings.HasSuffix(name, "ses") || strings.HasSuffix(name, "xes") || strings.HasSuffix(name, "zes") {
+		return name[:len(name)-2]
+	}
+	if strings.HasSuffix(name, "s") && !strings.HasSuffix(name, "ss") {
+		return name[:len(name)-1]
+	}
+	return name
 }
 
 // outputResult formats and prints the created or merged mock result.

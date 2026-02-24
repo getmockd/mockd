@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/validation"
+	"gopkg.in/yaml.v3"
 )
 
 // Type represents the type of mock.
@@ -300,6 +301,110 @@ type HTTPResponse struct {
 	Body       string            `json:"body" yaml:"body"`
 	BodyFile   string            `json:"bodyFile,omitempty" yaml:"bodyFile,omitempty"`
 	DelayMs    int               `json:"delayMs,omitempty" yaml:"delayMs,omitempty"`
+}
+
+// UnmarshalJSON handles the Body field accepting both a string and a JSON object/array.
+// When body is a JSON object (e.g., {"id": 1}) or array, it is marshaled to a JSON string.
+// This lets config files use: body: {"id": 1} instead of body: '{"id": 1}'.
+func (r *HTTPResponse) UnmarshalJSON(data []byte) error {
+	// Use a proxy struct with Body as json.RawMessage so we can inspect it.
+	var proxy struct {
+		StatusCode int               `json:"statusCode"`
+		Headers    map[string]string `json:"headers,omitempty"`
+		Body       json.RawMessage   `json:"body"`
+		BodyFile   string            `json:"bodyFile,omitempty"`
+		DelayMs    int               `json:"delayMs,omitempty"`
+	}
+	if err := json.Unmarshal(data, &proxy); err != nil {
+		return err
+	}
+
+	r.StatusCode = proxy.StatusCode
+	r.Headers = proxy.Headers
+	r.BodyFile = proxy.BodyFile
+	r.DelayMs = proxy.DelayMs
+
+	// Handle body: could be string, object, array, number, boolean, or null
+	if len(proxy.Body) == 0 {
+		r.Body = ""
+		return nil
+	}
+
+	// Try to unmarshal as string first (most common case)
+	var s string
+	if err := json.Unmarshal(proxy.Body, &s); err == nil {
+		r.Body = s
+		return nil
+	}
+
+	// Not a string — it's an object, array, number, or boolean.
+	// Store the raw JSON as the body string.
+	r.Body = string(proxy.Body)
+	return nil
+}
+
+// UnmarshalYAML handles the Body field accepting both a string and a YAML object/array.
+// When body is a YAML mapping or sequence, it is marshaled to a JSON string.
+// This lets config files use: body: { id: 1 } instead of body: '{"id": 1}'.
+func (r *HTTPResponse) UnmarshalYAML(value *yaml.Node) error {
+	// First, find the body node manually from the mapping, then decode the rest
+	// with a simple alias to avoid recursion.
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping node, got %d", value.Kind)
+	}
+
+	// Extract and handle body specially, decode everything else with alias
+	type httpResponseAlias HTTPResponse
+	var alias httpResponseAlias
+
+	// Walk the mapping to find the body node
+	var bodyNode *yaml.Node
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		keyNode := value.Content[i]
+		if keyNode.Value == "body" {
+			bodyNode = value.Content[i+1]
+			// Temporarily replace the body value with a placeholder scalar
+			// so the default decoder doesn't choke on object bodies
+			orig := *bodyNode
+			value.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Value: "", Tag: "!!str"}
+			if err := value.Decode(&alias); err != nil {
+				return err
+			}
+			// Restore original node
+			*value.Content[i+1] = orig
+			bodyNode = &orig
+			goto handleBody
+		}
+	}
+
+	// No body field found — just decode normally
+	if err := value.Decode(&alias); err != nil {
+		return err
+	}
+	*r = HTTPResponse(alias)
+	return nil
+
+handleBody:
+	*r = HTTPResponse(alias)
+
+	// Scalar values (strings, numbers, booleans): store as-is
+	if bodyNode.Kind == yaml.ScalarNode {
+		r.Body = bodyNode.Value
+		return nil
+	}
+
+	// Mapping or sequence: decode to interface{}, then marshal to JSON string
+	var bodyObj interface{}
+	if err := bodyNode.Decode(&bodyObj); err != nil {
+		return fmt.Errorf("failed to decode body: %w", err)
+	}
+
+	bodyJSON, err := json.Marshal(bodyObj)
+	if err != nil {
+		return fmt.Errorf("failed to marshal body to JSON: %w", err)
+	}
+	r.Body = string(bodyJSON)
+	return nil
 }
 
 // SSEConfig defines Server-Sent Events configuration.
