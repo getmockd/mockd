@@ -1,390 +1,361 @@
 ---
 title: Proxy Recording
-description: Use mockd as a MITM proxy to record real API traffic and automatically save mocks for replay.
+description: Use mockd as a MITM proxy to record real API traffic and convert recordings to mock definitions.
 ---
 
-mockd can act as a MITM (Man-in-the-Middle) proxy to record real API traffic. Recorded requests and responses are automatically saved as mocks that can be replayed later.
+mockd includes a **MITM (Man-in-the-Middle) forward proxy** that records real API traffic. Configure your HTTP client to route through the proxy, and mockd captures every request/response pair to disk. You can then convert recordings into mock definitions with `mockd convert`.
 
 ## Overview
 
 Proxy recording is useful for:
 
-- **Capturing production API behavior** without manual mock creation
-- **Recording integration test fixtures** from real services
+- **Capturing real API behavior** without writing mocks by hand
+- **Recording integration test fixtures** from live services
 - **Creating realistic mocks** from actual API responses
 - **Debugging API interactions** by inspecting traffic
 
 ## Quick Start
 
-Start the proxy targeting an upstream API:
+Start the proxy in the foreground:
 
 ```bash
-mockd proxy --target https://api.example.com --record
+mockd proxy start
 ```
 
-Point your application to the proxy:
+This starts a forward proxy on port **8888** in `record` mode. Configure your HTTP client to use it:
 
 ```bash
-# Application makes request through proxy
-curl http://localhost:4280/api/users
-# Proxied to https://api.example.com/api/users
+# cURL with proxy
+curl -x http://localhost:8888 http://api.example.com/users
+
+# Or set environment variables
+export http_proxy=http://localhost:8888
+export https_proxy=http://localhost:8888
+curl http://api.example.com/users
 ```
 
-The request and response are recorded. View recordings:
+The request and response are recorded to disk. Press **Ctrl+C** to stop the proxy.
+
+View what was captured:
 
 ```bash
 mockd recordings list
 ```
 
+Convert recordings to mock definitions:
+
+```bash
+mockd convert -o mocks.yaml
+```
+
+## Starting the Proxy
+
+The proxy runs in the foreground and stops with Ctrl+C:
+
+```bash
+# Default: port 8888, record mode
+mockd proxy start
+
+# Custom port
+mockd proxy start --port 9090
+
+# Named session (for organizing recordings)
+mockd proxy start --session my-api-test
+
+# Passthrough mode (no recording, just forwarding)
+mockd proxy start --mode passthrough
+```
+
+### Flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--port` | `-p` | `8888` | Proxy server port |
+| `--mode` | `-m` | `record` | Proxy mode: `record` or `passthrough` |
+| `--session` | `-s` | `default` | Recording session name |
+| `--recordings-dir` | | (platform default) | Base directory for recordings |
+| `--ca-path` | | | CA certificate directory (enables HTTPS interception) |
+| `--include` | | | Comma-separated path patterns to include (glob) |
+| `--exclude` | | | Comma-separated path patterns to exclude (glob) |
+| `--include-hosts` | | | Comma-separated host patterns to include |
+| `--exclude-hosts` | | | Comma-separated host patterns to exclude |
+
 ## Proxy Modes
 
-### Record Mode
+### Record Mode (default)
 
-Record all traffic passing through:
-
-```bash
-mockd proxy --target https://api.example.com --record
-```
-
-Recordings are saved to `./recordings/` by default.
-
-### Playback Mode
-
-Replay recorded responses without contacting upstream:
+Records all traffic passing through:
 
 ```bash
-mockd proxy --playback --recordings ./recordings
+mockd proxy start --mode record
 ```
 
-### Record and Playback
+Every HTTP request/response pair is persisted to disk as it flows through the proxy.
 
-Record new requests, replay known ones:
+### Passthrough Mode
+
+Forwards traffic without recording:
 
 ```bash
-mockd proxy --target https://api.example.com --record --playback
+mockd proxy start --mode passthrough
 ```
 
-Priority:
-1. Check recordings for matching request
-2. If found, replay recorded response
-3. If not found, proxy to upstream and record
+Useful for debugging or when you only need the proxy behavior without capturing data.
 
-## Configuration
+## HTTPS Interception
 
-### Basic Proxy Config
+By default, HTTPS requests are tunneled (TCP pass-through) and **not recorded** because the traffic is encrypted.
 
-```json
-{
-  "proxy": {
-    "target": "https://api.example.com",
-    "record": true,
-    "recordingsDir": "./recordings"
-  }
-}
-```
+To record HTTPS traffic, generate a CA certificate and configure your system to trust it:
 
-Start with config:
+### Generate a CA Certificate
 
 ```bash
-mockd proxy --config proxy-config.json
+# Generate CA cert and key
+mockd proxy ca generate --ca-path ./certs
+
+# Start proxy with HTTPS interception
+mockd proxy start --ca-path ./certs
 ```
 
-### Full Configuration
+The proxy dynamically generates per-host TLS certificates signed by your CA, enabling it to decrypt and record HTTPS traffic.
 
-```json
-{
-  "proxy": {
-    "target": "https://api.example.com",
-    "port": 4280,
-    "record": true,
-    "playback": true,
-    "recordingsDir": "./recordings",
-    "recordFormat": "json",
-    "stripHeaders": [
-      "Authorization",
-      "Cookie"
-    ],
-    "rewriteHost": true
-  }
-}
-```
+### Trust the CA Certificate
 
-| Field | Description | Default |
-|-------|-------------|---------|
-| `target` | Upstream API URL | Required |
-| `port` | Proxy port | `4280` |
-| `record` | Enable recording | `false` |
-| `playback` | Enable playback | `false` |
-| `recordingsDir` | Where to save recordings | `./recordings` |
-| `recordFormat` | Output format (json, yaml) | `json` |
-| `stripHeaders` | Headers to remove from recordings | `[]` |
-| `rewriteHost` | Rewrite Host header to target | `true` |
-
-## Recording Format
-
-Each recorded request creates a file:
-
-```
-recordings/
-├── GET_api_users_abc123.json
-├── POST_api_users_def456.json
-└── GET_api_users_1_ghi789.json
-```
-
-Recording content:
-
-```json
-{
-  "recorded_at": "2024-01-15T10:30:00Z",
-  "request": {
-    "method": "GET",
-    "path": "/api/users",
-    "headers": {
-      "Accept": "application/json"
-    },
-    "query": {}
-  },
-  "response": {
-    "statusCode": 200,
-    "headers": {
-      "Content-Type": "application/json"
-    },
-    "body": {
-      "users": [
-        {"id": 1, "name": "Alice"}
-      ]
-    }
-  }
-}
-```
-
-## HTTPS/TLS
-
-### Auto-generated Certificates
-
-mockd generates CA certificates automatically:
+Export the certificate for installation:
 
 ```bash
-mockd proxy --target https://api.example.com
-# Generates ./certs/mockd-ca.crt
-```
+# Export to file
+mockd proxy ca export --ca-path ./certs -o mockd-ca.crt
 
-Install the CA certificate in your system or browser to avoid TLS warnings.
+# macOS: Add to system keychain
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain mockd-ca.crt
 
-### Custom Certificates
-
-Use your own certificates:
-
-```bash
-mockd proxy --target https://api.example.com \
-  --ca-cert ./my-ca.crt \
-  --ca-key ./my-ca.key
-```
-
-### Certificate Configuration
-
-```json
-{
-  "proxy": {
-    "target": "https://api.example.com",
-    "tls": {
-      "caCertFile": "./certs/ca.crt",
-      "caKeyFile": "./certs/ca.key",
-      "certDir": "./certs/generated"
-    }
-  }
-}
+# Linux (Debian/Ubuntu): Add to system certificates
+sudo cp mockd-ca.crt /usr/local/share/ca-certificates/
+sudo update-ca-certificates
 ```
 
 ## Filtering
 
-### Record Only Certain Paths
+Control what gets recorded using include/exclude patterns with glob matching (`*` wildcard):
 
-```json
-{
-  "proxy": {
-    "target": "https://api.example.com",
-    "record": true,
-    "recordFilter": {
-      "includePaths": [
-        "/api/users.*",
-        "/api/posts.*"
-      ],
-      "excludePaths": [
-        "/api/health",
-        "/api/metrics"
-      ]
-    }
-  }
-}
+### Filter by Path
+
+```bash
+# Only record API paths
+mockd proxy start --include "/api/*"
+
+# Exclude health checks
+mockd proxy start --exclude "/health,/metrics,/ping"
 ```
 
-### Filter by Method
+### Filter by Host
 
-```json
-{
-  "proxy": {
-    "recordFilter": {
-      "methods": ["GET", "POST"]
-    }
-  }
-}
+```bash
+# Only record traffic to specific hosts
+mockd proxy start --include-hosts "api.example.com,auth.example.com"
+
+# Exclude noisy hosts
+mockd proxy start --exclude-hosts "analytics.example.com,cdn.example.com"
 ```
 
-### Filter by Status Code
+### Combine Filters
 
-Record only successful responses:
-
-```json
-{
-  "proxy": {
-    "recordFilter": {
-      "statusCodes": [200, 201, 204]
-    }
-  }
-}
+```bash
+mockd proxy start \
+  --include-hosts "api.example.com" \
+  --include "/api/*" \
+  --exclude "/api/health"
 ```
 
-## Sensitive Data
+**Filter precedence:**
+1. If the request matches **any** exclude pattern → not recorded
+2. If include patterns exist and the request matches **none** → not recorded
+3. Otherwise → recorded
 
-### Strip Headers
+## Recording Storage
 
-Remove sensitive headers from recordings:
+Recordings are organized by session and host:
 
-```json
-{
-  "proxy": {
-    "stripHeaders": [
-      "Authorization",
-      "Cookie",
-      "X-API-Key",
-      "X-Auth-Token"
-    ]
-  }
-}
+```
+~/.local/share/mockd/recordings/
+├── default-20260224-143000/
+│   ├── meta.json
+│   ├── api.example.com/
+│   │   ├── rec_a1b2c3d4.json
+│   │   └── rec_e5f6a7b8.json
+│   └── auth.example.com/
+│       └── rec_c9d0e1f2.json
+├── my-session-20260225-091500/
+│   ├── meta.json
+│   └── ...
+└── latest -> default-20260224-143000/
 ```
 
-### Redact Body Fields
+The `latest` symlink always points to the most recent session. The default storage location is platform-specific:
 
-Mask sensitive data in recorded bodies:
+| Platform | Default Path |
+|----------|-------------|
+| macOS | `~/Library/Application Support/mockd/recordings/` |
+| Linux | `~/.local/share/mockd/recordings/` |
+| Windows | `%LOCALAPPDATA%/mockd/recordings/` |
 
-```json
-{
-  "proxy": {
-    "redact": {
-      "bodyFields": [
-        "password",
-        "secret",
-        "$.user.ssn"
-      ],
-      "replacement": "[REDACTED]"
-    }
-  }
-}
+Override with `--recordings-dir` or the `XDG_DATA_HOME` environment variable.
+
+## Managing Recordings
+
+### List Sessions
+
+```bash
+mockd recordings sessions
+```
+
+### List Recordings
+
+```bash
+# From the latest session
+mockd recordings list
+
+# From a specific session
+mockd recordings list --session my-api-test
+
+# Filter by method or host
+mockd recordings list --method GET
+mockd recordings list --host api.example.com
+```
+
+### Export Recordings
+
+```bash
+# Export to JSON
+mockd recordings export -o recordings.json
+
+# From a specific session
+mockd recordings export --session my-api-test -o recordings.json
+```
+
+### Import Recordings
+
+```bash
+mockd recordings import --input recordings.json --session imported
+```
+
+### Clear Recordings
+
+```bash
+# Clear a specific session
+mockd recordings clear --session my-api-test --force
+
+# Clear all sessions
+mockd recordings clear --force
 ```
 
 ## Converting to Mocks
 
-Convert recordings to a mock configuration:
+The `mockd convert` command transforms recorded traffic into mock definitions:
 
 ```bash
-mockd recordings convert --input ./recordings --output mocks.json
+# Convert latest session, output to stdout
+mockd convert
+
+# Save to file
+mockd convert -o mocks.yaml
+
+# Convert a specific session
+mockd convert --session my-api-test -o mocks.yaml
 ```
 
-Options:
+### Smart Matching
+
+Detect dynamic path segments and convert them to path parameters:
 
 ```bash
-# Convert with response templates
-mockd recordings convert --input ./recordings --output mocks.json --templatize
-
-# Merge with existing mocks
-mockd recordings convert --input ./recordings --output mocks.json --merge
+# Turns /users/123 into /users/{id}
+mockd convert --smart-match -o mocks.yaml
 ```
 
-## CLI Commands
-
-### Start Proxy
+### Filtering During Conversion
 
 ```bash
-# Basic proxy with recording
-mockd proxy --target https://api.example.com --record
+# Only GET and POST requests
+mockd convert --method GET,POST
 
-# Playback only
-mockd proxy --playback --recordings ./recordings
+# Only successful responses
+mockd convert --status 2xx
 
-# Custom port
-mockd proxy --target https://api.example.com --port 4290
+# Only specific hosts
+mockd convert --include-hosts "api.example.com"
 
-# With config file
-mockd proxy --config proxy.json
+# Only specific paths
+mockd convert --path-filter "/api/*"
 ```
 
-### Manage Recordings
+### Duplicate Handling
+
+When multiple recordings match the same endpoint:
 
 ```bash
-# List recordings
-mockd recordings list
+# Keep first occurrence (default)
+mockd convert --duplicates first
 
-# List with filter
-mockd recordings list --path "/api/users.*"
+# Keep last occurrence
+mockd convert --duplicates last
 
-# Show recording details
-mockd recordings show GET_api_users_abc123.json
-
-# Delete recordings
-mockd recordings delete --older-than 7d
-
-# Convert to mocks
-mockd recordings convert --input ./recordings --output mocks.json
+# Keep all occurrences
+mockd convert --duplicates all
 ```
 
 ## Example Workflow
 
-### 1. Record Production Traffic
+### 1. Record Real API Traffic
 
 ```bash
-# Start proxy recording
-mockd proxy --target https://production-api.example.com --record
+# Start the proxy
+mockd proxy start --session api-capture --port 8888
 
-# Run your application tests through the proxy
-API_URL=http://localhost:4280 npm test
+# In another terminal, run your app through the proxy
+http_proxy=http://localhost:8888 npm test
+
+# Stop the proxy with Ctrl+C
 ```
 
 ### 2. Review Recordings
 
 ```bash
-mockd recordings list
-# Output:
-# GET_api_users_abc123.json (200, 1.2kb)
-# POST_api_users_def456.json (201, 0.3kb)
-# GET_api_users_1_ghi789.json (200, 0.5kb)
+mockd recordings list --session api-capture
+# ID       METHOD  HOST               PATH           STATUS  DURATION
+# a1b2c3d4 GET     api.example.com    /api/users     200     150ms
+# e5f6a7b8 POST    api.example.com    /api/users     201     89ms
+# c9d0e1f2 GET     api.example.com    /api/users/1   200     45ms
 ```
 
 ### 3. Convert to Mocks
 
 ```bash
-mockd recordings convert --input ./recordings --output mocks.json
+mockd convert --session api-capture --smart-match -o mocks.yaml
 ```
 
-### 4. Use for Testing
+### 4. Use the Mocks
 
 ```bash
-mockd start --config mocks.json
-# Tests now run against recorded responses
+mockd serve --config mocks.yaml
+# Your tests now run against captured responses — no external dependency needed
 ```
 
 ## Proxy vs Mock Server
 
-| Feature | Proxy Mode | Mock Server |
-|---------|------------|-------------|
-| Upstream dependency | Required | Not needed |
+| Feature | Proxy Recording | Mock Server |
+|---------|----------------|-------------|
+| Upstream dependency | Required (for recording) | Not needed |
 | Real responses | Yes | No (mocked) |
 | Recording | Built-in | N/A |
-| Offline operation | Playback only | Yes |
-| Best for | Capturing real behavior | Development/testing |
+| Offline operation | No | Yes |
+| Best for | Capturing real behavior | Development and testing |
 
 ## Next Steps
 
-- [TLS/HTTPS Configuration](/guides/tls-https/) - Certificate management
-- [CLI Reference](/reference/cli/) - All proxy commands
-- [Configuration Reference](/reference/configuration/) - Full schema
+- [TLS/HTTPS Configuration](/guides/tls-https/) — Certificate management for mock serving
+- [CLI Reference](/reference/cli/) — All available commands
+- [Configuration Reference](/reference/configuration/) — Full config schema

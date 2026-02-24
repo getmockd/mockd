@@ -919,7 +919,7 @@ wscat -c ws://localhost:4280/ws/chat
 ### Using curl (for connection testing)
 
 ```bash
-# Verify WebSocket endpoint exists (returns 400 for non-upgrade requests)
+# Verify WebSocket endpoint exists (returns 404 for non-upgrade requests)
 curl -i http://localhost:4280/ws
 
 # Test with upgrade headers

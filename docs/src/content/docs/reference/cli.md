@@ -1735,49 +1735,9 @@ mockd proxy start --include "/api/*" --exclude "/api/health"
 
 ---
 
-#### mockd proxy stop
-
-Stop the running proxy server.
-
-```bash
-mockd proxy stop
-```
-
----
-
-#### mockd proxy status
-
-Show the current proxy server status.
-
-```bash
-mockd proxy status
-```
-
----
-
-#### mockd proxy mode
-
-Get or set the proxy operating mode.
-
-```bash
-mockd proxy mode [mode]
-```
-
-**Arguments:**
-
-| Argument | Description |
-|----------|-------------|
-| `mode` | New mode: record or passthrough (optional) |
-
-**Examples:**
-
-```bash
-# Get current mode
-mockd proxy mode
-
-# Set mode to passthrough
-mockd proxy mode passthrough
-```
+:::note
+The proxy runs in the foreground and is stopped with **Ctrl+C**. There are no separate `proxy stop`, `proxy status`, or `proxy mode` CLI commands. These operations are available via the [Admin API](/reference/admin-api/) when the proxy is started through the admin server.
+:::
 
 ---
 

@@ -75,13 +75,16 @@ Or in JSON:
 ```json
 {
   "id": "basic-sse",
-  "matcher": { "method": "GET", "path": "/events" },
-  "sse": {
-    "events": [
-      { "data": "Hello" },
-      { "data": "World" }
-    ],
-    "timing": { "fixedDelay": 1000 }
+  "type": "http",
+  "http": {
+    "matcher": { "method": "GET", "path": "/events" },
+    "sse": {
+      "events": [
+        { "data": "Hello" },
+        { "data": "World" }
+      ],
+      "timing": { "fixedDelay": 1000 }
+    }
   }
 }
 ```
@@ -113,15 +116,18 @@ Or in JSON:
 ```json
 {
   "id": "openai-mock",
-  "matcher": { "method": "POST", "path": "/v1/chat/completions" },
-  "sse": {
-    "template": "openai-chat",
-    "templateParams": {
-      "tokens": ["Hello", "!", " How", " can", " I", " help", "?"],
-      "model": "gpt-4",
-      "finishReason": "stop",
-      "includeDone": true,
-      "delayPerToken": 50
+  "type": "http",
+  "http": {
+    "matcher": { "method": "POST", "path": "/v1/chat/completions" },
+    "sse": {
+      "template": "openai-chat",
+      "templateParams": {
+        "tokens": ["Hello", "!", " How", " can", " I", " help", "?"],
+        "model": "gpt-4",
+        "finishReason": "stop",
+        "includeDone": true,
+        "delayPerToken": 50
+      }
     }
   }
 }

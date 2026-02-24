@@ -968,18 +968,18 @@ Inspect a proto file to see available services and methods:
 mockd grpc list api.proto
 
 # With import path
-mockd grpc list api.proto -I ./proto
+mockd grpc list api.proto --import ./proto
 ```
 
 Output:
 
 ```
-Services in api.proto:
+Proto: api.proto
 
-  users.UserService
-    - GetUser (GetUserRequest) returns (User)
-    - ListUsers (ListUsersRequest) returns (stream User)
-    - CreateUser (CreateUserRequest) returns (User)
+Service: users.UserService
+  GetUser(GetUserRequest) → User
+  ListUsers(ListUsersRequest) → stream User
+  CreateUser(CreateUserRequest) → User
 ```
 
 ### Call a gRPC Method

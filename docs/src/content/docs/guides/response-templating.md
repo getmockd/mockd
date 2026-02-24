@@ -5,6 +5,18 @@ description: Create dynamic responses that include data from the incoming reques
 
 Response templating allows you to create dynamic responses that include data from the incoming request, generate random values, or compute values at response time.
 
+:::note
+Examples below show the contents of the `http` block within a mock definition. In a config file, wrap each example in the full mock structure:
+```yaml
+mocks:
+  - id: my-mock
+    type: http
+    http:
+      matcher: { method: POST, path: /api/example }
+      response: { ... }
+```
+:::
+
 ## Template Syntax
 
 Templates use double curly braces: `{{expression}}`
@@ -122,8 +134,9 @@ Nested access:
   "response": {
     "body": {
       "timestamp": "{{now}}",
-      "isoDate": "{{now.iso}}",
-      "unixTimestamp": "{{timestamp}}"
+      "isoTimestamp": "{{timestamp.iso}}",
+      "unixTimestamp": "{{timestamp}}",
+      "unixMs": "{{timestamp.unix_ms}}"
     }
   }
 }
@@ -132,9 +145,10 @@ Nested access:
 Output:
 ```json
 {
-  "timestamp": "2024-01-15T10:30:00Z",
-  "isoDate": "2024-01-15T10:30:00Z",
-  "unixTimestamp": 1705315800
+  "timestamp": "2024-01-15T10:30:00-06:00",
+  "isoTimestamp": "2024-01-15T16:30:00.123456789Z",
+  "unixTimestamp": "1705315800",
+  "unixMs": "1705315800123"
 }
 ```
 
@@ -145,7 +159,10 @@ Output:
   "response": {
     "body": {
       "id": "{{uuid}}",
-      "randomFloat": "{{random.float 0 1}}"
+      "shortId": "{{uuid.short}}",
+      "randomInt": "{{random.int(1, 100)}}",
+      "randomFloat": "{{random.float(0, 1)}}",
+      "randomString": "{{random.string(8)}}"
     }
   }
 }
@@ -159,27 +176,15 @@ Output:
     "body": {
       "upper": "{{upper request.body.name}}",
       "lower": "{{lower request.body.email}}",
-      "trim": "{{trim request.body.input}}"
+      "fallback": "{{default request.query.name \"Anonymous\"}}"
     }
   }
 }
 ```
 
-## Conditional Logic
+## Default Values
 
-### If/Else
-
-```json
-{
-  "response": {
-    "body": {
-      "status": "{{if request.query.premium}}premium{{else}}free{{end}}"
-    }
-  }
-}
-```
-
-### Default Values
+Provide fallback values when a field is missing:
 
 ```json
 {
@@ -192,27 +197,13 @@ Output:
 }
 ```
 
-## Loops and Arrays
-
-### Repeating Elements
+Both space-separated and parenthesized syntax work:
 
 ```json
 {
   "response": {
     "body": {
-      "items": "{{repeat 5 '{\"id\": {{index}}, \"name\": \"Item {{index}}\"}'}}"
-    }
-  }
-}
-```
-
-### Array Length
-
-```json
-{
-  "response": {
-    "body": {
-      "itemCount": "{{len request.body.items}}"
+      "name": "{{default(request.query.name, \"Anonymous\")}}"
     }
   }
 }
@@ -234,60 +225,73 @@ Templates work in headers too:
 }
 ```
 
-## Escaping
+## Faker Functions
 
-### Literal Braces
-
-To output literal `{{`, escape with backslash:
-
-```json
-{
-  "body": "Template syntax uses \\{{expression}}"
-}
-```
-
-### JSON in Templates
-
-When embedding JSON, ensure proper escaping:
+Generate realistic sample data:
 
 ```json
 {
   "response": {
-    "body": "{{jsonEncode request.body}}"
-  }
-}
-```
-
-## Complete Example
-
-```json
-{
-  "matcher": {
-    "method": "POST",
-    "path": "/api/orders"
-  },
-  "response": {
-    "statusCode": 201,
-    "headers": {
-      "Content-Type": "application/json",
-      "Location": "/api/orders/{{uuid}}",
-      "X-Request-ID": "{{request.header.X-Request-ID}}"
-    },
     "body": {
-      "id": "{{uuid}}",
-      "status": "pending",
-      "customer": {
-        "name": "{{request.body.customer.name}}",
-        "email": "{{lower request.body.customer.email}}"
-      },
-      "items": "{{request.body.items}}",
-      "itemCount": "{{len request.body.items}}",
-      "total": "{{request.body.total}}",
-      "createdAt": "{{now.iso}}",
-      "estimatedDelivery": "{{now.addDays 3}}"
+      "name": "{{faker.name}}",
+      "email": "{{faker.email}}",
+      "phone": "{{faker.phone}}",
+      "company": "{{faker.company}}",
+      "address": "{{faker.address}}"
     }
   }
 }
+```
+
+Available faker types: `name`, `firstName`, `lastName`, `email`, `phone`, `company`, `address`, `word`, `sentence`, `boolean`, `uuid`.
+
+## Sequences
+
+Generate auto-incrementing values (useful for IDs):
+
+```yaml
+response:
+  statusCode: 200
+  body: |
+    {
+      "id": "{{sequence("order-id")}}",
+      "ticketNumber": "{{sequence("tickets", 1000)}}"
+    }
+```
+
+The optional second argument sets the starting value (default: 1). Sequences persist for the lifetime of the server.
+
+:::note
+The `sequence()` function uses double quotes around the name. When writing body templates in YAML, use the literal block style (`body: |`) to avoid quote escaping issues.
+:::
+
+## Complete Example
+
+```yaml
+mocks:
+  - id: create-order
+    type: http
+    http:
+      matcher:
+        method: POST
+        path: /api/orders
+      response:
+        statusCode: 201
+        headers:
+          Content-Type: "application/json"
+          Location: "/api/orders/{{uuid}}"
+          X-Request-ID: "{{request.header.X-Request-ID}}"
+        body: |
+          {
+            "id": "{{uuid}}",
+            "status": "pending",
+            "customer": {
+              "name": "{{request.body.customer.name}}",
+              "email": "{{lower request.body.customer.email}}"
+            },
+            "total": "{{request.body.total}}",
+            "createdAt": "{{now}}"
+          }
 ```
 
 Request:
@@ -297,7 +301,6 @@ curl -X POST http://localhost:4280/api/orders \
   -H "X-Request-ID: req-123" \
   -d '{
     "customer": {"name": "Alice", "email": "ALICE@EXAMPLE.COM"},
-    "items": [{"sku": "A1", "qty": 2}],
     "total": 49.99
   }'
 ```
@@ -305,17 +308,14 @@ curl -X POST http://localhost:4280/api/orders \
 Response:
 ```json
 {
-  "id": "abc123",
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "status": "pending",
   "customer": {
     "name": "Alice",
     "email": "alice@example.com"
   },
-  "items": [{"sku": "A1", "qty": 2}],
-  "itemCount": 1,
-  "total": 49.99,
-  "createdAt": "2024-01-15T10:30:00Z",
-  "estimatedDelivery": "2024-01-18T10:30:00Z"
+  "total": "49.99",
+  "createdAt": "2026-02-24T10:30:00-06:00"
 }
 ```
 
@@ -325,18 +325,27 @@ Response:
 |------------|-------------|
 | `{{request.method}}` | HTTP method |
 | `{{request.path}}` | Request path |
+| `{{request.url}}` | Full request URL |
 | `{{request.pathParam.name}}` | Path parameter |
 | `{{request.query.name}}` | Query parameter |
 | `{{request.header.Name}}` | Request header |
-| `{{request.body}}` | Full request body |
-| `{{request.body.field}}` | Body field |
-| `{{now}}` | Current ISO timestamp |
+| `{{request.body.field}}` | Body field (dot-nested) |
+| `{{request.rawBody}}` | Raw request body string |
+| `{{now}}` | Current timestamp (RFC3339) |
 | `{{timestamp}}` | Unix timestamp (seconds) |
+| `{{timestamp.iso}}` | ISO timestamp (RFC3339Nano UTC) |
+| `{{timestamp.unix_ms}}` | Unix timestamp (milliseconds) |
 | `{{uuid}}` | Random UUID |
+| `{{uuid.short}}` | Short random ID (hex) |
+| `{{random.int(min, max)}}` | Random integer in range |
+| `{{random.float(min, max)}}` | Random float in range |
+| `{{random.string(length)}}` | Random alphanumeric string |
+| `{{sequence("name")}}` | Auto-incrementing counter |
 | `{{upper value}}` | Uppercase string |
 | `{{lower value}}` | Lowercase string |
 | `{{default value fallback}}` | Default if empty |
-| `{{len array}}` | Array length |
+| `{{faker.name}}` | Random person name |
+| `{{faker.email}}` | Random email address |
 
 ## Next Steps
 

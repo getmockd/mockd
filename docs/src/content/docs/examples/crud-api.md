@@ -19,6 +19,7 @@ Create `tasks-api.json`:
 
 ```json
 {
+  "version": "1.0",
   "server": {
     "port": 4280
   },
@@ -66,14 +67,18 @@ Create `tasks-api.json`:
   ],
   "mocks": [
     {
+      "id": "health-check",
+      "type": "http",
       "name": "Health check",
-      "matcher": {
-        "method": "GET",
-        "path": "/health"
-      },
-      "response": {
-        "statusCode": 200,
-        "body": {"status": "ok", "timestamp": "{{now}}"}
+      "http": {
+        "matcher": {
+          "method": "GET",
+          "path": "/health"
+        },
+        "response": {
+          "statusCode": 200,
+          "body": "{\"status\": \"ok\", \"timestamp\": \"{{now}}\"}"
+        }
       }
     }
   ]
@@ -231,31 +236,46 @@ curl -X POST http://localhost:4280/api/users \
 
 ## State Management
 
-### View Current State
+### View Registered Resources
 
 ```bash
-curl http://localhost:4290/state
+curl http://localhost:4290/state/resources
+```
+
+### List Items in a Resource
+
+```bash
+curl http://localhost:4290/state/resources/tasks/items
 ```
 
 ### Reset State
 
 ```bash
-# Reset all state
-curl -X DELETE http://localhost:4290/state
+# Reset a specific resource to its seed data
+curl -X POST http://localhost:4290/state/resources/tasks/reset
 
-# Reset specific resource
-curl -X DELETE http://localhost:4290/state/tasks
+# Clear all items from a resource (does NOT restore seed data)
+curl -X DELETE http://localhost:4290/state/resources/tasks
 ```
 
-### Import State
+### Import Stateful Resources
+
+Register new stateful resources via config import:
 
 ```bash
-curl -X POST http://localhost:4290/state \
+curl -X POST http://localhost:4290/config \
   -H "Content-Type: application/json" \
   -d '{
-    "tasks": [
-      {"id": 1, "title": "Fresh task", "status": "todo"}
-    ]
+    "config": {
+      "statefulResources": [{
+        "name": "tasks",
+        "basePath": "/api/tasks",
+        "idField": "id",
+        "seedData": [
+          {"id": "1", "title": "Fresh task", "status": "todo"}
+        ]
+      }]
+    }
   }'
 ```
 
@@ -302,9 +322,9 @@ const API = 'http://localhost:4280/api';
 
 describe('Tasks API', () => {
   beforeEach(async () => {
-    // Reset state before each test
-    await fetch('http://localhost:4290/state', {
-      method: 'DELETE'
+    // Reset all resources to seed data before each test
+    await fetch('http://localhost:4290/state/reset', {
+      method: 'POST'
     });
   });
 
@@ -358,8 +378,8 @@ API = 'http://localhost:4280/api'
 ADMIN = 'http://localhost:4290'
 
 def test_task_crud():
-    # Reset state
-    requests.delete(f'{ADMIN}/state')
+    # Reset all resources to seed data
+    requests.post(f'{ADMIN}/state/reset')
 
     # Create
     task = requests.post(f'{API}/tasks', json={

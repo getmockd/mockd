@@ -65,8 +65,8 @@ mocks:
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `id` | string | Yes | | Unique identifier |
-| `type` | string | Yes | | Mock type: `http`, `websocket`, `graphql`, `grpc`, `mqtt`, `soap` |
+| `id` | string | No | Auto-generated | Unique identifier |
+| `type` | string | No | Inferred | Mock type: `http`, `websocket`, `graphql`, `grpc`, `mqtt`, `soap`, `oauth` |
 | `name` | string | No | | Human-readable name |
 | `description` | string | No | | Longer description |
 | `enabled` | boolean | No | `true` | Whether mock is active |
@@ -118,10 +118,10 @@ mocks:
 | Field | Type | Description |
 |-------|------|-------------|
 | `method` | string | HTTP method (GET, POST, PUT, DELETE, PATCH, etc.) |
-| `path` | string | Exact URL path |
+| `path` | string | URL path (supports `{param}` syntax for path parameters) |
 | `pathPattern` | string | Regex pattern for URL path |
-| `headers` | map | Header matchers (key: regex pattern) |
-| `queryParams` | map | Query parameter matchers (key: regex pattern) |
+| `headers` | map | Header matchers (exact match or glob patterns with `*`) |
+| `queryParams` | map | Query parameter matchers (exact match) |
 | `bodyContains` | string | Body must contain this string |
 | `bodyEquals` | string | Body must equal this string exactly |
 | `bodyPattern` | string | Body must match this regex pattern |

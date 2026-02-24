@@ -23,7 +23,7 @@ mockd status
 mockd list
 
 # View recent request logs
-mockd logs --limit 10
+mockd logs --requests -n 10
 ```
 
 ## Mock Not Matching
@@ -46,7 +46,7 @@ mockd list
 mockd list --no-truncate
 
 # View request logs to see what's being received
-mockd logs
+mockd logs --requests
 
 # Delete a problematic mock by path
 mockd delete --path /api/users --method GET
@@ -125,7 +125,7 @@ If the server fails to start:
 mockd get <mock-id> --json
 
 # Check request logs for what was actually matched
-mockd logs --limit 5
+mockd logs --requests -n 5
 ```
 
 ### Wrong Mock Matched

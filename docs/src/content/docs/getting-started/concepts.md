@@ -57,14 +57,14 @@ A **mock** is a rule that defines:
 1. **Request Matcher** - Which incoming requests to match
 2. **Response** - What to send back when matched
 
-```json
-{
-  "matcher": { ... },   // Request matcher
-  "response": { ... }   // Response definition
-}
+```yaml
+- type: http
+  http:
+    matcher: { ... }   # Which requests to match
+    response: { ... }  # What to send back
 ```
 
-For HTTP mocks, when a request arrives, mockd checks each mock's request matcher. The first match wins and its response is returned. Other protocols use protocol-specific matching (GraphQL operations, gRPC methods, MQTT topics, etc.).
+Each mock has a `type` (http, graphql, grpc, websocket, mqtt, soap, oauth) and a protocol-specific block. For HTTP mocks, when a request arrives, mockd checks each mock's matcher. The first match wins and its response is returned. Other protocols use protocol-specific matching (GraphQL operations, gRPC methods, MQTT topics, etc.).
 
 ## Request Matching
 
@@ -76,9 +76,9 @@ The request matcher defines criteria for matching incoming requests:
     "method": "GET",
     "path": "/api/users",
     "headers": {
-      "Authorization": "Bearer .*"
+      "Authorization": "Bearer*"
     },
-    "query": {
+    "queryParams": {
       "page": "1"
     }
   }
@@ -90,10 +90,11 @@ The request matcher defines criteria for matching incoming requests:
 | Field | Description | Matching Type |
 |-------|-------------|---------------|
 | `method` | HTTP method (GET, POST, etc.) | Exact match |
-| `path` | URL path | Exact or pattern |
-| `headers` | HTTP headers | Exact or regex |
-| `query` | Query string parameters | Exact or regex |
-| `body` | Request body | JSON matching |
+| `path` | URL path | Exact or `{param}` pattern |
+| `pathPattern` | URL path regex | Full regex |
+| `headers` | HTTP headers | Exact or glob (`*`) |
+| `queryParams` | Query string parameters | Exact match |
+| `bodyContains` | Request body substring | Substring match |
 
 ### Path Patterns
 
@@ -102,20 +103,30 @@ Paths can include dynamic segments:
 ```json
 "/api/users/{id}"           // Matches /api/users/1, /api/users/abc
 "/api/{resource}/{id}"      // Matches /api/posts/123
-"/api/files/{path:.*}"      // Matches /api/files/a/b/c (greedy)
 ```
 
-### Regex Matching
+For full regex matching, use `pathPattern` instead of `path`:
 
-Headers and query params support regex:
+```json
+{
+  "pathPattern": "/api/v[0-9]+/users/.*"
+}
+```
+
+### Glob Matching
+
+Headers support glob patterns with `*`:
 
 ```json
 {
   "headers": {
-    "Authorization": "Bearer [a-zA-Z0-9]+"
+    "Authorization": "Bearer*",
+    "Content-Type": "*json*"
   }
 }
 ```
+
+Patterns: `prefix*` (starts with), `*suffix` (ends with), `*middle*` (contains).
 
 See [Request Matching Guide](/guides/request-matching/) for complete details.
 
@@ -143,7 +154,6 @@ The response defines what mockd sends back:
 | Field | Description | Default |
 |-------|-------------|---------|
 | `statusCode` | HTTP status code | 200 |
-|-------|-------------|---------|
 | `headers` | Response headers | `{}` |
 | `body` | Response body (string or JSON) | `""` |
 | `delayMs` | Simulated latency (milliseconds) | `0` |
@@ -209,34 +219,28 @@ When multiple mocks could match a request, mockd uses this priority:
 
 A complete configuration file:
 
-```json
-{
-  "server": {
-    "port": 4280,
-    "host": "localhost"
-  },
-  "mocks": [
-    {
-      "name": "List users",
-      "matcher": {
-        "method": "GET",
-        "path": "/api/users"
-      },
-      "response": {
-        "statusCode": 200,
-        "body": {"users": []}
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: list-users
+    name: List users
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/users
+      response:
+        statusCode: 200
+        body: '{"users": []}'
 ```
 
 ### Top-Level Fields
 
 | Field | Description | Required |
 |-------|-------------|----------|
-| `server` | Server configuration | No |
+| `version` | Config version (`"1.0"`) | Yes |
 | `mocks` | Array of mock definitions | Yes |
+| `statefulResources` | Array of CRUD resources | No |
 
 ## Stateful Mocking
 
@@ -269,7 +273,7 @@ See [Stateful Mocking Guide](/guides/stateful-mocking/).
 mockd can act as a proxy to record real API traffic:
 
 ```bash
-mockd proxy --target https://api.example.com --record
+mockd proxy start
 ```
 
 Recorded requests become mocks automatically.

@@ -5,6 +5,18 @@ description: Learn how mockd evaluates matchers to determine which mock responds
 
 Request matching determines which mock responds to an incoming HTTP request. mockd evaluates matchers in order and returns the first matching response.
 
+:::note
+Examples below show the contents of the `http` block within a mock definition. In a config file, wrap each example in the full mock structure:
+```yaml
+mocks:
+  - id: my-mock
+    type: http
+    http:
+      matcher: { ... }
+      response: { ... }
+```
+:::
+
 ## Basic Matching
 
 ### Method Matching
@@ -138,7 +150,7 @@ Match requests with specific query parameters:
 {
   "matcher": {
     "path": "/api/users",
-    "query": {
+    "queryParams": {
       "page": "1",
       "limit": "10"
     }
@@ -154,7 +166,7 @@ Only specified parameters are required. Additional parameters are ignored:
 {
   "matcher": {
     "path": "/api/search",
-    "query": {
+    "queryParams": {
       "q": "test"
     }
   }
@@ -220,63 +232,33 @@ Matches `Content-Type: application/json` and `CONTENT-TYPE: application/json`
 
 Match requests with specific body content.
 
-### JSON Body Matching
+### Substring Matching (bodyContains)
 
-Match exact JSON structure:
-
-```json
-{
-  "matcher": {
-    "body": {
-      "username": "alice",
-      "action": "login"
-    }
-  }
-}
-```
-
-### Partial JSON Matching
-
-Use `bodyContains` for partial matching:
+Use `bodyContains` to match requests whose body contains a specific substring:
 
 ```json
 {
   "matcher": {
-    "bodyContains": {
-      "username": "alice"
-    }
+    "bodyContains": "username"
   }
 }
 ```
 
-Matches any request body that contains `"username": "alice"`, ignoring other fields.
+Matches any request body that contains the string `"username"`. The value is a plain string, not a regex or JSON object.
 
-### JSON Path Matching
+### Exact Body Matching (bodyEquals)
 
-Match specific paths in JSON:
+Use `bodyEquals` for exact string comparison:
 
 ```json
 {
   "matcher": {
-    "bodyMatch": {
-      "$.user.email": ".*@example\\.com",
-      "$.items[0].quantity": "[1-9][0-9]*"
-    }
+    "bodyEquals": "{\"action\":\"login\"}"
   }
 }
 ```
 
-### String Body Matching
-
-Match raw body content:
-
-```json
-{
-  "matcher": {
-    "bodyString": "<xml>.*</xml>"
-  }
-}
-```
+The entire request body must match this string exactly.
 
 ### Regex Body Matching (bodyPattern)
 
@@ -366,14 +348,12 @@ Combine multiple matchers for precise matching:
     "path": "/api/users/{id}/comments",
     "headers": {
       "Content-Type": "application/json",
-      "Authorization": "Bearer .*"
+      "Authorization": "Bearer*"
     },
-    "query": {
+    "queryParams": {
       "notify": "true"
     },
-    "bodyContains": {
-      "text": ".*"
-    }
+    "bodyContains": "comment text"
   }
 }
 ```
@@ -405,7 +385,7 @@ Mocks with more conditions win:
 { "method": "GET", "path": "/api/users" }
 
 // More specific (matches only with Authorization header)
-{ "method": "GET", "path": "/api/users", "headers": { "Authorization": ".*" } }
+{ "method": "GET", "path": "/api/users", "headers": { "Authorization": "*" } }
 ```
 
 ### 3. Configuration Order
@@ -416,43 +396,49 @@ When priority is equal, earlier mocks in the config file win.
 
 ### API Key Required
 
-```json
-{
-  "matcher": {
-    "path": "/api/.*",
-    "headers": {
-      "X-API-Key": "valid-key-123"
-    }
-  },
-  "response": { "statusCode": 200 }
-}
+```yaml
+mocks:
+  - id: api-key-required
+    type: http
+    http:
+      matcher:
+        pathPattern: "^/api/.*"
+        headers:
+          X-API-Key: "valid-key-123"
+      response:
+        statusCode: 200
+        body: '{"access": "granted"}'
 ```
 
 ### Content Negotiation
 
-```json
-[
-  {
-    "matcher": {
-      "path": "/api/data",
-      "headers": { "Accept": "application/xml" }
-    },
-    "response": {
-      "headers": { "Content-Type": "application/xml" },
-      "body": "<data>...</data>"
-    }
-  },
-  {
-    "matcher": {
-      "path": "/api/data",
-      "headers": { "Accept": "application/json" }
-    },
-    "response": {
-      "headers": { "Content-Type": "application/json" },
-      "body": { "data": "..." }
-    }
-  }
-]
+```yaml
+mocks:
+  - id: data-xml
+    type: http
+    http:
+      matcher:
+        path: /api/data
+        headers:
+          Accept: "application/xml"
+      response:
+        statusCode: 200
+        headers:
+          Content-Type: "application/xml"
+        body: "<data>...</data>"
+
+  - id: data-json
+    type: http
+    http:
+      matcher:
+        path: /api/data
+        headers:
+          Accept: "application/json"
+      response:
+        statusCode: 200
+        headers:
+          Content-Type: "application/json"
+        body: '{"data": "..."}'
 ```
 
 ## Next Steps

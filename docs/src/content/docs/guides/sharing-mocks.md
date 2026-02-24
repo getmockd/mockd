@@ -256,7 +256,7 @@ mockd tunnel --allow-ips "10.0.0.0/8,192.168.1.0/24"
 
 When you create a tunnel:
 - **Exposed**: The local port you specify with `--port` (HTTP, gRPC, WebSocket, SSE)
-- **Exposed**: MQTT broker ports specified with `--mqtt` (via TLS ALPN)
+- **Exposed**: MQTT broker ports specified with `--mqtt` on `tunnel-quic` (via TLS ALPN)
 - **NOT exposed**: Admin API (port 4290) — unless explicitly tunneled
 - **NOT exposed**: Other local services
 
@@ -280,11 +280,16 @@ curl http://localhost:4280/health
 
 ### WebSocket connections drop
 
-Some tunnel providers have idle timeouts. Enable keepalive:
+Some tunnel providers have idle timeouts. Configure heartbeat in your WebSocket mock config:
 
-```bash
-# In your WebSocket mock config
-mockd websocket add --path /ws --keepalive 30
+```yaml
+# In your YAML config file
+websocket:
+  path: /ws
+  heartbeat:
+    enabled: true
+    interval: "30s"
+    timeout: "10s"
 ```
 
 ### SSE stream cuts off

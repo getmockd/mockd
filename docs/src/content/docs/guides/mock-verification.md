@@ -43,7 +43,6 @@ GET /mocks/{id}/verify
 {
   "mockId": "get-users",
   "callCount": 5,
-  "firstCalledAt": "2024-01-15T10:30:00Z",
   "lastCalledAt": "2024-01-15T10:35:00Z"
 }
 ```
@@ -70,8 +69,10 @@ Content-Type: application/json
 
 ```json
 {
-  "success": true,
-  "message": "Mock called 5 times, expected at least 1"
+  "passed": true,
+  "actual": 5,
+  "expected": "at least 1 time(s)",
+  "message": "Mock was called 5 time(s), matching expectations"
 }
 ```
 
@@ -79,8 +80,10 @@ Content-Type: application/json
 
 ```json
 {
-  "success": false,
-  "message": "Mock called 0 times, expected at least 1"
+  "passed": false,
+  "actual": 0,
+  "expected": "at least 1 time(s)",
+  "message": "Mock was called 0 time(s), not matching expectations"
 }
 ```
 
@@ -96,6 +99,7 @@ GET /mocks/{id}/invocations
 {
   "invocations": [
     {
+      "id": "req-1",
       "timestamp": "2024-01-15T10:30:00Z",
       "method": "GET",
       "path": "/api/users",
@@ -103,26 +107,22 @@ GET /mocks/{id}/invocations
         "Authorization": "Bearer token123",
         "User-Agent": "my-app/1.0"
       },
-      "query": {
-        "page": "1",
-        "limit": "10"
-      },
       "body": ""
     },
     {
+      "id": "req-2",
       "timestamp": "2024-01-15T10:31:00Z",
-      "method": "GET",
+      "method": "POST",
       "path": "/api/users",
       "headers": {
-        "Authorization": "Bearer token123"
+        "Authorization": "Bearer token123",
+        "Content-Type": "application/json"
       },
-      "query": {
-        "page": "2"
-      },
-      "body": ""
+      "body": "{\"name\": \"Alice\"}"
     }
   ],
-  "count": 2
+  "count": 2,
+  "total": 2
 }
 ```
 
@@ -178,7 +178,7 @@ test('retries on failure', async () => {
   });
   
   const data = await res.json();
-  expect(data.success).toBe(true);
+  expect(data.passed).toBe(true);
 });
 ```
 

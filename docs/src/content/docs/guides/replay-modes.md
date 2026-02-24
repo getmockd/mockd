@@ -234,7 +234,7 @@ curl -X POST http://localhost:4290/replay/SESSION_ID/advance \
 
 ```javascript
 // Start triggered replay
-const { replayId } = await fetch('/stream-recordings/REC_ID/replay', {
+const { sessionId } = await fetch('/stream-recordings/REC_ID/replay', {
   method: 'POST',
   body: JSON.stringify({ mode: 'triggered' })
 }).then(r => r.json());
@@ -243,16 +243,16 @@ const { replayId } = await fetch('/stream-recordings/REC_ID/replay', {
 const ws = new WebSocket('ws://localhost:4280/ws/chat');
 
 // Advance and assert
-await fetch(`/replay/${replayId}/advance`, { method: 'POST' });
+await fetch(`/replay/${sessionId}/advance`, { method: 'POST' });
 const msg1 = await nextMessage(ws);
 expect(msg1.type).toBe('welcome');
 
-await fetch(`/replay/${replayId}/advance`, { method: 'POST' });
+await fetch(`/replay/${sessionId}/advance`, { method: 'POST' });
 const msg2 = await nextMessage(ws);
 expect(msg2.type).toBe('ready');
 
 // Clean up
-await fetch(`/replay/${replayId}`, { method: 'DELETE' });
+await fetch(`/replay/${sessionId}`, { method: 'DELETE' });
 ```
 
 ## Replay Status
@@ -268,15 +268,11 @@ curl http://localhost:4290/replay/SESSION_ID
   "id": "01REPLAY123456",
   "recordingId": "01HXYZ123456",
   "status": "playing",
+  "mode": "pure",
   "currentFrame": 15,
   "totalFrames": 42,
   "framesSent": 15,
-  "startedAt": "2024-01-15T10:30:00Z",
-  "elapsedMs": 5432,
-  "config": {
-    "mode": "pure",
-    "timingScale": 1.0
-  }
+  "elapsedMs": 5432
 }
 ```
 
@@ -368,7 +364,7 @@ Step through messages one at a time:
 ```bash
 # Start triggered replay
 REPLAY_ID=$(curl -s -X POST http://localhost:4290/stream-recordings/REC_ID/replay \
-  -d '{"mode": "triggered"}' | jq -r '.id')
+  -d '{"mode": "triggered"}' | jq -r '.sessionId')
 
 # Step through
 while true; do

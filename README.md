@@ -106,8 +106,8 @@ Bring your existing API definitions — no rewriting needed:
 mockd import openapi.yaml           # OpenAPI 3.x / Swagger 2.0
 mockd import collection.json        # Postman collections
 mockd import recording.har          # HAR files
-mockd import wiremock-mappings/     # WireMock stubs
-mockd import --format curl < req.sh # cURL commands
+mockd import wiremock-mapping.json  # WireMock stubs
+mockd import "curl -X GET https://api.example.com/users"  # cURL commands
 mockd export --format yaml > mocks.yaml
 ```
 
@@ -125,21 +125,29 @@ mockd tunnel enable
 Test how your app handles failures:
 
 ```bash
-mockd chaos enable --latency 500ms --error-rate 0.1 --status 503
+mockd chaos enable --latency 500ms --error-rate 0.1 --error-code 503
 ```
 
 ### Stateful Mocking
 
 Simulate CRUD resources with automatic ID generation, pagination, and persistence:
 
+```yaml
+# mockd.yaml
+statefulResources:
+  - name: users
+    basePath: /api/users
+    seedData:
+      - { id: "1", name: "Alice", email: "alice@example.com" }
+```
+
 ```bash
-# Define a stateful resource
-mockd add http --path /api/users --stateful users
+mockd serve --config mockd.yaml
 
 # POST creates, GET lists, GET /:id reads, PUT updates, DELETE removes
 curl -X POST http://localhost:4280/api/users \
-  -d '{"name": "Alice"}' -H 'Content-Type: application/json'
-# → {"id": "01HX...", "name": "Alice", "createdAt": "..."}
+  -d '{"name": "Bob"}' -H 'Content-Type: application/json'
+# → {"id": "2", "name": "Bob", "createdAt": "..."}
 ```
 
 ### Proxy Recording
@@ -147,9 +155,10 @@ curl -X POST http://localhost:4280/api/users \
 Record real API traffic and replay it as mocks:
 
 ```bash
-mockd proxy --target https://api.example.com --record
+mockd proxy start --port 8888
+# Configure your app to use http://localhost:8888 as proxy
 # Traffic is recorded, then replay with:
-mockd import recordings/
+mockd import recordings/session-name.json
 ```
 
 ### Admin API

@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-02-24
+
+### Added
+
+- **Auto-generate mock IDs** — config files no longer require `id` fields; `fillMockDefaults()` generates deterministic IDs and infers `type` from populated spec fields (DX-1)
+- **Flexible `response.body`** — YAML/JSON config now accepts objects and arrays directly for `response.body` (auto-marshaled to JSON string); custom `UnmarshalJSON`/`UnmarshalYAML` on both `mock.HTTPResponse` and `config.HTTPResponse` (DX-5)
+- **Import from stdin** — `mockd import -` or `cat mocks.yaml | mockd import` (DX-2)
+- **Import directories** — `mockd import ./mocks/` recursively loads `.yaml`, `.yml`, and `.json` files (DX-3)
+- **`--stateful` flag on `mockd add`** — `mockd add http --path /api/users --stateful` creates a stateful CRUD resource in one command (DX-4)
+- **Doc config regression test** — `tests/unit/doc_config_test.go` scans all doc `.md` files, extracts YAML/JSON config blocks, and validates them through `config.ParseYAML`/`ParseJSON`
+
+### Fixed
+
+- **24 documentation bugs** found by live-testing every example across all 30 doc files against a running mockd server:
+  - `tls-https.md`: `mockd cert generate` and `mockd cert generate-ca` commands don't exist; replaced with `--tls-auto` flag and OpenSSL commands; fixed `--https`/`--cert`/`--key` → `--tls-auto`/`--tls-cert`/`--tls-key`/`--https-port`
+  - `observability.md`: Prometheus metric names corrected (`mockd_http_requests_total` → `mockd_requests_total`, `mockd_http_request_duration_seconds_bucket` → `mockd_request_duration_seconds_bucket`); added 3 missing metrics
+  - `validation.md`: Error response format corrected to include `location`, `code`, `received`, `expected`, `hint` fields
+  - `response-templating.md`: Removed 7 non-existent template functions; added documentation for actual functions (faker.*, sequence(), uuid.short, etc.)
+  - `mqtt.md`: All `mqtt subscribe` examples were missing required `broker:port` positional argument
+  - `replay-modes.md`: Replay start response field `replayId` → `sessionId`; status `config` object → top-level `mode`
+  - `stream-recording.md`: Start response format, recording `formatVersion` → `version`, stats field names corrected
+  - `grpc.md`: `-I` flag → `--import`; `grpc list` output format corrected
+  - `websocket.md`: Non-upgrade response returns 404, not 400
+  - `sharing-mocks.md`: Non-existent `--keepalive` flag; `--mqtt` tunnel-quic only
+  - `stateful-mocking.md`: List response format (plain array → paginated `{data, meta}`); IDs (integers → UUIDs)
+  - `chaos-engineering.md`: `PUT /chaos` body format (flat → nested objects)
+  - `mock-verification.md`: 3 wrong response field names
+  - `troubleshooting.md`: `--limit` → `--lines`; missing `--requests` flag
+  - Plus fixes in concepts.md, request-matching.md, admin-api.md, configuration.md, json-schema.md, crud-api.md, integration-testing.md, sse.md, cli.md, proxy-recording.md, basic-mocks.md, import-export.md
+- README examples corrected (chaos, stateful, proxy, import sections)
+
 ## [0.3.3] - 2026-02-23
 
 ### Added

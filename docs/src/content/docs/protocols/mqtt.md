@@ -891,25 +891,25 @@ Subscribe to a topic and print received messages:
 
 ```bash
 # Subscribe to a topic
-mockd mqtt subscribe sensors/temperature
+mockd mqtt subscribe localhost:1883 sensors/temperature
 
 # Subscribe with wildcard
-mockd mqtt subscribe "sensors/#"
+mockd mqtt subscribe localhost:1883 "sensors/#"
 
 # Subscribe to single-level wildcard
-mockd mqtt subscribe "sensors/+/temperature"
+mockd mqtt subscribe localhost:1883 "sensors/+/temperature"
 
 # Receive only 5 messages then exit
-mockd mqtt subscribe -c 5 sensors/temperature
+mockd mqtt subscribe -c 5 localhost:1883 sensors/temperature
 
 # Subscribe with timeout
-mockd mqtt subscribe -t 30s sensors/temperature
+mockd mqtt subscribe -t 30s localhost:1883 sensors/temperature
 
 # Subscribe with authentication
-mockd mqtt subscribe -u user -P pass sensors/temperature
+mockd mqtt subscribe -u user -P pass localhost:1883 sensors/temperature
 
 # Subscribe with QoS 1
-mockd mqtt subscribe --qos 1 sensors/temperature
+mockd mqtt subscribe --qos 1 localhost:1883 sensors/temperature
 ```
 
 Flags:
@@ -953,14 +953,14 @@ Flags:
 mockd serve --config mockd.yaml &
 
 # Subscribe to all sensors in background
-mockd mqtt subscribe "sensors/#" &
+mockd mqtt subscribe localhost:1883 "sensors/#" &
 
 # Publish test messages
 mockd mqtt publish localhost:1883 sensors/temperature '{"value": 25.5}'
 mockd mqtt publish localhost:1883 sensors/humidity '{"value": 65}'
 
 # Test command/response
-mockd mqtt subscribe responses/device &
+mockd mqtt subscribe localhost:1883 responses/device &
 mockd mqtt publish localhost:1883 commands/device/001 '{"action": "restart"}'
 ```
 

@@ -117,28 +117,54 @@ Add to `coc-settings.json`:
 
 ### Mock Definition
 
+A mock wraps protocol-specific config under a type key. The `id` and `type`
+fields are auto-generated if omitted in config files.
+
 ```json
 {
   "definitions": {
     "mock": {
       "type": "object",
-      "required": ["matcher", "response"],
       "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique mock ID (auto-generated if omitted)"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["http", "graphql", "grpc", "websocket", "mqtt", "soap", "oauth"],
+          "description": "Protocol type (inferred from spec field if omitted)"
+        },
         "name": {
           "type": "string",
           "description": "Human-readable name for the mock"
         },
-        "description": {
-          "type": "string",
-          "description": "Description of what this mock does"
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this mock is active"
         },
         "priority": {
           "type": "integer",
           "default": 0,
-          "description": "Match priority (lower = higher)"
+          "description": "Match priority (higher = matched first)"
         },
+        "http": { "$ref": "#/definitions/httpSpec" },
+        "graphql": { "$ref": "#/definitions/graphqlSpec" },
+        "grpc": { "$ref": "#/definitions/grpcSpec" },
+        "websocket": { "$ref": "#/definitions/websocketSpec" },
+        "mqtt": { "$ref": "#/definitions/mqttSpec" },
+        "soap": { "$ref": "#/definitions/soapSpec" },
+        "oauth": { "$ref": "#/definitions/oauthSpec" }
+      }
+    },
+    "httpSpec": {
+      "type": "object",
+      "description": "HTTP mock specification",
+      "properties": {
         "matcher": { "$ref": "#/definitions/requestMatcher" },
-        "response": { "$ref": "#/definitions/response" }
+        "response": { "$ref": "#/definitions/response" },
+        "priority": { "type": "integer", "default": 0 }
       }
     }
   }
@@ -165,24 +191,29 @@ Add to `coc-settings.json`:
         "headers": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "description": "Header matchers (values are regex patterns)"
+          "description": "Header matchers (exact match or glob patterns with *)"
         },
-        "query": {
+        "queryParams": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "description": "Query parameter matchers"
+          "description": "Query parameter matchers (exact match)"
         },
-        "body": {
-          "description": "Exact body match (any JSON value)"
+        "bodyEquals": {
+          "type": "string",
+          "description": "Exact body match (full string comparison)"
         },
         "bodyContains": {
-          "type": "object",
-          "description": "Partial body match"
+          "type": "string",
+          "description": "Substring body match"
         },
-        "bodyMatch": {
+        "bodyPattern": {
+          "type": "string",
+          "description": "Regex body match"
+        },
+        "bodyJsonPath": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
-          "description": "JSONPath matchers"
+          "additionalProperties": {},
+          "description": "JSONPath condition matchers (e.g., {\"$.user.role\": \"admin\"})"
         }
       }
     }
@@ -328,8 +359,11 @@ Add custom properties with `x-` prefix:
     {
       "x-team": "backend",
       "x-version": "2.0",
-      "matcher": {...},
-      "response": {...}
+      "type": "http",
+      "http": {
+        "matcher": {"method": "GET", "path": "/api/data"},
+        "response": {"statusCode": 200, "body": "{}"}
+      }
     }
   ]
 }

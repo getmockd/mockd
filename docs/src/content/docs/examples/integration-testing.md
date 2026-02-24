@@ -33,7 +33,11 @@ kill $MOCKD_PID
 ### 2. Reset State Between Tests
 
 ```bash
-curl -X DELETE http://localhost:4290/state
+# Reset a specific resource to its seed data
+curl -X POST http://localhost:4290/state/resources/users/reset
+
+# Or clear a resource (remove all items, no seed data restored)
+curl -X DELETE http://localhost:4290/state/resources/users
 ```
 
 ### 3. Point Application to mockd
@@ -70,8 +74,8 @@ afterAll(() => {
 });
 
 beforeEach(async () => {
-  // Reset state
-  await fetch('http://localhost:4290/state', { method: 'DELETE' });
+  // Reset stateful resources to seed data
+  await fetch('http://localhost:4290/state/resources/users/reset', { method: 'POST' });
 });
 
 async function waitForServer(url, timeout = 5000) {
@@ -141,8 +145,11 @@ describe('Error Handling', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        request: { method: 'GET', path: '/api/flaky' },
-        response: { status: 500, body: { error: 'Internal error' } }
+        type: 'http',
+        http: {
+          matcher: { method: 'GET', path: '/api/flaky' },
+          response: { statusCode: 500, body: '{"error": "Internal error"}' }
+        }
       })
     });
 
@@ -157,8 +164,11 @@ describe('Error Handling', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        request: { method: 'GET', path: '/api/slow' },
-        response: { status: 200, delay: '10s', body: {} }
+        type: 'http',
+        http: {
+          matcher: { method: 'GET', path: '/api/slow' },
+          response: { statusCode: 200, delayMs: 10000, body: '{}' }
+        }
       })
     });
 
@@ -212,8 +222,9 @@ def mockd_server():
 
 @pytest.fixture(autouse=True)
 def reset_state():
-    """Reset mockd state before each test."""
-    requests.delete("http://localhost:4290/state")
+    """Reset mockd stateful resources before each test."""
+    requests.post("http://localhost:4290/state/resources/users/reset")
+    requests.post("http://localhost:4290/state/resources/tasks/reset")
 ```
 
 ### Example Tests
@@ -282,7 +293,9 @@ package integration_test
 import (
     "encoding/json"
     "net/http"
+    "os"
     "os/exec"
+    "strings"
     "testing"
     "time"
 )
@@ -319,7 +332,10 @@ func waitForServer(url string) {
 }
 
 func resetState(t *testing.T) {
-    req, _ := http.NewRequest("DELETE", adminURL+"/state", nil)
+    t.Helper()
+    req, _ := http.NewRequest("POST", adminURL+"/state/resources/users/reset", nil)
+    http.DefaultClient.Do(req)
+    req, _ = http.NewRequest("POST", adminURL+"/state/resources/tasks/reset", nil)
     http.DefaultClient.Do(req)
 }
 ```
@@ -463,7 +479,7 @@ Reset state in each test to ensure isolation:
 
 ```javascript
 beforeEach(async () => {
-  await fetch('http://localhost:4290/state', { method: 'DELETE' });
+  await fetch('http://localhost:4290/state/resources/users/reset', { method: 'POST' });
 });
 ```
 
@@ -477,11 +493,14 @@ test('handles rate limiting', async () => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      request: { method: 'GET', path: '/api/limited' },
-      response: {
-        status: 429,
-        headers: { 'Retry-After': '60' },
-        body: { error: 'Rate limited' }
+      type: 'http',
+      http: {
+        matcher: { method: 'GET', path: '/api/limited' },
+        response: {
+          statusCode: 429,
+          headers: { 'Retry-After': '60' },
+          body: '{"error": "Rate limited"}'
+        }
       }
     })
   });

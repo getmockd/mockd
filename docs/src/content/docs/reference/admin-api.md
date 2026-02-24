@@ -187,20 +187,23 @@ List all configured mocks.
 {
   "mocks": [
     {
-      "id": "abc123",
+      "id": "http_abc123",
+      "type": "http",
       "name": "Get users",
-      "matcher": {
-        "method": "GET",
-        "path": "/api/users"
-      },
-      "response": {
-        "statusCode": 200,
-        "body": "[]"
-      },
       "enabled": true,
-      "priority": 0,
+      "workspaceId": "local",
       "createdAt": "2024-01-15T10:30:00Z",
-      "updatedAt": "2024-01-15T10:30:00Z"
+      "updatedAt": "2024-01-15T10:30:00Z",
+      "http": {
+        "matcher": {
+          "method": "GET",
+          "path": "/api/users"
+        },
+        "response": {
+          "statusCode": 200,
+          "body": "[]"
+        }
+      }
     }
   ],
   "count": 1
@@ -219,18 +222,27 @@ Add a new mock at runtime.
 
 ```json
 {
+  "type": "http",
   "name": "Get users",
-  "matcher": {
-    "method": "GET",
-    "path": "/api/users"
-  },
-  "response": {
-    "statusCode": 200,
-    "headers": {"Content-Type": "application/json"},
-    "body": "[{\"id\": 1, \"name\": \"Alice\"}]"
+  "http": {
+    "matcher": {
+      "method": "GET",
+      "path": "/api/users"
+    },
+    "response": {
+      "statusCode": 200,
+      "headers": {"Content-Type": "application/json"},
+      "body": "[{\"id\": 1, \"name\": \"Alice\"}]"
+    }
   }
 }
 ```
+
+The `type` field determines the protocol. Protocol-specific config goes under the matching key (`http`, `graphql`, `grpc`, `websocket`, `mqtt`, `soap`, `oauth`).
+
+:::note
+For convenience, bare `matcher`/`response` fields (without the `type`/`http` wrapper) are also accepted for HTTP mocks — the server infers `type: "http"` automatically. The wrapped format is recommended for clarity and required for non-HTTP protocols.
+:::
 
 **Response:** Returns the created mock with generated ID (HTTP 201).
 
@@ -351,30 +363,47 @@ Get stateful resource overview.
 
 ```json
 {
-  "resources": 2,
+  "resources": [
+    {"name": "users", "basePath": "/api/users", "itemCount": 10, "seedCount": 2, "idField": "id"},
+    {"name": "posts", "basePath": "/api/posts", "itemCount": 5, "seedCount": 3, "idField": "id"}
+  ],
+  "total": 2,
   "totalItems": 15,
-  "resourceList": [
-    {"name": "users", "itemCount": 10},
-    {"name": "posts", "itemCount": 5}
-  ]
+  "resourceList": ["users", "posts"]
 }
 ```
 
 #### POST /state/reset
 
-Reset all stateful resources to seed data.
+Reset all stateful resources to their seed data.
 
 #### GET /state/resources
 
-List all stateful resources.
+List all stateful resources (returns array).
 
 #### GET /state/resources/{name}
 
-Get all items in a specific resource.
+Get details for a specific resource (item count, seed count, basePath).
+
+#### POST /state/resources/{name}/reset
+
+Reset a specific resource to its seed data.
 
 #### DELETE /state/resources/{name}
 
-Clear a specific resource (reset to seed data).
+Clear all items from a specific resource (does NOT restore seed data — use reset for that).
+
+#### GET /state/resources/{name}/items
+
+List items in a specific resource.
+
+#### GET /state/resources/{name}/items/{id}
+
+Get a specific item by ID.
+
+#### POST /state/resources/{name}/items
+
+Create a new item in a resource.
 
 ---
 
@@ -1183,9 +1212,12 @@ curl -X POST http://localhost:4290/state/reset
 curl -X POST http://localhost:4290/mocks \
   -H "Content-Type: application/json" \
   -d '{
+    "type": "http",
     "name": "Test endpoint",
-    "matcher": {"method": "GET", "path": "/api/test"},
-    "response": {"statusCode": 200, "body": "{\"test\": true}"}
+    "http": {
+      "matcher": {"method": "GET", "path": "/api/test"},
+      "response": {"statusCode": 200, "body": "{\"test\": true}"}
+    }
   }'
 ```
 

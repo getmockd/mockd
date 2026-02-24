@@ -146,17 +146,14 @@ mockd export --format yaml > mockd.yaml
 ### Capture Real Traffic → Mock
 
 ```bash
-# Record traffic from a real API using the proxy
-mockd proxy start --target https://api.example.com
+# Start the MITM proxy (records traffic to disk)
+mockd proxy start --port 8888
 
-# Run your app against the proxy, generating traffic
-# ... (your app makes requests through localhost:4280)
+# Configure your app to use the proxy, then run it
+http_proxy=http://localhost:8888 npm test
 
-# Stop recording
-mockd proxy stop
-
-# Your recordings are now available as mocks
-mockd list
+# Stop recording with Ctrl+C, then convert to mocks
+mockd convert -o mocks.yaml
 ```
 
 ### Import from Browser

@@ -3,27 +3,24 @@ title: Basic Mocks Examples
 description: Simple examples to get started with mockd request/response mocking.
 ---
 
-Simple examples to get started with mockd request/response mocking.
+Simple examples to get started with mockd request/response mocking. Each config below can be saved as a YAML file and loaded with `mockd serve --config mocks.yaml`.
 
 ## Hello World
 
 The simplest possible mock:
 
-```json
-{
-  "mocks": [
-    {
-      "matcher": {
-        "method": "GET",
-        "path": "/hello"
-      },
-      "response": {
-        "statusCode": 200,
-        "body": "Hello, World!"
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: hello
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /hello
+      response:
+        statusCode: 200
+        body: "Hello, World!"
 ```
 
 Test:
@@ -37,109 +34,79 @@ curl http://localhost:4280/hello
 
 Return JSON data:
 
-```json
-{
-  "mocks": [
-    {
-      "matcher": {
-        "method": "GET",
-        "path": "/api/user"
-      },
-      "response": {
-        "statusCode": 200,
-        "headers": {
-          "Content-Type": "application/json"
-        },
-        "body": {
-          "id": 1,
-          "name": "Alice",
-          "email": "alice@example.com",
-          "roles": ["user", "admin"]
-        }
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: get-user
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/user
+      response:
+        statusCode: 200
+        headers:
+          Content-Type: application/json
+        body: '{"id": 1, "name": "Alice", "email": "alice@example.com", "roles": ["user", "admin"]}'
 ```
 
 ## Multiple Endpoints
 
 Mock a simple API:
 
-```json
-{
-  "mocks": [
-    {
-      "name": "List products",
-      "matcher": {
-        "method": "GET",
-        "path": "/api/products"
-      },
-      "response": {
-        "statusCode": 200,
-        "body": {
-          "products": [
-            {"id": 1, "name": "Widget", "price": 9.99},
-            {"id": 2, "name": "Gadget", "price": 19.99}
-          ]
-        }
-      }
-    },
-    {
-      "name": "Get product",
-      "matcher": {
-        "method": "GET",
-        "path": "/api/products/1"
-      },
-      "response": {
-        "statusCode": 200,
-        "body": {
-          "id": 1,
-          "name": "Widget",
-          "price": 9.99,
-          "description": "A useful widget"
-        }
-      }
-    },
-    {
-      "name": "Product not found",
-      "matcher": {
-        "method": "GET",
-        "path": "/api/products/999"
-      },
-      "response": {
-        "statusCode": 404,
-        "body": {
-          "error": "Product not found"
-        }
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: list-products
+    name: List products
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/products
+      response:
+        statusCode: 200
+        body: '{"products": [{"id": 1, "name": "Widget", "price": 9.99}, {"id": 2, "name": "Gadget", "price": 19.99}]}'
+
+  - id: get-product
+    name: Get product
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/products/1
+      response:
+        statusCode: 200
+        body: '{"id": 1, "name": "Widget", "price": 9.99, "description": "A useful widget"}'
+
+  - id: product-not-found
+    name: Product not found
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/products/999
+      response:
+        statusCode: 404
+        body: '{"error": "Product not found"}'
 ```
 
 ## Path Parameters
 
 Match dynamic paths:
 
-```json
-{
-  "mocks": [
-    {
-      "matcher": {
-        "method": "GET",
-        "path": "/api/users/{id}"
-      },
-      "response": {
-        "statusCode": 200,
-        "body": {
-          "id": "{{request.pathParam.id}}",
-          "name": "User {{request.pathParam.id}}"
-        }
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: get-user-by-id
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/users/{id}
+      response:
+        statusCode: 200
+        body: '{"id": "{{request.pathParam.id}}", "name": "User {{request.pathParam.id}}"}'
 ```
 
 Test:
@@ -156,28 +123,21 @@ curl http://localhost:4280/api/users/abc
 
 Match and use query params:
 
-```json
-{
-  "mocks": [
-    {
-      "matcher": {
-        "method": "GET",
-        "path": "/api/search",
-        "query": {
-          "q": ".*"
-        }
-      },
-      "response": {
-        "statusCode": 200,
-        "body": {
-          "query": "{{request.query.q}}",
-          "results": []
-        }
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: search
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/search
+      response:
+        statusCode: 200
+        body: '{"query": "{{request.query.q}}", "results": []}'
 ```
+
+This mock matches any GET to `/api/search` regardless of query parameters. The template `{{request.query.q}}` extracts the `q` parameter from the request.
 
 Test:
 
@@ -190,36 +150,33 @@ curl "http://localhost:4280/api/search?q=hello"
 
 Require specific headers:
 
-```json
-{
-  "mocks": [
-    {
-      "name": "Authenticated request",
-      "matcher": {
-        "method": "GET",
-        "path": "/api/protected",
-        "headers": {
-          "Authorization": "Bearer valid-token"
-        }
-      },
-      "response": {
-        "statusCode": 200,
-        "body": {"message": "Access granted"}
-      }
-    },
-    {
-      "name": "Unauthorized",
-      "matcher": {
-        "method": "GET",
-        "path": "/api/protected"
-      },
-      "response": {
-        "statusCode": 401,
-        "body": {"error": "Unauthorized"}
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: authenticated
+    name: Authenticated request
+    type: http
+    http:
+      priority: 10
+      matcher:
+        method: GET
+        path: /api/protected
+        headers:
+          Authorization: "Bearer valid-token"
+      response:
+        statusCode: 200
+        body: '{"message": "Access granted"}'
+
+  - id: unauthorized
+    name: Unauthorized
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/protected
+      response:
+        statusCode: 401
+        body: '{"error": "Unauthorized"}'
 ```
 
 Test:
@@ -236,29 +193,20 @@ curl -H "Authorization: Bearer valid-token" http://localhost:4280/api/protected
 
 Handle POST requests:
 
-```json
-{
-  "mocks": [
-    {
-      "matcher": {
-        "method": "POST",
-        "path": "/api/users"
-      },
-      "response": {
-        "statusCode": 201,
-        "headers": {
-          "Location": "/api/users/{{uuid}}"
-        },
-        "body": {
-          "id": "{{uuid}}",
-          "name": "{{request.body.name}}",
-          "email": "{{request.body.email}}",
-          "createdAt": "{{now}}"
-        }
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: create-user
+    type: http
+    http:
+      matcher:
+        method: POST
+        path: /api/users
+      response:
+        statusCode: 201
+        headers:
+          Location: "/api/users/{{uuid}}"
+        body: '{"id": "{{uuid}}", "name": "{{request.body.name}}", "email": "{{request.body.email}}", "createdAt": "{{now}}"}'
 ```
 
 Test:
@@ -274,183 +222,141 @@ curl -X POST http://localhost:4280/api/users \
 
 Add latency to responses:
 
-```json
-{
-  "mocks": [
-    {
-      "matcher": {
-        "method": "GET",
-        "path": "/api/slow"
-      },
-      "response": {
-        "statusCode": 200,
-        "delayMs": 2000,
-        "body": {"message": "Finally!"}
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: slow-endpoint
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/slow
+      response:
+        statusCode: 200
+        delayMs: 2000
+        body: '{"message": "Finally!"}'
 ```
 
 ## Error Responses
 
 Mock various error scenarios:
 
-```json
-{
-  "mocks": [
-    {
-      "matcher": {
-        "method": "GET",
-        "path": "/api/error/400"
-      },
-      "response": {
-        "statusCode": 400,
-        "body": {
-          "error": "Bad Request",
-          "message": "Invalid parameters"
-        }
-      }
-    },
-    {
-      "matcher": {
-        "method": "GET",
-        "path": "/api/error/500"
-      },
-      "response": {
-        "statusCode": 500,
-        "body": {
-          "error": "Internal Server Error",
-          "message": "Something went wrong"
-        }
-      }
-    },
-    {
-      "matcher": {
-        "method": "GET",
-        "path": "/api/error/503"
-      },
-      "response": {
-        "statusCode": 503,
-        "headers": {
-          "Retry-After": "30"
-        },
-        "body": {
-          "error": "Service Unavailable"
-        }
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: error-400
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/error/400
+      response:
+        statusCode: 400
+        body: '{"error": "Bad Request", "message": "Invalid parameters"}'
+
+  - id: error-500
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/error/500
+      response:
+        statusCode: 500
+        body: '{"error": "Internal Server Error", "message": "Something went wrong"}'
+
+  - id: error-503
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/error/503
+      response:
+        statusCode: 503
+        headers:
+          Retry-After: "30"
+        body: '{"error": "Service Unavailable"}'
 ```
 
 ## File-Based Response
 
 Load response body from file:
 
-```json
-{
-  "mocks": [
-    {
-      "matcher": {
-        "method": "GET",
-        "path": "/api/large-data"
-      },
-      "response": {
-        "statusCode": 200,
-        "headers": {
-          "Content-Type": "application/json"
-        },
-        "bodyFile": "./responses/large-data.json"
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: large-data
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/large-data
+      response:
+        statusCode: 200
+        headers:
+          Content-Type: application/json
+        bodyFile: ./responses/large-data.json
 ```
 
 ## Complete Example
 
 A realistic API mock:
 
-```json
-{
-  "server": {
-    "port": 4280
-  },
-  "mocks": [
-    {
-      "name": "Health check",
-      "matcher": {
-        "method": "GET",
-        "path": "/health"
-      },
-      "response": {
-        "statusCode": 200,
-        "body": {"status": "ok"}
-      }
-    },
-    {
-      "name": "List users",
-      "matcher": {
-        "method": "GET",
-        "path": "/api/v1/users"
-      },
-      "response": {
-        "statusCode": 200,
-        "body": {
-          "data": [
-            {"id": 1, "name": "Alice"},
-            {"id": 2, "name": "Bob"}
-          ],
-          "meta": {
-            "total": 2,
-            "page": 1
-          }
-        }
-      }
-    },
-    {
-      "name": "Get user by ID",
-      "matcher": {
-        "method": "GET",
-        "path": "/api/v1/users/{id}"
-      },
-      "response": {
-        "statusCode": 200,
-        "body": {
-          "id": "{{request.pathParam.id}}",
-          "name": "User {{request.pathParam.id}}",
-          "email": "user{{request.pathParam.id}}@example.com"
-        }
-      }
-    },
-    {
-      "name": "Create user",
-      "matcher": {
-        "method": "POST",
-        "path": "/api/v1/users"
-      },
-      "response": {
-        "statusCode": 201,
-        "body": {
-          "id": "{{uuid}}",
-          "name": "{{request.body.name}}",
-          "createdAt": "{{now}}"
-        }
-      }
-    },
-    {
-      "name": "Delete user",
-      "matcher": {
-        "method": "DELETE",
-        "path": "/api/v1/users/{id}"
-      },
-      "response": {
-        "statusCode": 204
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+mocks:
+  - id: health-check
+    name: Health check
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /health
+      response:
+        statusCode: 200
+        body: '{"status": "ok"}'
+
+  - id: list-users
+    name: List users
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/v1/users
+      response:
+        statusCode: 200
+        body: '{"data": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}], "meta": {"total": 2, "page": 1}}'
+
+  - id: get-user-by-id
+    name: Get user by ID
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/v1/users/{id}
+      response:
+        statusCode: 200
+        body: '{"id": "{{request.pathParam.id}}", "name": "User {{request.pathParam.id}}", "email": "user{{request.pathParam.id}}@example.com"}'
+
+  - id: create-user
+    name: Create user
+    type: http
+    http:
+      matcher:
+        method: POST
+        path: /api/v1/users
+      response:
+        statusCode: 201
+        body: '{"id": "{{uuid}}", "name": "{{request.body.name}}", "createdAt": "{{now}}"}'
+
+  - id: delete-user
+    name: Delete user
+    type: http
+    http:
+      matcher:
+        method: DELETE
+        path: /api/v1/users/{id}
+      response:
+        statusCode: 204
 ```
 
 ## Next Steps

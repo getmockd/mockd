@@ -35,32 +35,31 @@ Enable stateful mocking in your configuration:
 Start the server and interact:
 
 ```bash
-# Create a user
+# Create a user (returns 201 with auto-generated UUID id)
 curl -X POST http://localhost:4280/api/users \
   -H "Content-Type: application/json" \
   -d '{"name": "Alice", "email": "alice@example.com"}'
-# Response: {"id": 1, "name": "Alice", "email": "alice@example.com"}
+# Response: {"id": "a1b2c3d4-...", "name": "Alice", "email": "alice@example.com", ...}
 
-# List users - Alice is now in the list
+# List users - returns paginated response
 curl http://localhost:4280/api/users
-# Response: [{"id": 1, "name": "Alice", "email": "alice@example.com"}]
+# Response: {"data": [...], "meta": {"total": 1, "limit": 100, "offset": 0, "count": 1}}
 
-# Get single user
-curl http://localhost:4280/api/users/1
-# Response: {"id": 1, "name": "Alice", "email": "alice@example.com"}
+# Get single user by ID
+curl http://localhost:4280/api/users/a1b2c3d4-...
+# Response: {"id": "a1b2c3d4-...", "name": "Alice", "email": "alice@example.com"}
 
 # Update user
-curl -X PUT http://localhost:4280/api/users/1 \
+curl -X PUT http://localhost:4280/api/users/a1b2c3d4-... \
   -H "Content-Type: application/json" \
   -d '{"name": "Alice Smith", "email": "alice@example.com"}'
-# Response: {"id": 1, "name": "Alice Smith", "email": "alice@example.com"}
 
 # Delete user
-curl -X DELETE http://localhost:4280/api/users/1
+curl -X DELETE http://localhost:4280/api/users/a1b2c3d4-...
 # Response: 204 No Content
 
 # User is gone
-curl http://localhost:4280/api/users/1
+curl http://localhost:4280/api/users/a1b2c3d4-...
 # Response: 404 Not Found
 ```
 
@@ -139,16 +138,18 @@ Content-Type: application/json
 {"name": "Charlie", "email": "charlie@example.com"}
 ```
 
-Response:
+Response (`201 Created`):
 ```json
 {
-  "id": 3,
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "name": "Charlie",
-  "email": "charlie@example.com"
+  "email": "charlie@example.com",
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2024-01-15T10:30:00Z"
 }
 ```
 
-Status: `201 Created`
+IDs are auto-generated as UUIDs unless the request body includes an `id` field.
 
 ### Read Collection (GET)
 
@@ -156,13 +157,20 @@ Status: `201 Created`
 GET /api/users
 ```
 
-Response:
+Response (paginated):
 ```json
-[
-  {"id": 1, "name": "Alice"},
-  {"id": 2, "name": "Bob"},
-  {"id": 3, "name": "Charlie"}
-]
+{
+  "data": [
+    {"id": "1", "name": "Alice"},
+    {"id": "2", "name": "Bob"}
+  ],
+  "meta": {
+    "total": 2,
+    "limit": 100,
+    "offset": 0,
+    "count": 2
+  }
+}
 ```
 
 ### Read Single (GET)
@@ -173,7 +181,7 @@ GET /api/users/2
 
 Response:
 ```json
-{"id": 2, "name": "Bob", "email": "bob@example.com"}
+{"id": "2", "name": "Bob", "email": "bob@example.com"}
 ```
 
 Not found:
@@ -195,7 +203,7 @@ Content-Type: application/json
 
 Response:
 ```json
-{"id": 2, "name": "Robert", "email": "robert@example.com"}
+{"id": "2", "name": "Robert", "email": "robert@example.com"}
 ```
 
 ### Delete (DELETE)
@@ -347,20 +355,31 @@ State exists only in memory and resets when the server stops. Use seed data to p
 Manage state via the admin API:
 
 ```bash
-# Get state overview
-GET /state
+# Get state overview (resource list, item counts)
+curl http://localhost:4290/state
 
-# Reset all state to seed data
-POST /state/reset
+# Reset all resources to seed data
+curl -X POST http://localhost:4290/state/reset
 
-# List all resources
-GET /state/resources
+# List all registered resources
+curl http://localhost:4290/state/resources
 
 # Get specific resource info
-GET /state/resources/users
+curl http://localhost:4290/state/resources/users
 
-# Clear specific resource (remove all items)
-DELETE /state/resources/users
+# Reset a specific resource to its seed data
+curl -X POST http://localhost:4290/state/resources/users/reset
+
+# Clear all items from a resource (does NOT restore seed data)
+curl -X DELETE http://localhost:4290/state/resources/users
+
+# List items in a resource
+curl http://localhost:4290/state/resources/users/items
+
+# Create an item via admin API
+curl -X POST http://localhost:4290/state/resources/users/items \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Charlie", "email": "charlie@example.com"}'
 ```
 
 ## Combined with Static Mocks
@@ -371,8 +390,12 @@ Stateful resources work alongside traditional mocks:
 {
   "mocks": [
     {
-      "matcher": {"method": "GET", "path": "/api/health"},
-      "response": {"statusCode": 200, "body": {"status": "ok"}}
+      "id": "health-check",
+      "type": "http",
+      "http": {
+        "matcher": {"method": "GET", "path": "/api/health"},
+        "response": {"statusCode": 200, "body": "{\"status\": \"ok\"}"}
+      }
     }
   ],
   "statefulResources": [

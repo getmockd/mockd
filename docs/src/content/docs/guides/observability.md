@@ -24,13 +24,22 @@ mockd serve --admin-port 4290
 # Server uptime
 mockd_uptime_seconds 3600
 
-# HTTP request counters
-mockd_http_requests_total{method="GET",path="/api/users",status="200"} 42
+# Request counters (all protocols: HTTP, gRPC, WebSocket, MQTT)
+mockd_requests_total{method="GET",path="/api/users",status="200"} 42
+mockd_requests_total{method="grpc",path="/helloworld.Greeter/SayHello",status="ok"} 10
+mockd_requests_total{method="mqtt",path="sensors/temperature",status="ok"} 5
 
 # Request latency histogram
-mockd_http_request_duration_seconds_bucket{le="0.01"} 100
-mockd_http_request_duration_seconds_bucket{le="0.1"} 150
-mockd_http_request_duration_seconds_bucket{le="+Inf"} 155
+mockd_request_duration_seconds_bucket{le="0.001",method="GET",path="/api/users"} 100
+mockd_request_duration_seconds_bucket{le="0.01",method="GET",path="/api/users"} 150
+mockd_request_duration_seconds_bucket{le="+Inf",method="GET",path="/api/users"} 155
+
+# Active connections (WebSocket, etc.)
+mockd_active_connections{protocol="websocket"} 3
+
+# Mock matching counters
+mockd_match_hits_total{mock_id="http_abc123"} 42
+mockd_match_misses_total 5
 
 # Go runtime metrics
 go_goroutines 12
@@ -55,14 +64,17 @@ Example Grafana queries:
 
 ```promql
 # Request rate
-rate(mockd_http_requests_total[5m])
+rate(mockd_requests_total[5m])
 
 # Error rate
-sum(rate(mockd_http_requests_total{status=~"5.."}[5m])) 
-  / sum(rate(mockd_http_requests_total[5m]))
+sum(rate(mockd_requests_total{status=~"5.."}[5m])) 
+  / sum(rate(mockd_requests_total[5m]))
 
 # P95 latency
-histogram_quantile(0.95, rate(mockd_http_request_duration_seconds_bucket[5m]))
+histogram_quantile(0.95, rate(mockd_request_duration_seconds_bucket[5m]))
+
+# Mock match rate
+rate(mockd_match_hits_total[5m])
 ```
 
 ---

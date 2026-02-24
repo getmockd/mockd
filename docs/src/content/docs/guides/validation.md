@@ -21,10 +21,11 @@ Use validation when you want your mocks to reject invalid requests rather than a
 Add a `validation` block to any stateful resource or HTTP mock:
 
 ```yaml
-resources:
+statefulResources:
   - name: users
-    seed:
-      - id: 1
+    basePath: /api/users
+    seedData:
+      - id: "1"
         email: "alice@example.com"
         age: 28
     validation:
@@ -46,10 +47,11 @@ With this configuration, requests with an invalid email or out-of-range age will
 Stateful resources support validation on create and update operations. The validation block sits at the resource level:
 
 ```yaml
-resources:
+statefulResources:
   - name: products
-    seed:
-      - id: 1
+    basePath: /api/products
+    seedData:
+      - id: "1"
         sku: "WIDGET-001"
         name: "Blue Widget"
         price: 29.99
@@ -85,31 +87,33 @@ When `onCreate` and `onUpdate` are omitted, the top-level `fields` apply to both
 
 ## Validation for HTTP Mocks
 
-For HTTP mocks, add validation inside the request specification:
+For HTTP mocks, add validation inside the `http` block alongside `matcher` and `response`:
 
 ```yaml
 mocks:
-  - request:
-      method: POST
-      path: /api/contact
-    validation:
-      mode: strict
-      fields:
-        name:
-          type: string
-          required: true
-        email:
-          type: string
-          format: email
-          required: true
-        message:
-          type: string
-          minLength: 10
-          maxLength: 1000
-    response:
-      status: 200
-      body:
-        success: true
+  - id: contact-form
+    type: http
+    http:
+      matcher:
+        method: POST
+        path: /api/contact
+      validation:
+        mode: strict
+        fields:
+          name:
+            type: string
+            required: true
+          email:
+            type: string
+            format: email
+            required: true
+          message:
+            type: string
+            minLength: 10
+            maxLength: 1000
+      response:
+        statusCode: 200
+        body: '{"success": true}'
 ```
 
 The validation runs before the response is generated. If validation fails, the configured error response is returned instead.
@@ -331,50 +335,64 @@ Use `warn` mode during development to identify validation issues without breakin
 
 ## Error Response Format
 
-When validation fails in strict mode, Mockd returns an RFC 7807 Problem Details response:
+When validation fails in strict mode, mockd returns an RFC 7807 Problem Details response:
 
 ```json
 {
-  "type": "https://mockd.dev/errors/validation-error",
-  "title": "Validation Error",
+  "type": "validation_error",
+  "title": "Request Validation Failed",
   "status": 400,
-  "detail": "Request body failed validation",
-  "instance": "/api/users",
+  "detail": "2 validation errors",
   "errors": [
     {
       "field": "email",
-      "message": "must be a valid email address",
-      "value": "not-an-email"
+      "location": "body",
+      "code": "format",
+      "message": "must be a valid email",
+      "received": "not-an-email",
+      "expected": "format: email",
+      "hint": "Example: user@example.com"
     },
     {
       "field": "age",
-      "message": "must be greater than or equal to 0",
-      "value": -5
+      "location": "body",
+      "code": "min",
+      "message": "must be >= 0",
+      "received": -5,
+      "expected": ">= 0",
+      "hint": "Increase the value of 'age'"
     }
   ]
 }
 ```
 
-The response includes:
+The response uses `Content-Type: application/problem+json` and includes:
 
-- `type`: URI identifying the error type
+- `type`: Error type identifier
 - `title`: Human-readable error title
 - `status`: HTTP status code
-- `detail`: Explanation of what went wrong
-- `instance`: The request path that failed
-- `errors`: Array of individual field errors with the field name, error message, and rejected value
+- `detail`: Summary of what went wrong
+- `errors`: Array of individual field errors, each with:
+  - `field`: The field that failed validation
+  - `location`: Where the field was found (e.g., `body`)
+  - `code`: Machine-readable error code (e.g., `required`, `format`, `min`, `max_length`, `pattern`)
+  - `message`: Human-readable error description
+  - `received`: The value that was submitted (if applicable)
+  - `expected`: What was expected
+  - `hint`: Suggestion for fixing the error
 
 ## Auto-Inference from Seed Data
 
-When seed data is provided without explicit validation rules, Mockd can infer basic type validation:
+When seed data is provided without explicit validation rules, mockd can infer basic type validation:
 
 ```yaml
-resources:
+statefulResources:
   - name: users
+    basePath: /api/users
     validation:
-      inferFromSeed: true
-    seed:
-      - id: 1
+      auto: true
+    seedData:
+      - id: "1"
         email: "alice@example.com"
         age: 28
         active: true
@@ -387,10 +405,11 @@ This automatically creates validators based on the seed data types. Explicit fie
 ### Stateful Resource with Full Validation
 
 ```yaml
-resources:
+statefulResources:
   - name: orders
-    seed:
-      - id: 1
+    basePath: /api/orders
+    seedData:
+      - id: "1"
         customerId: "cust_abc123"
         status: pending
         items:
@@ -451,39 +470,40 @@ resources:
 
 ```yaml
 mocks:
-  - request:
-      method: POST
-      path: /api/newsletter/subscribe
-    validation:
-      mode: strict
-      fields:
-        email:
-          type: string
-          format: email
-          required: true
-        firstName:
-          type: string
-          minLength: 1
-          maxLength: 100
-        preferences:
-          type: object
-        preferences.frequency:
-          type: string
-          enum:
-            - daily
-            - weekly
-            - monthly
-        preferences.topics:
-          type: array
-          items:
+  - id: newsletter-subscribe
+    type: http
+    http:
+      matcher:
+        method: POST
+        path: /api/newsletter/subscribe
+      validation:
+        mode: strict
+        fields:
+          email:
             type: string
-          maxItems: 5
-          uniqueItems: true
-    response:
-      status: 201
-      body:
-        subscribed: true
-        message: "Successfully subscribed to newsletter"
+            format: email
+            required: true
+          firstName:
+            type: string
+            minLength: 1
+            maxLength: 100
+          preferences:
+            type: object
+          preferences.frequency:
+            type: string
+            enum:
+              - daily
+              - weekly
+              - monthly
+          preferences.topics:
+            type: array
+            items:
+              type: string
+            maxItems: 5
+            uniqueItems: true
+      response:
+        statusCode: 201
+        body: '{"subscribed": true, "message": "Successfully subscribed to newsletter"}'
 ```
 
 ## Next Steps

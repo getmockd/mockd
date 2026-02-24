@@ -9,26 +9,27 @@ mockd supports HTTPS for both the mock server and proxy modes. This guide covers
 
 ### Quick Start
 
-Enable HTTPS with auto-generated certificates:
+Enable HTTPS with auto-generated self-signed certificates:
 
 ```bash
-mockd start --config mocks.json --https
+mockd start --config mocks.json --tls-auto --https-port 8443
 ```
 
-mockd generates a self-signed certificate and starts on port 8443.
+mockd generates a self-signed certificate and starts HTTPS on port 8443.
 
 ### Custom Port
 
 ```bash
-mockd start --config mocks.json --https --port 443
+mockd start --config mocks.json --tls-auto --https-port 443
 ```
 
 ### With Your Own Certificates
 
 ```bash
 mockd start --config mocks.json \
-  --cert ./certs/server.crt \
-  --key ./certs/server.key
+  --tls-cert ./certs/server.crt \
+  --tls-key ./certs/server.key \
+  --https-port 8443
 ```
 
 ### Configuration File
@@ -51,86 +52,78 @@ mockd start --config mocks.json \
 
 ### Self-Signed (Development)
 
-Generate a self-signed certificate:
+The simplest approach is to use the `--tls-auto` flag, which generates a self-signed certificate automatically:
 
 ```bash
-mockd cert generate --name localhost --days 365
+mockd serve --config mocks.json --tls-auto --https-port 8443
 ```
 
-Output:
-```
-Generated certificate: ./certs/localhost.crt
-Generated private key: ./certs/localhost.key
+Alternatively, generate certificates with OpenSSL:
+
+```bash
+# Generate private key
+openssl genrsa -out ./certs/localhost.key 2048
+
+# Generate self-signed certificate
+openssl req -new -x509 -key ./certs/localhost.key \
+  -out ./certs/localhost.crt -days 365 -subj "/CN=localhost"
+
+# Start with your certificates
+mockd serve --config mocks.json \
+  --tls-cert ./certs/localhost.crt \
+  --tls-key ./certs/localhost.key \
+  --https-port 8443
 ```
 
 With Subject Alternative Names:
 
 ```bash
-mockd cert generate \
-  --name localhost \
-  --san "127.0.0.1" \
-  --san "::1" \
-  --san "myapp.local"
+openssl req -new -x509 -key ./certs/localhost.key \
+  -out ./certs/localhost.crt -days 365 \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=IP:127.0.0.1,IP:::1,DNS:myapp.local"
 ```
 
 ### CA Certificate (For Proxy)
 
-Generate a CA for MITM proxying:
+Generate a CA for MITM proxying with the built-in command:
 
 ```bash
-mockd cert generate-ca --name "mockd CA" --days 3650
+mockd proxy ca generate --ca-path ./certs
 ```
 
-Output:
-```
-Generated CA certificate: ./certs/mockd-ca.crt
-Generated CA private key: ./certs/mockd-ca.key
-```
+This generates a CA certificate and key in the `./certs` directory for use with proxy HTTPS interception.
 
 ## Proxy HTTPS
 
 ### MITM Proxy Setup
 
-For the proxy to intercept HTTPS traffic, clients must trust the mockd CA.
+For the proxy to intercept and record HTTPS traffic, clients must trust the mockd CA. Without a CA, HTTPS connections are tunneled (TCP pass-through) and cannot be recorded.
 
 1. **Generate CA Certificate**:
 
 ```bash
-mockd cert generate-ca
+mockd proxy ca generate --ca-path ./certs
 ```
 
-2. **Start Proxy**:
+2. **Start Proxy with HTTPS Interception**:
 
 ```bash
-mockd proxy --target https://api.example.com \
-  --ca-cert ./certs/mockd-ca.crt \
-  --ca-key ./certs/mockd-ca.key
+mockd proxy start --ca-path ./certs
 ```
+
+The proxy dynamically generates per-host TLS certificates signed by your CA, decrypting traffic for recording.
 
 3. **Install CA on Client**:
 
 See [Installing CA Certificates](#installing-ca-certificates) below.
 
-### Proxy Configuration
+### Export CA Certificate
 
-```json
-{
-  "proxy": {
-    "target": "https://api.example.com",
-    "tls": {
-      "caCertFile": "./certs/mockd-ca.crt",
-      "caKeyFile": "./certs/mockd-ca.key",
-      "certCacheDir": "./certs/generated"
-    }
-  }
-}
+```bash
+# Export to a file for distribution
+mockd proxy ca export --ca-path ./certs -o mockd-ca.crt
 ```
-
-| Field | Description |
-|-------|-------------|
-| `caCertFile` | CA certificate for signing |
-| `caKeyFile` | CA private key |
-| `certCacheDir` | Cache for generated certs |
 
 ## Installing CA Certificates
 
@@ -309,8 +302,13 @@ curl -k https://localhost:8443/api/users
 **Solution**: Generate certificate with correct SANs:
 
 ```bash
-mockd cert generate --name localhost --san "myapp.local"
+openssl req -new -x509 -key ./certs/localhost.key \
+  -out ./certs/localhost.crt -days 365 \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:myapp.local,IP:127.0.0.1"
 ```
+
+Or use `--tls-auto` which generates a cert for `localhost` automatically.
 
 ### Certificate Expired
 
@@ -319,7 +317,8 @@ mockd cert generate --name localhost --san "myapp.local"
 **Solution**: Regenerate with longer validity:
 
 ```bash
-mockd cert generate --name localhost --days 3650
+openssl req -new -x509 -key ./certs/localhost.key \
+  -out ./certs/localhost.crt -days 3650 -subj "/CN=localhost"
 ```
 
 ### Permission Denied (Port 443)
@@ -329,10 +328,10 @@ mockd cert generate --name localhost --days 3650
 **Solution**: Use a high port or grant capability:
 
 ```bash
-# Use high port
-mockd start --https --port 8443
+# Use high port (recommended)
+mockd start --tls-auto --https-port 8443
 
-# Or grant capability (Linux)
+# Or grant capability (Linux) to bind port 443
 sudo setcap 'cap_net_bind_service=+ep' $(which mockd)
 ```
 

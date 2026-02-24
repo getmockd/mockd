@@ -91,8 +91,7 @@ Response:
 ```json
 {
   "sessionId": "01HXYZ123456789ABCDEF",
-  "protocol": "websocket",
-  "path": "/ws/chat"
+  "recordingId": "01HXYZ123456789ABCDEF"
 }
 ```
 
@@ -252,8 +251,8 @@ Recordings are stored as JSON files with this structure:
 
 ```json
 {
-  "formatVersion": "1.0",
   "id": "01HXYZ123456789ABCDEF",
+  "version": "1.0",
   "name": "chat-session-1",
   "protocol": "websocket",
   "status": "complete",
@@ -263,7 +262,8 @@ Recordings are stored as JSON files with this structure:
   "metadata": {
     "path": "/ws/chat",
     "headers": {"Authorization": "[REDACTED]"},
-    "query": {"room": "general"}
+    "query": {"room": "general"},
+    "source": "manual"
   },
   "websocket": {
     "subprotocol": "chat.v1",
@@ -288,9 +288,8 @@ Recordings are stored as JSON files with this structure:
   },
   "stats": {
     "frameCount": 42,
-    "textFrames": 38,
-    "binaryFrames": 2,
-    "pingPongs": 2,
+    "bytesSent": 1200,
+    "bytesReceived": 800,
     "fileSizeBytes": 8432
   }
 }

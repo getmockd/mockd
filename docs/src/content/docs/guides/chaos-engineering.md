@@ -127,9 +127,8 @@ curl http://localhost:4290/chaos
 ```bash
 curl -X PUT http://localhost:4290/chaos -H 'Content-Type: application/json' -d '{
   "enabled": true,
-  "latency": {"min": "100ms", "max": "500ms"},
-  "errorRate": 0.1,
-  "errorCode": 503
+  "latency": {"min": "100ms", "max": "500ms", "probability": 1.0},
+  "errorRate": {"probability": 0.1, "defaultCode": 503}
 }'
 ```
 
