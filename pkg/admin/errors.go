@@ -50,7 +50,7 @@ const (
 //   - details: Additional context for logging (e.g., mock ID)
 //
 // Returns a sanitized message safe for client responses.
-func sanitizeError(err error, log *slog.Logger, operation string, details ...any) string {
+func sanitizeError(err error, log *slog.Logger, operation string, details ...any) string { //nolint:unparam // variadic details is intentional for future callers
 	// Log full error details server-side
 	if log != nil {
 		args := make([]any, 0, 4+len(details))

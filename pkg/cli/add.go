@@ -147,7 +147,7 @@ func init() {
 	addCmd.Flags().StringVar(&addOAuthPassword, "oauth-password", "password", "OAuth test password")
 }
 
-func runAdd(cmd *cobra.Command, args []string) error {
+func runAdd(cmd *cobra.Command, args []string) error { //nolint:gocyclo // CLI dispatch function
 	// Accept positional type: "mockd add http --path ..."
 	// Only override if --type wasn't explicitly set by the user
 	if len(args) == 1 && !cmd.Flags().Changed("type") {
@@ -374,6 +374,17 @@ Usage: mockd add --path /api/endpoint [flags]
 Run 'mockd add --help' for more options`)
 	}
 
+	// Validate stateful-operation incompatibilities before touching files.
+	// This ensures users get the real flag error rather than a body-file I/O error.
+	if statefulOperation != "" {
+		if sse || len(sseEvents) > 0 || sseTemplate != "" {
+			return nil, errors.New("--stateful-operation and --sse are mutually exclusive")
+		}
+		if body != "" || bodyFile != "" {
+			return nil, errors.New("--stateful-operation and --body/--body-file are mutually exclusive (the operation result becomes the response)")
+		}
+	}
+
 	// Read body from file if specified
 	responseBody := body
 	if bodyFile != "" {
@@ -429,22 +440,17 @@ Run 'mockd add --help' for more options`)
 	}
 
 	// Handle stateful operation: mutually exclusive with response/sse
-	if statefulOperation != "" {
-		if sse || len(sseEvents) > 0 || sseTemplate != "" {
-			return nil, errors.New("--stateful-operation and --sse are mutually exclusive")
-		}
-		if body != "" || bodyFile != "" {
-			return nil, errors.New("--stateful-operation and --body/--body-file are mutually exclusive (the operation result becomes the response)")
-		}
+	switch {
+	case statefulOperation != "":
 		m.HTTP.StatefulOperation = statefulOperation
-	} else if sse || len(sseEvents) > 0 || sseTemplate != "" {
+	case sse || len(sseEvents) > 0 || sseTemplate != "":
 		// Build SSE config if enabled
 		sseConfig, err := buildSSEConfig(sseEvents, sseDelay, sseTemplate, sseRepeat, sseKeepalive)
 		if err != nil {
 			return nil, err
 		}
 		m.HTTP.SSE = sseConfig
-	} else {
+	default:
 		// Only set Response for non-SSE, non-stateful-operation mocks
 		m.HTTP.Response = &mock.HTTPResponse{
 			StatusCode: status,
@@ -843,11 +849,6 @@ Run 'mockd add --help' for more options`)
 		}
 	}
 
-	// When stateful fields are set, response is optional
-	if statefulResource == "" && response == "" {
-		// No stateful and no response — default response is fine (empty string)
-	}
-
 	// Default path
 	if path == "" {
 		path = "/soap"
@@ -1131,7 +1132,7 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 }
 
 // outputJSONResult outputs the created or merged mock in JSON format.
-func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
+func outputJSONResult(result *CreateMockResult, mockType mock.Type) error { //nolint:gocyclo // per-type JSON output formatting
 	created := result.Mock
 
 	// For merge results, include merge-specific information

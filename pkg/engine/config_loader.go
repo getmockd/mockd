@@ -120,6 +120,9 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 	store := cl.server.Store()
 	if replace {
 		store.Clear()
+		if cl.server.statefulBridge != nil {
+			cl.server.statefulBridge.ClearCustomOperations()
+		}
 	}
 
 	// Load regular mocks
@@ -153,7 +156,10 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 			if opCfg == nil {
 				continue
 			}
-			customOp := convertCustomOperation(opCfg)
+			customOp, err := convertCustomOperation(opCfg)
+			if err != nil {
+				return fmt.Errorf("invalid custom operation %s: %w", opCfg.Name, err)
+			}
 			cl.server.statefulBridge.RegisterCustomOperation(opCfg.Name, customOp)
 			cl.log.Info("registered custom operation", "name", opCfg.Name, "steps", len(opCfg.Steps))
 		}
@@ -258,8 +264,9 @@ func (cl *ConfigLoader) Export(name string) *config.MockCollection {
 			configs := make([]*config.CustomOperationConfig, 0, len(customOps))
 			for name, op := range customOps {
 				cfg := &config.CustomOperationConfig{
-					Name:     name,
-					Response: op.Response,
+					Name:        name,
+					Consistency: string(op.Consistency),
+					Response:    op.Response,
 				}
 				for _, s := range op.Steps {
 					cfg.Steps = append(cfg.Steps, config.CustomStepConfig{
@@ -294,6 +301,9 @@ func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) 
 	store := cl.server.Store()
 	if replace {
 		store.Clear()
+		if cl.server.statefulBridge != nil {
+			cl.server.statefulBridge.ClearCustomOperations()
+		}
 	}
 
 	for _, cfg := range collection.Mocks {
@@ -332,7 +342,10 @@ func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) 
 			if opCfg == nil {
 				continue
 			}
-			customOp := convertCustomOperation(opCfg)
+			customOp, err := convertCustomOperation(opCfg)
+			if err != nil {
+				return fmt.Errorf("invalid custom operation %s: %w", opCfg.Name, err)
+			}
 			cl.server.statefulBridge.RegisterCustomOperation(opCfg.Name, customOp)
 		}
 	}
@@ -395,7 +408,7 @@ func (cl *ConfigLoader) registerStatefulResource(cfg *config.StatefulResourceCon
 }
 
 // convertCustomOperation converts a config.CustomOperationConfig to a stateful.CustomOperation.
-func convertCustomOperation(cfg *config.CustomOperationConfig) *stateful.CustomOperation {
+func convertCustomOperation(cfg *config.CustomOperationConfig) (*stateful.CustomOperation, error) {
 	steps := make([]stateful.Step, 0, len(cfg.Steps))
 	for _, s := range cfg.Steps {
 		steps = append(steps, stateful.Step{
@@ -408,9 +421,14 @@ func convertCustomOperation(cfg *config.CustomOperationConfig) *stateful.CustomO
 			Value:    s.Value,
 		})
 	}
-	return &stateful.CustomOperation{
-		Name:     cfg.Name,
-		Steps:    steps,
-		Response: cfg.Response,
+	op := &stateful.CustomOperation{
+		Name:        cfg.Name,
+		Consistency: stateful.ConsistencyMode(cfg.Consistency),
+		Steps:       steps,
+		Response:    cfg.Response,
 	}
+	if _, err := stateful.NormalizeCustomOperation(op); err != nil {
+		return nil, err
+	}
+	return op, nil
 }

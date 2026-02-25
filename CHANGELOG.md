@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WSDL format in admin API** — `GET /formats` now includes WSDL in supported import formats
 - **Config export completeness** — `Export()` now includes `statefulResources` and `customOperations` (previously only exported mocks)
 - **Config merge completeness** — `MergeProjectConfigs()` now merges `customOperations` by name
+- **Custom-op validation CLI improvements** — `mockd stateful custom validate` now supports `--strict` (fail on warnings) and `--check-expressions-runtime` with `--fixtures-file` for no-write runtime expression checks before registration
 
 ### Fixed
 

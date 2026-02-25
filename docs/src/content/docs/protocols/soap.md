@@ -1104,6 +1104,7 @@ Custom operations compose multiple reads, writes, and expression-evaluated trans
 ```yaml
 customOperations:
   - name: TransferFunds
+    consistency: atomic
     steps:
       - type: read
         resource: accounts
@@ -1144,6 +1145,13 @@ operations:
 Custom operations can also be managed and executed directly from the CLI — useful for testing, scripting, and AI agent workflows:
 
 ```bash
+# Validate before registering (optional but recommended)
+mockd stateful custom validate --file transfer.yaml --check-resources
+mockd stateful custom validate --file transfer.yaml \
+  --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}' \
+  --check-expressions-runtime \
+  --fixtures-file transfer-fixtures.json
+
 # Register a custom operation from a YAML file
 mockd stateful custom add --file transfer.yaml
 

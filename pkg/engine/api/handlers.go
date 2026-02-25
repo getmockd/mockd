@@ -562,7 +562,8 @@ func (s *Server) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Re
 	}
 
 	if err := s.engine.RegisterCustomOperation(&cfg); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		status, code := mapStatefulLookupError(err)
+		writeError(w, status, code, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{
@@ -852,10 +853,28 @@ func mapCreateStatefulItemError(err error) (int, string) {
 }
 
 func mapStatefulLookupError(err error) (int, string) {
-	if strings.Contains(strings.ToLower(err.Error()), "not found") {
+	var (
+		notFoundErr   *stateful.NotFoundError
+		conflictErr   *stateful.ConflictError
+		validationErr *stateful.ValidationError
+		capErr        *stateful.CapacityError
+	)
+	switch {
+	case errors.As(err, &notFoundErr):
 		return http.StatusNotFound, "not_found"
+	case errors.As(err, &conflictErr):
+		return http.StatusConflict, "conflict"
+	case errors.As(err, &validationErr):
+		return http.StatusBadRequest, "validation_error"
+	case errors.As(err, &capErr):
+		return http.StatusInsufficientStorage, "capacity_exceeded"
+	case strings.Contains(strings.ToLower(err.Error()), "not found"):
+		return http.StatusNotFound, "not_found"
+	case strings.Contains(strings.ToLower(err.Error()), "unsupported consistency"):
+		return http.StatusBadRequest, "validation_error"
+	default:
+		return http.StatusInternalServerError, "state_error"
 	}
-	return http.StatusInternalServerError, "state_error"
 }
 
 // writeJSON writes a JSON response using the shared httputil package.

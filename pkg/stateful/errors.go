@@ -1,6 +1,7 @@
 package stateful
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -211,46 +212,54 @@ type HintError interface {
 // GetErrorCode extracts the ErrorCode from an error.
 // Returns ErrCodeInternal if the error does not implement ErrorCodeError.
 func GetErrorCode(err error) ErrorCode {
-	if ec, ok := err.(ErrorCodeError); ok {
+	var ec ErrorCodeError
+	if errors.As(err, &ec) {
 		return ec.ErrorCode()
 	}
 	return ErrCodeInternal
 }
 
 // ToErrorResponse converts an error to an ErrorResponse struct.
+// Uses errors.As for proper unwrapping of wrapped errors.
 func ToErrorResponse(err error) *ErrorResponse {
 	resp := &ErrorResponse{}
 
-	switch e := err.(type) {
-	case *NotFoundError:
+	var nf *NotFoundError
+	var cf *ConflictError
+	var ve *ValidationError
+	var pt *PayloadTooLargeError
+	var ce *CapacityError
+
+	switch {
+	case errors.As(err, &nf):
 		resp.Error = "resource not found"
-		resp.Resource = e.Resource
-		resp.ID = e.ID
-		resp.StatusCode = e.StatusCode()
-		resp.Hint = e.Hint()
-	case *ConflictError:
+		resp.Resource = nf.Resource
+		resp.ID = nf.ID
+		resp.StatusCode = nf.StatusCode()
+		resp.Hint = nf.Hint()
+	case errors.As(err, &cf):
 		resp.Error = "resource already exists"
-		resp.Resource = e.Resource
-		resp.ID = e.ID
-		resp.StatusCode = e.StatusCode()
-		resp.Hint = e.Hint()
-	case *ValidationError:
+		resp.Resource = cf.Resource
+		resp.ID = cf.ID
+		resp.StatusCode = cf.StatusCode()
+		resp.Hint = cf.Hint()
+	case errors.As(err, &ve):
 		resp.Error = "invalid request"
-		resp.Detail = e.Message
-		resp.Field = e.Field
-		resp.StatusCode = e.StatusCode()
-		resp.Hint = e.Hint()
-	case *PayloadTooLargeError:
+		resp.Detail = ve.Message
+		resp.Field = ve.Field
+		resp.StatusCode = ve.StatusCode()
+		resp.Hint = ve.Hint()
+	case errors.As(err, &pt):
 		resp.Error = "payload too large"
-		resp.Detail = e.Error()
-		resp.StatusCode = e.StatusCode()
-		resp.Hint = e.Hint()
-	case *CapacityError:
+		resp.Detail = pt.Error()
+		resp.StatusCode = pt.StatusCode()
+		resp.Hint = pt.Hint()
+	case errors.As(err, &ce):
 		resp.Error = "resource capacity exceeded"
-		resp.Resource = e.Resource
-		resp.Detail = e.Error()
-		resp.StatusCode = e.StatusCode()
-		resp.Hint = e.Hint()
+		resp.Resource = ce.Resource
+		resp.Detail = ce.Error()
+		resp.StatusCode = ce.StatusCode()
+		resp.Hint = ce.Hint()
 	default:
 		resp.Error = "internal error"
 		resp.Detail = err.Error()

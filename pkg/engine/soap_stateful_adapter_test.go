@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -499,5 +500,22 @@ func TestSOAPStatefulAdapter_SharedState_HTTP_And_SOAP(t *testing.T) {
 	list := resource.List(filter)
 	if list.Meta.Total != 2 {
 		t.Errorf("expected 2 items total (1 HTTP + 1 SOAP), got %d", list.Meta.Total)
+	}
+}
+
+func TestErrorToSOAPFault_WrappedStatefulError(t *testing.T) {
+	fault := errorToSOAPFault(fmt.Errorf("step failed: %w", &stateful.NotFoundError{
+		Resource: "users",
+		ID:       "u1",
+	}))
+
+	if fault == nil {
+		t.Fatal("expected SOAP fault")
+	}
+	if fault.Code != "soap:Client" {
+		t.Fatalf("fault code = %q, want soap:Client", fault.Code)
+	}
+	if !strings.Contains(fault.Message, "not found") {
+		t.Fatalf("fault message = %q, expected wrapped not-found message", fault.Message)
 	}
 }

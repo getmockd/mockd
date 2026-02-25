@@ -196,6 +196,9 @@ func (h *Handler) handleCustomOperation(w http.ResponseWriter, r *http.Request, 
 	if h.statefulBridge == nil {
 		return h.writeStatefulError(w, http.StatusServiceUnavailable, "stateful bridge not configured", "", "")
 	}
+	if len(bodyBytes) > MaxStatefulBodySize {
+		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", operationName, "", "Reduce request body size to under 1MB")
+	}
 
 	// Parse JSON body as input (allow empty body)
 	var input map[string]interface{}

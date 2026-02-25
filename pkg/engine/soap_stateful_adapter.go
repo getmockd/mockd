@@ -71,10 +71,7 @@ func (a *soapStatefulAdapter) ExecuteStateful(ctx context.Context, req *soap.Sta
 
 	// List result
 	if result.List != nil {
-		soapResult.Items = make([]map[string]interface{}, 0, len(result.List.Data))
-		for _, itemData := range result.List.Data {
-			soapResult.Items = append(soapResult.Items, itemData)
-		}
+		soapResult.Items = append(soapResult.Items, result.List.Data...)
 		soapResult.Meta = &soap.StatefulListMeta{
 			Total:  result.List.Meta.Total,
 			Count:  result.List.Meta.Count,

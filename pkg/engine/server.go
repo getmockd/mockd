@@ -174,6 +174,9 @@ func NewServer(cfg *config.ServerConfiguration, opts ...ServerOption) *Server {
 	// and into the handler for HTTP custom operation support.
 	// The bridge is stored on the server so ConfigLoader can register custom operations.
 	bridge := stateful.NewBridge(statefulStore)
+	if s.tracer != nil {
+		bridge.SetTracer(s.tracer)
+	}
 	pm.SetSOAPStatefulExecutor(newSOAPStatefulAdapter(bridge))
 	handler.SetStatefulBridge(bridge)
 

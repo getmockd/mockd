@@ -479,14 +479,14 @@ func runSOAPImport(cmd *cobra.Command, args []string) error {
 		if err := os.WriteFile(soapImportOutput, output, 0o644); err != nil {
 			return fmt.Errorf("failed to write output file: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Imported %d mock(s) from %s → %s\n",
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Imported %d mock(s) from %s → %s\n",
 			len(collection.Mocks), wsdlFile, soapImportOutput)
 		if soapImportStateful && len(collection.StatefulResources) > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "Generated %d stateful resource(s)\n",
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Generated %d stateful resource(s)\n",
 				len(collection.StatefulResources))
 		}
 	} else {
-		fmt.Fprint(cmd.OutOrStdout(), string(output))
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), string(output))
 	}
 
 	return nil

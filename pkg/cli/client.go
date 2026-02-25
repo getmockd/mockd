@@ -203,15 +203,17 @@ type StatefulPaginationMeta struct {
 
 // CustomOperationInfo is a summary of a registered custom operation.
 type CustomOperationInfo struct {
-	Name      string `json:"name"`
-	StepCount int    `json:"stepCount"`
+	Name        string `json:"name"`
+	StepCount   int    `json:"stepCount"`
+	Consistency string `json:"consistency,omitempty"`
 }
 
 // CustomOperationDetail is the full definition of a custom operation.
 type CustomOperationDetail struct {
-	Name     string                `json:"name"`
-	Steps    []CustomOperationStep `json:"steps"`
-	Response map[string]string     `json:"response,omitempty"`
+	Name        string                `json:"name"`
+	Consistency string                `json:"consistency,omitempty"`
+	Steps       []CustomOperationStep `json:"steps"`
+	Response    map[string]string     `json:"response,omitempty"`
 }
 
 // CustomOperationStep describes a single step in a custom operation.

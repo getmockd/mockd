@@ -2,8 +2,13 @@ package stateful
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strconv"
+	"sync"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/tracing"
 )
 
 // Action represents the type of operation to perform on a stateful resource.
@@ -94,6 +99,8 @@ type Bridge struct {
 	store     *StateStore
 	observer  Observer
 	executor  *OperationExecutor
+	tracer    *tracing.Tracer
+	customMu  sync.RWMutex
 	customOps map[string]*CustomOperation // name → custom operation definition
 }
 
@@ -111,25 +118,48 @@ func NewBridge(store *StateStore) *Bridge {
 	}
 }
 
+// SetTracer configures an optional tracer for custom operation spans.
+func (b *Bridge) SetTracer(t *tracing.Tracer) {
+	b.tracer = t
+	if b.executor != nil {
+		b.executor.SetTracer(t)
+	}
+}
+
 // RegisterCustomOperation registers a named custom operation.
 // Operations are referenced by name in OperationRequest.Resource when Action is "custom".
 func (b *Bridge) RegisterCustomOperation(name string, op *CustomOperation) {
+	b.customMu.Lock()
+	defer b.customMu.Unlock()
 	b.customOps[name] = op
 }
 
 // GetCustomOperation returns a registered custom operation by name.
 func (b *Bridge) GetCustomOperation(name string) *CustomOperation {
+	b.customMu.RLock()
+	defer b.customMu.RUnlock()
 	return b.customOps[name]
 }
 
 // DeleteCustomOperation removes a registered custom operation by name.
 func (b *Bridge) DeleteCustomOperation(name string) {
+	b.customMu.Lock()
+	defer b.customMu.Unlock()
 	delete(b.customOps, name)
+}
+
+// ClearCustomOperations removes all registered custom operations.
+func (b *Bridge) ClearCustomOperations() {
+	b.customMu.Lock()
+	defer b.customMu.Unlock()
+	clear(b.customOps)
 }
 
 // ListCustomOperations returns all registered custom operations as a name→operation map.
 // Used by Export to serialize custom operation definitions back to config format.
 func (b *Bridge) ListCustomOperations() map[string]*CustomOperation {
+	b.customMu.RLock()
+	defer b.customMu.RUnlock()
 	if len(b.customOps) == 0 {
 		return nil
 	}
@@ -153,7 +183,7 @@ func (b *Bridge) Execute(ctx context.Context, req *OperationRequest) *OperationR
 	if req == nil {
 		return &OperationResult{
 			Status: StatusError,
-			Error:  fmt.Errorf("operation request must not be nil"),
+			Error:  errors.New("operation request must not be nil"),
 		}
 	}
 
@@ -330,20 +360,46 @@ func (b *Bridge) executeCustom(ctx context.Context, req *OperationRequest) *Oper
 	if opName == "" {
 		opName = req.Resource
 	}
+
+	var span *tracing.Span
+	if b.tracer != nil {
+		ctx, span = b.tracer.Start(ctx, "stateful.custom_operation")
+		span.SetKind(tracing.SpanKindInternal)
+		span.SetAttribute("stateful.custom_operation.name", opName)
+		defer span.End()
+	}
+	b.customMu.RLock()
 	op := b.customOps[opName]
+	b.customMu.RUnlock()
 	if op == nil {
 		err := &NotFoundError{Resource: "custom operation: " + opName}
+		if span != nil {
+			span.SetStatus(tracing.StatusError, err.Error())
+			span.SetAttribute("error.code", GetErrorCode(err).String())
+		}
 		b.observer.OnError(opName, "custom", err)
 		return &OperationResult{
 			Status: StatusNotFound,
 			Error:  err,
 		}
 	}
+	if span != nil {
+		mode, _ := normalizeConsistencyMode(op.Consistency)
+		span.SetAttribute("stateful.custom_operation.consistency", string(mode))
+		span.SetAttribute("stateful.custom_operation.step_count", strconv.Itoa(len(op.Steps)))
+	}
 
 	result := b.executor.Execute(ctx, op, req)
 	if result.Error != nil {
+		if span != nil {
+			span.SetStatus(tracing.StatusError, result.Error.Error())
+			span.SetAttribute("error.code", GetErrorCode(result.Error).String())
+		}
 		b.observer.OnError(opName, "custom", result.Error)
 	} else {
+		if span != nil {
+			span.SetStatus(tracing.StatusOK, "")
+		}
 		b.observer.OnRead(opName, "custom", time.Since(start))
 	}
 
@@ -351,19 +407,25 @@ func (b *Bridge) executeCustom(ctx context.Context, req *OperationRequest) *Oper
 }
 
 // errorToResult converts a domain error to an OperationResult with the appropriate status.
+// Uses errors.As for proper unwrapping of wrapped errors.
 func errorToResult(err error) *OperationResult {
-	switch err.(type) {
-	case *NotFoundError:
+	var nf *NotFoundError
+	if errors.As(err, &nf) {
 		return &OperationResult{Status: StatusNotFound, Error: err}
-	case *ConflictError:
-		return &OperationResult{Status: StatusConflict, Error: err}
-	case *ValidationError:
-		return &OperationResult{Status: StatusValidationError, Error: err}
-	case *CapacityError:
-		return &OperationResult{Status: StatusCapacityExceeded, Error: err}
-	default:
-		return &OperationResult{Status: StatusError, Error: err}
 	}
+	var cf *ConflictError
+	if errors.As(err, &cf) {
+		return &OperationResult{Status: StatusConflict, Error: err}
+	}
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		return &OperationResult{Status: StatusValidationError, Error: err}
+	}
+	var ce *CapacityError
+	if errors.As(err, &ce) {
+		return &OperationResult{Status: StatusCapacityExceeded, Error: err}
+	}
+	return &OperationResult{Status: StatusError, Error: err}
 }
 
 // Store returns the underlying StateStore.

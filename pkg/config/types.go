@@ -302,6 +302,9 @@ type StatefulResourceConfig struct {
 type CustomOperationConfig struct {
 	// Name is the unique operation name (referenced in SOAP/GraphQL/gRPC configs)
 	Name string `json:"name" yaml:"name"`
+	// Consistency controls execution semantics: "best_effort" (default) or "atomic".
+	// "atomic" rolls back prior mutations in the operation if a later step fails.
+	Consistency string `json:"consistency,omitempty" yaml:"consistency,omitempty"`
 	// Steps is the ordered sequence of steps to execute
 	Steps []CustomStepConfig `json:"steps" yaml:"steps"`
 	// Response is a map of field → expression that builds the result

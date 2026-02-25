@@ -981,10 +981,10 @@ func TestStateful_CustomOperation(t *testing.T) {
 	if executor.lastRequest.Data == nil {
 		t.Fatal("expected data to be non-nil")
 	}
-	if sourceId, ok := executor.lastRequest.Data["sourceId"]; !ok || sourceId != "acc-1" {
+	if sourceID, ok := executor.lastRequest.Data["sourceId"]; !ok || sourceID != "acc-1" {
 		t.Errorf("expected sourceId=acc-1, got %v", executor.lastRequest.Data["sourceId"])
 	}
-	if destId, ok := executor.lastRequest.Data["destId"]; !ok || destId != "acc-2" {
+	if destID, ok := executor.lastRequest.Data["destId"]; !ok || destID != "acc-2" {
 		t.Errorf("expected destId=acc-2, got %v", executor.lastRequest.Data["destId"])
 	}
 	if amount, ok := executor.lastRequest.Data["amount"]; !ok || amount != "300" {

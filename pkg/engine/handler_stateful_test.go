@@ -1120,3 +1120,30 @@ func TestHandleStatefulCreate_AutoID(t *testing.T) {
 		t.Error("Create without explicit ID should auto-generate a UUID")
 	}
 }
+
+func TestHandleCustomOperation_BodyTooLarge(t *testing.T) {
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: stateful.NewBridge(stateful.NewStateStore()),
+	}
+
+	largeBody := bytes.Repeat([]byte("x"), MaxStatefulBodySize+1)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/transfer", bytes.NewReader(largeBody))
+
+	status := h.handleCustomOperation(w, req, "TransferFunds", largeBody)
+	if status != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected %d, got %d", http.StatusRequestEntityTooLarge, status)
+	}
+
+	var resp stateful.ErrorResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("response statusCode = %d, want %d", resp.StatusCode, http.StatusRequestEntityTooLarge)
+	}
+	if resp.Error != "request body too large" {
+		t.Fatalf("response error = %q, want request body too large", resp.Error)
+	}
+}

@@ -1102,6 +1102,7 @@ mockd stateful custom [command]
 | `list` | List all registered custom operations |
 | `get` | Show details of a custom operation |
 | `add` | Register a new custom operation |
+| `validate` | Validate a custom operation definition (no writes) |
 | `run` | Execute a custom operation |
 | `delete` | Delete a custom operation |
 
@@ -1160,11 +1161,13 @@ mockd stateful custom add [flags]
 
 ```bash
 # From a YAML file
+mockd stateful custom validate --file transfer.yaml
 mockd stateful custom add --file transfer.yaml
 
 # Inline JSON definition
 mockd stateful custom add --definition '{
   "name": "TransferFunds",
+  "consistency": "atomic",
   "steps": [
     {"type": "read", "resource": "accounts", "id": "input.sourceId", "as": "source"},
     {"type": "read", "resource": "accounts", "id": "input.destId", "as": "dest"},
@@ -1179,6 +1182,7 @@ mockd stateful custom add --definition '{
 
 ```yaml
 name: TransferFunds
+consistency: atomic
 steps:
   - type: read
     resource: accounts
@@ -1214,9 +1218,73 @@ response:
 | `create` | Create a new item in a resource | `resource`, `set` |
 | `update` | Update an existing item in a resource | `resource`, `id`, `set` |
 | `delete` | Delete an item from a resource | `resource`, `id` |
-| `set` | Set a computed value in the expression context | `as`, `value` |
+| `set` | Set a computed value in the expression context | `var`, `value` |
 
-> All `id`, `value`, and `set` field values are **expr expressions** evaluated against an environment containing `input` (the request data) and all previously computed `as` variables.
+> All `id`, `value`, and `set` field values are **expr expressions** evaluated against an environment containing `input` (the request data) and all previously computed variables from `as` and `set.var`.
+
+---
+
+### mockd stateful custom validate
+
+Validate a custom operation definition locally before registering it. This command performs preflight checks and does not mutate server state.
+
+```bash
+mockd stateful custom validate [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--file` | Path to YAML/JSON file containing the operation definition | |
+| `--definition` | Inline JSON operation definition | |
+| `--input` | Inline JSON input example for expression compile checks | |
+| `--input-file` | Path to JSON file containing input example | |
+| `--fixtures-file` | Path to JSON/YAML fixtures file for runtime expression checks | |
+| `--check-resources` | Verify referenced stateful resources exist on the running admin/engine | `false` |
+| `--check-expressions-runtime` | Evaluate expressions with sample input/fixtures (no writes) | `false` |
+| `--strict` | Treat validation warnings as errors | `false` |
+
+**Examples:**
+
+```bash
+# Validate a YAML definition locally (no writes)
+mockd stateful custom validate --file transfer.yaml
+
+# Validate with example input to catch expression/env issues
+mockd stateful custom validate --file transfer.yaml \
+  --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
+
+# Validate and verify referenced stateful resources exist on the running engine
+mockd stateful custom validate --file transfer.yaml --check-resources
+
+# Runtime-check expressions with sample input + fixtures (no writes)
+mockd stateful custom validate --file transfer.yaml \
+  --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}' \
+  --check-expressions-runtime \
+  --fixtures-file transfer-fixtures.json
+
+# Fail on warnings (e.g., empty update/create set maps)
+mockd stateful custom validate --file transfer.yaml --strict
+```
+
+**Fixtures file (optional, recommended for `--check-expressions-runtime`):**
+
+```json
+{
+  "resources": {
+    "accounts": {
+      "acct-1": { "id": "acct-1", "balance": 500 },
+      "acct-2": { "id": "acct-2", "balance": 200 }
+    }
+  },
+  "vars": {
+    "source": { "id": "acct-1", "balance": 500 }
+  }
+}
+```
+
+If fixtures are missing for `read`/`update` aliases, validation still runs using synthetic placeholders and emits warnings (or fails under `--strict`).
 
 ---
 

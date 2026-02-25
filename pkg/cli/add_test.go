@@ -883,11 +883,11 @@ func TestBuildHTTPMock_StatefulOperation(t *testing.T) {
 			"", "",
 			"SomeOperation",
 		)
-		// The body-file doesn't exist so it will fail on ReadFile first,
-		// but if it existed it should fail on mutual exclusivity.
-		// Let's test with a real temp file:
 		if err == nil {
-			t.Error("expected error")
+			t.Error("expected error when both --body-file and --stateful-operation are set")
+		}
+		if !strings.Contains(err.Error(), "mutually exclusive") {
+			t.Errorf("error should mention mutual exclusivity, got: %v", err)
 		}
 	})
 

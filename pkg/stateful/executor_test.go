@@ -2,8 +2,10 @@ package stateful
 
 import (
 	"context"
+	"sync"
 	"testing"
 
+	"github.com/getmockd/mockd/pkg/tracing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +36,28 @@ func setupExecutorTest(t *testing.T) (*StateStore, *OperationExecutor) {
 
 	executor := NewOperationExecutor(store)
 	return store, executor
+}
+
+type testSpanExporter struct {
+	mu    sync.Mutex
+	spans []*tracing.Span
+}
+
+func (e *testSpanExporter) Export(spans []*tracing.Span) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.spans = append(e.spans, spans...)
+	return nil
+}
+
+func (e *testSpanExporter) Shutdown(context.Context) error { return nil }
+
+func (e *testSpanExporter) snapshot() []*tracing.Span {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := make([]*tracing.Span, len(e.spans))
+	copy(out, e.spans)
+	return out
 }
 
 // --- CO-09: Simple set step with expr evaluation ---
@@ -567,6 +591,139 @@ func TestExecutor_NoResponseTemplate_ReturnsContext(t *testing.T) {
 	// Should NOT include "input" in the response
 	_, hasInput := result.Item.Data["input"]
 	assert.False(t, hasInput)
+}
+
+func TestExecutor_BestEffort_PreservesPartialWrites_OnFailure(t *testing.T) {
+	store, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "partial-write",
+		Steps: []Step{
+			{Type: StepUpdate, Resource: "accounts", ID: `"acc-1"`, Set: map[string]string{
+				"balance": "111",
+			}},
+			{Type: StepRead, Resource: "accounts", ID: `"missing"`, As: "missing"},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{Data: map[string]interface{}{}})
+	require.Equal(t, StatusError, result.Status)
+	require.Equal(t, ErrCodeNotFound, GetErrorCode(result.Error))
+
+	acc1 := store.Get("accounts").Get("acc-1")
+	require.NotNil(t, acc1)
+	assert.Equal(t, 111, acc1.Data["balance"])
+}
+
+func TestExecutor_Atomic_RollsBackPartialWrites_OnFailure(t *testing.T) {
+	store, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name:        "atomic-failure",
+		Consistency: ConsistencyAtomic,
+		Steps: []Step{
+			{Type: StepUpdate, Resource: "accounts", ID: `"acc-1"`, Set: map[string]string{
+				"balance": "111",
+			}},
+			{Type: StepRead, Resource: "accounts", ID: `"missing"`, As: "missing"},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{Data: map[string]interface{}{}})
+	require.Equal(t, StatusError, result.Status)
+	require.Error(t, result.Error)
+	require.Equal(t, ErrCodeNotFound, GetErrorCode(result.Error))
+
+	acc1 := store.Get("accounts").Get("acc-1")
+	require.NotNil(t, acc1)
+	assert.Equal(t, float64(1000), acc1.Data["balance"], "atomic mode should restore pre-operation state")
+}
+
+func TestExecutor_InvalidConsistency(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	result := executor.Execute(context.Background(), &CustomOperation{
+		Name:        "bad-consistency",
+		Consistency: ConsistencyMode("sometimes"),
+		Steps:       []Step{{Type: StepSet, Var: "x", Value: "1"}},
+	}, &OperationRequest{Data: map[string]interface{}{}})
+
+	require.Equal(t, StatusValidationError, result.Status)
+	require.Error(t, result.Error)
+	assert.Contains(t, result.Error.Error(), "unsupported consistency mode")
+}
+
+func TestExecutor_Tracing_CustomOperationAndSteps(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	exporter := &testSpanExporter{}
+	tracer := tracing.NewTracer("mockd-test", tracing.WithExporter(exporter))
+	executor.SetTracer(tracer)
+
+	op := &CustomOperation{
+		Name:        "trace-me",
+		Consistency: ConsistencyAtomic,
+		Steps: []Step{
+			{Type: StepSet, Var: "x", Value: "1"},
+			{Type: StepSet, Var: "y", Value: "x + 1"},
+		},
+		Response: map[string]string{"y": "y"},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{Data: map[string]interface{}{}})
+	require.Equal(t, StatusSuccess, result.Status)
+	require.NoError(t, tracer.Flush())
+
+	spans := exporter.snapshot()
+	var (
+		hasExec  bool
+		stepSpan int
+	)
+	for _, sp := range spans {
+		switch sp.Name {
+		case "stateful.custom_operation.execute":
+			hasExec = true
+		case "stateful.custom_operation.step":
+			stepSpan++
+		}
+	}
+	assert.True(t, hasExec, "expected custom operation execution span")
+	assert.Equal(t, 2, stepSpan, "expected one span per step")
+}
+
+func TestExecutor_ExpressionCompileCache_ReusedAcrossExecutions(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "cache-me",
+		Steps: []Step{
+			{Type: StepSet, Var: "x", Value: `input.a + input.b`},
+			{Type: StepSet, Var: "y", Value: `x * 2`},
+		},
+		Response: map[string]string{
+			"y": "y",
+		},
+	}
+
+	first := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{"a": float64(2), "b": float64(3)},
+	})
+	require.Equal(t, StatusSuccess, first.Status)
+
+	executor.programMu.RLock()
+	cacheSizeAfterFirst := len(executor.programCache)
+	executor.programMu.RUnlock()
+	require.Greater(t, cacheSizeAfterFirst, 0)
+
+	second := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{"a": float64(5), "b": float64(7)},
+	})
+	require.Equal(t, StatusSuccess, second.Status)
+
+	executor.programMu.RLock()
+	cacheSizeAfterSecond := len(executor.programCache)
+	executor.programMu.RUnlock()
+	assert.Equal(t, cacheSizeAfterFirst, cacheSizeAfterSecond)
 }
 
 // --- Bridge.Execute with ActionCustom ---

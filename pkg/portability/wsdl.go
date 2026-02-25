@@ -306,7 +306,7 @@ func (w *WSDLImporter) generateCollection(def *wsdlDefinitions, originalWSDL []b
 		Name:    def.Name,
 		Metadata: &config.CollectionMetadata{
 			Name:        def.Name,
-			Description: fmt.Sprintf("Imported from WSDL: %s", def.Name),
+			Description: "Imported from WSDL: " + def.Name,
 			Tags:        []string{"soap", "wsdl-import"},
 		},
 		Mocks: make([]*config.MockConfiguration, 0),
@@ -605,7 +605,7 @@ func (w *WSDLImporter) inferStatefulResources(def *wsdlDefinitions, types map[st
 }
 
 // inferSeedData generates sample seed data from XSD types associated with the operation.
-func (w *WSDLImporter) inferSeedData(op wsdlOperation, resource string, def *wsdlDefinitions, types map[string]*wsdlXSDElement) []map[string]interface{} {
+func (w *WSDLImporter) inferSeedData(_ wsdlOperation, resource string, _ *wsdlDefinitions, types map[string]*wsdlXSDElement) []map[string]interface{} {
 	// Look for a response type that contains the entity fields
 	// E.g., GetUserResponse → User type → fields
 	for _, xsdEl := range types {

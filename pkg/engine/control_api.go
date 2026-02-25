@@ -776,9 +776,11 @@ func (a *ControlAPIAdapter) ListCustomOperations() []api.CustomOperationInfo {
 
 	result := make([]api.CustomOperationInfo, 0, len(ops))
 	for name, op := range ops {
+		mode, _ := stateful.CustomOperationConsistency(op)
 		result = append(result, api.CustomOperationInfo{
-			Name:      name,
-			StepCount: len(op.Steps),
+			Name:        name,
+			StepCount:   len(op.Steps),
+			Consistency: string(mode),
 		})
 	}
 	return result
@@ -795,6 +797,10 @@ func (a *ControlAPIAdapter) GetCustomOperation(name string) (*api.CustomOperatio
 	if op == nil {
 		return nil, errors.New("custom operation not found: " + name)
 	}
+	mode, err := stateful.CustomOperationConsistency(op)
+	if err != nil {
+		return nil, err
+	}
 
 	steps := make([]api.CustomOperationStep, 0, len(op.Steps))
 	for _, s := range op.Steps {
@@ -810,9 +816,10 @@ func (a *ControlAPIAdapter) GetCustomOperation(name string) (*api.CustomOperatio
 	}
 
 	return &api.CustomOperationDetail{
-		Name:     name,
-		Steps:    steps,
-		Response: op.Response,
+		Name:        name,
+		Consistency: string(mode),
+		Steps:       steps,
+		Response:    op.Response,
 	}, nil
 }
 
@@ -827,7 +834,10 @@ func (a *ControlAPIAdapter) RegisterCustomOperation(cfg *config.CustomOperationC
 		return errors.New("custom operation config must have a name")
 	}
 
-	customOp := convertCustomOperation(cfg)
+	customOp, err := convertCustomOperation(cfg)
+	if err != nil {
+		return err
+	}
 	bridge.RegisterCustomOperation(cfg.Name, customOp)
 	return nil
 }

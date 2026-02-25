@@ -635,6 +635,7 @@ version: "1.0"
 
 customOperations:
   - name: TransferFunds
+    consistency: atomic
     steps:
       - type: read
         resource: accounts
@@ -663,6 +664,7 @@ customOperations:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | Yes | Unique operation name |
+| `consistency` | string | No | Execution mode: `best_effort` (default) or `atomic` (rollback-on-failure, no isolation guarantees) |
 | `steps` | array | Yes | Ordered sequence of steps |
 | `response` | map | No | Field → expression map for building the result |
 
@@ -673,12 +675,14 @@ customOperations:
 | `type` | string | Step type: `read`, `create`, `update`, `delete`, `set` |
 | `resource` | string | Stateful resource name (for read/create/update/delete) |
 | `id` | string | Expression resolving to item ID (for read/update/delete) |
-| `as` | string | Variable name to store the result (for read/create) |
+| `as` | string | Variable name to store the result (required for `read`, optional for `create`/`update`) |
 | `set` | map | Field → expression map (for create/update) |
 | `var` | string | Variable name (for set steps) |
 | `value` | string | Expression value (for set steps) |
 
-Expressions use [expr-lang/expr](https://github.com/expr-lang/expr) syntax. The environment includes `input` (request data) and variables from prior steps.
+Expressions use [expr-lang/expr](https://github.com/expr-lang/expr) syntax. The environment includes `input` (request data) and variables from prior steps (from `as` and `set.var`).
+
+Use `mockd stateful custom validate --file <op.yaml>` to preflight custom operations before registering them. Add `--strict` to fail on warnings (for example, empty `set` maps). For stronger preflight checks, provide sample input and run `--check-expressions-runtime` with `--fixtures-file` to evaluate expressions without writing state.
 
 ---
 

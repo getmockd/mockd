@@ -2,6 +2,7 @@ package stateful
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -448,6 +449,23 @@ func TestGetErrorCode_WithErrorCodeError(t *testing.T) {
 func TestGetErrorCode_WithGenericError(t *testing.T) {
 	err := assert.AnError
 	assert.Equal(t, ErrCodeInternal, GetErrorCode(err))
+}
+
+func TestGetErrorCode_WithWrappedErrorCodeError(t *testing.T) {
+	err := fmt.Errorf("step failed: %w", &NotFoundError{Resource: "users", ID: "u1"})
+	assert.Equal(t, ErrCodeNotFound, GetErrorCode(err))
+}
+
+func TestBridge_ClearCustomOperations(t *testing.T) {
+	bridge, _ := setupBridgeTest(t)
+	bridge.RegisterCustomOperation("A", &CustomOperation{Name: "A"})
+	bridge.RegisterCustomOperation("B", &CustomOperation{Name: "B"})
+
+	bridge.ClearCustomOperations()
+
+	assert.Nil(t, bridge.GetCustomOperation("A"))
+	assert.Nil(t, bridge.GetCustomOperation("B"))
+	assert.Nil(t, bridge.ListCustomOperations())
 }
 
 func TestErrorCode_String_All(t *testing.T) {

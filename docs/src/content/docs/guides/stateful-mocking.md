@@ -543,6 +543,46 @@ Steps use [expr-lang/expr](https://github.com/expr-lang/expr) for evaluating exp
 - Named variables from prior `read`/`create` steps
 - Standard arithmetic, comparison, and string operators
 
+### Consistency Modes
+
+Custom operations support two consistency modes:
+
+| Mode | Description |
+|------|-------------|
+| `best_effort` (default) | Steps execute sequentially. If a step fails, prior state changes persist. |
+| `atomic` | Steps execute sequentially. If a step fails, all prior state changes from this operation are rolled back. |
+
+```yaml
+customOperations:
+  - name: TransferFunds
+    consistency: atomic
+    steps:
+      # ...
+```
+
+:::caution[Atomic limitations]
+**Atomic provides rollback-on-failure within a single operation.** It does NOT provide isolation across concurrent requests — other requests may observe intermediate state during execution. This is a mock server, not a database transaction engine.
+:::
+
+### Validating Operations Offline
+
+Use `mockd stateful custom validate` to check operation definitions before registering them:
+
+```bash
+# Compile-check all expressions
+mockd stateful custom validate --file transfer.yaml
+
+# Evaluate expressions with sample input (preflight confidence, not a guarantee)
+mockd stateful custom validate --file transfer.yaml \
+  --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}' \
+  --check-expressions-runtime
+
+# Verify referenced resources exist on the running server
+mockd stateful custom validate --file transfer.yaml --check-resources
+```
+
+The `--check-expressions-runtime` flag provides **preflight confidence** by evaluating expressions with sample input and optional fixture data. It does not guarantee runtime success — actual resource data may differ from fixtures.
+
 ### Using with SOAP
 
 Wire custom operations from SOAP operation configs:
@@ -582,6 +622,12 @@ When a `POST /api/transfer` request arrives, the JSON request body becomes the o
 
 ```bash
 # Register the custom operation
+mockd stateful custom validate --file transfer.yaml --check-resources
+# Optional stronger preflight (sample input + runtime expression checks, no writes)
+mockd stateful custom validate --file transfer.yaml \
+  --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}' \
+  --check-expressions-runtime \
+  --fixtures-file transfer-fixtures.json
 mockd stateful custom add --file transfer.yaml
 
 # Create the HTTP mock wired to the operation
@@ -598,6 +644,7 @@ curl -X POST http://localhost:4280/api/transfer \
 ```yaml
 customOperations:
   - name: TransferFunds
+    consistency: atomic
     steps:
       - type: read
         resource: accounts
@@ -621,6 +668,8 @@ mocks:
 Custom operations can be executed directly from the CLI without any protocol handler:
 
 ```bash
+mockd stateful custom validate --file transfer.yaml --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
+mockd stateful custom validate --file transfer.yaml --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}' --check-expressions-runtime --fixtures-file transfer-fixtures.json
 mockd stateful custom run TransferFunds --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
 ```
 
