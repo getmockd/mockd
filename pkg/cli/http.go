@@ -87,6 +87,7 @@ func init() {
 	httpAddCmd.Flags().IntVar(&addStatus, "status", 200, "Response status code")
 	httpAddCmd.Flags().StringVar(&addBody, "body", "", "Response body")
 	httpAddCmd.Flags().StringVar(&addName, "name", "", "Mock display name")
+	httpAddCmd.Flags().StringVar(&addStatefulOperation, "stateful-operation", "", "Wire to a custom stateful operation (e.g., TransferFunds)")
 
 	// Missing commands like list/get/delete fall back to root aliases exactly like before
 	httpCmd.AddCommand(&cobra.Command{

@@ -578,19 +578,42 @@ mocks:
 
 When a `POST /api/transfer` request arrives, the JSON request body becomes the operation's `input`, the custom operation steps execute, and the result is returned as a JSON response. This allows HTTP endpoints to run the same multi-step logic as SOAP operations — sharing both the operation definition and the underlying stateful data.
 
-**Example usage:**
+**Example usage (CLI):**
 
 ```bash
 # Register the custom operation
 mockd stateful custom add --file transfer.yaml
 
-# Create the HTTP mock that triggers it
-mockd add http --method POST --path /api/transfer
+# Create the HTTP mock wired to the operation
+mockd add http --method POST --path /api/transfer --stateful-operation TransferFunds
 
 # Call it
 curl -X POST http://localhost:4280/api/transfer \
   -H "Content-Type: application/json" \
   -d '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
+```
+
+**Example usage (YAML config):**
+
+```yaml
+customOperations:
+  - name: TransferFunds
+    steps:
+      - type: read
+        resource: accounts
+        id: "input.sourceId"
+        as: source
+      # ... more steps ...
+    response:
+      status: '"completed"'
+
+mocks:
+  - type: http
+    http:
+      matcher:
+        method: POST
+        path: /api/transfer
+      statefulOperation: TransferFunds
 ```
 
 ### Using with the CLI

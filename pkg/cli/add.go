@@ -59,9 +59,10 @@ var (
 	addQoS      int
 	addMQTTPort int
 
-	addSoapAction  string
-	addActionAlias string
-	addMutation    bool
+	addSoapAction        string
+	addActionAlias       string
+	addMutation          bool
+	addStatefulOperation string
 
 	addIssuer        string
 	addClientID      string
@@ -135,6 +136,8 @@ func init() {
 	addCmd.Flags().IntVar(&addQoS, "qos", 0, "MQTT QoS level (0, 1, 2)")
 	addCmd.Flags().IntVar(&addMQTTPort, "mqtt-port", 1883, "MQTT broker port")
 
+	addCmd.Flags().StringVar(&addStatefulOperation, "stateful-operation", "", "Wire to a custom stateful operation (e.g., TransferFunds)")
+
 	addCmd.Flags().StringVar(&addSoapAction, "soap-action", "", "SOAPAction header value")
 
 	addCmd.Flags().StringVar(&addIssuer, "issuer", "", "OAuth issuer URL (default: http://localhost:4280)")
@@ -197,7 +200,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	switch mockTypeEnum {
 	case mock.TypeHTTP:
 		m, err = buildHTTPMock(addName, addPath, addMethod, addStatus, addBody, addBodyFile, addPriority, addDelay, addHeaders, addMatchHeaders, addMatchQueries,
-			addSSE, addSSEEvents, addSSEDelay, addSSETemplate, addSSERepeat, addSSEKeepalive, addBodyContains, addPathPattern)
+			addSSE, addSSEEvents, addSSEDelay, addSSETemplate, addSSERepeat, addSSEKeepalive, addBodyContains, addPathPattern, addStatefulOperation)
 	case mock.TypeWebSocket:
 		m, err = buildWebSocketMock(addName, addPath, addMessage, addEcho)
 	case mock.TypeGraphQL:
@@ -361,7 +364,7 @@ func mergeSOAPIfExists(client AdminClient, newMock *config.MockConfiguration) (*
 func buildHTTPMock(name, path, method string, status int, body, bodyFile string, priority, delay int,
 	headers, matchHeaders, matchQueries flags.StringSlice,
 	sse bool, sseEvents flags.StringSlice, sseDelay int, sseTemplate string, sseRepeat, sseKeepalive int,
-	bodyContains, pathPattern string) (*config.MockConfiguration, error) {
+	bodyContains, pathPattern, statefulOperation string) (*config.MockConfiguration, error) {
 
 	if path == "" && pathPattern == "" {
 		return nil, errors.New(`--path or --path-pattern is required for HTTP mocks
@@ -425,15 +428,24 @@ Run 'mockd add --help' for more options`)
 		},
 	}
 
-	// Build SSE config if enabled
-	if sse || len(sseEvents) > 0 || sseTemplate != "" {
+	// Handle stateful operation: mutually exclusive with response/sse
+	if statefulOperation != "" {
+		if sse || len(sseEvents) > 0 || sseTemplate != "" {
+			return nil, errors.New("--stateful-operation and --sse are mutually exclusive")
+		}
+		if body != "" || bodyFile != "" {
+			return nil, errors.New("--stateful-operation and --body/--body-file are mutually exclusive (the operation result becomes the response)")
+		}
+		m.HTTP.StatefulOperation = statefulOperation
+	} else if sse || len(sseEvents) > 0 || sseTemplate != "" {
+		// Build SSE config if enabled
 		sseConfig, err := buildSSEConfig(sseEvents, sseDelay, sseTemplate, sseRepeat, sseKeepalive)
 		if err != nil {
 			return nil, err
 		}
 		m.HTTP.SSE = sseConfig
 	} else {
-		// Only set Response for non-SSE mocks
+		// Only set Response for non-SSE, non-stateful-operation mocks
 		m.HTTP.Response = &mock.HTTPResponse{
 			StatusCode: status,
 			Body:       responseBody,
@@ -1059,7 +1071,9 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 				fmt.Printf("  Method: %s\n", created.HTTP.Matcher.Method)
 				fmt.Printf("  Path:   %s\n", created.HTTP.Matcher.Path)
 			}
-			if created.HTTP.Response != nil {
+			if created.HTTP.StatefulOperation != "" {
+				fmt.Printf("  Operation: %s\n", created.HTTP.StatefulOperation)
+			} else if created.HTTP.Response != nil {
 				fmt.Printf("  Status: %d\n", created.HTTP.Response.StatusCode)
 			}
 		}
@@ -1176,6 +1190,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 		createdMethod := ""
 		createdPath := ""
 		createdStatus := 0
+		createdOperation := ""
 		if created.HTTP != nil && created.HTTP.Matcher != nil {
 			createdMethod = created.HTTP.Matcher.Method
 			createdPath = created.HTTP.Matcher.Path
@@ -1183,20 +1198,25 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 		if created.HTTP != nil && created.HTTP.Response != nil {
 			createdStatus = created.HTTP.Response.StatusCode
 		}
+		if created.HTTP != nil {
+			createdOperation = created.HTTP.StatefulOperation
+		}
 		return output.JSON(struct {
-			ID         string `json:"id"`
-			Type       string `json:"type"`
-			Action     string `json:"action"`
-			Method     string `json:"method"`
-			Path       string `json:"path"`
-			StatusCode int    `json:"statusCode"`
+			ID                string `json:"id"`
+			Type              string `json:"type"`
+			Action            string `json:"action"`
+			Method            string `json:"method"`
+			Path              string `json:"path"`
+			StatusCode        int    `json:"statusCode,omitempty"`
+			StatefulOperation string `json:"statefulOperation,omitempty"`
 		}{
-			ID:         created.ID,
-			Type:       string(created.Type),
-			Action:     result.Action,
-			Method:     createdMethod,
-			Path:       createdPath,
-			StatusCode: createdStatus,
+			ID:                created.ID,
+			Type:              string(created.Type),
+			Action:            result.Action,
+			Method:            createdMethod,
+			Path:              createdPath,
+			StatusCode:        createdStatus,
+			StatefulOperation: createdOperation,
 		})
 
 	case mock.TypeWebSocket:

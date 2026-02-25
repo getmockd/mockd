@@ -580,6 +580,7 @@ mockd http add [flags]
 | `--path-pattern` | | Regex path pattern for matching (alternative to `--path`) | |
 | `--priority` | | Mock priority (higher = matched first) | |
 | `--delay` | | Response delay in milliseconds | |
+| `--stateful-operation` | | Wire to a custom stateful operation (e.g., TransferFunds) | |
 
 **SSE Flags (for streaming):**
 
@@ -597,6 +598,7 @@ mockd http add [flags]
 mockd http add --path /api/users --status 200 --body '[{"id":1}]'
 mockd http add -m POST --path /api/users -s 201 -b '{"created": true}'
 mockd http add --path /events --sse --sse-event 'connected:{"status":"ok"}'
+mockd http add -m POST --path /api/transfer --stateful-operation TransferFunds
 ```
 
 ---

@@ -1139,6 +1139,29 @@ operations:
     statefulAction: custom
 ```
 
+### Managing Custom Operations via CLI
+
+Custom operations can also be managed and executed directly from the CLI — useful for testing, scripting, and AI agent workflows:
+
+```bash
+# Register a custom operation from a YAML file
+mockd stateful custom add --file transfer.yaml
+
+# Or inline as JSON
+mockd stateful custom add --definition '{"name":"TransferFunds","steps":[...]}'
+
+# List registered operations
+mockd stateful custom list
+
+# Execute directly (no HTTP/SOAP request needed)
+mockd stateful custom run TransferFunds --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
+
+# Wire to an HTTP endpoint too
+mockd http add -m POST --path /api/transfer --stateful-operation TransferFunds
+```
+
+See [`mockd stateful custom`](/reference/cli/#mockd-stateful-custom) in the CLI reference for the full command set.
+
 ### Step Types
 
 | Step | Description |

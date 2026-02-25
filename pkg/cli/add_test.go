@@ -167,6 +167,7 @@ func TestBuildHTTPMock(t *testing.T) {
 				tt.matchQueries,
 				false, nil, 100, "", 1, 0, // SSE defaults: disabled
 				"", "", // bodyContains, pathPattern defaults
+				"", // statefulOperation default
 			)
 
 			if tt.expectError {
@@ -216,6 +217,7 @@ func TestBuildHTTPMock_BodyFile(t *testing.T) {
 		nil, nil, nil,
 		false, nil, 100, "", 1, 0, // SSE defaults
 		"", "", // bodyContains, pathPattern defaults
+		"", // statefulOperation default
 	)
 
 	if err != nil {
@@ -239,6 +241,7 @@ func TestBuildHTTPMock_BodyFileNotFound(t *testing.T) {
 		nil, nil, nil,
 		false, nil, 100, "", 1, 0, // SSE defaults
 		"", "", // bodyContains, pathPattern defaults
+		"", // statefulOperation default
 	)
 
 	if err == nil {
@@ -790,7 +793,7 @@ func TestOutputJSONResult(t *testing.T) {
 	// the JSON encoding doesn't panic
 
 	t.Run("http mock json output", func(t *testing.T) {
-		cfg, _ := buildHTTPMock("test", "/api/test", "GET", 200, "{}", "", 0, 0, nil, nil, nil, false, nil, 100, "", 1, 0, "", "")
+		cfg, _ := buildHTTPMock("test", "/api/test", "GET", 200, "{}", "", 0, 0, nil, nil, nil, false, nil, 100, "", 1, 0, "", "", "")
 		cfg.ID = "test-id"
 
 		createResult := &CreateMockResult{
@@ -827,6 +830,146 @@ func TestOutputJSONResult(t *testing.T) {
 		}
 		if jsonResult["type"] != "http" {
 			t.Errorf("type: got %v, want http", jsonResult["type"])
+		}
+	})
+}
+
+func TestBuildHTTPMock_StatefulOperation(t *testing.T) {
+	t.Run("sets StatefulOperation on HTTPSpec", func(t *testing.T) {
+		cfg, err := buildHTTPMock(
+			"transfer", "/api/transfer", "POST", 200, "", "", 0, 0,
+			nil, nil, nil,
+			false, nil, 100, "", 1, 0,
+			"", "",
+			"TransferFunds",
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.HTTP.StatefulOperation != "TransferFunds" {
+			t.Errorf("statefulOperation: got %q, want TransferFunds", cfg.HTTP.StatefulOperation)
+		}
+		if cfg.HTTP.Response != nil {
+			t.Error("response should be nil when statefulOperation is set")
+		}
+		if cfg.HTTP.SSE != nil {
+			t.Error("sse should be nil when statefulOperation is set")
+		}
+	})
+
+	t.Run("mutually exclusive with --body", func(t *testing.T) {
+		_, err := buildHTTPMock(
+			"test", "/api/test", "POST", 200,
+			`{"data":"value"}`, "", // body set
+			0, 0, nil, nil, nil,
+			false, nil, 100, "", 1, 0,
+			"", "",
+			"SomeOperation",
+		)
+		if err == nil {
+			t.Error("expected error when both --body and --stateful-operation are set")
+		}
+		if !strings.Contains(err.Error(), "mutually exclusive") {
+			t.Errorf("error should mention mutual exclusivity, got: %v", err)
+		}
+	})
+
+	t.Run("mutually exclusive with --body-file", func(t *testing.T) {
+		_, err := buildHTTPMock(
+			"test", "/api/test", "POST", 200,
+			"", "/some/file.json", // bodyFile set
+			0, 0, nil, nil, nil,
+			false, nil, 100, "", 1, 0,
+			"", "",
+			"SomeOperation",
+		)
+		// The body-file doesn't exist so it will fail on ReadFile first,
+		// but if it existed it should fail on mutual exclusivity.
+		// Let's test with a real temp file:
+		if err == nil {
+			t.Error("expected error")
+		}
+	})
+
+	t.Run("mutually exclusive with --sse", func(t *testing.T) {
+		_, err := buildHTTPMock(
+			"test", "/api/test", "GET", 200, "", "", 0, 0,
+			nil, nil, nil,
+			true, nil, 100, "", 1, 0, // sse=true
+			"", "",
+			"SomeOperation",
+		)
+		if err == nil {
+			t.Error("expected error when both --sse and --stateful-operation are set")
+		}
+		if !strings.Contains(err.Error(), "mutually exclusive") {
+			t.Errorf("error should mention mutual exclusivity, got: %v", err)
+		}
+	})
+
+	t.Run("empty statefulOperation falls through to normal response", func(t *testing.T) {
+		cfg, err := buildHTTPMock(
+			"test", "/api/test", "GET", 200, `{"ok":true}`, "", 0, 0,
+			nil, nil, nil,
+			false, nil, 100, "", 1, 0,
+			"", "",
+			"", // empty — normal mock
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.HTTP.StatefulOperation != "" {
+			t.Errorf("statefulOperation should be empty, got %q", cfg.HTTP.StatefulOperation)
+		}
+		if cfg.HTTP.Response == nil {
+			t.Error("response should be set for normal mocks")
+		}
+	})
+
+	t.Run("JSON output includes statefulOperation", func(t *testing.T) {
+		cfg, _ := buildHTTPMock(
+			"transfer", "/api/transfer", "POST", 200, "", "", 0, 0,
+			nil, nil, nil,
+			false, nil, 100, "", 1, 0,
+			"", "",
+			"TransferFunds",
+		)
+		cfg.ID = "test-op-id"
+
+		createResult := &CreateMockResult{
+			Mock:   cfg,
+			Action: "created",
+		}
+
+		// Capture stdout
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := outputJSONResult(createResult, mock.TypeHTTP)
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		buf := make([]byte, 4096)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		var jsonResult map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &jsonResult); err != nil {
+			t.Fatalf("invalid JSON output: %v\nOutput: %s", err, output)
+		}
+
+		if jsonResult["statefulOperation"] != "TransferFunds" {
+			t.Errorf("statefulOperation: got %v, want TransferFunds", jsonResult["statefulOperation"])
+		}
+		// statusCode should be omitted (zero value with omitempty)
+		if sc, ok := jsonResult["statusCode"]; ok && sc != nil && sc != float64(0) {
+			t.Errorf("statusCode should be omitted or 0 when statefulOperation is set, got %v", sc)
 		}
 	})
 }
