@@ -35,6 +35,9 @@ type mockEngine struct {
 	configResp     *ConfigResponse
 	protocols      map[string]ProtocolStatusInfo
 
+	// Custom operations support
+	customOps map[string]*CustomOperationDetail
+
 	// Error injection for testing error paths
 	addMockErr            error
 	updateMockErr         error
@@ -51,6 +54,7 @@ func newMockEngine() *mockEngine {
 	return &mockEngine{
 		mocks:       make(map[string]*config.MockConfiguration),
 		requestLogs: make(map[string]*requestlog.Entry),
+		customOps:   make(map[string]*CustomOperationDetail),
 		running:     true,
 		uptime:      100,
 		protocols: map[string]ProtocolStatusInfo{
@@ -310,23 +314,63 @@ func (m *mockEngine) GetConfig() *ConfigResponse {
 }
 
 func (m *mockEngine) ListCustomOperations() []CustomOperationInfo {
-	return nil
+	var ops []CustomOperationInfo
+	for _, op := range m.customOps {
+		ops = append(ops, CustomOperationInfo{Name: op.Name, StepCount: len(op.Steps)})
+	}
+	return ops
 }
 
 func (m *mockEngine) GetCustomOperation(name string) (*CustomOperationDetail, error) {
-	return nil, errors.New("not found")
+	op, ok := m.customOps[name]
+	if !ok {
+		return nil, errors.New("operation not found: " + name)
+	}
+	return op, nil
 }
 
 func (m *mockEngine) RegisterCustomOperation(cfg *config.CustomOperationConfig) error {
+	steps := make([]CustomOperationStep, len(cfg.Steps))
+	for i, s := range cfg.Steps {
+		steps[i] = CustomOperationStep{
+			Type:     s.Type,
+			Resource: s.Resource,
+			ID:       s.ID,
+			As:       s.As,
+			Set:      s.Set,
+			Var:      s.Var,
+			Value:    s.Value,
+		}
+	}
+	m.customOps[cfg.Name] = &CustomOperationDetail{
+		Name:     cfg.Name,
+		Steps:    steps,
+		Response: cfg.Response,
+	}
 	return nil
 }
 
 func (m *mockEngine) DeleteCustomOperation(name string) error {
+	if _, ok := m.customOps[name]; !ok {
+		return errors.New("operation not found: " + name)
+	}
+	delete(m.customOps, name)
 	return nil
 }
 
 func (m *mockEngine) ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error) {
-	return nil, errors.New("not found")
+	_, ok := m.customOps[name]
+	if !ok {
+		return nil, errors.New("operation not found: " + name)
+	}
+	// Simulate successful execution
+	result := map[string]interface{}{
+		"status": "completed",
+	}
+	for k, v := range input {
+		result["input_"+k] = v
+	}
+	return result, nil
 }
 
 // boolPtr returns a pointer to a bool value.
@@ -1801,4 +1845,332 @@ func TestServerIntegration(t *testing.T) {
 		server.handleGetMock(verifyRec, verifyReq)
 		assert.Equal(t, http.StatusNotFound, verifyRec.Code)
 	})
+}
+
+// --- Custom Operation Handler Tests ---
+
+func TestHandleListCustomOperations(t *testing.T) {
+	t.Run("returns empty list when no operations", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/state/operations", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListCustomOperations(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var result map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+		assert.Equal(t, float64(0), result["count"])
+		ops, ok := result["operations"].([]interface{})
+		require.True(t, ok)
+		assert.Empty(t, ops)
+	})
+
+	t.Run("returns registered operations", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		// Register an operation
+		engine.customOps["TransferFunds"] = &CustomOperationDetail{
+			Name: "TransferFunds",
+			Steps: []CustomOperationStep{
+				{Type: "read", Resource: "accounts", ID: "input.sourceId", As: "source"},
+				{Type: "read", Resource: "accounts", ID: "input.destId", As: "dest"},
+			},
+			Response: map[string]string{"status": `"completed"`},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/state/operations", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListCustomOperations(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var result map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+		assert.Equal(t, float64(1), result["count"])
+	})
+}
+
+func TestHandleGetCustomOperation(t *testing.T) {
+	t.Run("returns operation details", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		engine.customOps["TransferFunds"] = &CustomOperationDetail{
+			Name: "TransferFunds",
+			Steps: []CustomOperationStep{
+				{Type: "read", Resource: "accounts", ID: "input.sourceId", As: "source"},
+			},
+			Response: map[string]string{"status": `"done"`},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/state/operations/TransferFunds", nil)
+		req.SetPathValue("name", "TransferFunds")
+		rec := httptest.NewRecorder()
+
+		server.handleGetCustomOperation(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var result CustomOperationDetail
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+		assert.Equal(t, "TransferFunds", result.Name)
+		assert.Len(t, result.Steps, 1)
+		assert.Equal(t, "read", result.Steps[0].Type)
+	})
+
+	t.Run("returns 404 for missing operation", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/state/operations/NonExistent", nil)
+		req.SetPathValue("name", "NonExistent")
+		rec := httptest.NewRecorder()
+
+		server.handleGetCustomOperation(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+func TestHandleRegisterCustomOperation(t *testing.T) {
+	t.Run("registers a valid operation", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		body := `{
+			"name": "TransferFunds",
+			"steps": [
+				{"type": "read", "resource": "accounts", "id": "input.sourceId", "as": "source"},
+				{"type": "update", "resource": "accounts", "id": "input.sourceId", "set": {"balance": "source.balance - input.amount"}}
+			],
+			"response": {"status": "\"completed\""}
+		}`
+
+		req := httptest.NewRequest(http.MethodPost, "/state/operations", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleRegisterCustomOperation(rec, req)
+
+		assert.Equal(t, http.StatusCreated, rec.Code)
+		var result map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+		assert.Equal(t, "TransferFunds", result["name"])
+		assert.Equal(t, "custom operation registered", result["message"])
+
+		// Verify it was actually stored
+		_, ok := engine.customOps["TransferFunds"]
+		assert.True(t, ok)
+	})
+
+	t.Run("rejects empty name", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		body := `{"name": "", "steps": [{"type": "read", "resource": "accounts", "id": "1", "as": "x"}]}`
+		req := httptest.NewRequest(http.MethodPost, "/state/operations", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleRegisterCustomOperation(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "operation name is required")
+	})
+
+	t.Run("rejects no steps", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		body := `{"name": "EmptyOp", "steps": []}`
+		req := httptest.NewRequest(http.MethodPost, "/state/operations", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleRegisterCustomOperation(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "at least one step")
+	})
+
+	t.Run("rejects invalid JSON", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodPost, "/state/operations", strings.NewReader(`{invalid`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleRegisterCustomOperation(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+}
+
+func TestHandleDeleteCustomOperation(t *testing.T) {
+	t.Run("deletes existing operation", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		engine.customOps["ToDelete"] = &CustomOperationDetail{
+			Name:  "ToDelete",
+			Steps: []CustomOperationStep{{Type: "set", As: "x", Value: "1"}},
+		}
+
+		req := httptest.NewRequest(http.MethodDelete, "/state/operations/ToDelete", nil)
+		req.SetPathValue("name", "ToDelete")
+		rec := httptest.NewRecorder()
+
+		server.handleDeleteCustomOperation(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var result map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+		assert.Equal(t, "ToDelete", result["name"])
+		assert.Equal(t, "custom operation deleted", result["message"])
+
+		// Verify it was removed
+		_, ok := engine.customOps["ToDelete"]
+		assert.False(t, ok)
+	})
+
+	t.Run("returns 404 for missing operation", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodDelete, "/state/operations/NonExistent", nil)
+		req.SetPathValue("name", "NonExistent")
+		rec := httptest.NewRecorder()
+
+		server.handleDeleteCustomOperation(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+func TestHandleExecuteCustomOperation(t *testing.T) {
+	t.Run("executes operation with input", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		engine.customOps["TransferFunds"] = &CustomOperationDetail{
+			Name:  "TransferFunds",
+			Steps: []CustomOperationStep{{Type: "read", Resource: "accounts", ID: "input.sourceId", As: "source"}},
+		}
+
+		body := `{"sourceId": "acct-1", "amount": 100}`
+		req := httptest.NewRequest(http.MethodPost, "/state/operations/TransferFunds/execute", strings.NewReader(body))
+		req.SetPathValue("name", "TransferFunds")
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleExecuteCustomOperation(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var result map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+		assert.Equal(t, "completed", result["status"])
+		assert.Equal(t, "acct-1", result["input_sourceId"])
+	})
+
+	t.Run("executes operation with empty body", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		engine.customOps["SimpleOp"] = &CustomOperationDetail{
+			Name:  "SimpleOp",
+			Steps: []CustomOperationStep{{Type: "set", As: "x", Value: "1"}},
+		}
+
+		req := httptest.NewRequest(http.MethodPost, "/state/operations/SimpleOp/execute", nil)
+		req.SetPathValue("name", "SimpleOp")
+		rec := httptest.NewRecorder()
+
+		server.handleExecuteCustomOperation(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("returns error for non-existent operation", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		body := `{"x": 1}`
+		req := httptest.NewRequest(http.MethodPost, "/state/operations/Missing/execute", strings.NewReader(body))
+		req.SetPathValue("name", "Missing")
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		server.handleExecuteCustomOperation(rec, req)
+
+		// Should get an error status (not 200)
+		assert.NotEqual(t, http.StatusOK, rec.Code)
+	})
+}
+
+// TestCustomOperationFullCRUD tests the complete lifecycle of a custom operation.
+func TestCustomOperationFullCRUD(t *testing.T) {
+	engine := newMockEngine()
+	server := newTestServer(engine)
+
+	// 1. List — should be empty
+	listReq := httptest.NewRequest(http.MethodGet, "/state/operations", nil)
+	listRec := httptest.NewRecorder()
+	server.handleListCustomOperations(listRec, listReq)
+	assert.Equal(t, http.StatusOK, listRec.Code)
+	var listResult map[string]interface{}
+	json.Unmarshal(listRec.Body.Bytes(), &listResult)
+	assert.Equal(t, float64(0), listResult["count"])
+
+	// 2. Register
+	registerBody := `{"name":"TestOp","steps":[{"type":"set","as":"x","value":"42"}],"response":{"result":"string(x)"}}`
+	regReq := httptest.NewRequest(http.MethodPost, "/state/operations", strings.NewReader(registerBody))
+	regReq.Header.Set("Content-Type", "application/json")
+	regRec := httptest.NewRecorder()
+	server.handleRegisterCustomOperation(regRec, regReq)
+	assert.Equal(t, http.StatusCreated, regRec.Code)
+
+	// 3. Get — should exist
+	getReq := httptest.NewRequest(http.MethodGet, "/state/operations/TestOp", nil)
+	getReq.SetPathValue("name", "TestOp")
+	getRec := httptest.NewRecorder()
+	server.handleGetCustomOperation(getRec, getReq)
+	assert.Equal(t, http.StatusOK, getRec.Code)
+	var detail CustomOperationDetail
+	json.Unmarshal(getRec.Body.Bytes(), &detail)
+	assert.Equal(t, "TestOp", detail.Name)
+	assert.Len(t, detail.Steps, 1)
+
+	// 4. Execute
+	execReq := httptest.NewRequest(http.MethodPost, "/state/operations/TestOp/execute", strings.NewReader(`{}`))
+	execReq.SetPathValue("name", "TestOp")
+	execReq.Header.Set("Content-Type", "application/json")
+	execRec := httptest.NewRecorder()
+	server.handleExecuteCustomOperation(execRec, execReq)
+	assert.Equal(t, http.StatusOK, execRec.Code)
+
+	// 5. List — should have 1
+	listReq2 := httptest.NewRequest(http.MethodGet, "/state/operations", nil)
+	listRec2 := httptest.NewRecorder()
+	server.handleListCustomOperations(listRec2, listReq2)
+	var listResult2 map[string]interface{}
+	json.Unmarshal(listRec2.Body.Bytes(), &listResult2)
+	assert.Equal(t, float64(1), listResult2["count"])
+
+	// 6. Delete
+	delReq := httptest.NewRequest(http.MethodDelete, "/state/operations/TestOp", nil)
+	delReq.SetPathValue("name", "TestOp")
+	delRec := httptest.NewRecorder()
+	server.handleDeleteCustomOperation(delRec, delReq)
+	assert.Equal(t, http.StatusOK, delRec.Code)
+
+	// 7. Get — should be gone
+	getReq2 := httptest.NewRequest(http.MethodGet, "/state/operations/TestOp", nil)
+	getReq2.SetPathValue("name", "TestOp")
+	getRec2 := httptest.NewRecorder()
+	server.handleGetCustomOperation(getRec2, getReq2)
+	assert.Equal(t, http.StatusNotFound, getRec2.Code)
 }

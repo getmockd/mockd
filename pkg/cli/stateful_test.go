@@ -122,3 +122,104 @@ func TestSoapAddCmdStatefulFlags(t *testing.T) {
 		t.Error("soap add should have --stateful-action flag")
 	}
 }
+
+// --- Custom operation command tests ---
+
+func TestCustomCmdRegistered(t *testing.T) {
+	// Verify the custom command is registered under stateful
+	found := false
+	for _, cmd := range statefulCmd.Commands() {
+		if cmd.Use == "custom" {
+			found = true
+
+			subCmds := map[string]bool{}
+			for _, sub := range cmd.Commands() {
+				subCmds[sub.Name()] = true
+			}
+
+			if !subCmds["list"] {
+				t.Error("custom command should have 'list' subcommand")
+			}
+			if !subCmds["get"] {
+				t.Error("custom command should have 'get' subcommand")
+			}
+			if !subCmds["add"] {
+				t.Error("custom command should have 'add' subcommand")
+			}
+			if !subCmds["run"] {
+				t.Error("custom command should have 'run' subcommand")
+			}
+			if !subCmds["delete"] {
+				t.Error("custom command should have 'delete' subcommand")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("custom command should be registered under stateful")
+	}
+}
+
+func TestCustomGetCmdRequiresArgs(t *testing.T) {
+	err := customGetCmd.Args(customGetCmd, []string{})
+	if err == nil {
+		t.Error("custom get should require exactly 1 argument")
+	}
+
+	err = customGetCmd.Args(customGetCmd, []string{"TransferFunds"})
+	if err != nil {
+		t.Errorf("custom get should accept 1 argument: %v", err)
+	}
+}
+
+func TestCustomRunCmdRequiresArgs(t *testing.T) {
+	err := customRunCmd.Args(customRunCmd, []string{})
+	if err == nil {
+		t.Error("custom run should require exactly 1 argument")
+	}
+
+	err = customRunCmd.Args(customRunCmd, []string{"TransferFunds"})
+	if err != nil {
+		t.Errorf("custom run should accept 1 argument: %v", err)
+	}
+}
+
+func TestCustomDeleteCmdRequiresArgs(t *testing.T) {
+	err := customDeleteCmd.Args(customDeleteCmd, []string{})
+	if err == nil {
+		t.Error("custom delete should require exactly 1 argument")
+	}
+
+	err = customDeleteCmd.Args(customDeleteCmd, []string{"TransferFunds"})
+	if err != nil {
+		t.Errorf("custom delete should accept 1 argument: %v", err)
+	}
+}
+
+func TestCustomAddCmdFlags(t *testing.T) {
+	flags := customAddCmd.Flags()
+
+	fileFlag := flags.Lookup("file")
+	if fileFlag == nil {
+		t.Error("custom add should have --file flag")
+	}
+
+	defFlag := flags.Lookup("definition")
+	if defFlag == nil {
+		t.Error("custom add should have --definition flag")
+	}
+}
+
+func TestCustomRunCmdFlags(t *testing.T) {
+	flags := customRunCmd.Flags()
+
+	inputFlag := flags.Lookup("input")
+	if inputFlag == nil {
+		t.Error("custom run should have --input flag")
+	}
+
+	inputFileFlag := flags.Lookup("input-file")
+	if inputFileFlag == nil {
+		t.Error("custom run should have --input-file flag")
+	}
+}
