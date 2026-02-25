@@ -52,13 +52,12 @@ func TestStateStore_Register(t *testing.T) {
 			errMsg:  "resource name cannot be empty",
 		},
 		{
-			name: "empty basePath",
+			name: "empty basePath (bridge-only)",
 			config: &ResourceConfig{
-				Name:     "users",
+				Name:     "bridge-only",
 				BasePath: "",
 			},
-			wantErr: true,
-			errMsg:  "resource basePath cannot be empty",
+			wantErr: false,
 		},
 		{
 			name: "basePath without leading slash",

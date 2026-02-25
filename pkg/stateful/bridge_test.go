@@ -473,3 +473,67 @@ func TestBridge_Store(t *testing.T) {
 	assert.NotNil(t, bridge.Store())
 	assert.Equal(t, 2, bridge.Store().Get("users").Count())
 }
+
+// --- Bridge-only resources (no basePath, no HTTP) ---
+
+func TestBridge_BridgeOnlyResource_CRUD(t *testing.T) {
+	// Resource without basePath — accessible via Bridge but NOT via HTTP path matching
+	store := NewStateStore()
+	err := store.Register(&ResourceConfig{
+		Name: "internal-data",
+		// No BasePath — bridge-only
+	})
+	require.NoError(t, err)
+
+	bridge := NewBridge(store)
+	ctx := context.Background()
+
+	// Create via Bridge works
+	result := bridge.Execute(ctx, &OperationRequest{
+		Resource: "internal-data",
+		Action:   ActionCreate,
+		Data:     map[string]interface{}{"key": "value"},
+	})
+	require.Equal(t, StatusCreated, result.Status)
+	require.NotNil(t, result.Item)
+	itemID := result.Item.ID
+
+	// Get via Bridge works
+	getResult := bridge.Execute(ctx, &OperationRequest{
+		Resource:   "internal-data",
+		Action:     ActionGet,
+		ResourceID: itemID,
+	})
+	require.Equal(t, StatusSuccess, getResult.Status)
+	assert.Equal(t, "value", getResult.Item.Data["key"])
+
+	// HTTP path matching returns false (no HTTP routing)
+	resource := store.Get("internal-data")
+	require.NotNil(t, resource)
+	_, _, matched := resource.MatchPath("/internal-data")
+	assert.False(t, matched, "bridge-only resource should not match HTTP paths")
+	_, _, matched2 := resource.MatchPath("/api/internal-data/" + itemID)
+	assert.False(t, matched2, "bridge-only resource should not match any path")
+
+	// Store.MatchPath also skips it
+	r, _, _ := store.MatchPath("/internal-data")
+	assert.Nil(t, r, "store should not match bridge-only resources via path")
+}
+
+func TestBridge_BridgeOnlyResource_Registration(t *testing.T) {
+	store := NewStateStore()
+
+	// Empty basePath is allowed
+	err := store.Register(&ResourceConfig{
+		Name: "bridge-only",
+	})
+	require.NoError(t, err)
+
+	// Non-slash basePath still rejected
+	err = store.Register(&ResourceConfig{
+		Name:     "bad-path",
+		BasePath: "no-slash",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must start with /")
+}

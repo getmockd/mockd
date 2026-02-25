@@ -51,8 +51,10 @@ func NewStatefulResourceWithLogger(config *ResourceConfig, logger *slog.Logger) 
 		validationConfig: config.Validation,
 	}
 
-	// Build path regex for matching
-	r.buildPathMatcher()
+	// Build path regex for HTTP matching (skip if no basePath — bridge-only resource)
+	if r.basePath != "" {
+		r.buildPathMatcher()
+	}
 
 	// Initialize validation
 	r.initValidation(logger)
@@ -153,7 +155,11 @@ func (r *StatefulResource) buildPathMatcher() {
 
 // MatchPath checks if the given path matches this resource.
 // Returns: itemID (if present), path params, and whether it matched.
+// Returns false for bridge-only resources (no basePath / no HTTP routing).
 func (r *StatefulResource) MatchPath(path string) (string, map[string]string, bool) {
+	if r.pathRegex == nil {
+		return "", nil, false
+	}
 	matches := r.pathRegex.FindStringSubmatch(path)
 	if matches == nil {
 		return "", nil, false

@@ -53,11 +53,9 @@ func (s *StateStore) Register(config *ResourceConfig) error {
 		return errors.New("resource name cannot be empty")
 	}
 
-	if config.BasePath == "" {
-		return errors.New("resource basePath cannot be empty")
-	}
-
-	if !strings.HasPrefix(config.BasePath, "/") {
+	// basePath is optional — when empty, the resource is only accessible
+	// via the Bridge (SOAP, GraphQL, gRPC, etc.), not via HTTP REST.
+	if config.BasePath != "" && !strings.HasPrefix(config.BasePath, "/") {
 		return errors.New("resource basePath must start with /")
 	}
 
