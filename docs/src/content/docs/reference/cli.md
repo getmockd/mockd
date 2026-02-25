@@ -1085,6 +1085,185 @@ mockd stateful reset products --json
 
 ---
 
+### mockd stateful custom
+
+Manage custom multi-step operations that run against stateful resources. Custom operations define a pipeline of steps (read, create, update, delete, set) with expression-based logic using [expr-lang/expr](https://github.com/expr-lang/expr). They can be invoked via CLI, REST API, SOAP, or any protocol that supports the stateful bridge.
+
+```bash
+mockd stateful custom [command]
+```
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `list` | List all registered custom operations |
+| `get` | Show details of a custom operation |
+| `add` | Register a new custom operation |
+| `run` | Execute a custom operation |
+| `delete` | Delete a custom operation |
+
+---
+
+### mockd stateful custom list
+
+List all registered custom operations.
+
+```bash
+mockd stateful custom list [flags]
+```
+
+**Example:**
+
+```bash
+mockd stateful custom list
+mockd stateful custom list --json
+```
+
+---
+
+### mockd stateful custom get
+
+Show details of a custom operation including its steps and response template.
+
+```bash
+mockd stateful custom get <name> [flags]
+```
+
+**Example:**
+
+```bash
+mockd stateful custom get TransferFunds
+mockd stateful custom get TransferFunds --json
+```
+
+---
+
+### mockd stateful custom add
+
+Register a new custom operation from a file or inline definition.
+
+```bash
+mockd stateful custom add [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--file` | Path to YAML/JSON file containing the operation definition | |
+| `--definition` | Inline JSON operation definition | |
+
+**Examples:**
+
+```bash
+# From a YAML file
+mockd stateful custom add --file transfer.yaml
+
+# Inline JSON definition
+mockd stateful custom add --definition '{
+  "name": "TransferFunds",
+  "steps": [
+    {"type": "read", "resource": "accounts", "id": "input.sourceId", "as": "source"},
+    {"type": "read", "resource": "accounts", "id": "input.destId", "as": "dest"},
+    {"type": "update", "resource": "accounts", "id": "input.sourceId", "set": {"balance": "source.balance - input.amount"}},
+    {"type": "update", "resource": "accounts", "id": "input.destId", "set": {"balance": "dest.balance + input.amount"}}
+  ],
+  "response": {"status": "\"completed\""}
+}'
+```
+
+**Operation Definition Format:**
+
+```yaml
+name: TransferFunds
+steps:
+  - type: read
+    resource: accounts
+    id: "input.sourceId"
+    as: source
+  - type: read
+    resource: accounts
+    id: "input.destId"
+    as: dest
+  - type: set
+    as: total
+    value: "source.balance + dest.balance"
+  - type: update
+    resource: accounts
+    id: "input.sourceId"
+    set:
+      balance: "source.balance - input.amount"
+  - type: update
+    resource: accounts
+    id: "input.destId"
+    set:
+      balance: "dest.balance + input.amount"
+response:
+  status: '"completed"'
+  total: "string(total)"
+```
+
+**Step Types:**
+
+| Type | Description | Required Fields |
+|------|-------------|-----------------|
+| `read` | Read a single item from a resource | `resource`, `id`, `as` |
+| `create` | Create a new item in a resource | `resource`, `set` |
+| `update` | Update an existing item in a resource | `resource`, `id`, `set` |
+| `delete` | Delete an item from a resource | `resource`, `id` |
+| `set` | Set a computed value in the expression context | `as`, `value` |
+
+> All `id`, `value`, and `set` field values are **expr expressions** evaluated against an environment containing `input` (the request data) and all previously computed `as` variables.
+
+---
+
+### mockd stateful custom run
+
+Execute a registered custom operation with the given input.
+
+```bash
+mockd stateful custom run <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--input` | Inline JSON input for the operation | |
+| `--input-file` | Path to JSON file containing operation input | |
+
+**Examples:**
+
+```bash
+# Run with inline input
+mockd stateful custom run TransferFunds --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
+
+# Run with input from file
+mockd stateful custom run TransferFunds --input-file transfer-input.json
+
+# Run with no input
+mockd stateful custom run TransferFunds
+```
+
+---
+
+### mockd stateful custom delete
+
+Delete a registered custom operation.
+
+```bash
+mockd stateful custom delete <name> [flags]
+```
+
+**Example:**
+
+```bash
+mockd stateful custom delete TransferFunds
+```
+
+---
+
 ### mockd new
 
 Create mocks from templates.

@@ -559,6 +559,64 @@ mocks:
           statefulAction: custom
 ```
 
+When a SOAP request arrives for the `TransferFunds` operation, the handler extracts the SOAP body as a map, passes it as input to the Bridge, executes the custom operation steps, and serializes the result back as an XML SOAP response.
+
+### Using with HTTP Mocks
+
+Any HTTP mock can trigger a custom operation by setting the `statefulOperation` field instead of a static `response`:
+
+```yaml
+mocks:
+  - id: transfer-endpoint
+    type: http
+    http:
+      matcher:
+        method: POST
+        path: /api/transfer
+      statefulOperation: TransferFunds
+```
+
+When a `POST /api/transfer` request arrives, the JSON request body becomes the operation's `input`, the custom operation steps execute, and the result is returned as a JSON response. This allows HTTP endpoints to run the same multi-step logic as SOAP operations — sharing both the operation definition and the underlying stateful data.
+
+**Example usage:**
+
+```bash
+# Register the custom operation
+mockd stateful custom add --file transfer.yaml
+
+# Create the HTTP mock that triggers it
+mockd add http --method POST --path /api/transfer
+
+# Call it
+curl -X POST http://localhost:4280/api/transfer \
+  -H "Content-Type: application/json" \
+  -d '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
+```
+
+### Using with the CLI
+
+Custom operations can be executed directly from the CLI without any protocol handler:
+
+```bash
+mockd stateful custom run TransferFunds --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
+```
+
+This is useful for testing, scripting, and AI agent workflows where you want to manipulate stateful data through defined business logic without making HTTP/SOAP requests.
+
+### Using with the Admin API
+
+Custom operations are also accessible via the admin REST API:
+
+```bash
+# List all operations
+curl http://localhost:4290/state/operations
+
+# Execute an operation
+curl -X POST http://localhost:4290/state/operations/TransferFunds/execute \
+  -H "Content-Type: application/json" \
+  -d '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
+```
+
 ## Next Steps
 
 - [SOAP Mocking](/protocols/soap/) - Full SOAP protocol guide with WSDL import
