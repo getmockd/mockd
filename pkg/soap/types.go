@@ -40,6 +40,16 @@ type OperationConfig struct {
 	Delay      string     `json:"delay,omitempty" yaml:"delay,omitempty"`
 	Fault      *SOAPFault `json:"fault,omitempty" yaml:"fault,omitempty"`
 	Match      *SOAPMatch `json:"match,omitempty" yaml:"match,omitempty"`
+
+	// StatefulResource is the name of the stateful resource this operation reads/writes
+	// (e.g., "users", "orders"). When set, the operation routes through the StatefulBridge
+	// instead of returning a canned/template response.
+	StatefulResource string `json:"statefulResource,omitempty" yaml:"statefulResource,omitempty"`
+
+	// StatefulAction is the CRUD action to perform on the stateful resource.
+	// Valid values: "get", "list", "create", "update", "patch", "delete".
+	// Required when StatefulResource is set.
+	StatefulAction string `json:"statefulAction,omitempty" yaml:"statefulAction,omitempty"`
 }
 
 // SOAPMatch defines XPath-based request matching conditions.

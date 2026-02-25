@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +14,9 @@ import (
 	"github.com/beevik/etree"
 	"github.com/charmbracelet/huh"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
+	"github.com/getmockd/mockd/pkg/portability"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var soapCmd = &cobra.Command{
@@ -70,12 +73,33 @@ var soapAddCmd = &cobra.Command{
 }
 
 var (
-	soapHeaders     string
-	soapPretty      bool
-	soapCallAction  string
-	soapCallSOAP12  bool
-	soapCallTimeout int
+	soapHeaders        string
+	soapPretty         bool
+	soapCallAction     string
+	soapCallSOAP12     bool
+	soapCallTimeout    int
+	soapImportStateful bool
+	soapImportOutput   string
+	soapImportFormat   string
 )
+
+var soapImportCmd = &cobra.Command{
+	Use:   "import <wsdl-file>",
+	Short: "Import a WSDL file and generate SOAP mock configuration",
+	Long: `Parse a WSDL 1.1 file and generate mockd SOAP mock definitions.
+
+By default, operations get canned XML responses generated from XSD types.
+Use --stateful to map CRUD-like operations (GetUser, CreateOrder, etc.)
+to stateful resources with appropriate actions.
+
+Examples:
+  mockd soap import service.wsdl
+  mockd soap import service.wsdl --stateful
+  mockd soap import service.wsdl --stateful -o mocks.yaml
+  mockd soap import service.wsdl --format json`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSOAPImport,
+}
 
 func init() {
 	rootCmd.AddCommand(soapCmd)
@@ -106,6 +130,11 @@ func init() {
 	})
 
 	soapCmd.AddCommand(soapValidateCmd)
+
+	soapImportCmd.Flags().BoolVar(&soapImportStateful, "stateful", false, "Map CRUD operations to stateful resources")
+	soapImportCmd.Flags().StringVarP(&soapImportOutput, "output", "o", "", "Write output to file instead of stdout")
+	soapImportCmd.Flags().StringVar(&soapImportFormat, "format", "yaml", "Output format (yaml or json)")
+	soapCmd.AddCommand(soapImportCmd)
 
 	soapCallCmd.Flags().StringVarP(&soapHeaders, "header", "H", "", "Additional headers (key:value,key2:value2)")
 	soapCallCmd.Flags().BoolVar(&soapPretty, "pretty", true, "Pretty print output")
@@ -403,4 +432,57 @@ func prettyPrintXML(xmlBytes []byte) string {
 // secondsToDuration converts seconds to time.Duration.
 func secondsToDuration(seconds int) time.Duration {
 	return time.Duration(seconds) * time.Second
+}
+
+// runSOAPImport handles the "mockd soap import <wsdl-file>" command.
+func runSOAPImport(cmd *cobra.Command, args []string) error {
+	wsdlFile := args[0]
+
+	// Read the WSDL file
+	data, err := os.ReadFile(wsdlFile)
+	if err != nil {
+		return fmt.Errorf("failed to read WSDL file: %w", err)
+	}
+
+	// Create the importer with options
+	importer := &portability.WSDLImporter{
+		Stateful: soapImportStateful,
+	}
+
+	// Import
+	collection, err := importer.Import(data)
+	if err != nil {
+		return fmt.Errorf("failed to import WSDL: %w", err)
+	}
+
+	// Serialize output
+	var output []byte
+	switch strings.ToLower(soapImportFormat) {
+	case "json":
+		output, err = json.MarshalIndent(collection, "", "  ")
+	case "yaml", "yml", "":
+		output, err = yaml.Marshal(collection)
+	default:
+		return fmt.Errorf("unsupported output format %q (use yaml or json)", soapImportFormat)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to serialize output: %w", err)
+	}
+
+	// Write output
+	if soapImportOutput != "" {
+		if err := os.WriteFile(soapImportOutput, output, 0o644); err != nil {
+			return fmt.Errorf("failed to write output file: %w", err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Imported %d mock(s) from %s → %s\n",
+			len(collection.Mocks), wsdlFile, soapImportOutput)
+		if soapImportStateful && len(collection.StatefulResources) > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "Generated %d stateful resource(s)\n",
+				len(collection.StatefulResources))
+		}
+	} else {
+		fmt.Fprint(cmd.OutOrStdout(), string(output))
+	}
+
+	return nil
 }

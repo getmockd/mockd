@@ -41,6 +41,9 @@ type ProjectConfig struct {
 
 	// StatefulResources defines CRUD resources
 	StatefulResources []StatefulResourceConfig `json:"statefulResources,omitempty" yaml:"statefulResources,omitempty"`
+
+	// CustomOperations defines multi-step custom operations against stateful resources
+	CustomOperations []CustomOperationConfig `json:"customOperations,omitempty" yaml:"customOperations,omitempty"`
 }
 
 // AdminConfig defines a control plane instance.

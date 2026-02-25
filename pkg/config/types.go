@@ -192,6 +192,9 @@ type MockCollection struct {
 	ServerConfig *ServerConfiguration `json:"serverConfig,omitempty" yaml:"serverConfig,omitempty"`
 	// StatefulResources defines stateful CRUD resources
 	StatefulResources []*StatefulResourceConfig `json:"statefulResources,omitempty" yaml:"statefulResources,omitempty"`
+	// CustomOperations defines multi-step custom operations that compose reads, writes,
+	// and expression-evaluated transforms against stateful resources.
+	CustomOperations []*CustomOperationConfig `json:"customOperations,omitempty" yaml:"customOperations,omitempty"`
 	// WebSocketEndpoints defines WebSocket endpoints
 	WebSocketEndpoints []*WebSocketEndpointConfig `json:"websocketEndpoints,omitempty" yaml:"websocketEndpoints,omitempty"`
 }
@@ -265,6 +268,62 @@ type StatefulResourceConfig struct {
 	SeedData []map[string]interface{} `json:"seedData,omitempty" yaml:"seedData,omitempty"`
 	// Validation defines validation rules for CRUD operations
 	Validation *validation.StatefulValidation `json:"validation,omitempty" yaml:"validation,omitempty"`
+}
+
+// CustomOperationConfig defines a multi-step custom operation in YAML/JSON config.
+// Custom operations compose reads, writes, and expression-evaluated transforms
+// against stateful resources. This enables complex mock scenarios like fund transfers.
+//
+// Example YAML:
+//
+//	customOperations:
+//	  - name: TransferFunds
+//	    steps:
+//	      - type: read
+//	        resource: accounts
+//	        id: "input.sourceId"
+//	        as: source
+//	      - type: read
+//	        resource: accounts
+//	        id: "input.destId"
+//	        as: dest
+//	      - type: update
+//	        resource: accounts
+//	        id: "input.sourceId"
+//	        set:
+//	          balance: "source.balance - input.amount"
+//	      - type: update
+//	        resource: accounts
+//	        id: "input.destId"
+//	        set:
+//	          balance: "dest.balance + input.amount"
+//	    response:
+//	      status: '"completed"'
+type CustomOperationConfig struct {
+	// Name is the unique operation name (referenced in SOAP/GraphQL/gRPC configs)
+	Name string `json:"name" yaml:"name"`
+	// Steps is the ordered sequence of steps to execute
+	Steps []CustomStepConfig `json:"steps" yaml:"steps"`
+	// Response is a map of field → expression that builds the result
+	Response map[string]string `json:"response,omitempty" yaml:"response,omitempty"`
+}
+
+// CustomStepConfig defines a single step in a custom operation pipeline.
+type CustomStepConfig struct {
+	// Type is the step kind: "read", "update", "delete", "create", "set"
+	Type string `json:"type" yaml:"type"`
+	// Resource is the stateful resource name (for read/update/delete/create)
+	Resource string `json:"resource,omitempty" yaml:"resource,omitempty"`
+	// ID is an expression that resolves to the item ID (for read/update/delete)
+	ID string `json:"id,omitempty" yaml:"id,omitempty"`
+	// As is the variable name to store the result (for read/create)
+	As string `json:"as,omitempty" yaml:"as,omitempty"`
+	// Set is a map of field → expression for update/create steps
+	Set map[string]string `json:"set,omitempty" yaml:"set,omitempty"`
+	// Var is the variable name (for set steps)
+	Var string `json:"var,omitempty" yaml:"var,omitempty"`
+	// Value is an expression (for set steps)
+	Value string `json:"value,omitempty" yaml:"value,omitempty"`
 }
 
 // DefaultServerConfiguration returns a ServerConfiguration with sensible defaults.

@@ -709,6 +709,11 @@ type OperationConfig struct {
 	Delay      string     `json:"delay,omitempty" yaml:"delay,omitempty"`
 	Fault      *SOAPFault `json:"fault,omitempty" yaml:"fault,omitempty"`
 	Match      *SOAPMatch `json:"match,omitempty" yaml:"match,omitempty"`
+
+	// StatefulResource is the name of the stateful resource this operation reads/writes.
+	StatefulResource string `json:"statefulResource,omitempty" yaml:"statefulResource,omitempty"`
+	// StatefulAction is the CRUD action: "get", "list", "create", "update", "patch", "delete".
+	StatefulAction string `json:"statefulAction,omitempty" yaml:"statefulAction,omitempty"`
 }
 
 // SOAPMatch defines XPath-based request matching conditions.

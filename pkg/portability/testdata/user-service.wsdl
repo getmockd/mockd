@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions name="UserService"
+                  targetNamespace="http://example.com/users"
+                  xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+                  xmlns:tns="http://example.com/users"
+                  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/">
+
+  <wsdl:types>
+    <xsd:schema targetNamespace="http://example.com/users">
+      <xsd:complexType name="User">
+        <xsd:sequence>
+          <xsd:element name="id" type="xsd:string"/>
+          <xsd:element name="name" type="xsd:string"/>
+          <xsd:element name="email" type="xsd:string"/>
+          <xsd:element name="age" type="xsd:int" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:complexType>
+      <xsd:element name="GetUserRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="id" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="GetUserResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="user" type="tns:User"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="CreateUserRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="name" type="xsd:string"/>
+            <xsd:element name="email" type="xsd:string"/>
+            <xsd:element name="age" type="xsd:int" minOccurs="0"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="CreateUserResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="user" type="tns:User"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="ListUsersRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="limit" type="xsd:int" minOccurs="0"/>
+            <xsd:element name="offset" type="xsd:int" minOccurs="0"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="ListUsersResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="users" type="tns:User" maxOccurs="unbounded"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="DeleteUserRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="id" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="DeleteUserResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="success" type="xsd:boolean"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:schema>
+  </wsdl:types>
+
+  <wsdl:message name="GetUserInput">
+    <wsdl:part name="parameters" element="tns:GetUserRequest"/>
+  </wsdl:message>
+  <wsdl:message name="GetUserOutput">
+    <wsdl:part name="parameters" element="tns:GetUserResponse"/>
+  </wsdl:message>
+  <wsdl:message name="CreateUserInput">
+    <wsdl:part name="parameters" element="tns:CreateUserRequest"/>
+  </wsdl:message>
+  <wsdl:message name="CreateUserOutput">
+    <wsdl:part name="parameters" element="tns:CreateUserResponse"/>
+  </wsdl:message>
+  <wsdl:message name="ListUsersInput">
+    <wsdl:part name="parameters" element="tns:ListUsersRequest"/>
+  </wsdl:message>
+  <wsdl:message name="ListUsersOutput">
+    <wsdl:part name="parameters" element="tns:ListUsersResponse"/>
+  </wsdl:message>
+  <wsdl:message name="DeleteUserInput">
+    <wsdl:part name="parameters" element="tns:DeleteUserRequest"/>
+  </wsdl:message>
+  <wsdl:message name="DeleteUserOutput">
+    <wsdl:part name="parameters" element="tns:DeleteUserResponse"/>
+  </wsdl:message>
+
+  <wsdl:portType name="UserPortType">
+    <operation name="GetUser">
+      <input message="tns:GetUserInput"/>
+      <output message="tns:GetUserOutput"/>
+    </operation>
+    <operation name="CreateUser">
+      <input message="tns:CreateUserInput"/>
+      <output message="tns:CreateUserOutput"/>
+    </operation>
+    <operation name="ListUsers">
+      <input message="tns:ListUsersInput"/>
+      <output message="tns:ListUsersOutput"/>
+    </operation>
+    <operation name="DeleteUser">
+      <input message="tns:DeleteUserInput"/>
+      <output message="tns:DeleteUserOutput"/>
+    </operation>
+  </wsdl:portType>
+
+  <wsdl:binding name="UserBinding" type="tns:UserPortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="GetUser">
+      <soap:operation soapAction="http://example.com/users/GetUser"/>
+    </operation>
+    <operation name="CreateUser">
+      <soap:operation soapAction="http://example.com/users/CreateUser"/>
+    </operation>
+    <operation name="ListUsers">
+      <soap:operation soapAction="http://example.com/users/ListUsers"/>
+    </operation>
+    <operation name="DeleteUser">
+      <soap:operation soapAction="http://example.com/users/DeleteUser"/>
+    </operation>
+  </wsdl:binding>
+
+  <wsdl:service name="UserService">
+    <wsdl:port name="UserPort" binding="tns:UserBinding">
+      <soap:address location="http://localhost:8080/soap/users"/>
+    </wsdl:port>
+  </wsdl:service>
+
+</wsdl:definitions>

@@ -169,6 +169,10 @@ func NewServer(cfg *config.ServerConfiguration, opts ...ServerOption) *Server {
 	pm := NewProtocolManager()
 	pm.SetRequestLogger(logger)
 
+	// Create stateful bridge and wire into protocol manager for SOAP support
+	bridge := stateful.NewBridge(statefulStore)
+	pm.SetSOAPStatefulExecutor(newSOAPStatefulAdapter(bridge))
+
 	mockManager := NewMockManager(mockStore, handler, pm)
 
 	// Set remaining server fields

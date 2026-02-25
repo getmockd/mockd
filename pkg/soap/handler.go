@@ -63,6 +63,7 @@ type Handler struct {
 	requestLogger    requestlog.Logger
 	loggerMu         sync.RWMutex
 	templateEngine   *template.Engine
+	statefulExecutor StatefulExecutor // optional: routes stateful operations through the bridge
 }
 
 // NewHandler creates a new SOAP handler with the given configuration.
@@ -270,6 +271,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if opConfig.Fault != nil {
 		h.writeFaultWithRecording(w, opConfig.Fault, version, startTime, r.URL.Path, opName, soapAction, string(body), requestHeaders, r)
 		return
+	}
+
+	// Handle stateful operations (routed through the stateful bridge)
+	if opConfig.StatefulResource != "" && h.statefulExecutor != nil {
+		statefulBody, statefulFault := h.handleStatefulOperation(opConfig, doc)
+		if statefulFault != nil {
+			h.writeFaultWithRecording(w, statefulFault, version, startTime, r.URL.Path, opName, soapAction, string(body), requestHeaders, r)
+			return
+		}
+		if statefulBody != nil {
+			h.writeResponseWithRecording(w, statefulBody, version, startTime, r.URL.Path, opName, soapAction, string(body), requestHeaders, r)
+			return
+		}
 	}
 
 	// Build and send response

@@ -470,9 +470,11 @@ func (mm *MockManager) registerSOAPMock(m *mock.Mock) error {
 		cfg.Operations = make(map[string]soap.OperationConfig)
 		for name, op := range soapSpec.Operations {
 			soapOp := soap.OperationConfig{
-				SOAPAction: op.SOAPAction,
-				Response:   op.Response,
-				Delay:      op.Delay,
+				SOAPAction:       op.SOAPAction,
+				Response:         op.Response,
+				Delay:            op.Delay,
+				StatefulResource: op.StatefulResource,
+				StatefulAction:   op.StatefulAction,
 			}
 			// Convert fault if present
 			if op.Fault != nil {
@@ -499,6 +501,10 @@ func (mm *MockManager) registerSOAPMock(m *mock.Mock) error {
 	}
 	if mm.protocolManager != nil && mm.protocolManager.requestLogger != nil {
 		handler.SetRequestLogger(mm.protocolManager.requestLogger)
+	}
+	// Set stateful executor if available
+	if mm.protocolManager != nil && mm.protocolManager.soapStatefulExec != nil {
+		handler.SetStatefulExecutor(mm.protocolManager.soapStatefulExec)
 	}
 	mm.handler.RegisterSOAPHandler(cfg.Path, handler)
 

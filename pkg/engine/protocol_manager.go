@@ -22,10 +22,11 @@ import (
 
 // ProtocolManager manages the lifecycle of all protocol handlers.
 type ProtocolManager struct {
-	registry      *protocol.Registry
-	requestLogger RequestLogger
-	log           *slog.Logger
-	mu            sync.RWMutex
+	registry         *protocol.Registry
+	requestLogger    RequestLogger
+	log              *slog.Logger
+	mu               sync.RWMutex
+	soapStatefulExec soap.StatefulExecutor // optional: stateful bridge adapter for SOAP handlers
 
 	// Protocol handlers
 	graphqlHandlers    []*graphql.Handler
@@ -61,6 +62,14 @@ func (pm *ProtocolManager) SetRequestLogger(logger RequestLogger) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	pm.requestLogger = logger
+}
+
+// SetSOAPStatefulExecutor sets the stateful executor for SOAP handlers.
+// When set, newly created SOAP handlers will have stateful operation support.
+func (pm *ProtocolManager) SetSOAPStatefulExecutor(executor soap.StatefulExecutor) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.soapStatefulExec = executor
 }
 
 // Registry returns the protocol handler registry.
@@ -266,6 +275,11 @@ func (pm *ProtocolManager) startSOAP(cfg *ProtocolConfig, handler *Handler) erro
 		// Set request logger for unified logging
 		if pm.requestLogger != nil {
 			soapHandler.SetRequestLogger(pm.requestLogger)
+		}
+
+		// Set stateful executor if available
+		if pm.soapStatefulExec != nil {
+			soapHandler.SetStatefulExecutor(pm.soapStatefulExec)
 		}
 
 		pm.soapHandlers = append(pm.soapHandlers, soapHandler)

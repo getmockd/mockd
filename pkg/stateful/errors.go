@@ -23,6 +23,11 @@ func (e *NotFoundError) StatusCode() int {
 	return http.StatusNotFound
 }
 
+// ErrorCode returns the protocol-agnostic error code.
+func (e *NotFoundError) ErrorCode() ErrorCode {
+	return ErrCodeNotFound
+}
+
 // Hint returns a user-friendly suggestion for resolving this error.
 func (e *NotFoundError) Hint() string {
 	if e.ID != "" {
@@ -46,6 +51,11 @@ func (e *ConflictError) StatusCode() int {
 	return http.StatusConflict
 }
 
+// ErrorCode returns the protocol-agnostic error code.
+func (e *ConflictError) ErrorCode() ErrorCode {
+	return ErrCodeConflict
+}
+
 // Hint returns a user-friendly suggestion for resolving this error.
 func (e *ConflictError) Hint() string {
 	return fmt.Sprintf("Item with ID %q already exists. Use PUT to update or provide a different ID.", e.ID)
@@ -67,6 +77,11 @@ func (e *ValidationError) Error() string {
 // StatusCode returns the HTTP status code for this error.
 func (e *ValidationError) StatusCode() int {
 	return http.StatusBadRequest
+}
+
+// ErrorCode returns the protocol-agnostic error code.
+func (e *ValidationError) ErrorCode() ErrorCode {
+	return ErrCodeValidation
 }
 
 // Hint returns a user-friendly suggestion for resolving this error.
@@ -93,6 +108,11 @@ func (e *PayloadTooLargeError) StatusCode() int {
 	return http.StatusRequestEntityTooLarge
 }
 
+// ErrorCode returns the protocol-agnostic error code.
+func (e *PayloadTooLargeError) ErrorCode() ErrorCode {
+	return ErrCodePayloadTooLarge
+}
+
 // Hint returns a user-friendly suggestion for resolving this error.
 func (e *PayloadTooLargeError) Hint() string {
 	return fmt.Sprintf("Reduce request body size to under %d bytes.", e.MaxSize)
@@ -113,12 +133,70 @@ func (e *CapacityError) StatusCode() int {
 	return http.StatusInsufficientStorage // 507
 }
 
+// ErrorCode returns the protocol-agnostic error code.
+func (e *CapacityError) ErrorCode() ErrorCode {
+	return ErrCodeCapacityExceeded
+}
+
 // Hint returns a user-friendly suggestion for resolving this error.
 func (e *CapacityError) Hint() string {
 	return fmt.Sprintf("Delete existing items or increase the maxItems limit (currently %d) for resource %q.", e.MaxItems, e.Resource)
 }
 
+// ErrorCode represents a protocol-agnostic error classification.
+// Protocol adapters map these to protocol-specific error representations:
+//
+//	HTTP: ErrorCode → HTTP status code
+//	SOAP: ErrorCode → SOAP fault code (Client/Sender or Server/Receiver)
+//	gRPC: ErrorCode → gRPC status code (NOT_FOUND, ALREADY_EXISTS, etc.)
+//	GraphQL: ErrorCode → GraphQL error extensions code
+type ErrorCode int
+
+const (
+	// ErrCodeNotFound indicates the requested resource or item was not found.
+	ErrCodeNotFound ErrorCode = iota
+	// ErrCodeConflict indicates a duplicate ID or state conflict.
+	ErrCodeConflict
+	// ErrCodeValidation indicates invalid input data.
+	ErrCodeValidation
+	// ErrCodePayloadTooLarge indicates the request body exceeds size limits.
+	ErrCodePayloadTooLarge
+	// ErrCodeCapacityExceeded indicates the resource has reached its maximum capacity.
+	ErrCodeCapacityExceeded
+	// ErrCodeInternal indicates an unexpected internal error.
+	ErrCodeInternal
+)
+
+// String returns a human-readable representation of the error code.
+func (c ErrorCode) String() string {
+	switch c {
+	case ErrCodeNotFound:
+		return "NOT_FOUND"
+	case ErrCodeConflict:
+		return "CONFLICT"
+	case ErrCodeValidation:
+		return "VALIDATION_ERROR"
+	case ErrCodePayloadTooLarge:
+		return "PAYLOAD_TOO_LARGE"
+	case ErrCodeCapacityExceeded:
+		return "CAPACITY_EXCEEDED"
+	case ErrCodeInternal:
+		return "INTERNAL_ERROR"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+// ErrorCodeError is an interface for errors that provide a protocol-agnostic error code.
+// This is the preferred interface for protocol adapters (SOAP, gRPC, GraphQL).
+// The existing StatusCodeError interface is preserved for backward compatibility with HTTP handlers.
+type ErrorCodeError interface {
+	error
+	ErrorCode() ErrorCode
+}
+
 // StatusCodeError is an interface for errors that have an HTTP status code.
+// Retained for backward compatibility with the HTTP stateful handler.
 type StatusCodeError interface {
 	error
 	StatusCode() int
@@ -128,6 +206,15 @@ type StatusCodeError interface {
 type HintError interface {
 	error
 	Hint() string
+}
+
+// GetErrorCode extracts the ErrorCode from an error.
+// Returns ErrCodeInternal if the error does not implement ErrorCodeError.
+func GetErrorCode(err error) ErrorCode {
+	if ec, ok := err.(ErrorCodeError); ok {
+		return ec.ErrorCode()
+	}
+	return ErrCodeInternal
 }
 
 // ToErrorResponse converts an error to an ErrorResponse struct.
