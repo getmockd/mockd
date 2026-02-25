@@ -839,13 +839,16 @@ func TestBuildStatefulRequest_GetAction(t *testing.T) {
 		StatefulAction:   "get",
 	}
 
-	req := buildStatefulRequest(opConfig, doc)
+	req := buildStatefulRequest("GetUser", opConfig, doc)
 
 	if req.Resource != "users" {
 		t.Errorf("expected resource 'users', got %q", req.Resource)
 	}
 	if req.Action != StatefulActionGet {
 		t.Errorf("expected action 'get', got %q", req.Action)
+	}
+	if req.OperationName != "GetUser" {
+		t.Errorf("expected operationName 'GetUser', got %q", req.OperationName)
 	}
 	if req.ResourceID != "user-1" {
 		t.Errorf("expected resourceID 'user-1', got %q", req.ResourceID)
@@ -866,7 +869,7 @@ func TestBuildStatefulRequest_CreateAction(t *testing.T) {
 		StatefulAction:   "create",
 	}
 
-	req := buildStatefulRequest(opConfig, doc)
+	req := buildStatefulRequest("CreateUser", opConfig, doc)
 
 	if req.Action != StatefulActionCreate {
 		t.Errorf("expected action 'create', got %q", req.Action)
@@ -890,7 +893,7 @@ func TestBuildStatefulRequest_ListAction(t *testing.T) {
 		StatefulAction:   "list",
 	}
 
-	req := buildStatefulRequest(opConfig, doc)
+	req := buildStatefulRequest("ListUsers", opConfig, doc)
 
 	if req.Action != StatefulActionList {
 		t.Errorf("expected action 'list', got %q", req.Action)

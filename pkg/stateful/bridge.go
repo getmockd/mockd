@@ -54,6 +54,9 @@ type OperationRequest struct {
 	Resource string
 	// Action is the CRUD action to perform.
 	Action Action
+	// OperationName is the name of a registered custom operation (e.g., "TransferFunds").
+	// Used when Action is ActionCustom. If empty, falls back to Resource for backwards compatibility.
+	OperationName string
 	// ResourceID is the item ID for single-item operations (get, update, patch, delete).
 	ResourceID string
 	// Data is the request payload, already deserialized into a map by the protocol adapter.
@@ -117,6 +120,11 @@ func (b *Bridge) RegisterCustomOperation(name string, op *CustomOperation) {
 // GetCustomOperation returns a registered custom operation by name.
 func (b *Bridge) GetCustomOperation(name string) *CustomOperation {
 	return b.customOps[name]
+}
+
+// DeleteCustomOperation removes a registered custom operation by name.
+func (b *Bridge) DeleteCustomOperation(name string) {
+	delete(b.customOps, name)
 }
 
 // ListCustomOperations returns all registered custom operations as a name→operation map.
@@ -316,7 +324,12 @@ func (b *Bridge) executeDelete(resource *StatefulResource, req *OperationRequest
 func (b *Bridge) executeCustom(ctx context.Context, req *OperationRequest) *OperationResult {
 	start := time.Now()
 
-	opName := req.Resource // for custom actions, Resource holds the operation name
+	// Use OperationName if set (protocol adapters provide it), fall back to Resource
+	// for backwards compatibility with direct callers.
+	opName := req.OperationName
+	if opName == "" {
+		opName = req.Resource
+	}
 	op := b.customOps[opName]
 	if op == nil {
 		err := &NotFoundError{Resource: "custom operation: " + opName}

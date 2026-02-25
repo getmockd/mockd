@@ -70,6 +70,17 @@ type AdminClient interface {
 	// ResetStatefulResource resets a stateful resource to seed data.
 	ResetStatefulResource(resourceName string) error
 
+	// ListCustomOperations returns all registered custom operations.
+	ListCustomOperations() ([]CustomOperationInfo, error)
+	// GetCustomOperation returns a specific custom operation by name.
+	GetCustomOperation(name string) (*CustomOperationDetail, error)
+	// RegisterCustomOperation registers a new custom operation.
+	RegisterCustomOperation(definition map[string]interface{}) error
+	// DeleteCustomOperation deletes a custom operation by name.
+	DeleteCustomOperation(name string) error
+	// ExecuteCustomOperation executes a custom operation with the given input.
+	ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error)
+
 	// ListWorkspaces returns all workspaces on the admin server.
 	ListWorkspaces() ([]*WorkspaceDTO, error)
 	// CreateWorkspace creates a new workspace on the admin.
@@ -120,6 +131,9 @@ type CreateMockResult struct {
 	AddedTopics   []string // For MQTT merge: topics added
 	TotalServices []string // For gRPC merge: all services after merge
 	TotalTopics   []string // For MQTT merge: all topics after merge
+
+	AddedOperations []string // For SOAP merge: operations added
+	TotalOperations []string // For SOAP merge: all operations after merge
 }
 
 // IsMerge returns true if this result was a merge operation.
@@ -185,6 +199,30 @@ type StatefulPaginationMeta struct {
 	Limit  int `json:"limit"`
 	Offset int `json:"offset"`
 	Count  int `json:"count"`
+}
+
+// CustomOperationInfo is a summary of a registered custom operation.
+type CustomOperationInfo struct {
+	Name      string `json:"name"`
+	StepCount int    `json:"stepCount"`
+}
+
+// CustomOperationDetail is the full definition of a custom operation.
+type CustomOperationDetail struct {
+	Name     string                `json:"name"`
+	Steps    []CustomOperationStep `json:"steps"`
+	Response map[string]string     `json:"response,omitempty"`
+}
+
+// CustomOperationStep describes a single step in a custom operation.
+type CustomOperationStep struct {
+	Type     string            `json:"type"`
+	Resource string            `json:"resource,omitempty"`
+	ID       string            `json:"id,omitempty"`
+	As       string            `json:"as,omitempty"`
+	Set      map[string]string `json:"set,omitempty"`
+	Var      string            `json:"var,omitempty"`
+	Value    string            `json:"value,omitempty"`
 }
 
 // APIError represents an error response from the admin API.
@@ -837,6 +875,125 @@ func (c *adminClient) ResetStatefulResource(resourceName string) error {
 		return c.parseError(resp)
 	}
 	return nil
+}
+
+// ListCustomOperations returns all registered custom operations.
+func (c *adminClient) ListCustomOperations() ([]CustomOperationInfo, error) {
+	resp, err := c.doRequest("GET", "/state/operations", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result struct {
+		Operations []CustomOperationInfo `json:"operations"`
+		Count      int                   `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result.Operations, nil
+}
+
+// GetCustomOperation returns a specific custom operation by name.
+func (c *adminClient) GetCustomOperation(name string) (*CustomOperationDetail, error) {
+	resp, err := c.doRequest("GET", "/state/operations/"+url.PathEscape(name), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "custom operation not found: " + name,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var op CustomOperationDetail
+	if err := json.NewDecoder(resp.Body).Decode(&op); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &op, nil
+}
+
+// RegisterCustomOperation registers a new custom operation.
+func (c *adminClient) RegisterCustomOperation(definition map[string]interface{}) error {
+	body, err := json.Marshal(definition)
+	if err != nil {
+		return fmt.Errorf("failed to encode request: %w", err)
+	}
+
+	resp, err := c.post("/state/operations", body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// DeleteCustomOperation deletes a custom operation by name.
+func (c *adminClient) DeleteCustomOperation(name string) error {
+	resp, err := c.doRequest("DELETE", "/state/operations/"+url.PathEscape(name), nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "custom operation not found: " + name,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// ExecuteCustomOperation executes a custom operation with the given input.
+func (c *adminClient) ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode request: %w", err)
+	}
+
+	resp, err := c.post("/state/operations/"+url.PathEscape(name)+"/execute", body)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "custom operation not found: " + name,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result, nil
 }
 
 // ListWorkspaces lists all workspaces on the admin.

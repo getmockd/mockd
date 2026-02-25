@@ -689,6 +689,103 @@ func (c *Client) CreateStatefulItem(ctx context.Context, resourceName string, da
 	return item, nil
 }
 
+// ListCustomOperations returns all registered custom operations.
+func (c *Client) ListCustomOperations(ctx context.Context) ([]CustomOperationInfo, error) {
+	resp, err := c.get(ctx, "/state/operations")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result struct {
+		Operations []CustomOperationInfo `json:"operations"`
+		Count      int                   `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode custom operations: %w", err)
+	}
+	return result.Operations, nil
+}
+
+// GetCustomOperation returns a specific custom operation by name.
+func (c *Client) GetCustomOperation(ctx context.Context, name string) (*CustomOperationDetail, error) {
+	resp, err := c.get(ctx, "/state/operations/"+url.PathEscape(name))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var op CustomOperationDetail
+	if err := json.NewDecoder(resp.Body).Decode(&op); err != nil {
+		return nil, fmt.Errorf("failed to decode custom operation: %w", err)
+	}
+	return &op, nil
+}
+
+// RegisterCustomOperation registers a new custom operation.
+func (c *Client) RegisterCustomOperation(ctx context.Context, cfg interface{}) error {
+	resp, err := c.post(ctx, "/state/operations", cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// DeleteCustomOperation deletes a custom operation by name.
+func (c *Client) DeleteCustomOperation(ctx context.Context, name string) error {
+	resp, err := c.delete(ctx, "/state/operations/"+url.PathEscape(name))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// ExecuteCustomOperation executes a custom operation with the given input.
+func (c *Client) ExecuteCustomOperation(ctx context.Context, name string, input map[string]interface{}) (map[string]interface{}, error) {
+	resp, err := c.post(ctx, "/state/operations/"+url.PathEscape(name)+"/execute", input)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode custom operation result: %w", err)
+	}
+	return result, nil
+}
+
 // ListHandlers returns all protocol handlers.
 func (c *Client) ListHandlers(ctx context.Context) ([]*ProtocolHandler, error) {
 	resp, err := c.get(ctx, "/handlers")

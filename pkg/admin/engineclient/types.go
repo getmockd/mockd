@@ -46,4 +46,7 @@ type (
 	ProtocolHandler       = types.ProtocolHandler
 	SSEConnection         = types.SSEConnection
 	SSEStats              = types.SSEStats
+	CustomOperationInfo   = types.CustomOperationInfo
+	CustomOperationDetail = types.CustomOperationDetail
+	CustomOperationStep   = types.CustomOperationStep
 )

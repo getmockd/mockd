@@ -275,7 +275,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Handle stateful operations (routed through the stateful bridge)
 	if opConfig.StatefulResource != "" && h.statefulExecutor != nil {
-		statefulBody, statefulFault := h.handleStatefulOperation(opConfig, doc)
+		statefulBody, statefulFault := h.handleStatefulOperation(opName, opConfig, doc)
 		if statefulFault != nil {
 			h.writeFaultWithRecording(w, statefulFault, version, startTime, r.URL.Path, opName, soapAction, string(body), requestHeaders, r)
 			return

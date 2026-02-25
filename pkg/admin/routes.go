@@ -103,6 +103,13 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /state/resources/{name}/items/{id}", a.requireEngine(a.handleGetStatefulItem))
 	mux.HandleFunc("POST /state/resources/{name}/items", a.requireEngine(a.handleCreateStatefulItem))
 
+	// Custom operations
+	mux.HandleFunc("GET /state/operations", a.requireEngine(a.handleListCustomOperations))
+	mux.HandleFunc("GET /state/operations/{name}", a.requireEngine(a.handleGetCustomOperation))
+	mux.HandleFunc("POST /state/operations", a.requireEngine(a.handleRegisterCustomOperation))
+	mux.HandleFunc("DELETE /state/operations/{name}", a.requireEngine(a.handleDeleteCustomOperation))
+	mux.HandleFunc("POST /state/operations/{name}/execute", a.requireEngine(a.handleExecuteCustomOperation))
+
 	// SSE connection management
 	mux.HandleFunc("GET /sse/connections", a.handleListSSEConnections)
 	mux.HandleFunc("GET /sse/connections/{id}", a.handleGetSSEConnection)

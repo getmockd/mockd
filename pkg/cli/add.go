@@ -207,7 +207,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	case mock.TypeMQTT:
 		m, err = buildMQTTMock(addName, addTopic, addPayload, addQoS, addMQTTPort)
 	case mock.TypeSOAP:
-		m, err = buildSOAPMock(addName, addPath, addOperation, addSoapAction, addResponse)
+		m, err = buildSOAPMock(addName, addPath, addOperation, addSoapAction, addResponse, soapAddStatefulRes, soapAddStatefulAction)
 	case mock.TypeOAuth:
 		m = buildOAuthMock(addName, addIssuer, addClientID, addClientSecret, addOAuthUser, addOAuthPassword)
 	}
@@ -236,6 +236,17 @@ func runAdd(cmd *cobra.Command, args []string) error {
 				Mock:   updated,
 				Action: "updated",
 			}, mockTypeEnum, jsonOutput)
+		}
+	}
+
+	// For SOAP mocks: merge operations into existing mock on same path
+	if mockTypeEnum == mock.TypeSOAP && !addAllowDuplicate && m.SOAP != nil {
+		result, merged, err := mergeSOAPIfExists(client, m)
+		if err != nil {
+			return fmt.Errorf("%s", FormatConnectionError(err))
+		}
+		if merged {
+			return outputResult(result, mockTypeEnum, jsonOutput)
 		}
 	}
 
@@ -269,6 +280,81 @@ func findExistingHTTPMock(client AdminClient, method, path string) (string, erro
 		}
 	}
 	return "", nil
+}
+
+// findExistingSOAPMock looks for an existing SOAP mock on the same path.
+// Returns the mock ID if found, empty string if not.
+func findExistingSOAPMock(client AdminClient, path string) (string, error) {
+	mocks, err := client.ListMocks()
+	if err != nil {
+		return "", err
+	}
+
+	for _, m := range mocks {
+		if m.Type != mock.TypeSOAP {
+			continue
+		}
+		if m.SOAP != nil && m.SOAP.Path == path {
+			return m.ID, nil
+		}
+	}
+	return "", nil
+}
+
+// mergeSOAPIfExists merges new operations into an existing SOAP mock on the same path.
+// Returns (result, true, nil) if merged, (nil, false, nil) if no existing mock found.
+func mergeSOAPIfExists(client AdminClient, newMock *config.MockConfiguration) (*CreateMockResult, bool, error) {
+	existingID, err := findExistingSOAPMock(client, newMock.SOAP.Path)
+	if err != nil {
+		return nil, false, err
+	}
+	if existingID == "" {
+		return nil, false, nil
+	}
+
+	// Fetch the full existing mock to get its operations
+	existing, err := client.GetMock(existingID)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to get existing SOAP mock: %w", err)
+	}
+
+	if existing.SOAP == nil {
+		return nil, false, nil
+	}
+	if existing.SOAP.Operations == nil {
+		existing.SOAP.Operations = make(map[string]mock.OperationConfig)
+	}
+
+	// Merge new operations into the existing mock
+	addedOps := []string{}
+	for opName, opConfig := range newMock.SOAP.Operations {
+		if _, exists := existing.SOAP.Operations[opName]; !exists {
+			addedOps = append(addedOps, opName)
+		}
+		existing.SOAP.Operations[opName] = opConfig
+	}
+
+	// Collect all operation names after merge
+	totalOps := make([]string, 0, len(existing.SOAP.Operations))
+	for opName := range existing.SOAP.Operations {
+		totalOps = append(totalOps, opName)
+	}
+
+	// Update the existing mock with merged operations
+	updated, err := client.UpdateMock(existingID, existing)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to update mock: %w", err)
+	}
+
+	result := &CreateMockResult{
+		Mock:            updated,
+		Action:          "merged",
+		Message:         fmt.Sprintf("Merged %d operation(s) into existing SOAP mock %s", len(addedOps), existingID),
+		AddedOperations: addedOps,
+		TotalOperations: totalOps,
+	}
+
+	return result, true, nil
 }
 
 // buildHTTPMock creates an HTTP mock configuration.
@@ -720,13 +806,34 @@ Run 'mockd add --help' for more options`)
 }
 
 // buildSOAPMock creates a SOAP mock configuration.
-func buildSOAPMock(name, path, operation, soapAction, response string) (*config.MockConfiguration, error) {
+func buildSOAPMock(name, path, operation, soapAction, response, statefulResource, statefulAction string) (*config.MockConfiguration, error) {
 	if operation == "" {
 		return nil, errors.New(`--operation is required for SOAP mocks
 
 Usage: mockd add --type soap --operation GetWeather [flags]
 
 Run 'mockd add --help' for more options`)
+	}
+
+	// Validate stateful flags: both or neither
+	if (statefulResource != "") != (statefulAction != "") {
+		return nil, errors.New("--stateful-resource and --stateful-action must be used together")
+	}
+
+	// Validate stateful action values
+	if statefulAction != "" {
+		validActions := map[string]bool{
+			"list": true, "get": true, "create": true,
+			"update": true, "delete": true, "custom": true,
+		}
+		if !validActions[statefulAction] {
+			return nil, fmt.Errorf("invalid --stateful-action %q: must be one of list, get, create, update, delete, custom", statefulAction)
+		}
+	}
+
+	// When stateful fields are set, response is optional
+	if statefulResource == "" && response == "" {
+		// No stateful and no response — default response is fine (empty string)
 	}
 
 	// Default path
@@ -751,6 +858,11 @@ Run 'mockd add --help' for more options`)
 
 	if soapAction != "" {
 		opConfig.SOAPAction = soapAction
+	}
+
+	if statefulResource != "" {
+		opConfig.StatefulResource = statefulResource
+		opConfig.StatefulAction = statefulAction
 	}
 
 	m.SOAP.Operations[operation] = opConfig
@@ -888,7 +1000,7 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 		fmt.Printf("Merged into mock: %s\n", created.ID)
 		fmt.Printf("  Type: %s\n", created.Type)
 
-		switch mockType { //nolint:exhaustive // only gRPC and MQTT have merge output
+		switch mockType { //nolint:exhaustive // only gRPC, MQTT, and SOAP have merge output
 		case mock.TypeGRPC:
 			if len(result.AddedServices) > 0 {
 				fmt.Printf("  Added:\n")
@@ -913,6 +1025,19 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 				fmt.Printf("  Total topics:\n")
 				for _, topic := range result.TotalTopics {
 					fmt.Printf("    - %s\n", topic)
+				}
+			}
+		case mock.TypeSOAP:
+			if len(result.AddedOperations) > 0 {
+				fmt.Printf("  Added:\n")
+				for _, op := range result.AddedOperations {
+					fmt.Printf("    - %s\n", op)
+				}
+			}
+			if len(result.TotalOperations) > 0 {
+				fmt.Printf("  Total operations:\n")
+				for _, op := range result.TotalOperations {
+					fmt.Printf("    - %s\n", op)
 				}
 			}
 		}
@@ -997,7 +1122,7 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 
 	// For merge results, include merge-specific information
 	if result.IsMerge() {
-		switch mockType { //nolint:exhaustive // only gRPC and MQTT have merge JSON output
+		switch mockType { //nolint:exhaustive // only gRPC, MQTT, and SOAP have merge JSON output
 		case mock.TypeGRPC:
 			return output.JSON(struct {
 				ID            string   `json:"id"`
@@ -1025,6 +1150,22 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error {
 				Action:      result.Action,
 				AddedTopics: result.AddedTopics,
 				TotalTopics: result.TotalTopics,
+			})
+		case mock.TypeSOAP:
+			return output.JSON(struct {
+				ID              string   `json:"id"`
+				Type            string   `json:"type"`
+				Action          string   `json:"action"`
+				Path            string   `json:"path"`
+				AddedOperations []string `json:"addedOperations,omitempty"`
+				TotalOperations []string `json:"totalOperations,omitempty"`
+			}{
+				ID:              created.ID,
+				Type:            string(created.Type),
+				Action:          result.Action,
+				Path:            created.SOAP.Path,
+				AddedOperations: result.AddedOperations,
+				TotalOperations: result.TotalOperations,
 			})
 		}
 	}

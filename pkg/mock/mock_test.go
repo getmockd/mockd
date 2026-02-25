@@ -889,7 +889,7 @@ func TestMock_Validate_HTTPRequiresResponse(t *testing.T) {
 
 	err := m.Validate()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "one of response, sse, or chunked is required")
+	assert.Contains(t, err.Error(), "one of response, sse, chunked, or statefulOperation is required")
 }
 
 func TestMock_Validate_HTTPOnlyOneResponseType(t *testing.T) {
@@ -905,7 +905,7 @@ func TestMock_Validate_HTTPOnlyOneResponseType(t *testing.T) {
 
 	err := m.Validate()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "only one of response, sse, or chunked may be specified")
+	assert.Contains(t, err.Error(), "only one of response, sse, chunked, or statefulOperation may be specified")
 }
 
 func TestMock_Validate_ValidHTTPMock(t *testing.T) {

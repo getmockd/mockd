@@ -259,6 +259,12 @@ type HTTPSpec struct {
 
 	// Validation defines request validation rules (runs after matching, before response)
 	Validation *validation.RequestValidation `json:"validation,omitempty" yaml:"validation,omitempty"`
+
+	// StatefulOperation routes this mock through a registered custom operation.
+	// When set, the JSON request body becomes the operation input, and the
+	// operation result is returned as JSON. This allows HTTP endpoints like
+	// POST /api/transfer to execute multi-step custom operations (e.g., TransferFunds).
+	StatefulOperation string `json:"statefulOperation,omitempty" yaml:"statefulOperation,omitempty"`
 }
 
 // HTTPMatcher defines criteria used to match incoming HTTP requests.

@@ -170,10 +170,12 @@ func NewServer(cfg *config.ServerConfiguration, opts ...ServerOption) *Server {
 	pm := NewProtocolManager()
 	pm.SetRequestLogger(logger)
 
-	// Create stateful bridge and wire into protocol manager for SOAP support.
+	// Create stateful bridge and wire into protocol manager for SOAP support
+	// and into the handler for HTTP custom operation support.
 	// The bridge is stored on the server so ConfigLoader can register custom operations.
 	bridge := stateful.NewBridge(statefulStore)
 	pm.SetSOAPStatefulExecutor(newSOAPStatefulAdapter(bridge))
+	handler.SetStatefulBridge(bridge)
 
 	mockManager := NewMockManager(mockStore, handler, pm)
 

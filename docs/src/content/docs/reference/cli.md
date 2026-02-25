@@ -825,10 +825,21 @@ mockd soap add [flags]
 | `--operation` | SOAP operation name | Required |
 | `--soap-action` | SOAPAction header value | |
 | `--response` | XML response body | |
+| `--stateful-resource` | Stateful resource name (e.g., `users`) | |
+| `--stateful-action` | Stateful action: `list`, `get`, `create`, `update`, `delete`, `custom` | |
+
+> `--stateful-resource` and `--stateful-action` must be used together. When set, the operation reads/writes the named stateful resource instead of returning a canned response.
 
 **Examples:**
 ```bash
+# Canned response
 mockd soap add --operation GetWeather --soap-action "http://example.com/GetWeather" --response '<GetWeatherResponse><Temperature>72</Temperature></GetWeatherResponse>'
+
+# Stateful: list all users from the "users" resource
+mockd soap add --path /soap --action GetUsers --stateful-resource users --stateful-action list
+
+# Stateful: get a single user by ID
+mockd soap add --path /soap --action GetUser --stateful-resource users --stateful-action get
 ```
 
 ---
@@ -968,6 +979,108 @@ Show the OAuth provider status.
 
 ```bash
 mockd oauth status [flags]
+```
+
+---
+
+### mockd stateful
+
+Manage stateful CRUD resources. Stateful resources provide in-memory data stores that can be shared across protocols (HTTP REST, SOAP, GraphQL, gRPC, etc.).
+
+```bash
+mockd stateful [command]
+```
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `add` | Create a stateful CRUD resource |
+| `list` | List all stateful resources |
+| `reset` | Reset a stateful resource to seed data |
+
+---
+
+### mockd stateful add
+
+Create a new stateful CRUD resource. By default, resources are "bridge-only" (accessible via SOAP, GraphQL, gRPC, etc. but without HTTP REST endpoints). Use `--path` to also expose HTTP REST endpoints.
+
+```bash
+mockd stateful add <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--path` | URL base path for HTTP REST endpoints (omit for bridge-only) | |
+| `--id-field` | Custom ID field name | `id` |
+
+**Examples:**
+
+```bash
+# Create with HTTP REST endpoints
+mockd stateful add users --path /api/users
+# Endpoints: GET/POST /api/users, GET/PUT/DELETE /api/users/{id}
+
+# Bridge-only (no HTTP endpoints, accessible via SOAP/GraphQL/gRPC)
+mockd stateful add products
+
+# Custom ID field
+mockd stateful add orders --path /api/orders --id-field orderId
+```
+
+---
+
+### mockd stateful list
+
+List all stateful resources and their item counts.
+
+```bash
+mockd stateful list [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--limit` | Maximum items to show per resource | `100` |
+| `--offset` | Skip this many items | `0` |
+| `--sort` | Sort field | |
+| `--order` | Sort order (`asc` or `desc`) | |
+
+**Example output:**
+
+```
+Stateful Resources (3):
+
+NAME        BASE PATH       ITEMS  SEED  ID FIELD
+----        ---------       -----  ----  --------
+users       /api/users      5      3     id
+products    /api/products   12     10    id
+orders      (bridge-only)   0      0     orderId
+
+Total items across all resources: 17
+```
+
+---
+
+### mockd stateful reset
+
+Reset a stateful resource to its initial seed data state. All current items are removed and replaced with the original seed data (if any).
+
+```bash
+mockd stateful reset <name> [flags]
+```
+
+**Examples:**
+
+```bash
+# Reset users to seed data
+mockd stateful reset users
+
+# Reset with JSON output
+mockd stateful reset products --json
 ```
 
 ---

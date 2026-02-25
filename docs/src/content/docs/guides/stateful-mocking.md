@@ -18,7 +18,17 @@ Changes persist for the lifetime of the server session.
 
 ## Quick Start
 
-Enable stateful mocking in your configuration:
+Create a stateful resource using the CLI or configuration file:
+
+```bash
+# Via CLI (creates the resource on a running server)
+mockd stateful add users --path /api/users
+
+# Or for a bridge-only resource (accessible via SOAP/GraphQL/gRPC but not HTTP)
+mockd stateful add users
+```
+
+Or define it in your configuration file:
 
 ```json
 {
@@ -81,7 +91,7 @@ curl http://localhost:4280/api/users/a1b2c3d4-...
 | Field | Description | Default |
 |-------|-------------|---------|
 | `name` | Unique resource name | Required |
-| `basePath` | URL path prefix for the resource | Required |
+| `basePath` | URL path prefix for HTTP REST endpoints (omit for bridge-only) | `""` |
 | `idField` | Field name for resource ID | `"id"` |
 | `parentField` | Parent FK field for nested resources | - |
 | `seedData` | Initial data array | `[]` |

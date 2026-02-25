@@ -43,6 +43,7 @@ const MaxRequestBodySize = 10 << 20 // 10MB
 type Handler struct {
 	store          storage.MockStore
 	statefulStore  *stateful.StateStore
+	statefulBridge *stateful.Bridge // Bridge for custom operation execution
 	logger         RequestLogger
 	log            *slog.Logger // Operational logger for errors/warnings
 	sseHandler     *sse.SSEHandler
@@ -103,6 +104,11 @@ func (h *Handler) SetOperationalLogger(log *slog.Logger) {
 // SetStatefulStore sets the stateful resource store for the handler.
 func (h *Handler) SetStatefulStore(store *stateful.StateStore) {
 	h.statefulStore = store
+}
+
+// SetStatefulBridge sets the stateful bridge for custom operation execution.
+func (h *Handler) SetStatefulBridge(bridge *stateful.Bridge) {
+	h.statefulBridge = bridge
 }
 
 // SetStore sets the mock store for the handler.
@@ -287,6 +293,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 				}
 				// statusCode 0 means permissive/warn mode — continue to response
 			}
+		}
+
+		// Check for stateful custom operation
+		if match.HTTP != nil && match.HTTP.StatefulOperation != "" {
+			statusCode = h.handleCustomOperation(w, r, match.HTTP.StatefulOperation, bodyBytes)
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+			return
 		}
 
 		// Standard response

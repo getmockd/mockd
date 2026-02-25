@@ -720,11 +720,29 @@ Created mock: soap_4b349e0c7719f577
 | `--path` | SOAP endpoint path (required) |
 | `--action` | SOAP operation/action name (required) |
 | `--response` | XML response body |
+| `--stateful-resource` | Stateful resource name (e.g., `users`) |
+| `--stateful-action` | Stateful action: `list`, `get`, `create`, `update`, `delete`, `custom` |
 | `--admin-url` | Admin API URL (default: `http://localhost:4290`) |
 
 :::note
 The CLI flag is `--action`, not `--operation`. This matches the SOAPAction header terminology.
 :::
+
+#### Stateful SOAP via CLI
+
+Wire a SOAP operation directly to a stateful resource from the command line:
+
+```bash
+# First, create a stateful resource (if one doesn't exist)
+mockd stateful add users --path /api/users
+
+# Wire SOAP operations to the resource
+mockd soap add --path /soap --action ListUsers --stateful-resource users --stateful-action list
+mockd soap add --path /soap --action GetUser --stateful-resource users --stateful-action get
+mockd soap add --path /soap --action CreateUser --stateful-resource users --stateful-action create
+```
+
+`--stateful-resource` and `--stateful-action` must be used together. When set, the SOAP operation reads/writes from the named stateful resource instead of returning a canned response.
 
 For complex SOAP mocks with WSDL definitions, XPath matching, or multiple operations, use a YAML config file instead of the CLI.
 

@@ -762,6 +762,116 @@ func (a *ControlAPIAdapter) GetConfig() *api.ConfigResponse {
 	}
 }
 
+// ListCustomOperations implements api.EngineController.
+func (a *ControlAPIAdapter) ListCustomOperations() []api.CustomOperationInfo {
+	bridge := a.server.StatefulBridge()
+	if bridge == nil {
+		return nil
+	}
+
+	ops := bridge.ListCustomOperations()
+	if len(ops) == 0 {
+		return nil
+	}
+
+	result := make([]api.CustomOperationInfo, 0, len(ops))
+	for name, op := range ops {
+		result = append(result, api.CustomOperationInfo{
+			Name:      name,
+			StepCount: len(op.Steps),
+		})
+	}
+	return result
+}
+
+// GetCustomOperation implements api.EngineController.
+func (a *ControlAPIAdapter) GetCustomOperation(name string) (*api.CustomOperationDetail, error) {
+	bridge := a.server.StatefulBridge()
+	if bridge == nil {
+		return nil, errors.New("stateful bridge not initialized")
+	}
+
+	op := bridge.GetCustomOperation(name)
+	if op == nil {
+		return nil, errors.New("custom operation not found: " + name)
+	}
+
+	steps := make([]api.CustomOperationStep, 0, len(op.Steps))
+	for _, s := range op.Steps {
+		steps = append(steps, api.CustomOperationStep{
+			Type:     string(s.Type),
+			Resource: s.Resource,
+			ID:       s.ID,
+			As:       s.As,
+			Set:      s.Set,
+			Var:      s.Var,
+			Value:    s.Value,
+		})
+	}
+
+	return &api.CustomOperationDetail{
+		Name:     name,
+		Steps:    steps,
+		Response: op.Response,
+	}, nil
+}
+
+// RegisterCustomOperation implements api.EngineController.
+func (a *ControlAPIAdapter) RegisterCustomOperation(cfg *config.CustomOperationConfig) error {
+	bridge := a.server.StatefulBridge()
+	if bridge == nil {
+		return errors.New("stateful bridge not initialized")
+	}
+
+	if cfg == nil || cfg.Name == "" {
+		return errors.New("custom operation config must have a name")
+	}
+
+	customOp := convertCustomOperation(cfg)
+	bridge.RegisterCustomOperation(cfg.Name, customOp)
+	return nil
+}
+
+// DeleteCustomOperation implements api.EngineController.
+func (a *ControlAPIAdapter) DeleteCustomOperation(name string) error {
+	bridge := a.server.StatefulBridge()
+	if bridge == nil {
+		return errors.New("stateful bridge not initialized")
+	}
+
+	op := bridge.GetCustomOperation(name)
+	if op == nil {
+		return errors.New("custom operation not found: " + name)
+	}
+
+	bridge.DeleteCustomOperation(name)
+	return nil
+}
+
+// ExecuteCustomOperation implements api.EngineController.
+func (a *ControlAPIAdapter) ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error) {
+	bridge := a.server.StatefulBridge()
+	if bridge == nil {
+		return nil, errors.New("stateful bridge not initialized")
+	}
+
+	result := bridge.Execute(context.Background(), &stateful.OperationRequest{
+		Action:        stateful.ActionCustom,
+		OperationName: name,
+		Data:          input,
+	})
+
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	if result.Item != nil {
+		return result.Item.ToJSON(), nil
+	}
+
+	return map[string]interface{}{"success": true}, nil
+}
+
 // ControlAPI represents a control API server associated with an engine.
 type ControlAPI struct {
 	server  *api.Server

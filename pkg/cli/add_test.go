@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/getmockd/mockd/pkg/cli/internal/flags"
@@ -624,14 +625,17 @@ func TestBuildMQTTMock(t *testing.T) {
 
 func TestBuildSOAPMock(t *testing.T) {
 	tests := []struct {
-		name        string
-		mockName    string
-		path        string
-		operation   string
-		soapAction  string
-		response    string
-		expectError bool
-		validate    func(*testing.T, *mock.SOAPSpec)
+		name             string
+		mockName         string
+		path             string
+		operation        string
+		soapAction       string
+		response         string
+		statefulResource string
+		statefulAction   string
+		expectError      bool
+		errorContain     string
+		validate         func(*testing.T, *mock.SOAPSpec)
 	}{
 		{
 			name:        "operation required",
@@ -680,15 +684,87 @@ func TestBuildSOAPMock(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:             "with stateful resource and action",
+			operation:        "GetUsers",
+			statefulResource: "users",
+			statefulAction:   "list",
+			validate: func(t *testing.T, spec *mock.SOAPSpec) {
+				op := spec.Operations["GetUsers"]
+				if op.StatefulResource != "users" {
+					t.Errorf("statefulResource: got %s, want users", op.StatefulResource)
+				}
+				if op.StatefulAction != "list" {
+					t.Errorf("statefulAction: got %s, want list", op.StatefulAction)
+				}
+			},
+		},
+		{
+			name:             "stateful get action",
+			operation:        "GetUser",
+			statefulResource: "users",
+			statefulAction:   "get",
+			validate: func(t *testing.T, spec *mock.SOAPSpec) {
+				op := spec.Operations["GetUser"]
+				if op.StatefulResource != "users" {
+					t.Errorf("statefulResource: got %s, want users", op.StatefulResource)
+				}
+				if op.StatefulAction != "get" {
+					t.Errorf("statefulAction: got %s, want get", op.StatefulAction)
+				}
+			},
+		},
+		{
+			name:             "stateful create action",
+			operation:        "CreateUser",
+			statefulResource: "users",
+			statefulAction:   "create",
+			validate: func(t *testing.T, spec *mock.SOAPSpec) {
+				op := spec.Operations["CreateUser"]
+				if op.StatefulResource != "users" {
+					t.Errorf("statefulResource: got %s, want users", op.StatefulResource)
+				}
+				if op.StatefulAction != "create" {
+					t.Errorf("statefulAction: got %s, want create", op.StatefulAction)
+				}
+			},
+		},
+		{
+			name:             "stateful resource without action is error",
+			operation:        "GetUsers",
+			statefulResource: "users",
+			expectError:      true,
+			errorContain:     "must be used together",
+		},
+		{
+			name:           "stateful action without resource is error",
+			operation:      "GetUsers",
+			statefulAction: "list",
+			expectError:    true,
+			errorContain:   "must be used together",
+		},
+		{
+			name:             "invalid stateful action",
+			operation:        "GetUsers",
+			statefulResource: "users",
+			statefulAction:   "invalid",
+			expectError:      true,
+			errorContain:     "invalid --stateful-action",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := buildSOAPMock(tt.mockName, tt.path, tt.operation, tt.soapAction, tt.response)
+			cfg, err := buildSOAPMock(tt.mockName, tt.path, tt.operation, tt.soapAction, tt.response, tt.statefulResource, tt.statefulAction)
 
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got nil")
+				}
+				if tt.errorContain != "" && err != nil {
+					if !strings.Contains(err.Error(), tt.errorContain) {
+						t.Errorf("error should contain %q, got %q", tt.errorContain, err.Error())
+					}
 				}
 				return
 			}
@@ -751,6 +827,33 @@ func TestOutputJSONResult(t *testing.T) {
 		}
 		if jsonResult["type"] != "http" {
 			t.Errorf("type: got %v, want http", jsonResult["type"])
+		}
+	})
+}
+
+func TestBuildSOAPMock_MergeFields(t *testing.T) {
+	// Verify that stateful and non-stateful operations can coexist in the same spec
+	t.Run("stateful operation preserves other fields", func(t *testing.T) {
+		cfg, err := buildSOAPMock("test", "/soap", "GetUser", "http://example.com/GetUser", "", "users", "get")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		op := cfg.SOAP.Operations["GetUser"]
+		if op.StatefulResource != "users" {
+			t.Errorf("statefulResource: got %s, want users", op.StatefulResource)
+		}
+		if op.SOAPAction != "http://example.com/GetUser" {
+			t.Errorf("soapAction: got %s, want http://example.com/GetUser", op.SOAPAction)
+		}
+	})
+
+	t.Run("all valid stateful actions accepted", func(t *testing.T) {
+		validActions := []string{"list", "get", "create", "update", "delete", "custom"}
+		for _, action := range validActions {
+			_, err := buildSOAPMock("test", "/soap", "Op", "", "", "resource", action)
+			if err != nil {
+				t.Errorf("action %q should be valid, got error: %v", action, err)
+			}
 		}
 	})
 }

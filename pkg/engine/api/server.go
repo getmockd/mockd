@@ -63,6 +63,13 @@ type EngineController interface {
 	GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error)
 	CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error)
 
+	// Custom operations
+	ListCustomOperations() []CustomOperationInfo
+	GetCustomOperation(name string) (*CustomOperationDetail, error)
+	RegisterCustomOperation(cfg *config.CustomOperationConfig) error
+	DeleteCustomOperation(name string) error
+	ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error)
+
 	// Protocol handlers
 	ListProtocolHandlers() []*ProtocolHandler
 	GetProtocolHandler(id string) *ProtocolHandler
@@ -184,6 +191,13 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /state/resources/{name}/items", s.handleListStatefulItems)
 	mux.HandleFunc("GET /state/resources/{name}/items/{id}", s.handleGetStatefulItem)
 	mux.HandleFunc("POST /state/resources/{name}/items", s.handleCreateStatefulItem)
+
+	// Custom operations
+	mux.HandleFunc("GET /state/operations", s.handleListCustomOperations)
+	mux.HandleFunc("GET /state/operations/{name}", s.handleGetCustomOperation)
+	mux.HandleFunc("POST /state/operations", s.handleRegisterCustomOperation)
+	mux.HandleFunc("DELETE /state/operations/{name}", s.handleDeleteCustomOperation)
+	mux.HandleFunc("POST /state/operations/{name}/execute", s.handleExecuteCustomOperation)
 
 	// Protocol handlers
 	mux.HandleFunc("GET /handlers", s.handleListHandlers)

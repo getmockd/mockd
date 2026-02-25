@@ -188,6 +188,67 @@ func (h *Handler) handleStatefulDelete(w http.ResponseWriter, resource *stateful
 	return http.StatusNoContent
 }
 
+// handleCustomOperation executes a registered custom operation via the Bridge.
+// The JSON request body becomes the operation input, and the result is returned as JSON.
+func (h *Handler) handleCustomOperation(w http.ResponseWriter, r *http.Request, operationName string, bodyBytes []byte) int {
+	w.Header().Set("Content-Type", "application/json")
+
+	if h.statefulBridge == nil {
+		return h.writeStatefulError(w, http.StatusServiceUnavailable, "stateful bridge not configured", "", "")
+	}
+
+	// Parse JSON body as input (allow empty body)
+	var input map[string]interface{}
+	if len(bodyBytes) > 0 {
+		if err := json.Unmarshal(bodyBytes, &input); err != nil {
+			return h.writeStatefulError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error(), "", "")
+		}
+	}
+	if input == nil {
+		input = make(map[string]interface{})
+	}
+
+	// Execute via bridge
+	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
+		Action:        stateful.ActionCustom,
+		OperationName: operationName,
+		Data:          input,
+	})
+
+	if result.Error != nil {
+		// Map stateful errors to HTTP status codes
+		code := stateful.GetErrorCode(result.Error)
+		var httpStatus int
+		switch code {
+		case stateful.ErrCodeNotFound:
+			httpStatus = http.StatusNotFound
+		case stateful.ErrCodeValidation:
+			httpStatus = http.StatusBadRequest
+		case stateful.ErrCodeConflict:
+			httpStatus = http.StatusConflict
+		default:
+			httpStatus = http.StatusInternalServerError
+		}
+		return h.writeStatefulError(w, httpStatus, result.Error.Error(), operationName, "")
+	}
+
+	// Return result as JSON
+	if result.Item != nil {
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(result.Item.ToJSON()); err != nil {
+			h.log.Error("failed to encode custom operation response", "error", err)
+		}
+		return http.StatusOK
+	}
+
+	// Successful but no item result (e.g., void operation)
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"success": true}); err != nil {
+		h.log.Error("failed to encode custom operation response", "error", err)
+	}
+	return http.StatusOK
+}
+
 // writeStatefulError writes a JSON error response.
 func (h *Handler) writeStatefulError(w http.ResponseWriter, statusCode int, errorMsg, resource, id string) int {
 	w.WriteHeader(statusCode)

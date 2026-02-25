@@ -309,6 +309,26 @@ func (m *mockEngine) GetConfig() *ConfigResponse {
 	return m.configResp
 }
 
+func (m *mockEngine) ListCustomOperations() []CustomOperationInfo {
+	return nil
+}
+
+func (m *mockEngine) GetCustomOperation(name string) (*CustomOperationDetail, error) {
+	return nil, errors.New("not found")
+}
+
+func (m *mockEngine) RegisterCustomOperation(cfg *config.CustomOperationConfig) error {
+	return nil
+}
+
+func (m *mockEngine) DeleteCustomOperation(name string) error {
+	return nil
+}
+
+func (m *mockEngine) ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error) {
+	return nil, errors.New("not found")
+}
+
 // boolPtr returns a pointer to a bool value.
 func boolPtr(v bool) *bool { return &v }
 

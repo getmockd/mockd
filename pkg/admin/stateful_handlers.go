@@ -232,3 +232,126 @@ func mapStatefulResourceError(err error, log *slog.Logger, notFoundMsg, operatio
 	}
 	return http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, log, operation)
 }
+
+// --- Custom Operation Handlers ---
+
+// handleListCustomOperations returns all registered custom operations.
+func (a *API) handleListCustomOperations(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+
+	ops, err := engine.ListCustomOperations(ctx)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list custom operations"))
+		return
+	}
+
+	if ops == nil {
+		ops = []engineclient.CustomOperationInfo{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"operations": ops,
+		"count":      len(ops),
+	})
+}
+
+// handleGetCustomOperation returns a specific custom operation.
+func (a *API) handleGetCustomOperation(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing_name", "Operation name is required")
+		return
+	}
+
+	op, err := engine.GetCustomOperation(ctx, name)
+	if err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Custom operation not found: "+name)
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get custom operation"))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, op)
+}
+
+// handleRegisterCustomOperation registers a new custom operation.
+func (a *API) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+
+	var cfg map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		writeJSONDecodeError(w, err, a.logger())
+		return
+	}
+
+	name, _ := cfg["name"].(string)
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "validation_error", "Operation name is required")
+		return
+	}
+
+	if err := engine.RegisterCustomOperation(ctx, cfg); err != nil {
+		writeError(w, http.StatusBadRequest, "registration_failed", sanitizeError(err, a.logger(), "register custom operation"))
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"name":    name,
+		"message": "Custom operation registered",
+	})
+}
+
+// handleDeleteCustomOperation deletes a custom operation.
+func (a *API) handleDeleteCustomOperation(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing_name", "Operation name is required")
+		return
+	}
+
+	if err := engine.DeleteCustomOperation(ctx, name); err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Custom operation not found: "+name)
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "delete custom operation"))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"name":    name,
+		"message": "Custom operation deleted",
+	})
+}
+
+// handleExecuteCustomOperation executes a custom operation with the given input.
+func (a *API) handleExecuteCustomOperation(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing_name", "Operation name is required")
+		return
+	}
+
+	var input map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		// Allow empty body (no input)
+		input = make(map[string]interface{})
+	}
+
+	result, err := engine.ExecuteCustomOperation(ctx, name, input)
+	if err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Custom operation not found: "+name)
+			return
+		}
+		writeError(w, http.StatusBadRequest, "execution_failed", sanitizeError(err, a.logger(), "execute custom operation"))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}

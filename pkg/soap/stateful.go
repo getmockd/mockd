@@ -32,6 +32,9 @@ type StatefulRequest struct {
 	Resource string
 	// Action is the CRUD action to perform
 	Action StatefulAction
+	// OperationName is the protocol-level operation name (e.g., SOAP operation "TransferFunds").
+	// For custom actions, this is used to look up the registered custom operation.
+	OperationName string
 	// ResourceID is the item ID for single-item operations
 	ResourceID string
 	// Data is the deserialized request payload
@@ -92,13 +95,14 @@ func (h *Handler) GetStatefulExecutor() StatefulExecutor {
 
 // handleStatefulOperation executes a stateful CRUD operation and returns
 // the SOAP response body XML. Returns (nil, nil) if the operation is not stateful.
-func (h *Handler) handleStatefulOperation(opConfig *OperationConfig, doc *etree.Document) ([]byte, *SOAPFault) {
+// opName is the SOAP operation name (e.g., "TransferFunds"), needed for custom operation lookup.
+func (h *Handler) handleStatefulOperation(opName string, opConfig *OperationConfig, doc *etree.Document) ([]byte, *SOAPFault) {
 	if opConfig.StatefulResource == "" || h.statefulExecutor == nil {
 		return nil, nil
 	}
 
 	// Build the StatefulRequest from the SOAP body
-	req := buildStatefulRequest(opConfig, doc)
+	req := buildStatefulRequest(opName, opConfig, doc)
 
 	// Execute via the executor (provided by the engine, backed by stateful.Bridge)
 	result := h.statefulExecutor.ExecuteStateful(context.Background(), req)
@@ -108,30 +112,38 @@ func (h *Handler) handleStatefulOperation(opConfig *OperationConfig, doc *etree.
 		return nil, result.Error
 	}
 
-	// Build XML response from result
+	// Build XML response from result.
+	// For custom operations, use the operation name as the response wrapper (e.g., <TransferFundsResponse>).
+	// For CRUD operations, use the resource name (e.g., <userResponse>).
+	responseName := opConfig.StatefulResource
+	if req.Action == StatefulActionCustom && opName != "" {
+		responseName = opName
+	}
+
 	var responseXML []byte
 	switch {
 	case result.Items != nil:
-		responseXML = listResultToXML(result, opConfig.StatefulResource)
+		responseXML = listResultToXML(result, responseName)
 	case result.Item != nil:
-		responseXML = mapToXML(result.Item, opConfig.StatefulResource)
+		responseXML = mapToXML(result.Item, responseName)
 	default:
-		// Delete success — return a simple success element
-		singular := singularize(opConfig.StatefulResource)
+		// Delete/custom success — return a simple success element
 		responseXML = []byte(fmt.Sprintf("<%sResponse><success>true</success></%sResponse>",
-			singular, singular))
+			responseName, responseName))
 	}
 
 	return responseXML, nil
 }
 
 // buildStatefulRequest translates SOAP body XML into a StatefulRequest.
-func buildStatefulRequest(opConfig *OperationConfig, doc *etree.Document) *StatefulRequest {
+// opName is the SOAP operation name, used as the custom operation lookup key when action is "custom".
+func buildStatefulRequest(opName string, opConfig *OperationConfig, doc *etree.Document) *StatefulRequest {
 	action := StatefulAction(opConfig.StatefulAction)
 
 	req := &StatefulRequest{
-		Resource: opConfig.StatefulResource,
-		Action:   action,
+		Resource:      opConfig.StatefulResource,
+		Action:        action,
+		OperationName: opName,
 	}
 
 	// Extract the SOAP body content

@@ -33,10 +33,11 @@ func (a *soapStatefulAdapter) ExecuteStateful(ctx context.Context, req *soap.Sta
 
 	// Translate soap.StatefulRequest → stateful.OperationRequest
 	opReq := &stateful.OperationRequest{
-		Resource:   req.Resource,
-		Action:     stateful.Action(req.Action),
-		ResourceID: req.ResourceID,
-		Data:       req.Data,
+		Resource:      req.Resource,
+		Action:        stateful.Action(req.Action),
+		OperationName: req.OperationName,
+		ResourceID:    req.ResourceID,
+		Data:          req.Data,
 	}
 
 	// Translate filter

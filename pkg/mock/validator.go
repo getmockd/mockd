@@ -93,13 +93,16 @@ func (m *Mock) validateHTTP() error {
 	if m.HTTP.Chunked != nil {
 		responseTypeCount++
 	}
+	if m.HTTP.StatefulOperation != "" {
+		responseTypeCount++
+	}
 
 	// Exactly one response type must be specified
 	if responseTypeCount == 0 {
-		return &ValidationError{Field: "http.response", Message: "one of response, sse, or chunked is required"}
+		return &ValidationError{Field: "http.response", Message: "one of response, sse, chunked, or statefulOperation is required"}
 	}
 	if responseTypeCount > 1 {
-		return &ValidationError{Field: "http.response", Message: "only one of response, sse, or chunked may be specified"}
+		return &ValidationError{Field: "http.response", Message: "only one of response, sse, chunked, or statefulOperation may be specified"}
 	}
 
 	// Validate the response type that is present

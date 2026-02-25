@@ -521,6 +521,90 @@ func (s *Server) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusCreated, item)
 }
 
+// Custom operation handlers
+
+func (s *Server) handleListCustomOperations(w http.ResponseWriter, r *http.Request) {
+	ops := s.engine.ListCustomOperations()
+	if ops == nil {
+		ops = []CustomOperationInfo{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"operations": ops,
+		"count":      len(ops),
+	})
+}
+
+func (s *Server) handleGetCustomOperation(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	op, err := s.engine.GetCustomOperation(name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, op)
+}
+
+func (s *Server) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Request) {
+	limitedBody(w, r)
+	var cfg config.CustomOperationConfig
+	if err := decodeJSONBody(r, &cfg, false); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+
+	if cfg.Name == "" {
+		writeError(w, http.StatusBadRequest, "validation_error", "operation name is required")
+		return
+	}
+	if len(cfg.Steps) == 0 {
+		writeError(w, http.StatusBadRequest, "validation_error", "operation must have at least one step")
+		return
+	}
+
+	if err := s.engine.RegisterCustomOperation(&cfg); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"name":    cfg.Name,
+		"message": "custom operation registered",
+	})
+}
+
+func (s *Server) handleDeleteCustomOperation(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := s.engine.DeleteCustomOperation(name); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name":    name,
+		"message": "custom operation deleted",
+	})
+}
+
+func (s *Server) handleExecuteCustomOperation(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	limitedBody(w, r)
+
+	var input map[string]interface{}
+	if err := decodeJSONBody(r, &input, true); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	if input == nil {
+		input = make(map[string]interface{})
+	}
+
+	result, err := s.engine.ExecuteCustomOperation(name, input)
+	if err != nil {
+		status, code := mapStatefulLookupError(err)
+		writeError(w, status, code, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 // Protocol handler handlers
 
 func (s *Server) handleListHandlers(w http.ResponseWriter, r *http.Request) {

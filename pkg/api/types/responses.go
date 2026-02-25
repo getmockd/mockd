@@ -282,6 +282,32 @@ type StatefulItemsResponse struct {
 	Meta PaginationMeta           `json:"meta"`
 }
 
+// --- Custom Operations ---
+
+// CustomOperationInfo is a summary of a registered custom operation.
+type CustomOperationInfo struct {
+	Name      string `json:"name"`
+	StepCount int    `json:"stepCount"`
+}
+
+// CustomOperationDetail is the full definition of a custom operation.
+type CustomOperationDetail struct {
+	Name     string                `json:"name"`
+	Steps    []CustomOperationStep `json:"steps"`
+	Response map[string]string     `json:"response,omitempty"`
+}
+
+// CustomOperationStep describes a single step in a custom operation.
+type CustomOperationStep struct {
+	Type     string            `json:"type"`
+	Resource string            `json:"resource,omitempty"`
+	ID       string            `json:"id,omitempty"`
+	As       string            `json:"as,omitempty"`
+	Set      map[string]string `json:"set,omitempty"`
+	Var      string            `json:"var,omitempty"`
+	Value    string            `json:"value,omitempty"`
+}
+
 // --- Protocol Handlers ---
 
 // ProtocolHandler represents a running protocol handler.

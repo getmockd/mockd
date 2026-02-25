@@ -42,6 +42,9 @@ type (
 	WebSocketConnectionListResponse = types.WebSocketConnectionListResponse
 	WebSocketStats                  = types.WebSocketStats
 	ConfigResponse                  = types.ConfigResponse
+	CustomOperationInfo             = types.CustomOperationInfo
+	CustomOperationDetail           = types.CustomOperationDetail
+	CustomOperationStep             = types.CustomOperationStep
 )
 
 // ProtocolStatusInfo is an alias for ProtocolStatus for backward compatibility.
