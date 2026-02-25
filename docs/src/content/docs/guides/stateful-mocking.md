@@ -433,8 +433,125 @@ Static mocks take priority when matched.
 }
 ```
 
+## Multi-Protocol State Sharing
+
+Stateful resources are **protocol-agnostic**. The same in-memory store backs HTTP REST, SOAP, and other protocol handlers. Data created by one protocol is immediately visible to all others.
+
+### SOAP + REST Sharing
+
+```yaml
+version: "1.0"
+
+statefulResources:
+  - name: users
+    basePath: /api/users
+
+mocks:
+  - type: soap
+    soap:
+      path: /soap/UserService
+      operations:
+        GetUser:
+          statefulResource: users
+          statefulAction: get
+        CreateUser:
+          statefulResource: users
+          statefulAction: create
+```
+
+```bash
+# Create via REST
+curl -X POST http://localhost:4280/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Alice"}'
+
+# Retrieve via SOAP — same data store!
+curl -X POST http://localhost:4280/soap/UserService \
+  -H "SOAPAction: GetUser" -H "Content-Type: text/xml" \
+  -d '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+        <soap:Body><GetUser><Id>USER_ID_HERE</Id></GetUser></soap:Body>
+      </soap:Envelope>'
+```
+
+This is especially useful for testing systems that use REST internally but expose SOAP externally (or vice versa).
+
+## Custom Operations
+
+Custom operations compose reads, writes, and expression-evaluated transforms against stateful resources. They enable complex mock scenarios that span multiple resources.
+
+### Example: Fund Transfer
+
+```yaml
+statefulResources:
+  - name: accounts
+    basePath: /api/accounts
+    seedData:
+      - { id: "acct-1", owner: "Alice", balance: 1000 }
+      - { id: "acct-2", owner: "Bob", balance: 500 }
+
+customOperations:
+  - name: TransferFunds
+    steps:
+      - type: read
+        resource: accounts
+        id: "input.sourceId"
+        as: source
+      - type: read
+        resource: accounts
+        id: "input.destId"
+        as: dest
+      - type: update
+        resource: accounts
+        id: "input.sourceId"
+        set:
+          balance: "source.balance - input.amount"
+      - type: update
+        resource: accounts
+        id: "input.destId"
+        set:
+          balance: "dest.balance + input.amount"
+    response:
+      status: '"completed"'
+      newSourceBalance: "source.balance - input.amount"
+      newDestBalance: "dest.balance + input.amount"
+```
+
+### Step Types
+
+| Step | Fields | Description |
+|------|--------|-------------|
+| `read` | `resource`, `id`, `as` | Read an item, store in named variable |
+| `create` | `resource`, `set`, `as` | Create an item with expression fields |
+| `update` | `resource`, `id`, `set` | Update an item with expression fields |
+| `delete` | `resource`, `id` | Delete an item |
+| `set` | `var`, `value` | Set a context variable to an expression |
+
+### Expression Language
+
+Steps use [expr-lang/expr](https://github.com/expr-lang/expr) for evaluating expressions. The environment includes:
+- `input` — the request data
+- Named variables from prior `read`/`create` steps
+- Standard arithmetic, comparison, and string operators
+
+### Using with SOAP
+
+Wire custom operations from SOAP operation configs:
+
+```yaml
+mocks:
+  - type: soap
+    soap:
+      path: /soap/BankService
+      operations:
+        TransferFunds:
+          soapAction: "http://bank.example.com/TransferFunds"
+          statefulResource: TransferFunds
+          statefulAction: custom
+```
+
 ## Next Steps
 
+- [SOAP Mocking](/protocols/soap/) - Full SOAP protocol guide with WSDL import
 - [Proxy Recording](/guides/proxy-recording/) - Record real API traffic
 - [Admin API Reference](/reference/admin-api/) - State management endpoints
 - [Configuration Reference](/reference/configuration/) - Full schema

@@ -1108,3 +1108,130 @@ func TestStateful_US6_PathParameterExtractedFromNestedPath(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp2.StatusCode)
 }
+
+// =============================================================================
+// Cross-Protocol: REST + SOAP sharing stateful resources
+// =============================================================================
+
+func TestStateful_CrossProtocol_REST_Creates_SOAP_Retrieves(t *testing.T) {
+	// Verify that REST and SOAP share the same stateful store.
+	// Create a user via HTTP REST POST, then retrieve it via the SOAP
+	// stateful bridge adapter — proving the Bridge architecture works.
+	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
+		Name:     "users",
+		BasePath: "/api/users",
+	})
+
+	require.NoError(t, srv.Start(), "server should start")
+	defer srv.Stop()
+	waitForReady(t, srv.ManagementPort())
+
+	// 1. Create a user via HTTP REST
+	createBody := `{"name":"Alice","email":"alice@example.com"}`
+	resp, err := http.Post(
+		fmt.Sprintf("http://localhost:%d/api/users", httpPort),
+		"application/json",
+		bytes.NewBufferString(createBody),
+	)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var created map[string]interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+	userID, ok := created["id"].(string)
+	require.True(t, ok, "expected string id")
+	require.NotEmpty(t, userID)
+
+	// 2. Retrieve via the stateful Bridge directly (same path SOAP uses)
+	//    This proves the shared StateStore: Bridge.Execute() reads from
+	//    the same store that HTTP REST wrote to.
+	bridge := srv.StatefulBridge()
+	require.NotNil(t, bridge, "server should expose stateful bridge")
+
+	result := bridge.Execute(t.Context(), &stateful.OperationRequest{
+		Resource:   "users",
+		Action:     stateful.ActionGet,
+		ResourceID: userID,
+	})
+	require.Equal(t, stateful.StatusSuccess, result.Status, "bridge get should succeed")
+	require.NotNil(t, result.Item, "should return item")
+
+	itemMap := result.Item.ToJSON()
+	assert.Equal(t, "Alice", itemMap["name"])
+	assert.Equal(t, "alice@example.com", itemMap["email"])
+	assert.Equal(t, userID, itemMap["id"])
+
+	// 3. List via Bridge (same as SOAP ListUsers would do)
+	listResult := bridge.Execute(t.Context(), &stateful.OperationRequest{
+		Resource: "users",
+		Action:   stateful.ActionList,
+	})
+	require.Equal(t, stateful.StatusSuccess, listResult.Status)
+	require.NotNil(t, listResult.List)
+	assert.Equal(t, 1, listResult.List.Meta.Total, "should have 1 user")
+
+	// 4. Delete via Bridge, verify HTTP REST also sees it gone
+	deleteResult := bridge.Execute(t.Context(), &stateful.OperationRequest{
+		Resource:   "users",
+		Action:     stateful.ActionDelete,
+		ResourceID: userID,
+	})
+	require.Equal(t, stateful.StatusSuccess, deleteResult.Status)
+
+	// 5. Confirm HTTP REST returns 404 for the deleted user
+	getResp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/users/%s", httpPort, userID))
+	require.NoError(t, err)
+	defer getResp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, getResp.StatusCode, "REST should return 404 after bridge delete")
+}
+
+func TestStateful_CrossProtocol_Bridge_Creates_REST_Retrieves(t *testing.T) {
+	// Reverse direction: create via Bridge (as SOAP would), retrieve via HTTP REST.
+	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
+		Name:     "products",
+		BasePath: "/api/products",
+	})
+
+	require.NoError(t, srv.Start(), "server should start")
+	defer srv.Stop()
+	waitForReady(t, srv.ManagementPort())
+
+	// 1. Create via Bridge (mimicking a SOAP CreateProduct operation)
+	bridge := srv.StatefulBridge()
+	require.NotNil(t, bridge)
+
+	createResult := bridge.Execute(t.Context(), &stateful.OperationRequest{
+		Resource: "products",
+		Action:   stateful.ActionCreate,
+		Data: map[string]interface{}{
+			"name":  "Widget",
+			"price": 9.99,
+		},
+	})
+	require.Equal(t, stateful.StatusCreated, createResult.Status)
+	require.NotNil(t, createResult.Item)
+	productID := createResult.Item.ID
+
+	// 2. Retrieve via HTTP REST — proves the shared store works bidirectionally
+	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/products/%s", httpPort, productID))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var product map[string]interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&product))
+	assert.Equal(t, "Widget", product["name"])
+	assert.Equal(t, 9.99, product["price"])
+	assert.Equal(t, productID, product["id"])
+
+	// 3. List via HTTP REST should include the bridge-created product
+	listResp, err := http.Get(fmt.Sprintf("http://localhost:%d/api/products", httpPort))
+	require.NoError(t, err)
+	defer listResp.Body.Close()
+	assert.Equal(t, http.StatusOK, listResp.StatusCode)
+
+	var listResult stateful.PaginatedResponse
+	require.NoError(t, json.NewDecoder(listResp.Body).Decode(&listResult))
+	assert.Equal(t, 1, listResult.Meta.Total)
+}

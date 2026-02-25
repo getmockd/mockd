@@ -222,6 +222,19 @@ func (s *StateStore) ResourceInfo(name string) (*ResourceInfo, error) {
 	return resource.Info(), nil
 }
 
+// ListConfigs returns the config for every registered resource.
+// Used by Export to serialize resource definitions back to config format.
+func (s *StateStore) ListConfigs() []*ResourceConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	configs := make([]*ResourceConfig, 0, len(s.resources))
+	for _, r := range s.resources {
+		configs = append(configs, r.Config())
+	}
+	return configs
+}
+
 // ClearResource removes all items from a specific resource (does not restore seed data).
 func (s *StateStore) ClearResource(name string) (int, error) {
 	s.mu.RLock()

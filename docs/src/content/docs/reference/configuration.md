@@ -34,6 +34,7 @@ mocks:
 
 serverConfig: { ... }       # Optional server settings
 statefulResources: [ ... ]  # Optional CRUD resources
+customOperations: [ ... ]   # Optional multi-step operations
 ```
 
 | Field | Type | Required | Description |
@@ -42,6 +43,7 @@ statefulResources: [ ... ]  # Optional CRUD resources
 | `mocks` | array | Yes | Mock definitions |
 | `serverConfig` | object | No | Server configuration |
 | `statefulResources` | array | No | Stateful CRUD resources |
+| `customOperations` | array | No | Multi-step custom operations with expression evaluation |
 
 ---
 
@@ -617,6 +619,66 @@ mocks:
 | `delay` | string | Response delay |
 | `match` | object | XPath-based request matching |
 | `fault` | object | SOAP fault response |
+| `statefulResource` | string | Name of stateful resource for CRUD operations |
+| `statefulAction` | string | CRUD action: `get`, `list`, `create`, `update`, `patch`, `delete`, `custom` |
+
+> **Note:** When `statefulResource` is set, the operation gets its response from the stateful resource — `response` and `fault` fields are not required. `statefulResource` and `statefulAction` must be set together.
+
+---
+
+## Custom Operations
+
+Custom operations compose reads, writes, and expression-evaluated transforms against stateful resources.
+
+```yaml
+version: "1.0"
+
+customOperations:
+  - name: TransferFunds
+    steps:
+      - type: read
+        resource: accounts
+        id: "input.sourceId"
+        as: source
+      - type: read
+        resource: accounts
+        id: "input.destId"
+        as: dest
+      - type: update
+        resource: accounts
+        id: "input.sourceId"
+        set:
+          balance: "source.balance - input.amount"
+      - type: update
+        resource: accounts
+        id: "input.destId"
+        set:
+          balance: "dest.balance + input.amount"
+    response:
+      status: '"completed"'
+```
+
+### Custom Operation Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Unique operation name |
+| `steps` | array | Yes | Ordered sequence of steps |
+| `response` | map | No | Field → expression map for building the result |
+
+### Step Config
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Step type: `read`, `create`, `update`, `delete`, `set` |
+| `resource` | string | Stateful resource name (for read/create/update/delete) |
+| `id` | string | Expression resolving to item ID (for read/update/delete) |
+| `as` | string | Variable name to store the result (for read/create) |
+| `set` | map | Field → expression map (for create/update) |
+| `var` | string | Variable name (for set steps) |
+| `value` | string | Expression value (for set steps) |
+
+Expressions use [expr-lang/expr](https://github.com/expr-lang/expr) syntax. The environment includes `input` (request data) and variables from prior steps.
 
 ---
 

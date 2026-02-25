@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Stateful Protocol Bridge** — SOAP operations can now read/write stateful CRUD resources that were previously HTTP-only. A REST `POST /api/users` creates a user that a SOAP `GetUser` can retrieve, and vice versa. All protocols share the same in-memory state store.
+- **SOAP stateful operations** — New `statefulResource` and `statefulAction` fields on SOAP operation configs wire operations directly to stateful resources with automatic XML↔map conversion and SOAP fault mapping
+- **Custom operations with `expr-lang/expr`** — Define multi-step operations that compose reads, writes, and expression-evaluated transforms against stateful resources (e.g., `TransferFunds` that debits one account and credits another atomically)
+- **WSDL import** — `mockd soap import <wsdl-file>` generates SOAP mock configs from WSDL 1.1 service definitions with `--stateful` flag for automatic CRUD heuristics; WSDL also supported via `mockd import service.wsdl`
+- **`customOperations` top-level config** — YAML/JSON configs can define custom operations with named step pipelines (`read`, `update`, `delete`, `create`, `set`) and response expression maps
+- **Cross-protocol state verification** — Integration tests proving REST↔Bridge (SOAP path) bidirectional state sharing
+- **WSDL format in admin API** — `GET /formats` now includes WSDL in supported import formats
+- **Config export completeness** — `Export()` now includes `statefulResources` and `customOperations` (previously only exported mocks)
+- **Config merge completeness** — `MergeProjectConfigs()` now merges `customOperations` by name
+
+### Fixed
+
+- **SOAP validation rejected stateful operations** — Validator required `response` or `fault` on every SOAP operation, blocking stateful-only operations that get their response from the stateful resource. Now accepts `statefulResource` as a valid alternative.
+- **Custom operations silently ignored** — `loadCollection()` parsed `customOperations` from config but never registered them on the stateful Bridge. They now wire through correctly.
+- **StatefulAction validation** — Added validation that `statefulAction` is a valid CRUD action and that `statefulResource` and `statefulAction` are set together (both or neither)
+
+### Dependencies
+
+- Added `github.com/expr-lang/expr` v1.17.8 for expression evaluation in custom operations (zero transitive dependencies, ~0.5MB)
+
 ## [0.4.0] - 2026-02-24
 
 ### Added

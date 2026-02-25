@@ -86,7 +86,8 @@ Supported Formats:
   postman    Postman Collection v2.x
   har        HTTP Archive (browser recordings)
   wiremock   WireMock JSON mappings
-  curl       cURL command`,
+  curl       cURL command
+  wsdl       WSDL 1.1 service definition (generates SOAP mocks)`,
 	Example: `  # Import from OpenAPI spec (auto-detected)
   mockd import openapi.yaml
 

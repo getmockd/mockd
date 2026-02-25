@@ -184,6 +184,64 @@ EXAMPLE
           </ListUsersResponse>
         delay: 100ms
 
+STATEFUL OPERATIONS
+-------------------
+
+  SOAP operations can be wired to stateful CRUD resources, enabling shared
+  state between REST and SOAP. A POST /api/users via REST creates a user
+  that a SOAP GetUser can retrieve — and vice versa.
+
+  Operation fields for stateful mode:
+
+    statefulResource   Name of the stateful resource (e.g., "users")
+    statefulAction     CRUD action: get, list, create, update, patch, delete, custom
+
+  Example stateful SOAP operations:
+
+    operations:
+      GetUser:
+        soapAction: "http://example.com/GetUser"
+        statefulResource: users
+        statefulAction: get
+
+      ListUsers:
+        soapAction: "http://example.com/ListUsers"
+        statefulResource: users
+        statefulAction: list
+
+      CreateUser:
+        soapAction: "http://example.com/CreateUser"
+        statefulResource: users
+        statefulAction: create
+
+      DeleteUser:
+        soapAction: "http://example.com/DeleteUser"
+        statefulResource: users
+        statefulAction: delete
+
+  Stateful operations automatically:
+    • Extract data from SOAP XML request bodies
+    • Route to the shared stateful resource (same data as REST)
+    • Return SOAP XML responses with proper envelopes
+    • Map errors to SOAP faults (e.g., 404 → soap:Client)
+
+WSDL IMPORT
+-----------
+
+  Generate SOAP mock configurations from existing WSDL files:
+
+    mockd soap import service.wsdl
+    mockd soap import service.wsdl --stateful
+    mockd soap import service.wsdl -o mocks.yaml
+    mockd soap import service.wsdl --format json
+
+  The --stateful flag enables intelligent heuristics that detect CRUD
+  operations and wire them to stateful resources automatically.
+
+  WSDL files can also be imported via the general import command:
+
+    mockd import service.wsdl
+
 SEE ALSO
 --------
 

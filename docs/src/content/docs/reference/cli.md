@@ -833,6 +833,41 @@ mockd soap add --operation GetWeather --soap-action "http://example.com/GetWeath
 
 ---
 
+### mockd soap import
+
+Generate SOAP mock configurations from a WSDL file.
+
+```bash
+mockd soap import <wsdl-file> [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--stateful` | | Enable stateful CRUD heuristics | `false` |
+| `--output` | `-o` | Output file path | stdout |
+| `--format` | `-f` | Output format (yaml/json) | `yaml` |
+
+**Examples:**
+```bash
+# Generate static SOAP mocks from WSDL
+mockd soap import service.wsdl
+
+# Generate stateful mocks (auto-detects CRUD operations)
+mockd soap import service.wsdl --stateful
+
+# Save to a file
+mockd soap import service.wsdl --stateful -o soap-mocks.yaml
+
+# Output as JSON
+mockd soap import service.wsdl --format json
+```
+
+When `--stateful` is enabled, the importer detects CRUD patterns in operation names (Get, List, Create, Update, Delete) and generates both `statefulResources` definitions and SOAP operations pre-wired with `statefulResource`/`statefulAction` fields.
+
+---
+
 ### mockd soap validate
 
 Validate a WSDL file against standard schema rules.
@@ -1160,6 +1195,7 @@ mockd import <source> [flags]
 | `har` | HTTP Archive (browser recordings) |
 | `wiremock` | WireMock JSON mappings |
 | `curl` | cURL command |
+| `wsdl` | WSDL 1.1 service definition (generates SOAP mocks) |
 
 **Examples:**
 

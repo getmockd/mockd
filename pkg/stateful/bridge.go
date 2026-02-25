@@ -119,6 +119,20 @@ func (b *Bridge) GetCustomOperation(name string) *CustomOperation {
 	return b.customOps[name]
 }
 
+// ListCustomOperations returns all registered custom operations as a name→operation map.
+// Used by Export to serialize custom operation definitions back to config format.
+func (b *Bridge) ListCustomOperations() map[string]*CustomOperation {
+	if len(b.customOps) == 0 {
+		return nil
+	}
+	// Return a copy to prevent external mutation
+	result := make(map[string]*CustomOperation, len(b.customOps))
+	for name, op := range b.customOps {
+		result[name] = op
+	}
+	return result
+}
+
 // Execute performs a CRUD operation on a stateful resource.
 // This is the single entry point for all protocol adapters.
 //

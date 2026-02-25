@@ -945,8 +945,203 @@ mockd start -d --config soap-mocks.yaml
 mockd stop
 ```
 
+## Stateful SOAP Operations
+
+SOAP operations can be wired to stateful CRUD resources, enabling shared state between REST and SOAP protocols. A REST `POST /api/users` creates a user that a SOAP `GetUser` can retrieve — and vice versa.
+
+### Configuration
+
+Add `statefulResource` and `statefulAction` to any SOAP operation:
+
+```yaml
+version: "1.0"
+
+statefulResources:
+  - name: users
+    basePath: /api/users
+    seedData:
+      - { id: "1", name: "Alice", email: "alice@example.com" }
+
+mocks:
+  - type: soap
+    name: User SOAP Service
+    soap:
+      path: /soap/UserService
+      operations:
+        GetUser:
+          soapAction: "http://example.com/GetUser"
+          statefulResource: users
+          statefulAction: get
+
+        ListUsers:
+          soapAction: "http://example.com/ListUsers"
+          statefulResource: users
+          statefulAction: list
+
+        CreateUser:
+          soapAction: "http://example.com/CreateUser"
+          statefulResource: users
+          statefulAction: create
+
+        UpdateUser:
+          soapAction: "http://example.com/UpdateUser"
+          statefulResource: users
+          statefulAction: update
+
+        DeleteUser:
+          soapAction: "http://example.com/DeleteUser"
+          statefulResource: users
+          statefulAction: delete
+```
+
+### Supported Actions
+
+| Action | Description | Request Data | Response |
+|--------|-------------|--------------|----------|
+| `get` | Retrieve single item | ID extracted from XML | Item as XML |
+| `list` | List all items | Optional filters | Items wrapped in XML |
+| `create` | Create new item | Fields from XML body | Created item as XML |
+| `update` | Replace item (PUT) | ID + fields from XML | Updated item as XML |
+| `patch` | Partial update | ID + partial fields | Updated item as XML |
+| `delete` | Remove item | ID extracted from XML | Empty response |
+| `custom` | Multi-step operation | Defined by steps | Expression-built response |
+
+### How It Works
+
+1. SOAP request arrives and is routed to the matching operation
+2. XML body is parsed and converted to a `map[string]interface{}`
+3. The stateful Bridge executes the CRUD action against the shared store
+4. The result is converted back to XML and wrapped in a SOAP envelope
+5. Errors map to SOAP faults (e.g., not-found → `soap:Client`)
+
+### Cross-Protocol State Sharing
+
+The key insight: stateful resources are **protocol-agnostic**. The same in-memory store backs both HTTP REST and SOAP:
+
+```bash
+# Create via REST
+curl -X POST http://localhost:4280/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Alice"}'
+# → {"id": "abc-123", "name": "Alice", ...}
+
+# Retrieve the same user via SOAP
+curl -X POST http://localhost:4280/soap/UserService \
+  -H "SOAPAction: http://example.com/GetUser" \
+  -H "Content-Type: text/xml" \
+  -d '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+        <soap:Body><GetUser><Id>abc-123</Id></GetUser></soap:Body>
+      </soap:Envelope>'
+# → SOAP envelope with user data
+```
+
+## WSDL Import
+
+Generate SOAP mock configurations from existing WSDL files.
+
+### Using the SOAP Import Command
+
+```bash
+# Basic import — generates static response mocks
+mockd soap import service.wsdl
+
+# Stateful import — detects CRUD operations and wires to stateful resources
+mockd soap import service.wsdl --stateful
+
+# Output to a specific file
+mockd soap import service.wsdl -o mocks.yaml
+
+# Output as JSON
+mockd soap import service.wsdl --format json
+```
+
+### Using the General Import Command
+
+WSDL files are auto-detected by the general import command:
+
+```bash
+mockd import service.wsdl
+```
+
+### Stateful Heuristics
+
+With the `--stateful` flag, the importer detects CRUD patterns in operation names:
+
+| Pattern | Detected Action |
+|---------|----------------|
+| `GetUser`, `FindOrder` | `get` |
+| `ListUsers`, `SearchOrders` | `list` |
+| `CreateUser`, `AddOrder` | `create` |
+| `UpdateUser`, `ModifyOrder` | `update` |
+| `DeleteUser`, `RemoveOrder` | `delete` |
+
+The importer generates both the `statefulResources` definitions and the SOAP operations with `statefulResource`/`statefulAction` fields pre-filled.
+
+## Custom Operations
+
+Custom operations compose multiple reads, writes, and expression-evaluated transforms against stateful resources. This enables complex mock scenarios like fund transfers.
+
+### Configuration
+
+```yaml
+customOperations:
+  - name: TransferFunds
+    steps:
+      - type: read
+        resource: accounts
+        id: "input.sourceId"
+        as: source
+      - type: read
+        resource: accounts
+        id: "input.destId"
+        as: dest
+      - type: update
+        resource: accounts
+        id: "input.sourceId"
+        set:
+          balance: "source.balance - input.amount"
+      - type: update
+        resource: accounts
+        id: "input.destId"
+        set:
+          balance: "dest.balance + input.amount"
+    response:
+      status: '"completed"'
+      newSourceBalance: "source.balance - input.amount"
+      newDestBalance: "dest.balance + input.amount"
+```
+
+### Referencing from SOAP
+
+```yaml
+operations:
+  TransferFunds:
+    soapAction: "http://example.com/TransferFunds"
+    statefulResource: TransferFunds   # Name of the custom operation
+    statefulAction: custom
+```
+
+### Step Types
+
+| Step | Description |
+|------|-------------|
+| `read` | Read an item from a resource, store in a named variable |
+| `create` | Create a new item in a resource |
+| `update` | Update an item using expression-evaluated fields |
+| `delete` | Delete an item from a resource |
+| `set` | Set a context variable to an expression result |
+
+### Expression Language
+
+Custom operations use [expr-lang/expr](https://github.com/expr-lang/expr) for expressions. The environment includes:
+
+- `input` — the request data (parsed from SOAP XML, GraphQL variables, etc.)
+- Named variables from prior `read` steps (e.g., `source.balance`)
+- All Go arithmetic, comparison, and string operators
+
 ## Next Steps
 
+- [Stateful Mocking](/guides/stateful-mocking/) - Complete stateful resource guide
 - [Response Templating](/guides/response-templating/) - Dynamic response values
 - [Import/Export](/guides/import-export/) - Import existing SOAP mocks
 - [Chaos Engineering](/guides/chaos-engineering/) - Simulate failures

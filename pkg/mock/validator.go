@@ -590,11 +590,45 @@ func (m *Mock) validateSOAP() error {
 	}
 
 	// Validate operations if present
+	validStatefulActions := map[string]bool{
+		"get": true, "list": true, "create": true,
+		"update": true, "patch": true, "delete": true, "custom": true,
+	}
+
 	for name, op := range m.SOAP.Operations {
-		if op.Response == "" && op.Fault == nil {
+		isStateful := op.StatefulResource != ""
+		hasAction := op.StatefulAction != ""
+
+		// Check for orphaned statefulAction (action without resource)
+		if !isStateful && hasAction {
+			return &ValidationError{
+				Field:   "soap.operations." + name + ".statefulAction",
+				Message: "statefulAction requires statefulResource to be set",
+			}
+		}
+
+		// Validate stateful operation fields
+		if isStateful {
+			if !hasAction {
+				return &ValidationError{
+					Field:   "soap.operations." + name + ".statefulAction",
+					Message: "statefulAction is required when statefulResource is set",
+				}
+			}
+			if !validStatefulActions[op.StatefulAction] {
+				return &ValidationError{
+					Field:   "soap.operations." + name + ".statefulAction",
+					Message: "statefulAction must be one of: get, list, create, update, patch, delete, custom",
+				}
+			}
+		}
+
+		// Non-stateful operations must have either a static response or fault.
+		// Stateful operations get their response from the stateful resource.
+		if !isStateful && op.Response == "" && op.Fault == nil {
 			return &ValidationError{
 				Field:   "soap.operations." + name,
-				Message: "operation must have either response or fault",
+				Message: "operation must have either response, fault, or statefulResource",
 			}
 		}
 	}

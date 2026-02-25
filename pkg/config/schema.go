@@ -588,6 +588,7 @@ func MergeProjectConfigs(configs ...*ProjectConfig) *ProjectConfig {
 		Workspaces:        []WorkspaceConfig{},
 		Mocks:             []MockEntry{},
 		StatefulResources: []StatefulResourceConfig{},
+		CustomOperations:  []CustomOperationConfig{},
 	}
 
 	for _, cfg := range configs {
@@ -614,6 +615,9 @@ func MergeProjectConfigs(configs ...*ProjectConfig) *ProjectConfig {
 
 		// Merge stateful resources by name
 		result.StatefulResources = mergeStatefulResources(result.StatefulResources, cfg.StatefulResources)
+
+		// Merge custom operations by name
+		result.CustomOperations = mergeCustomOperations(result.CustomOperations, cfg.CustomOperations)
 	}
 
 	return result
@@ -801,6 +805,26 @@ func mergeStatefulResource(base, overlay StatefulResourceConfig) StatefulResourc
 	if overlay.Validation != nil {
 		base.Validation = overlay.Validation
 	}
+	return base
+}
+
+// mergeCustomOperations merges custom operation configs by name. Overlay replaces base.
+func mergeCustomOperations(base, overlay []CustomOperationConfig) []CustomOperationConfig {
+	byName := make(map[string]int)
+	for i, op := range base {
+		byName[op.Name] = i
+	}
+
+	for _, op := range overlay {
+		if idx, exists := byName[op.Name]; exists {
+			// Overlay replaces the entire operation (steps + response)
+			base[idx] = op
+		} else {
+			base = append(base, op)
+			byName[op.Name] = len(base) - 1
+		}
+	}
+
 	return base
 }
 

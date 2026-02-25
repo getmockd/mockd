@@ -10,6 +10,7 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/graphql"
 	"github.com/getmockd/mockd/pkg/logging"
+	"github.com/getmockd/mockd/pkg/stateful"
 	"github.com/getmockd/mockd/pkg/store"
 )
 
@@ -144,6 +145,20 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 		}
 	}
 
+	// Load custom operations and register them on the stateful bridge.
+	// Custom operations compose reads, writes, and expression-evaluated transforms
+	// against stateful resources (e.g., TransferFunds).
+	if cl.server.statefulBridge != nil {
+		for _, opCfg := range collection.CustomOperations {
+			if opCfg == nil {
+				continue
+			}
+			customOp := convertCustomOperation(opCfg)
+			cl.server.statefulBridge.RegisterCustomOperation(opCfg.Name, customOp)
+			cl.log.Info("registered custom operation", "name", opCfg.Name, "steps", len(opCfg.Steps))
+		}
+	}
+
 	// Load WebSocket endpoints
 	for _, ws := range collection.WebSocketEndpoints {
 		if ws != nil {
@@ -219,14 +234,51 @@ func (cl *ConfigLoader) SaveToFile(path string, name string) error {
 
 // Export exports the current configuration as a MockCollection.
 // All protocol types (HTTP, WebSocket, GraphQL, gRPC, MQTT, SOAP, OAuth)
-// are included in the export.
+// are included in the export, along with stateful resources and custom operations.
 func (cl *ConfigLoader) Export(name string) *config.MockCollection {
 	mocks := cl.server.Store().List()
-	return &config.MockCollection{
+	collection := &config.MockCollection{
 		Version: "1.0",
 		Name:    name,
 		Mocks:   mocks,
 	}
+
+	// Include stateful resource definitions
+	if cl.server.statefulStore != nil {
+		resources := cl.server.statefulStore.ListConfigs()
+		if len(resources) > 0 {
+			collection.StatefulResources = resources
+		}
+	}
+
+	// Include custom operation definitions
+	if cl.server.statefulBridge != nil {
+		customOps := cl.server.statefulBridge.ListCustomOperations()
+		if len(customOps) > 0 {
+			configs := make([]*config.CustomOperationConfig, 0, len(customOps))
+			for name, op := range customOps {
+				cfg := &config.CustomOperationConfig{
+					Name:     name,
+					Response: op.Response,
+				}
+				for _, s := range op.Steps {
+					cfg.Steps = append(cfg.Steps, config.CustomStepConfig{
+						Type:     string(s.Type),
+						Resource: s.Resource,
+						ID:       s.ID,
+						As:       s.As,
+						Set:      s.Set,
+						Var:      s.Var,
+						Value:    s.Value,
+					})
+				}
+				configs = append(configs, cfg)
+			}
+			collection.CustomOperations = configs
+		}
+	}
+
+	return collection
 }
 
 // Import imports a MockCollection, optionally replacing existing mocks.
@@ -271,6 +323,17 @@ func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) 
 				}
 				return fmt.Errorf("failed to register stateful resource %s: %w", res.Name, err)
 			}
+		}
+	}
+
+	// Import custom operations
+	if cl.server.statefulBridge != nil {
+		for _, opCfg := range collection.CustomOperations {
+			if opCfg == nil {
+				continue
+			}
+			customOp := convertCustomOperation(opCfg)
+			cl.server.statefulBridge.RegisterCustomOperation(opCfg.Name, customOp)
 		}
 	}
 
@@ -329,4 +392,25 @@ func (cl *ConfigLoader) mergeServerConfig(src *config.ServerConfiguration) {
 // registerStatefulResource registers a stateful resource from config.
 func (cl *ConfigLoader) registerStatefulResource(cfg *config.StatefulResourceConfig) error {
 	return cl.server.statefulStore.Register(cfg)
+}
+
+// convertCustomOperation converts a config.CustomOperationConfig to a stateful.CustomOperation.
+func convertCustomOperation(cfg *config.CustomOperationConfig) *stateful.CustomOperation {
+	steps := make([]stateful.Step, 0, len(cfg.Steps))
+	for _, s := range cfg.Steps {
+		steps = append(steps, stateful.Step{
+			Type:     stateful.StepType(s.Type),
+			Resource: s.Resource,
+			ID:       s.ID,
+			As:       s.As,
+			Set:      s.Set,
+			Var:      s.Var,
+			Value:    s.Value,
+		})
+	}
+	return &stateful.CustomOperation{
+		Name:     cfg.Name,
+		Steps:    steps,
+		Response: cfg.Response,
+	}
 }

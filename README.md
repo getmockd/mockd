@@ -107,6 +107,7 @@ mockd import openapi.yaml           # OpenAPI 3.x / Swagger 2.0
 mockd import collection.json        # Postman collections
 mockd import recording.har          # HAR files
 mockd import wiremock-mapping.json  # WireMock stubs
+mockd import service.wsdl           # WSDL → SOAP mocks
 mockd import "curl -X GET https://api.example.com/users"  # cURL commands
 mockd export --format yaml > mocks.yaml
 ```
@@ -130,7 +131,7 @@ mockd chaos enable --latency 500ms --error-rate 0.1 --error-code 503
 
 ### Stateful Mocking
 
-Simulate CRUD resources with automatic ID generation, pagination, and persistence:
+Simulate CRUD resources with automatic ID generation, pagination, and persistence. State is shared across protocols — REST and SOAP operate on the same data:
 
 ```yaml
 # mockd.yaml
@@ -139,15 +140,28 @@ statefulResources:
     basePath: /api/users
     seedData:
       - { id: "1", name: "Alice", email: "alice@example.com" }
+
+mocks:
+  - type: soap
+    soap:
+      path: /soap/UserService
+      operations:
+        GetUser:
+          statefulResource: users    # Same data as REST!
+          statefulAction: get
 ```
 
 ```bash
 mockd serve --config mockd.yaml
 
-# POST creates, GET lists, GET /:id reads, PUT updates, DELETE removes
+# Create via REST
 curl -X POST http://localhost:4280/api/users \
   -d '{"name": "Bob"}' -H 'Content-Type: application/json'
-# → {"id": "2", "name": "Bob", "createdAt": "..."}
+
+# Retrieve via SOAP — same user!
+curl -X POST http://localhost:4280/soap/UserService \
+  -H 'SOAPAction: GetUser' -H 'Content-Type: text/xml' \
+  -d '<soap:Envelope>...<GetUser><Id>...</Id></GetUser>...</soap:Envelope>'
 ```
 
 ### Proxy Recording

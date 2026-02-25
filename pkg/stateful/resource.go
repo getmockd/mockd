@@ -479,3 +479,30 @@ func (r *StatefulResource) GetValidationMode() string {
 	}
 	return r.validator.GetMode()
 }
+
+// Config reconstructs the ResourceConfig from the resource's current settings.
+// This is used by Export to serialize the resource definition back to config format.
+// Note: seed data reflects the original config, not current runtime state.
+func (r *StatefulResource) Config() *ResourceConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cfg := &ResourceConfig{
+		Name:     r.name,
+		BasePath: r.basePath,
+		MaxItems: r.maxItems,
+	}
+	// Only include non-default idField
+	if r.idField != "id" {
+		cfg.IDField = r.idField
+	}
+	if r.parentField != "" {
+		cfg.ParentField = r.parentField
+	}
+	if len(r.seedData) > 0 {
+		cfg.SeedData = r.seedData
+	}
+	if r.validationConfig != nil {
+		cfg.Validation = r.validationConfig
+	}
+	return cfg
+}

@@ -12,6 +12,7 @@ IMPORT FORMATS
   har        HTTP Archive (browser recordings)
   wiremock   WireMock JSON mappings
   curl       cURL commands
+  wsdl       WSDL 1.1 service definition (generates SOAP mocks)
 
 EXAMPLES
 --------

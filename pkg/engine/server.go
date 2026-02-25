@@ -65,6 +65,7 @@ type Server struct {
 	cfg             *config.ServerConfiguration
 	persistentStore store.Store // Optional persistent storage backend
 	statefulStore   *stateful.StateStore
+	statefulBridge  *stateful.Bridge
 	requestLogger   RequestLogger // For request history (user-facing)
 	log             *slog.Logger  // For operational logging (developer-facing)
 	httpServer      *http.Server
@@ -169,7 +170,8 @@ func NewServer(cfg *config.ServerConfiguration, opts ...ServerOption) *Server {
 	pm := NewProtocolManager()
 	pm.SetRequestLogger(logger)
 
-	// Create stateful bridge and wire into protocol manager for SOAP support
+	// Create stateful bridge and wire into protocol manager for SOAP support.
+	// The bridge is stored on the server so ConfigLoader can register custom operations.
 	bridge := stateful.NewBridge(statefulStore)
 	pm.SetSOAPStatefulExecutor(newSOAPStatefulAdapter(bridge))
 
@@ -177,6 +179,7 @@ func NewServer(cfg *config.ServerConfiguration, opts ...ServerOption) *Server {
 
 	// Set remaining server fields
 	s.statefulStore = statefulStore
+	s.statefulBridge = bridge
 	s.requestLogger = logger
 	s.handler = handler
 	s.protocolRegistry = pm.Registry()
@@ -534,6 +537,13 @@ func (s *Server) ManagementPort() int {
 // Store returns the mock store (for admin API use).
 func (s *Server) Store() storage.MockStore {
 	return s.mockManager.Store()
+}
+
+// StatefulBridge returns the stateful bridge for cross-protocol state sharing.
+// Protocol handlers (SOAP, GraphQL, gRPC, etc.) use the bridge to perform
+// CRUD operations on the same stateful resources as HTTP REST.
+func (s *Server) StatefulBridge() *stateful.Bridge {
+	return s.statefulBridge
 }
 
 // SaveConfig saves the current mock configurations to a file.

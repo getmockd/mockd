@@ -2088,7 +2088,7 @@ func TestMock_Validate_SOAP(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "operation must have either response or fault",
+			errSubstr: "operation must have either response, fault, or statefulResource",
 		},
 		{
 			name: "multiple operations mixed valid and invalid",
@@ -2104,7 +2104,76 @@ func TestMock_Validate_SOAP(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "operation must have either response or fault",
+			errSubstr: "operation must have either response, fault, or statefulResource",
+		},
+		{
+			name: "stateful operation is valid without response",
+			mock: Mock{
+				ID:   "soap-stateful",
+				Type: TypeSOAP,
+				SOAP: &SOAPSpec{
+					Path: "/soap/service",
+					Operations: map[string]OperationConfig{
+						"GetUser": {
+							StatefulResource: "users",
+							StatefulAction:   "get",
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "stateful operation missing action",
+			mock: Mock{
+				ID:   "soap-stateful-noaction",
+				Type: TypeSOAP,
+				SOAP: &SOAPSpec{
+					Path: "/soap/service",
+					Operations: map[string]OperationConfig{
+						"GetUser": {
+							StatefulResource: "users",
+						},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "statefulAction is required when statefulResource is set",
+		},
+		{
+			name: "stateful operation invalid action",
+			mock: Mock{
+				ID:   "soap-stateful-badaction",
+				Type: TypeSOAP,
+				SOAP: &SOAPSpec{
+					Path: "/soap/service",
+					Operations: map[string]OperationConfig{
+						"GetUser": {
+							StatefulResource: "users",
+							StatefulAction:   "bogus",
+						},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "statefulAction must be one of",
+		},
+		{
+			name: "stateful action without resource",
+			mock: Mock{
+				ID:   "soap-action-noresource",
+				Type: TypeSOAP,
+				SOAP: &SOAPSpec{
+					Path: "/soap/service",
+					Operations: map[string]OperationConfig{
+						"GetUser": {
+							StatefulAction: "get",
+						},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "statefulAction requires statefulResource",
 		},
 	}
 
