@@ -462,6 +462,51 @@ func resolveFaker(fakerType string) string {
 			"System status nominal.",
 		}
 		return sentences[mathrand.IntN(len(sentences))]
+
+	// --- Internet ---
+	case "ipv4":
+		return fakerIPv4()
+	case "ipv6":
+		return fakerIPv6()
+	case "mac_address":
+		return fakerMACAddress()
+	case "user_agent":
+		return fakerUserAgents[mathrand.IntN(len(fakerUserAgents))]
+
+	// --- Finance ---
+	case "credit_card":
+		return fakerCreditCard()
+	case "currency_code":
+		return fakerCurrencyCodes[mathrand.IntN(len(fakerCurrencyCodes))]
+	case "iban":
+		return fakerIBAN()
+
+	// --- Commerce ---
+	case "price":
+		return fakerPrice()
+	case "product_name":
+		return fakerProductAdjectives[mathrand.IntN(len(fakerProductAdjectives))] + " " +
+			fakerProductMaterials[mathrand.IntN(len(fakerProductMaterials))] + " " +
+			fakerProductNouns[mathrand.IntN(len(fakerProductNouns))]
+	case "color":
+		return fakerColors[mathrand.IntN(len(fakerColors))]
+
+	// --- Identity ---
+	case "ssn":
+		return fakerSSN()
+	case "passport":
+		return fakerPassport()
+	case "job_title":
+		return fakerJobLevels[mathrand.IntN(len(fakerJobLevels))] + " " +
+			fakerJobFields[mathrand.IntN(len(fakerJobFields))] + " " +
+			fakerJobRoles[mathrand.IntN(len(fakerJobRoles))]
+
+	// --- Data ---
+	case "mime_type":
+		return fakerMIMETypes[mathrand.IntN(len(fakerMIMETypes))]
+	case "file_extension":
+		return fakerFileExtensions[mathrand.IntN(len(fakerFileExtensions))]
+
 	default:
 		return ""
 	}
