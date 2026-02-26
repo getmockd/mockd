@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 // handleGetMockVerification handles GET /mocks/{id}/verify.
@@ -23,15 +24,16 @@ func (a *API) handleGetMockVerification(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Check if mock exists
-	_, err := engine.GetMock(ctx, id)
-	if err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+	// Check if mock exists in the admin store (single source of truth).
+	if mockStore := a.getMockStore(); mockStore != nil {
+		if _, err := mockStore.Get(ctx, id); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get mock for verification"))
-		return
 	}
 
 	// Get invocations for this mock from request logs
@@ -75,15 +77,16 @@ func (a *API) handleVerifyMock(w http.ResponseWriter, r *http.Request, engine *e
 		return
 	}
 
-	// Check if mock exists
-	_, err := engine.GetMock(ctx, id)
-	if err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+	// Check if mock exists in the admin store (single source of truth).
+	if mockStore := a.getMockStore(); mockStore != nil {
+		if _, err := mockStore.Get(ctx, id); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get mock for verify"))
-		return
 	}
 
 	var req VerifyRequest
@@ -196,15 +199,16 @@ func (a *API) handleListMockInvocations(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Check if mock exists
-	_, err := engine.GetMock(ctx, id)
-	if err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+	// Check if mock exists in the admin store (single source of truth).
+	if mockStore := a.getMockStore(); mockStore != nil {
+		if _, err := mockStore.Get(ctx, id); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get mock for invocations"))
-		return
 	}
 
 	// Parse pagination parameters
@@ -277,15 +281,16 @@ func (a *API) handleResetMockVerification(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Verify mock exists
-	_, err := engine.GetMock(ctx, id)
-	if err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+	// Verify mock exists in the admin store (single source of truth).
+	if mockStore := a.getMockStore(); mockStore != nil {
+		if _, err := mockStore.Get(ctx, id); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get mock for reset verification"))
-		return
 	}
 
 	count, err := engine.ClearRequestsByMockID(ctx, id)

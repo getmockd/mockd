@@ -463,6 +463,62 @@ func (a *API) ImportConfigDirect(ctx context.Context, collection *config.MockCol
 	return importResult.Imported, nil
 }
 
+// MockCreatorFunc creates a mock through the admin dual-write path: store first,
+// then push to engine. Recording/stream conversion handlers use this instead of
+// calling engine.CreateMock directly, so every mock they produce is visible to
+// list/get/delete/toggle via the admin store.
+type MockCreatorFunc func(ctx context.Context, m *config.MockConfiguration) (*config.MockConfiguration, error)
+
+// mockCreator returns a MockCreatorFunc that dual-writes to the admin store and
+// engine. Callers in the recording subsystem use this so converted recordings
+// are immediately visible in the admin store.
+func (a *API) mockCreator() MockCreatorFunc {
+	return func(ctx context.Context, m *config.MockConfiguration) (*config.MockConfiguration, error) {
+		mockStore := a.getMockStore()
+
+		// Ensure required fields.
+		now := time.Now()
+		if m.ID == "" {
+			m.ID = generateMockID(m.Type)
+		}
+		if m.WorkspaceID == "" {
+			m.WorkspaceID = store.DefaultWorkspaceID
+		}
+		if m.CreatedAt.IsZero() {
+			m.CreatedAt = now
+		}
+		m.UpdatedAt = now
+
+		// 1. Write to the admin store (single source of truth).
+		if mockStore != nil {
+			if err := mockStore.Create(ctx, m); err != nil {
+				if errors.Is(err, store.ErrAlreadyExists) {
+					// Overwrite — the caller built a new mock from a recording.
+					_ = mockStore.Update(ctx, m)
+				} else {
+					return nil, fmt.Errorf("store create failed: %w", err)
+				}
+			}
+		}
+
+		// 2. Push to the engine so it starts serving the mock.
+		if engine := a.localEngine.Load(); engine != nil {
+			created, err := engine.CreateMock(ctx, m)
+			if err != nil {
+				// Rollback store on engine failure.
+				if mockStore != nil {
+					_ = mockStore.Delete(ctx, m.ID)
+				}
+				return nil, fmt.Errorf("engine create failed: %w", err)
+			}
+			return created, nil
+		}
+
+		// No engine — store-only is fine; engine will sync on reconnect.
+		return m, nil
+	}
+}
+
 // handleListRequests handles GET /requests.
 // Supports filtering by protocol, method, path, and protocol-specific fields.
 //

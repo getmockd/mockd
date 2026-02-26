@@ -7,7 +7,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/recording"
 )
@@ -150,7 +149,7 @@ func (pm *ProxyManager) handleDeleteRecording(w http.ResponseWriter, r *http.Req
 }
 
 // handleConvertRecordings handles POST /recordings/convert.
-func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.Request, client *engineclient.Client) {
+func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.Request, createMock MockCreatorFunc) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
@@ -197,14 +196,12 @@ func (pm *ProxyManager) handleConvertRecordings(w http.ResponseWriter, r *http.R
 	}
 	mocks := recording.ToMocks(recordings, opts)
 
-	// Add mocks to engine via HTTP client
+	// Add mocks via dual-write path (store + engine)
 	mockIDs := make([]string, 0, len(mocks))
 	ctx := r.Context()
 	for _, mock := range mocks {
-		if client != nil {
-			if _, err := client.CreateMock(ctx, mock); err != nil {
-				continue // skip failed mocks
-			}
+		if _, err := createMock(ctx, mock); err != nil {
+			continue // skip failed mocks
 		}
 		mockIDs = append(mockIDs, mock.ID)
 	}
@@ -287,7 +284,7 @@ type SingleConvertResponse struct {
 }
 
 // handleConvertSingleRecording handles POST /recordings/{id}/to-mock.
-func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *http.Request, client *engineclient.Client) {
+func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *http.Request, createMock MockCreatorFunc) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
@@ -331,15 +328,11 @@ func (pm *ProxyManager) handleConvertSingleRecording(w http.ResponseWriter, r *h
 		mock.HTTP.Matcher.Path = recording.SmartPathMatcher(mock.HTTP.Matcher.Path)
 	}
 
-	// Check if we should add to engine (from JSON body or query param)
+	// Check if we should add to server (from JSON body or query param)
 	addToServer := shouldAddToServer(req.AddToServer, r.URL.Query().Get("add"))
-	if addToServer && client == nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
-		return
-	}
 	if addToServer {
-		if _, err := client.CreateMock(r.Context(), mock); err != nil {
-			pm.log.Error("failed to add mock to engine", "error", err)
+		if _, err := createMock(r.Context(), mock); err != nil {
+			pm.log.Error("failed to add mock", "error", err)
 			status, code, msg := mapCreateMockAddError(err, pm.log, "add converted recording mock")
 			writeError(w, status, code, msg)
 			return
@@ -383,7 +376,7 @@ type SessionConvertResponse struct {
 }
 
 // handleConvertSession handles POST /recordings/sessions/{id}/to-mocks.
-func (pm *ProxyManager) handleConvertSession(w http.ResponseWriter, r *http.Request, client *engineclient.Client) {
+func (pm *ProxyManager) handleConvertSession(w http.ResponseWriter, r *http.Request, createMock MockCreatorFunc) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
@@ -423,10 +416,6 @@ func (pm *ProxyManager) handleConvertSession(w http.ResponseWriter, r *http.Requ
 		writeJSONDecodeError(w, err, pm.log)
 		return
 	}
-	if req.AddToServer && client == nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
-		return
-	}
 
 	// Build filter options
 	statusCodes, statusRange := recording.ParseStatusFilter(req.StatusFilter)
@@ -453,15 +442,15 @@ func (pm *ProxyManager) handleConvertSession(w http.ResponseWriter, r *http.Requ
 	// Convert with options
 	result := recording.ConvertSessionWithOptions(session, opts)
 
-	// Add to server if requested
+	// Add to server if requested via dual-write (store + engine)
 	addedCount := 0
 	mockIDs := make([]string, 0, len(result.Mocks))
 
 	ctx := r.Context()
 	for _, mock := range result.Mocks {
 		mockIDs = append(mockIDs, mock.ID)
-		if req.AddToServer && client != nil {
-			if _, err := client.CreateMock(ctx, mock); err == nil {
+		if req.AddToServer {
+			if _, err := createMock(ctx, mock); err == nil {
 				addedCount++
 			}
 		}

@@ -319,28 +319,13 @@ func (a *API) handleReloadWorkspaceServer(w http.ResponseWriter, r *http.Request
 }
 
 // fetchMocksForWorkspace is the mock fetcher function used by the workspace manager.
-// It fetches mocks from the engine via HTTP client filtered by workspace ID.
+// It queries the admin data store (single source of truth) filtered by workspace ID.
 func (a *API) fetchMocksForWorkspace(ctx context.Context, workspaceID string) ([]*config.MockConfiguration, error) {
-	// Get mocks from the engine via HTTP client
-	engine := a.localEngine.Load()
-	if engine == nil {
+	if a.dataStore == nil {
 		return nil, nil
 	}
 
-	allMocks, err := engine.ListMocks(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Filter by workspace ID
-	var filtered []*config.MockConfiguration
-	for _, mock := range allMocks {
-		if mock != nil && mock.WorkspaceID == workspaceID {
-			filtered = append(filtered, mock)
-		}
-	}
-
-	return filtered, nil
+	return a.dataStore.Mocks().List(ctx, &store.MockFilter{WorkspaceID: workspaceID})
 }
 
 // ListWorkspaceServers returns all running workspace servers.

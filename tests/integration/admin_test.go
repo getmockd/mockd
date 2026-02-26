@@ -22,6 +22,23 @@ import (
 
 func boolPtr(b bool) *bool { return &b }
 
+// createMockViaAdmin creates a mock through the admin API (POST /mocks).
+// Tests must always go through admin — the admin store is the source of truth.
+func createMockViaAdmin(t *testing.T, adminPort int, m *config.MockConfiguration) {
+	t.Helper()
+	body, err := json.Marshal(m)
+	require.NoError(t, err)
+
+	resp, err := http.Post(
+		fmt.Sprintf("http://localhost:%d/mocks", adminPort),
+		"application/json",
+		bytes.NewReader(body),
+	)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode, "failed to create mock via admin: %s", m.ID)
+}
+
 // setupAdminTest creates a server with admin API for testing
 func setupAdminTest(t *testing.T) (*engine.Server, *admin.API, int, int, func()) {
 	httpPort := getFreePort()
@@ -109,14 +126,11 @@ func TestAdminAPICreateMock(t *testing.T) {
 
 // T055: GET /mocks lists mocks
 func TestAdminAPIListMocks(t *testing.T) {
-	srv, _, _, adminPort, cleanup := setupAdminTest(t)
+	_, _, _, adminPort, cleanup := setupAdminTest(t)
 	defer cleanup()
 
-	// Create engine client for mock CRUD
-	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
-
-	// Add some mocks via engine client
-	_, err := client.CreateMock(context.Background(), &config.MockConfiguration{
+	// Create mocks via admin API (admin store is the source of truth)
+	createMockViaAdmin(t, adminPort, &config.MockConfiguration{
 		ID:      "mock-1",
 		Name:    "Mock 1",
 		Enabled: boolPtr(true),
@@ -126,9 +140,8 @@ func TestAdminAPIListMocks(t *testing.T) {
 			Response: &mock.HTTPResponse{StatusCode: 200, Body: "one"},
 		},
 	})
-	require.NoError(t, err)
 
-	_, err = client.CreateMock(context.Background(), &config.MockConfiguration{
+	createMockViaAdmin(t, adminPort, &config.MockConfiguration{
 		ID:      "mock-2",
 		Name:    "Mock 2",
 		Enabled: boolPtr(true),
@@ -138,7 +151,6 @@ func TestAdminAPIListMocks(t *testing.T) {
 			Response: &mock.HTTPResponse{StatusCode: 200, Body: "two"},
 		},
 	})
-	require.NoError(t, err)
 
 	// List mocks via admin API
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/mocks", adminPort))
@@ -314,14 +326,11 @@ func TestAdminAPIInvalidJSONReturns400(t *testing.T) {
 
 // T059: Duplicate ID returns 409
 func TestAdminAPIDuplicateIDReturns409(t *testing.T) {
-	srv, _, _, adminPort, cleanup := setupAdminTest(t)
+	_, _, _, adminPort, cleanup := setupAdminTest(t)
 	defer cleanup()
 
-	// Create engine client
-	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
-
-	// Create first mock
-	_, err := client.CreateMock(context.Background(), &config.MockConfiguration{
+	// Create first mock via admin API
+	createMockViaAdmin(t, adminPort, &config.MockConfiguration{
 		ID:      "duplicate-id",
 		Enabled: boolPtr(true),
 		Type:    mock.TypeHTTP,
@@ -330,7 +339,6 @@ func TestAdminAPIDuplicateIDReturns409(t *testing.T) {
 			Response: &mock.HTTPResponse{StatusCode: 200, Body: "first"},
 		},
 	})
-	require.NoError(t, err)
 
 	// Try to create another with same ID (using unified mock format)
 	mockData := map[string]interface{}{
@@ -385,14 +393,11 @@ func TestAdminAPIHealth(t *testing.T) {
 
 // Test toggle mock
 func TestAdminAPIToggleMock(t *testing.T) {
-	srv, _, httpPort, adminPort, cleanup := setupAdminTest(t)
+	_, _, httpPort, adminPort, cleanup := setupAdminTest(t)
 	defer cleanup()
 
-	// Create engine client
-	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
-
-	// Create enabled mock
-	_, err := client.CreateMock(context.Background(), &config.MockConfiguration{
+	// Create enabled mock via admin API
+	createMockViaAdmin(t, adminPort, &config.MockConfiguration{
 		ID:      "toggle-test",
 		Enabled: boolPtr(true),
 		Type:    mock.TypeHTTP,
@@ -401,7 +406,6 @@ func TestAdminAPIToggleMock(t *testing.T) {
 			Response: &mock.HTTPResponse{StatusCode: 200, Body: "enabled"},
 		},
 	})
-	require.NoError(t, err)
 
 	// Verify mock works
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/toggle", httpPort))
@@ -434,14 +438,11 @@ func TestAdminAPIToggleMock(t *testing.T) {
 
 // Test filter by enabled
 func TestAdminAPIFilterByEnabled(t *testing.T) {
-	srv, _, _, adminPort, cleanup := setupAdminTest(t)
+	_, _, _, adminPort, cleanup := setupAdminTest(t)
 	defer cleanup()
 
-	// Create engine client
-	client := engineclient.New(fmt.Sprintf("http://localhost:%d", srv.ManagementPort()))
-
-	// Add enabled mock
-	_, err := client.CreateMock(context.Background(), &config.MockConfiguration{
+	// Create mocks via admin API
+	createMockViaAdmin(t, adminPort, &config.MockConfiguration{
 		ID:      "enabled-mock",
 		Enabled: boolPtr(true),
 		Type:    mock.TypeHTTP,
@@ -450,10 +451,8 @@ func TestAdminAPIFilterByEnabled(t *testing.T) {
 			Response: &mock.HTTPResponse{StatusCode: 200, Body: "enabled"},
 		},
 	})
-	require.NoError(t, err)
 
-	// Add a mock that will be disabled
-	_, err = client.CreateMock(context.Background(), &config.MockConfiguration{
+	createMockViaAdmin(t, adminPort, &config.MockConfiguration{
 		ID:      "disabled-mock",
 		Enabled: boolPtr(true),
 		Type:    mock.TypeHTTP,
@@ -462,14 +461,17 @@ func TestAdminAPIFilterByEnabled(t *testing.T) {
 			Response: &mock.HTTPResponse{StatusCode: 200, Body: "disabled"},
 		},
 	})
-	require.NoError(t, err)
 
-	// Toggle the mock to disabled
-	_, err = client.ToggleMock(context.Background(), "disabled-mock", false)
+	// Toggle the mock to disabled via admin API
+	req, _ := http.NewRequest("POST",
+		fmt.Sprintf("http://localhost:%d/mocks/disabled-mock/toggle", adminPort), nil)
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Filter by enabled=true
-	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/mocks?enabled=true", adminPort))
+	resp, err = http.Get(fmt.Sprintf("http://localhost:%d/mocks?enabled=true", adminPort))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 

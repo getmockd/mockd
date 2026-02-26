@@ -138,36 +138,20 @@ func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-// getAllMocksForExport gets mocks from engine or dataStore for export
+// getAllMocksForExport returns all mocks from the admin data store (the
+// single source of truth for mock configuration).
 func (a *API) getAllMocksForExport(ctx context.Context) ([]*config.MockConfiguration, error) {
-	if engine := a.localEngine.Load(); engine != nil {
-		mocks, err := engine.ListMocks(ctx)
-		if err == nil {
-			if mocks == nil {
-				return []*config.MockConfiguration{}, nil
-			}
-			return mocks, nil
-		}
-		// Fall back to persistent data if available so export still works when the
-		// local engine is temporarily unavailable.
-		if a.dataStore != nil {
-			a.logger().Warn("falling back to datastore for export after engine list failure", "error", err)
-		} else {
-			return nil, err
-		}
+	if a.dataStore == nil {
+		return nil, errors.New("no mock source available")
 	}
-	// Fall back to dataStore
-	if a.dataStore != nil {
-		mocks, err := a.dataStore.Mocks().List(ctx, nil)
-		if err != nil {
-			return nil, err
-		}
-		if mocks == nil {
-			return []*config.MockConfiguration{}, nil
-		}
-		return mocks, nil
+	mocks, err := a.dataStore.Mocks().List(ctx, nil)
+	if err != nil {
+		return nil, err
 	}
-	return nil, errors.New("no mock source available")
+	if mocks == nil {
+		return []*config.MockConfiguration{}, nil
+	}
+	return mocks, nil
 }
 
 // Insomnia v4 export types

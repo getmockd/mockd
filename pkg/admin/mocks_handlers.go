@@ -226,13 +226,11 @@ func (a *API) checkPortAvailability(ctx context.Context, m *mock.Mock, excludeID
 		return &PortCheckResult{} // Mock doesn't use a dedicated port
 	}
 
-	// Get all mocks to check for conflicts
+	// Get all mocks from the admin store (source of truth) to check for conflicts
 	var allMocks []*mock.Mock
 	var err error
 
-	if engine := a.localEngine.Load(); engine != nil {
-		allMocks, err = engine.ListMocks(ctx)
-	} else if a.dataStore != nil {
+	if a.dataStore != nil {
 		allMocks, err = a.dataStore.Mocks().List(ctx, nil)
 	}
 
@@ -556,48 +554,14 @@ func applyMockPatch(m *mock.Mock, patch map[string]interface{}) {
 
 // handleListUnifiedMocks returns all mocks with optional filtering.
 // GET /mocks?type=http&parentId=folder123&enabled=true&search=user
+//
+// The admin store is the single source of truth for mock configuration.
+// All mocks — whether loaded from config files or created via the API — are
+// written to the admin store, so we always query from there.
 func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
-	// Query from engine if available (engine is the runtime data plane)
-	// Fall back to dataStore for persistence-only scenarios
-	if engine := a.localEngine.Load(); engine != nil {
-		mocks, err := engine.ListMocks(r.Context())
-		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.logger(), "list mocks"))
-			return
-		}
-
-		query := r.URL.Query()
-
-		// Apply filters (engine returns all, we filter locally)
-		filter := &MockFilter{
-			Type:        query.Get("type"),
-			ParentID:    query.Get("parentId"),
-			FolderID:    query.Get("folderId"),
-			WorkspaceID: query.Get("workspaceId"),
-		}
-		filter.Enabled = parseOptionalBool(query.Get("enabled"))
-		mocks = applyMockFilter(mocks, filter)
-
-		// Apply pagination
-		total := len(mocks)
-		mocks, err = applyPagination(mocks, query)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "validation_error", err.Error())
-			return
-		}
-
-		writeJSON(w, http.StatusOK, MocksListResponse{
-			Mocks: mocks,
-			Total: total,
-			Count: len(mocks),
-		})
-		return
-	}
-
-	// Fallback to dataStore if no engine
 	mockStore := a.getMockStore()
 	if mockStore == nil {
-		writeError(w, http.StatusNotImplemented, "not_implemented", "Unified mocks API requires persistent storage or engine connection")
+		writeError(w, http.StatusServiceUnavailable, "store_unavailable", "Mock store is not available")
 		return
 	}
 
@@ -664,6 +628,8 @@ func (a *API) handleListUnifiedMocks(w http.ResponseWriter, r *http.Request) {
 
 // handleGetUnifiedMock returns a single mock by ID.
 // GET /mocks/{id}
+//
+// The admin store is the single source of truth — always read from there.
 func (a *API) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -671,22 +637,9 @@ func (a *API) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query from engine if available (engine is the runtime data plane)
-	if engine := a.localEngine.Load(); engine != nil {
-		m, err := engine.GetMock(r.Context(), id)
-		if err != nil {
-			status, code, msg := mapMockLookupError(err, a.logger(), "get mock")
-			writeError(w, status, code, msg)
-			return
-		}
-		writeJSON(w, http.StatusOK, m)
-		return
-	}
-
-	// Fallback to dataStore if no engine
 	mockStore := a.getMockStore()
 	if mockStore == nil {
-		writeError(w, http.StatusNotImplemented, "not_implemented", "Unified mocks API requires persistent storage or engine connection")
+		writeError(w, http.StatusServiceUnavailable, "store_unavailable", "Mock store is not available")
 		return
 	}
 
@@ -736,12 +689,10 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if engine := a.localEngine.Load(); engine != nil {
-		// Check engine for duplicate ID (engine is the runtime truth)
-		if existing, err := engine.GetMock(r.Context(), m.ID); err == nil && existing != nil {
-			writeError(w, http.StatusConflict, "duplicate_id", "Mock with this ID already exists")
-			return
-		}
+	// Check store for duplicate ID (admin store is the source of truth)
+	if existing, err := mockStore.Get(r.Context(), m.ID); err == nil && existing != nil {
+		writeError(w, http.StatusConflict, "duplicate_id", "Mock with this ID already exists")
+		return
 	}
 
 	// Set timestamps
@@ -1194,6 +1145,8 @@ func (a *API) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Request
 
 // handleToggleUnifiedMock toggles the enabled state of a mock.
 // POST /mocks/{id}/toggle
+//
+// Store-first: update the admin store (source of truth), then notify the engine.
 func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -1201,63 +1154,9 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If engine is available, toggle there (engine is the runtime data plane)
-	if engine := a.localEngine.Load(); engine != nil {
-		// Get current state to determine new state
-		existing, err := engine.GetMock(r.Context(), id)
-		if err != nil {
-			status, code, msg := mapMockLookupError(err, a.logger(), "get mock for toggle")
-			writeError(w, status, code, msg)
-			return
-		}
-
-		currentEnabled := existing.Enabled == nil || *existing.Enabled
-		newEnabled := !currentEnabled
-		updated, err := engine.ToggleMock(r.Context(), id, newEnabled)
-		if err != nil {
-			a.logger().Error("failed to toggle mock in engine", "id", id, "error", err)
-			writeError(w, http.StatusInternalServerError, "toggle_error", ErrMsgInternalError)
-			return
-		}
-
-		// Persist the toggle to store so it survives restarts
-		if mockStore := a.getMockStore(); mockStore != nil {
-			if m, storeErr := mockStore.Get(r.Context(), id); storeErr == nil {
-				m.Enabled = &newEnabled
-				m.UpdatedAt = time.Now()
-				if storeErr := mockStore.Update(r.Context(), m); storeErr != nil {
-					a.logger().Error("failed to persist mock toggle to store — engine and store may be out of sync", "id", id, "error", storeErr)
-					// Revert the engine toggle so state stays consistent
-					if _, revertErr := engine.ToggleMock(r.Context(), id, currentEnabled); revertErr != nil {
-						a.logger().Warn("failed to revert engine toggle after store error", "id", id, "error", revertErr)
-					}
-					writeError(w, http.StatusInternalServerError, "persist_error",
-						"Toggle applied to engine but failed to persist — reverted")
-					return
-				}
-			} else {
-				a.logger().Warn("failed to get mock from store for toggle persist", "id", id, "error", storeErr)
-			}
-		}
-
-		state := "disabled"
-		if newEnabled {
-			state = "enabled"
-		}
-		response := map[string]interface{}{
-			"id":      updated.ID,
-			"action":  "toggled",
-			"message": "Mock " + state,
-			"mock":    updated,
-		}
-		writeJSON(w, http.StatusOK, response)
-		return
-	}
-
-	// Fallback to dataStore if no engine
 	mockStore := a.getMockStore()
 	if mockStore == nil {
-		writeError(w, http.StatusNotImplemented, "not_implemented", "Unified mocks API requires persistent storage or engine connection")
+		writeError(w, http.StatusServiceUnavailable, "store_unavailable", "Mock store is not available")
 		return
 	}
 
@@ -1283,14 +1182,29 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fallbackState := "disabled"
+	// Notify engine so the runtime state matches
+	if engine := a.localEngine.Load(); engine != nil {
+		if _, err := engine.ToggleMock(r.Context(), id, newEnabled); err != nil {
+			a.logger().Error("failed to toggle mock in engine", "id", id, "error", err)
+			// Rollback store
+			m.Enabled = &currentEnabled
+			if rollbackErr := mockStore.Update(r.Context(), m); rollbackErr != nil {
+				a.logger().Warn("failed to rollback toggle after engine error", "id", id, "error", rollbackErr)
+			}
+			writeError(w, http.StatusServiceUnavailable, "engine_error",
+				sanitizeEngineError(err, a.logger(), "toggle mock in engine"))
+			return
+		}
+	}
+
+	state := "disabled"
 	if newEnabled {
-		fallbackState = "enabled"
+		state = "enabled"
 	}
 	response := map[string]interface{}{
 		"id":      m.ID,
 		"action":  "toggled",
-		"message": "Mock " + fallbackState,
+		"message": "Mock " + state,
 		"mock":    m,
 	}
 	writeJSON(w, http.StatusOK, response)

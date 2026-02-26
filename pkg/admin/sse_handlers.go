@@ -7,6 +7,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/sse"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 // SSEConnectionListResponse represents a list of SSE connections.
@@ -188,15 +189,16 @@ func (a *API) handleListMockSSEConnections(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Verify mock exists
-	_, err := engine.GetMock(ctx, mockID)
-	if err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+	// Verify mock exists in the admin store (single source of truth).
+	if mockStore := a.getMockStore(); mockStore != nil {
+		if _, err := mockStore.Get(ctx, mockID); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get mock for SSE connections"))
-		return
 	}
 
 	// Get all SSE connections and filter by mock
@@ -232,15 +234,16 @@ func (a *API) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Verify mock exists
-	_, err := engine.GetMock(ctx, mockID)
-	if err != nil {
-		if errors.Is(err, engineclient.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+	// Verify mock exists in the admin store (single source of truth).
+	if mockStore := a.getMockStore(); mockStore != nil {
+		if _, err := mockStore.Get(ctx, mockID); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
 			return
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get mock for close SSE connections"))
-		return
 	}
 
 	// Get all SSE connections and close those for this mock

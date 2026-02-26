@@ -8,8 +8,10 @@ import (
 	"sync"
 
 	"github.com/getmockd/mockd/pkg/logging"
+	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/mqtt"
 	"github.com/getmockd/mockd/pkg/recording"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 // MQTTRecordingManager manages MQTT recording operations for the Admin API.
@@ -451,7 +453,7 @@ func (m *MQTTRecordingManager) handleGetMQTTStatusInternal(w http.ResponseWriter
 }
 
 // handleListMQTTBrokers handles GET /mqtt.
-// Queries MQTT mocks from the engine (over HTTP) to build broker list.
+// Returns MQTT broker info derived from the admin data store.
 func (a *API) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
 	// First check local recording manager for directly registered brokers.
 	a.mqttRecordingManager.mu.RLock()
@@ -463,14 +465,13 @@ func (a *API) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// No local brokers — query engine for MQTT mocks over HTTP.
-	engine := a.localEngine.Load()
-	if engine == nil {
+	// Query the admin data store (single source of truth) for MQTT mocks.
+	if a.dataStore == nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": []interface{}{}, "count": 0})
 		return
 	}
 
-	mocks, err := engine.ListMocks(r.Context())
+	mocks, err := a.dataStore.Mocks().List(r.Context(), &store.MockFilter{Type: mock.TypeMQTT})
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"brokers": []interface{}{}, "count": 0})
 		return
@@ -478,7 +479,7 @@ func (a *API) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
 
 	brokers := make([]MQTTBrokerStatusResponse, 0)
 	for _, m := range mocks {
-		if m.Type == "mqtt" && m.MQTT != nil {
+		if m.MQTT != nil {
 			brokers = append(brokers, MQTTBrokerStatusResponse{
 				ID:      m.ID,
 				Port:    m.MQTT.Port,
@@ -491,7 +492,7 @@ func (a *API) handleListMQTTBrokers(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetMQTTStatus handles GET /mqtt/status.
-// Queries MQTT mocks from the engine (over HTTP) to build aggregate status.
+// Returns aggregate MQTT status derived from the admin data store.
 func (a *API) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
 	// First check local recording manager for directly registered brokers.
 	a.mqttRecordingManager.mu.RLock()
@@ -503,14 +504,13 @@ func (a *API) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// No local brokers — query engine for MQTT mocks over HTTP.
-	engine2 := a.localEngine.Load()
-	if engine2 == nil {
+	// Query the admin data store (single source of truth) for MQTT mocks.
+	if a.dataStore == nil {
 		writeJSON(w, http.StatusOK, MQTTGlobalStatusResponse{Brokers: []MQTTBrokerStatusResponse{}})
 		return
 	}
 
-	mocks, err := engine2.ListMocks(r.Context())
+	mocks, err := a.dataStore.Mocks().List(r.Context(), &store.MockFilter{Type: mock.TypeMQTT})
 	if err != nil {
 		writeJSON(w, http.StatusOK, MQTTGlobalStatusResponse{Brokers: []MQTTBrokerStatusResponse{}})
 		return
@@ -519,7 +519,7 @@ func (a *API) handleGetMQTTStatus(w http.ResponseWriter, r *http.Request) {
 	brokers := make([]MQTTBrokerStatusResponse, 0)
 	anyRunning := false
 	for _, m := range mocks {
-		if m.Type == "mqtt" && m.MQTT != nil {
+		if m.MQTT != nil {
 			running := m.Enabled == nil || *m.Enabled
 			if running {
 				anyRunning = true

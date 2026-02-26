@@ -2,6 +2,7 @@ package admin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -559,36 +560,46 @@ func TestHandleListRecordings_LimitParsing(t *testing.T) {
 }
 
 func TestHandleConvertRecording_AddRequestedWithoutEngine(t *testing.T) {
-	store, _ := createTestStoreWithRecordings(
+	recStore, _ := createTestStoreWithRecordings(
 		createTestRecording("rec-1", "session-1", "GET", "/api/users"),
 	)
-	pm := &ProxyManager{store: store}
+	pm := &ProxyManager{store: recStore}
 
 	req := httptest.NewRequest(http.MethodPost, "/recordings/rec-1/convert?add=1", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "rec-1")
 	rec := httptest.NewRecorder()
 
-	pm.handleConvertSingleRecording(rec, req, nil)
+	// The MockCreatorFunc from an API with no engine writes to the store only.
+	// This is valid — the engine will sync on reconnect. So we expect success.
+	api := NewAPI(0, WithDataDir(t.TempDir()))
+	pm.handleConvertSingleRecording(rec, req, api.mockCreator())
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected status 503, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (store-only write), got %d body=%s", rec.Code, rec.Body.String())
 	}
 
-	var resp ErrorResponse
+	var resp SingleConvertResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to decode error response: %v", err)
+		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp.Error != "engine_error" {
-		t.Fatalf("expected engine_error, got %q", resp.Error)
+	if resp.Mock == nil {
+		t.Fatal("expected mock in response")
+	}
+
+	// Verify mock was persisted in the admin store.
+	ctx := context.Background()
+	_, err := api.dataStore.Mocks().Get(ctx, resp.Mock.ID)
+	if err != nil {
+		t.Fatalf("mock should be in admin store after store-only write: %v", err)
 	}
 }
 
 func TestHandleConvertRecording_ChunkedBodyIsParsed(t *testing.T) {
-	store, _ := createTestStoreWithRecordings(
+	recStore, _ := createTestStoreWithRecordings(
 		createTestRecording("rec-1", "session-1", "GET", "/api/users"),
 	)
-	pm := &ProxyManager{store: store}
+	pm := &ProxyManager{store: recStore}
 
 	req := httptest.NewRequest(http.MethodPost, "/recordings/rec-1/convert", strings.NewReader(`{"addToServer":true}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -596,9 +607,12 @@ func TestHandleConvertRecording_ChunkedBodyIsParsed(t *testing.T) {
 	req.SetPathValue("id", "rec-1")
 	rec := httptest.NewRecorder()
 
-	pm.handleConvertSingleRecording(rec, req, nil)
+	// With the dual-write design, addToServer without an engine does a
+	// store-only write (succeeds). Chunked body parsing is the real test.
+	api := NewAPI(0, WithDataDir(t.TempDir()))
+	pm.handleConvertSingleRecording(rec, req, api.mockCreator())
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected status 503 when chunked body requests addToServer without engine, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (chunked body should be parsed), got %d body=%s", rec.Code, rec.Body.String())
 	}
 }

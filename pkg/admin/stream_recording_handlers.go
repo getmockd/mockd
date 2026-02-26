@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/mock"
@@ -412,7 +411,7 @@ func (m *StreamRecordingManager) handleExportStreamRecording(w http.ResponseWrit
 }
 
 // handleConvertStreamRecording handles POST /stream-recordings/{id}/convert.
-func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWriter, r *http.Request, client *engineclient.Client) {
+func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWriter, r *http.Request, createMock MockCreatorFunc) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -475,22 +474,18 @@ func (m *StreamRecordingManager) handleConvertStreamRecording(w http.ResponseWri
 		Config:   json.RawMessage(result.ConfigJSON),
 	}
 
-	// Add to engine if requested
-	if req.AddToServer && client == nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
-		return
-	}
+	// Add via dual-write (store + engine) if requested
 	if req.AddToServer {
-		mockID, addErr := m.addStreamMockToEngine(r.Context(), rec.Protocol, result, req, client)
+		mockID, addErr := m.addStreamMock(r.Context(), rec.Protocol, result, req, createMock)
 		if addErr != nil {
-			m.log.Error("failed to add stream mock to engine", "error", addErr)
+			m.log.Error("failed to add stream mock", "error", addErr)
 			status, code, msg := mapStreamAddError(addErr, m.log)
 			writeError(w, status, code, msg)
 			return
 		}
 		response.MockID = mockID
 		response.Added = true
-		response.Message = fmt.Sprintf("%s mock added to engine at %s", rec.Protocol, streamAddEndpointPath(rec.Protocol, req.EndpointPath))
+		response.Message = fmt.Sprintf("%s mock added at %s", rec.Protocol, streamAddEndpointPath(rec.Protocol, req.EndpointPath))
 	}
 
 	writeJSON(w, http.StatusOK, response)
@@ -503,20 +498,20 @@ func streamAddEndpointPath(protocol recording.Protocol, requested string) string
 	return requested
 }
 
-// addStreamMockToEngine adds the converted stream mock to the engine via HTTP client.
-func (m *StreamRecordingManager) addStreamMockToEngine(ctx context.Context, protocol recording.Protocol, result *recording.StreamConvertResult, req ConvertRecordingRequest, client *engineclient.Client) (string, error) {
+// addStreamMock adds the converted stream mock via the dual-write path (store + engine).
+func (m *StreamRecordingManager) addStreamMock(ctx context.Context, protocol recording.Protocol, result *recording.StreamConvertResult, req ConvertRecordingRequest, createMock MockCreatorFunc) (string, error) {
 	switch protocol {
 	case recording.ProtocolWebSocket:
-		return m.addWebSocketMock(ctx, result, req, client)
+		return m.addWebSocketMock(ctx, result, req, createMock)
 	case recording.ProtocolSSE:
-		return m.addSSEMock(ctx, result, req, client)
+		return m.addSSEMock(ctx, result, req, createMock)
 	default:
 		return "", fmt.Errorf("unsupported protocol for addToServer: %s", protocol)
 	}
 }
 
-// addWebSocketMock adds a WebSocket mock to the engine via HTTP client.
-func (m *StreamRecordingManager) addWebSocketMock(ctx context.Context, result *recording.StreamConvertResult, req ConvertRecordingRequest, client *engineclient.Client) (string, error) {
+// addWebSocketMock creates a WebSocket mock via the dual-write path.
+func (m *StreamRecordingManager) addWebSocketMock(ctx context.Context, result *recording.StreamConvertResult, req ConvertRecordingRequest, createMock MockCreatorFunc) (string, error) {
 	if req.EndpointPath == "" {
 		return "", errors.New("endpointPath is required for WebSocket mocks")
 	}
@@ -546,7 +541,7 @@ func (m *StreamRecordingManager) addWebSocketMock(ctx context.Context, result *r
 		},
 	}
 
-	created, err := client.CreateMock(ctx, wsMock)
+	created, err := createMock(ctx, wsMock)
 	if err != nil {
 		return "", err
 	}
@@ -554,8 +549,8 @@ func (m *StreamRecordingManager) addWebSocketMock(ctx context.Context, result *r
 	return created.ID, nil
 }
 
-// addSSEMock adds an SSE mock to the engine via HTTP client.
-func (m *StreamRecordingManager) addSSEMock(ctx context.Context, result *recording.StreamConvertResult, req ConvertRecordingRequest, client *engineclient.Client) (string, error) {
+// addSSEMock creates an SSE mock via the dual-write path.
+func (m *StreamRecordingManager) addSSEMock(ctx context.Context, result *recording.StreamConvertResult, req ConvertRecordingRequest, createMock MockCreatorFunc) (string, error) {
 	// Config is already a *mock.SSEConfig from the converter
 	sseConfig, ok := result.Config.(*mock.SSEConfig)
 	if !ok {
@@ -588,7 +583,7 @@ func (m *StreamRecordingManager) addSSEMock(ctx context.Context, result *recordi
 		},
 	}
 
-	created, err := client.CreateMock(ctx, sseMock)
+	created, err := createMock(ctx, sseMock)
 	if err != nil {
 		return "", err
 	}

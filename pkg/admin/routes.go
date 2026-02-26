@@ -248,42 +248,22 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /handlers/{id}/stats", a.requireEngine(a.handleGetHandlerStats))
 }
 
-// handleConvertRecordings wraps the convert handler to pass the engine client.
+// handleConvertRecordings wraps the convert handler to pass the dual-write mock creator.
 func (a *API) handleConvertRecordings(w http.ResponseWriter, r *http.Request) {
-	engine := a.localEngine.Load()
-	if engine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-	a.proxyManager.handleConvertRecordings(w, r, engine)
+	a.proxyManager.handleConvertRecordings(w, r, a.mockCreator())
 }
 
 // handleConvertSingleRecording wraps the single recording convert handler.
 func (a *API) handleConvertSingleRecording(w http.ResponseWriter, r *http.Request) {
-	engine := a.localEngine.Load()
-	if engine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-	a.proxyManager.handleConvertSingleRecording(w, r, engine)
+	a.proxyManager.handleConvertSingleRecording(w, r, a.mockCreator())
 }
 
 // handleConvertSession wraps the session convert handler.
 func (a *API) handleConvertSession(w http.ResponseWriter, r *http.Request) {
-	engine := a.localEngine.Load()
-	if engine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-	a.proxyManager.handleConvertSession(w, r, engine)
+	a.proxyManager.handleConvertSession(w, r, a.mockCreator())
 }
 
 // handleConvertStreamRecording wraps the stream recording convert handler.
 func (a *API) handleConvertStreamRecording(w http.ResponseWriter, r *http.Request) {
-	engine := a.localEngine.Load()
-	if engine == nil {
-		writeError(w, http.StatusServiceUnavailable, "no_engine", "No engine connected")
-		return
-	}
-	a.streamRecordingManager.handleConvertStreamRecording(w, r, engine)
+	a.streamRecordingManager.handleConvertStreamRecording(w, r, a.mockCreator())
 }
