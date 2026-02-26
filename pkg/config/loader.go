@@ -8,11 +8,27 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/mock"
 	"gopkg.in/yaml.v3"
 )
+
+// timestampSpaceRe matches YAML timestamps that use a space instead of 'T' as
+// the date/time separator when a timezone offset is present. Python's
+// yaml.dump produces this format (e.g. "2026-02-25 18:36:41+00:00") which
+// Go's yaml.v3 rejects. We normalize the space to 'T' before unmarshaling.
+var timestampSpaceRe = regexp.MustCompile(
+	`(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?[+-]\d{2}:\d{2})`,
+)
+
+// NormalizeYAMLTimestamps converts space-separated timestamps with timezone
+// offsets to RFC3339 format so Go's yaml.v3 can parse them.
+// Exported for use by other packages that parse mock YAML.
+func NormalizeYAMLTimestamps(data []byte) []byte {
+	return timestampSpaceRe.ReplaceAll(data, []byte("${1}T${2}"))
+}
 
 // Common errors for configuration loading/saving.
 var (
@@ -156,6 +172,9 @@ func ParseJSON(data []byte) (*MockCollection, error) {
 
 // ParseYAML parses YAML bytes into a MockCollection with validation.
 func ParseYAML(data []byte) (*MockCollection, error) {
+	// Normalize space-separated timestamps (e.g. Python yaml.dump output)
+	data = NormalizeYAMLTimestamps(data)
+
 	var collection MockCollection
 
 	if err := yaml.Unmarshal(data, &collection); err != nil {

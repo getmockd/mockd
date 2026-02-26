@@ -498,9 +498,12 @@ func LoadProjectConfig(path string) (*ProjectConfig, error) {
 	// Apply environment variable substitution
 	expanded := ExpandEnvVars(string(data))
 
+	// Normalize timestamps (e.g. Python yaml.dump output)
+	normalized := NormalizeYAMLTimestamps([]byte(expanded))
+
 	// Parse YAML
 	var cfg ProjectConfig
-	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
+	if err := yaml.Unmarshal(normalized, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing config file: %w", err)
 	}
 
@@ -512,9 +515,12 @@ func LoadProjectConfigFromBytes(data []byte) (*ProjectConfig, error) {
 	// Apply environment variable substitution
 	expanded := ExpandEnvVars(string(data))
 
+	// Normalize timestamps (e.g. Python yaml.dump output)
+	normalized := NormalizeYAMLTimestamps([]byte(expanded))
+
 	// Parse YAML
 	var cfg ProjectConfig
-	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
+	if err := yaml.Unmarshal(normalized, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 

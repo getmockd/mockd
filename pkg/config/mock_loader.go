@@ -129,9 +129,12 @@ func loadMocksFromFile(filePath, baseDir string) ([]MockEntry, error) {
 	// Apply environment variable expansion
 	expanded := ExpandEnvVars(string(data))
 
+	// Normalize timestamps (e.g. Python yaml.dump output)
+	normalized := NormalizeYAMLTimestamps([]byte(expanded))
+
 	// Parse YAML - handle both single mock and array of mocks
 	var content MockFileContent
-	if err := yaml.Unmarshal([]byte(expanded), &content); err != nil {
+	if err := yaml.Unmarshal(normalized, &content); err != nil {
 		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
 

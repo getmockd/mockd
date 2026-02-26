@@ -651,3 +651,81 @@ func TestSaveMocksToFile(t *testing.T) {
 	assert.Equal(t, "save-mocks-test", loaded.Name)
 	assert.Len(t, loaded.Mocks, 1)
 }
+
+func TestNormalizeYAMLTimestamps(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "python yaml.dump UTC offset",
+			input:    "createdAt: 2026-02-25 18:36:41+00:00",
+			expected: "createdAt: 2026-02-25T18:36:41+00:00",
+		},
+		{
+			name:     "python yaml.dump positive offset",
+			input:    "updatedAt: 2026-02-25 18:36:41+05:30",
+			expected: "updatedAt: 2026-02-25T18:36:41+05:30",
+		},
+		{
+			name:     "python yaml.dump negative offset",
+			input:    "createdAt: 2026-02-25 12:36:41-06:00",
+			expected: "createdAt: 2026-02-25T12:36:41-06:00",
+		},
+		{
+			name:     "python yaml.dump with fractional seconds",
+			input:    "createdAt: 2026-02-25 18:36:41.123456+00:00",
+			expected: "createdAt: 2026-02-25T18:36:41.123456+00:00",
+		},
+		{
+			name:     "already RFC3339 - no change",
+			input:    "createdAt: 2026-02-25T18:36:41+00:00",
+			expected: "createdAt: 2026-02-25T18:36:41+00:00",
+		},
+		{
+			name:     "space separator without tz - no change",
+			input:    "createdAt: 2026-02-25 18:36:41",
+			expected: "createdAt: 2026-02-25 18:36:41",
+		},
+		{
+			name:     "non-timestamp string - no change",
+			input:    "description: meeting at 2026-02-25 18:36:41 in the office",
+			expected: "description: meeting at 2026-02-25 18:36:41 in the office",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := NormalizeYAMLTimestamps([]byte(tt.input))
+			assert.Equal(t, tt.expected, string(result))
+		})
+	}
+}
+
+func TestParseYAML_PythonTimestamps(t *testing.T) {
+	// Bug 5: Python's yaml.dump writes "2026-02-25 18:36:41+00:00" which
+	// Go's yaml.v3 rejects. Our normalization should handle this.
+	yamlContent := `version: "1.0"
+mocks:
+- id: http_test123
+  type: http
+  createdAt: 2026-02-25 18:36:41+00:00
+  updatedAt: 2026-02-25 18:36:41+00:00
+  http:
+    matcher:
+      path: /test
+    response:
+      statusCode: 200
+      body: ok
+`
+	collection, err := ParseYAML([]byte(yamlContent))
+	require.NoError(t, err)
+	require.Len(t, collection.Mocks, 1)
+
+	m := collection.Mocks[0]
+	assert.Equal(t, "http_test123", m.ID)
+	assert.False(t, m.CreatedAt.IsZero(), "createdAt should be parsed")
+	assert.False(t, m.UpdatedAt.IsZero(), "updatedAt should be parsed")
+	assert.Equal(t, 2026, m.CreatedAt.Year())
+}
