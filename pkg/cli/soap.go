@@ -79,6 +79,7 @@ var (
 	soapCallAction        string
 	soapCallSOAP12        bool
 	soapCallTimeout       int
+	soapCallBodyFile      string
 	soapImportStateful    bool
 	soapImportOutput      string
 	soapImportFormat      string
@@ -146,6 +147,7 @@ func init() {
 	soapCallCmd.Flags().StringVar(&soapCallAction, "action", "", "SOAPAction header value")
 	soapCallCmd.Flags().BoolVar(&soapCallSOAP12, "soap12", false, "Use SOAP 1.2 envelope format")
 	soapCallCmd.Flags().IntVar(&soapCallTimeout, "timeout", 30, "Request timeout in seconds")
+	soapCallCmd.Flags().StringVarP(&soapCallBodyFile, "body-file", "f", "", "Read SOAP body XML from file (use - for stdin)")
 	soapCmd.AddCommand(soapCallCmd)
 }
 
@@ -192,41 +194,27 @@ func runSOAPValidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("wsdl validation failed: root element must be 'definitions' (WSDL 1.1) or 'description' (WSDL 2.0), got '%s'", root.Tag)
 	}
 
-	// Validate namespace
+	// Validate namespace — check both default xmlns and prefixed xmlns:prefix declarations.
+	// etree stores default xmlns as Key="xmlns", but prefixed xmlns:wsdl as Key="wsdl" Space="xmlns".
 	wsdlNS := false
 	for _, attr := range root.Attr {
-		if strings.HasPrefix(attr.Key, "xmlns") {
-			if strings.Contains(attr.Value, "wsdl") || strings.Contains(attr.Value, "schemas.xmlsoap.org") {
-				wsdlNS = true
-				break
-			}
+		isNS := attr.Key == "xmlns" || attr.Space == "xmlns"
+		if isNS && (strings.Contains(attr.Value, "wsdl") || strings.Contains(attr.Value, "schemas.xmlsoap.org")) {
+			wsdlNS = true
+			break
 		}
 	}
 	if !wsdlNS {
 		return errors.New("wsdl validation failed: missing WSDL namespace declaration")
 	}
 
-	// Count elements
-	services := doc.FindElements("//service")
-	if len(services) == 0 {
-		services = doc.FindElements("//*[local-name()='service']")
-	}
-	portTypes := doc.FindElements("//portType")
-	if len(portTypes) == 0 {
-		portTypes = doc.FindElements("//*[local-name()='portType']")
-	}
-	bindings := doc.FindElements("//binding")
-	if len(bindings) == 0 {
-		bindings = doc.FindElements("//*[local-name()='binding']")
-	}
-	operations := doc.FindElements("//operation")
-	if len(operations) == 0 {
-		operations = doc.FindElements("//*[local-name()='operation']")
-	}
-	messages := doc.FindElements("//message")
-	if len(messages) == 0 {
-		messages = doc.FindElements("//*[local-name()='message']")
-	}
+	// Count elements using the portability package's namespace-aware helpers,
+	// which handle both prefixed (wsdl:service) and unprefixed (service) elements.
+	services := findWSDLElements(root, "service")
+	portTypes := findWSDLElements(root, "portType")
+	bindings := findWSDLElements(root, "binding")
+	messages := findWSDLElements(root, "message")
+	operations := findWSDLOperations(portTypes)
 
 	// Build structured result
 	serviceNames := make([]string, 0, len(services))
@@ -236,11 +224,7 @@ func runSOAPValidate(cmd *cobra.Command, args []string) error {
 	opNames := make([]string, 0, len(operations))
 	for _, pt := range portTypes {
 		ptName := pt.SelectAttrValue("name", "unnamed")
-		ops := pt.FindElements("operation")
-		if len(ops) == 0 {
-			ops = pt.FindElements("*[local-name()='operation']")
-		}
-		for _, op := range ops {
+		for _, op := range findWSDLChildElements(pt, "operation") {
 			opNames = append(opNames, ptName+"."+op.SelectAttrValue("name", "unnamed"))
 		}
 	}
@@ -267,11 +251,7 @@ func runSOAPValidate(cmd *cobra.Command, args []string) error {
 				svcName := svc.SelectAttrValue("name", "unnamed")
 				fmt.Printf("  %s\n", svcName)
 
-				ports := svc.FindElements("port")
-				if len(ports) == 0 {
-					ports = svc.FindElements("*[local-name()='port']")
-				}
-				for _, port := range ports {
+				for _, port := range findWSDLChildElements(svc, "port") {
 					portName := port.SelectAttrValue("name", "unnamed")
 					binding := port.SelectAttrValue("binding", "")
 					fmt.Printf("    Port: %s (binding: %s)\n", portName, binding)
@@ -306,20 +286,32 @@ func runSOAPCall(cmd *cobra.Command, args []string) error {
 	soap12 := soapCallSOAP12
 	timeout := soapCallTimeout
 
-	// Build SOAP body
+	// Build SOAP body — resolution order: --body-file, @file arg, positional arg, stdin, auto-generate
 	var soapBody string
-	if body != "" {
-		// Load body from file if prefixed with @
-		if len(body) > 0 && body[0] == '@' {
-			bodyBytes, err := os.ReadFile(body[1:])
+	switch {
+	case soapCallBodyFile != "":
+		if soapCallBodyFile == "-" {
+			bodyBytes, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("failed to read body from stdin: %w", err)
+			}
+			soapBody = string(bodyBytes)
+		} else {
+			bodyBytes, err := os.ReadFile(soapCallBodyFile)
 			if err != nil {
 				return fmt.Errorf("failed to read body file: %w", err)
 			}
 			soapBody = string(bodyBytes)
-		} else {
-			soapBody = body
 		}
-	} else {
+	case body != "" && body[0] == '@':
+		bodyBytes, err := os.ReadFile(body[1:])
+		if err != nil {
+			return fmt.Errorf("failed to read body file: %w", err)
+		}
+		soapBody = string(bodyBytes)
+	case body != "":
+		soapBody = body
+	default:
 		// Generate minimal body for operation
 		soapBody = fmt.Sprintf("<%s xmlns=\"http://tempuri.org/\"/>", operation)
 	}
@@ -490,4 +482,34 @@ func runSOAPImport(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// --- WSDL namespace-aware helpers for soap validate ---
+// These mirror the helpers in pkg/portability/wsdl.go, matching child elements
+// by local name regardless of namespace prefix (handles both <service> and <wsdl:service>).
+
+// findWSDLElements returns all direct child elements of parent matching the local name.
+// etree stores the local name in Tag (e.g., "service" even for <wsdl:service>).
+func findWSDLElements(parent *etree.Element, localName string) []*etree.Element {
+	var results []*etree.Element
+	for _, child := range parent.ChildElements() {
+		if child.Tag == localName {
+			results = append(results, child)
+		}
+	}
+	return results
+}
+
+// findWSDLChildElements is an alias for findWSDLElements for readability at call sites.
+func findWSDLChildElements(parent *etree.Element, localName string) []*etree.Element {
+	return findWSDLElements(parent, localName)
+}
+
+// findWSDLOperations collects all operation elements from a slice of portType elements.
+func findWSDLOperations(portTypes []*etree.Element) []*etree.Element {
+	ops := make([]*etree.Element, 0, len(portTypes))
+	for _, pt := range portTypes {
+		ops = append(ops, findWSDLElements(pt, "operation")...)
+	}
+	return ops
 }
