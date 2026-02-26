@@ -274,18 +274,21 @@ func (r *EngineRegistry) UpdateStatus(id string, status EngineStatus) error {
 }
 
 // Heartbeat updates an engine's lastSeen time and sets status to online.
-func (r *EngineRegistry) Heartbeat(id string) error {
+// It returns true if the engine was previously offline (an offline→online
+// transition), which callers can use to trigger a store-to-engine sync.
+func (r *EngineRegistry) Heartbeat(id string) (wasOffline bool, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	engine, exists := r.engines[id]
 	if !exists {
-		return ErrNotFound
+		return false, ErrNotFound
 	}
 
+	wasOffline = engine.Status == EngineStatusOffline
 	engine.LastSeen = time.Now()
 	engine.Status = EngineStatusOnline
-	return nil
+	return wasOffline, nil
 }
 
 // AssignWorkspace assigns a workspace to an engine (deprecated, use AddWorkspace instead).

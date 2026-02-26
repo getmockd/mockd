@@ -307,10 +307,13 @@ func TestEngineRegistry_Heartbeat(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 
-	// Heartbeat should set back to online and update LastSeen
-	err := reg.Heartbeat("engine-1")
+	// Heartbeat should set back to online, report wasOffline, and update LastSeen
+	wasOffline, err := reg.Heartbeat("engine-1")
 	if err != nil {
 		t.Fatalf("Heartbeat failed: %v", err)
+	}
+	if !wasOffline {
+		t.Error("expected wasOffline=true for offline→online transition")
 	}
 
 	got, _ := reg.Get("engine-1")
@@ -318,8 +321,17 @@ func TestEngineRegistry_Heartbeat(t *testing.T) {
 		t.Errorf("Status = %q, want %q", got.Status, EngineStatusOnline)
 	}
 
+	// Second heartbeat while online — wasOffline should be false
+	wasOffline, err = reg.Heartbeat("engine-1")
+	if err != nil {
+		t.Fatalf("Heartbeat failed: %v", err)
+	}
+	if wasOffline {
+		t.Error("expected wasOffline=false for online→online heartbeat")
+	}
+
 	// Heartbeat non-existent
-	err = reg.Heartbeat("nonexistent")
+	_, err = reg.Heartbeat("nonexistent")
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}

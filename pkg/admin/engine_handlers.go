@@ -260,16 +260,17 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	// Auto-set localEngine for the first registered engine.
 	// This allows all existing handler code that uses a.localEngine to work
 	// when engines register via HTTP (e.g. from `mockd up`).
+	engineURL := fmt.Sprintf("http://%s:%d", req.Host, req.Port)
 	if a.localEngine.Load() == nil {
-		engineURL := fmt.Sprintf("http://%s:%d", req.Host, req.Port)
 		a.localEngine.Store(engineclient.New(engineURL))
 		a.logger().Info("auto-set localEngine from registration", "engineId", engineID, "url", engineURL)
-
-		// Push any persisted stateful resources to the newly connected engine.
-		// Mocks are handled separately (via BulkCreate from the CLI or re-import),
-		// but stateful resources need to be restored here so they survive restarts.
-		go a.syncPersistedStatefulResources()
 	}
+
+	// Sync the admin store (mocks + stateful resources) to the engine.
+	// This runs on EVERY registration, not just the first, because:
+	// - First registration: engine has no mocks, admin store may have persisted mocks
+	// - Re-registration after crash: engine lost in-memory mocks, admin store has them
+	go a.syncAdminStoreToEngine(engineclient.New(engineURL), "engine-registration")
 
 	writeJSON(w, http.StatusCreated, RegisterEngineResponse{
 		ID:             engineID,
@@ -363,10 +364,22 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update heartbeat
-	if err := a.engineRegistry.Heartbeat(id); err != nil {
+	// Update heartbeat — returns whether the engine was previously offline.
+	wasOffline, err := a.engineRegistry.Heartbeat(id)
+	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "Engine not found")
 		return
+	}
+
+	// On offline→online transition, sync the admin store to the engine.
+	// This covers mocks created while the engine was unreachable.
+	if wasOffline {
+		a.logger().Info("engine came back online, syncing admin store", "engineID", id)
+		engine, lookupErr := a.engineRegistry.Get(id)
+		if lookupErr == nil {
+			engineURL := fmt.Sprintf("http://%s:%d", engine.Host, engine.Port)
+			go a.syncAdminStoreToEngine(engineclient.New(engineURL), "engine-reconnect")
+		}
 	}
 
 	// If status was provided, update it
@@ -620,37 +633,80 @@ func (a *API) handleGetEngineConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-// syncPersistedStatefulResources pushes stateful resources from the file store
-// to the engine. This runs asynchronously after the first engine registers so
-// that resources imported in a previous admin session are restored.
-func (a *API) syncPersistedStatefulResources() {
-	client := a.localEngine.Load()
+// syncAdminStoreToEngine pushes all mocks and stateful resources from the admin
+// store to the given engine client. It uses replace=true so the engine's state
+// matches the admin store exactly (admin is the single source of truth).
+//
+// This runs asynchronously after:
+//   - Engine registration (first or re-registration after crash)
+//   - Heartbeat offline→online transition (engine was unreachable, now back)
+//
+// A sync.Mutex ensures only one sync runs at a time; concurrent attempts are
+// skipped (the in-flight sync will push the latest state).
+func (a *API) syncAdminStoreToEngine(client *engineclient.Client, reason string) {
 	if a.dataStore == nil || client == nil {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(a.ctx, 15*time.Second)
+	// Try-lock: skip if another sync is already running.
+	if !a.engineSyncMu.TryLock() {
+		a.logger().Debug("skipping engine sync, already in progress", "reason", reason)
+		return
+	}
+	defer a.engineSyncMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
 	defer cancel()
 
-	resources, err := a.dataStore.StatefulResources().List(ctx)
+	// Read all mocks from admin store.
+	mocks, err := a.dataStore.Mocks().List(ctx, nil)
 	if err != nil {
-		a.logger().Warn("failed to load persisted stateful resources", "error", err)
-		return
-	}
-	if len(resources) == 0 {
+		a.logger().Warn("sync: failed to list mocks from admin store", "error", err, "reason", reason)
 		return
 	}
 
-	a.logger().Info("restoring persisted stateful resources to engine", "count", len(resources))
+	// Read all stateful resources.
+	var resources []*config.StatefulResourceConfig
+	if a.dataStore.StatefulResources() != nil {
+		resources, err = a.dataStore.StatefulResources().List(ctx)
+		if err != nil {
+			a.logger().Warn("sync: failed to list stateful resources", "error", err, "reason", reason)
+			// Continue without resources — mocks are more important.
+			resources = nil
+		}
+	}
 
-	// Build a minimal collection with only stateful resources (no mocks).
+	if len(mocks) == 0 && len(resources) == 0 {
+		a.logger().Debug("sync: admin store is empty, nothing to push", "reason", reason)
+		return
+	}
+
 	collection := &config.MockCollection{
 		Version:           "1.0",
-		Name:              "persisted-stateful-resources",
+		Kind:              "MockCollection",
+		Name:              "admin-store-sync",
+		Mocks:             mocks,
 		StatefulResources: resources,
 	}
 
-	if _, err := client.ImportConfig(ctx, collection, false); err != nil {
-		a.logger().Warn("failed to sync persisted stateful resources to engine", "error", err)
+	a.logger().Info("syncing admin store to engine",
+		"reason", reason,
+		"mocks", len(mocks),
+		"statefulResources", len(resources),
+	)
+
+	result, err := client.ImportConfig(ctx, collection, true)
+	if err != nil {
+		a.logger().Warn("sync: failed to push admin store to engine",
+			"error", err, "reason", reason,
+			"mocks", len(mocks), "statefulResources", len(resources),
+		)
+		return
 	}
+
+	a.logger().Info("sync complete",
+		"reason", reason,
+		"imported", result.Imported,
+		"total", result.Total,
+	)
 }

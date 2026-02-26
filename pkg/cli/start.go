@@ -203,14 +203,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Load config file if specified
-	if sf.ConfigFile != "" {
-		if err := server.LoadConfig(sf.ConfigFile, false); err != nil {
-			return fmt.Errorf("failed to load config file: %w", err)
-		}
-	}
-
 	// Start the mock server first (before loading mocks via HTTP)
+	// Config files are loaded AFTER admin starts so they route through the
+	// dual-write path (admin store + engine), not directly into the engine.
 	if err := server.Start(); err != nil {
 		if isAddrInUseError(err) {
 			return fmt.Errorf("port %d is already in use — try a different port with --port or check what's using it: lsof -i :%d", sf.Port, sf.Port)
@@ -259,6 +254,25 @@ func runStart(cmd *cobra.Command, args []string) error {
 			wsManager.SetRecordingHookFactory(hookFactory)
 			sseHandler := server.Handler().SSEHandler()
 			sseHandler.SetRecordingHookFactory(hookFactory.CreateSSEHookFactory())
+		}
+	}
+
+	// Load config file if specified — route through admin dual-write path
+	// so mocks land in both the admin store and the engine.
+	if sf.ConfigFile != "" {
+		collection, err := config.LoadFromFile(sf.ConfigFile)
+		if err != nil {
+			_ = server.Stop()
+			_ = adminAPI.Stop()
+			return fmt.Errorf("failed to load config file: %w", err)
+		}
+		baseDir := config.GetMockFileBaseDir(sf.ConfigFile)
+		server.Handler().SetBaseDir(baseDir)
+
+		if _, err := adminAPI.ImportConfigDirect(ctx, collection, false); err != nil {
+			_ = server.Stop()
+			_ = adminAPI.Stop()
+			return fmt.Errorf("failed to import config: %w", err)
 		}
 	}
 

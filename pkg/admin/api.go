@@ -55,6 +55,10 @@ type API struct {
 	cancel                 context.CancelFunc
 	log                    atomic.Pointer[slog.Logger]
 
+	// engineSyncMu prevents concurrent admin-store-to-engine syncs.
+	// Used by syncAdminStoreToEngine to ensure only one sync runs at a time.
+	engineSyncMu sync.Mutex
+
 	// Token management for engine authentication
 	registrationTokens map[string]storedToken // token -> storedToken
 	engineTokens       map[string]storedToken // engineID -> storedToken
