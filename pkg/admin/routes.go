@@ -47,7 +47,7 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /verify", a.requireEngine(a.handleResetAllVerification))
 
 	// Configuration import/export
-	mux.HandleFunc("GET /config", a.requireEngine(a.handleExportConfig))
+	mux.HandleFunc("GET /config", a.handleExportConfig)
 	mux.HandleFunc("POST /config", a.requireEngine(a.handleImportConfig))
 
 	// OpenAPI/Insomnia export (for importing mocks into external tools)
@@ -199,7 +199,7 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	// Metadata endpoints (formats and templates)
 	mux.HandleFunc("GET /formats", a.handleListFormats)
 	mux.HandleFunc("GET /templates", a.handleListTemplates)
-	mux.HandleFunc("POST /templates/{name}", a.requireEngine(a.handleGenerateFromTemplate))
+	mux.HandleFunc("POST /templates/{name}", a.handleGenerateFromTemplate)
 
 	// Engine registry management
 	mux.HandleFunc("GET /engines", a.handleListEngines)

@@ -3,7 +3,6 @@ package admin
 import (
 	"net/http"
 
-	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/portability"
 )
 
@@ -171,7 +170,8 @@ func (a *API) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGenerateFromTemplate handles POST /templates/{name}.
-func (a *API) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+// Uses ImportConfigDirect to dual-write: admin store first, then push to engine.
+func (a *API) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "missing_name", "Template name is required")
@@ -200,9 +200,9 @@ func (a *API) handleGenerateFromTemplate(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Import the generated mocks into the engine via HTTP client
-	if _, err := engine.ImportConfig(r.Context(), collection, false); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "import template mocks"))
+	// Import through admin dual-write path: store first, then push to engine.
+	if _, err := a.ImportConfigDirect(r.Context(), collection, false); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeError(err, a.logger(), "import template mocks"))
 		return
 	}
 

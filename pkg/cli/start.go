@@ -229,7 +229,41 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("engine management API did not become healthy: %w", err)
 	}
 
-	// Load mocks from directory if specified
+	// Create and start the admin API BEFORE loading mocks, so --load and
+	// --watch can route through the admin dual-write path (store + engine).
+	adminOpts := []admin.Option{
+		admin.WithLocalEngine(engineURL),
+		admin.WithWorkspaceManager(engine.NewWorkspaceManager(nil)),
+	}
+	if sf.NoAuth {
+		adminOpts = append(adminOpts, admin.WithAPIKeyDisabled())
+	}
+	if sf.DataDir != "" {
+		adminOpts = append(adminOpts, admin.WithDataDir(sf.DataDir))
+	}
+	adminAPI := admin.NewAPI(sf.AdminPort, adminOpts...)
+	adminAPI.SetLogger(log.With("component", "admin"))
+	if err := adminAPI.Start(); err != nil {
+		_ = server.Stop()
+		if isAddrInUseError(err) {
+			return fmt.Errorf("admin port %d is already in use — try a different port with --admin-port or check what's using it: lsof -i :%d", sf.AdminPort, sf.AdminPort)
+		}
+		return fmt.Errorf("failed to start admin API: %w", err)
+	}
+
+	// Wire stream recording to WebSocket and SSE handlers
+	if recMgr := adminAPI.StreamRecordingManager(); recMgr != nil {
+		if recStore := recMgr.Store(); recStore != nil {
+			hookFactory := recording.NewFileStoreHookFactory(recStore)
+			wsManager := server.Handler().WebSocketManager()
+			wsManager.SetRecordingHookFactory(hookFactory)
+			sseHandler := server.Handler().SSEHandler()
+			sseHandler.SetRecordingHookFactory(hookFactory.CreateSSEHookFactory())
+		}
+	}
+
+	// Load mocks from directory if specified — route through admin API
+	// so mocks are written to both the persistent store and the engine.
 	var dirLoader *config.DirectoryLoader
 	if startLoadDir != "" {
 		dirLoader = config.NewDirectoryLoader(startLoadDir)
@@ -263,22 +297,21 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		// Add loaded mocks to engine via HTTP
-		for _, mock := range result.Collection.Mocks {
-			if _, err := engClient.CreateMock(ctx, mock); err != nil {
-				output.Warn("failed to add mock %s: %v", mock.ID, err)
-			}
+		// Import through admin dual-write path: store first, then push to engine.
+		imported, err := adminAPI.ImportConfigDirect(ctx, result.Collection, false)
+		if err != nil {
+			output.Warn("failed to import mocks: %v", err)
 		}
 
-		fmt.Printf("Loaded %d mocks from %d files in %s\n", len(result.Collection.Mocks), result.FileCount, startLoadDir)
+		fmt.Printf("Loaded %d mocks from %d files in %s\n", imported, result.FileCount, startLoadDir)
 	}
 
-	// Start file watcher if requested
+	// Start file watcher if requested — route through admin API
 	var watcher *config.Watcher
 	if startWatch && dirLoader != nil {
 		watcher = config.NewWatcher(dirLoader)
 		eventCh := watcher.Start()
-		go handleWatchEvents(eventCh, dirLoader, engClient)
+		go handleWatchEvents(eventCh, dirLoader, adminAPI)
 		fmt.Println("Watching for file changes...")
 	}
 	// Ensure watcher cleanup on shutdown
@@ -287,38 +320,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 			watcher.Stop()
 		}
 	}()
-
-	// Create and start the admin API
-	adminOpts := []admin.Option{
-		admin.WithLocalEngine(engineURL),
-		admin.WithWorkspaceManager(engine.NewWorkspaceManager(nil)),
-	}
-	if sf.NoAuth {
-		adminOpts = append(adminOpts, admin.WithAPIKeyDisabled())
-	}
-	if sf.DataDir != "" {
-		adminOpts = append(adminOpts, admin.WithDataDir(sf.DataDir))
-	}
-	adminAPI := admin.NewAPI(sf.AdminPort, adminOpts...)
-	adminAPI.SetLogger(log.With("component", "admin"))
-	if err := adminAPI.Start(); err != nil {
-		_ = server.Stop()
-		if isAddrInUseError(err) {
-			return fmt.Errorf("admin port %d is already in use — try a different port with --admin-port or check what's using it: lsof -i :%d", sf.AdminPort, sf.AdminPort)
-		}
-		return fmt.Errorf("failed to start admin API: %w", err)
-	}
-
-	// Wire stream recording to WebSocket and SSE handlers
-	if recMgr := adminAPI.StreamRecordingManager(); recMgr != nil {
-		if recStore := recMgr.Store(); recStore != nil {
-			hookFactory := recording.NewFileStoreHookFactory(recStore)
-			wsManager := server.Handler().WebSocketManager()
-			wsManager.SetRecordingHookFactory(hookFactory)
-			sseHandler := server.Handler().SSEHandler()
-			sseHandler.SetRecordingHookFactory(hookFactory.CreateSSEHookFactory())
-		}
-	}
 
 	// Register with remote admin if engine mode is enabled
 	if startRegisterURL != "" {
@@ -333,8 +334,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 		// Create engine client to communicate with admin
 		engineClient := engine.NewEngineClient(&engine.EngineClientConfig{
-			AdminURL:     startRegisterURL,
-			EngineName:   name,
+			AdminURL:   startRegisterURL,
+			EngineName: name,
 			// Register the engine control API port so the admin can address the engine.
 			LocalPort:    server.ManagementPort(),
 			PollInterval: 10 * time.Second,
@@ -408,7 +409,9 @@ func printStartupMessage(httpPort, adminPort, httpsPort int) {
 }
 
 // handleWatchEvents processes file change events from the watcher.
-func handleWatchEvents(eventCh <-chan config.WatchEvent, loader *config.DirectoryLoader, engClient *engineclient.Client) {
+// Routes all mock updates through the admin API (ImportConfigDirect) so
+// changes are written to both the persistent store and the engine.
+func handleWatchEvents(eventCh <-chan config.WatchEvent, loader *config.DirectoryLoader, adminAPI *admin.API) {
 	ctx := context.Background()
 	for event := range eventCh {
 		if event.Error != nil {
@@ -425,11 +428,10 @@ func handleWatchEvents(eventCh <-chan config.WatchEvent, loader *config.Director
 			continue
 		}
 
-		// Update mocks in engine via HTTP
-		for _, mock := range collection.Mocks {
-			if _, err := engClient.CreateMock(ctx, mock); err != nil {
-				output.Warn("failed to update mock %s: %v", mock.ID, err)
-			}
+		// Import through admin dual-write path: store first, then push to engine.
+		if _, err := adminAPI.ImportConfigDirect(ctx, collection, false); err != nil {
+			output.Warn("failed to import reloaded mocks from %s: %v", event.Path, err)
+			continue
 		}
 
 		fmt.Printf("Reloaded %d mocks from %s\n", len(collection.Mocks), event.Path)

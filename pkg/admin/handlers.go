@@ -61,17 +61,16 @@ func (a *API) handleGetStatus(w http.ResponseWriter, r *http.Request, engine *en
 		return
 	}
 
-	// Count active mocks from engine status
-	mocks, err := engine.ListMocks(ctx)
-	if err != nil {
-		// Log the error but continue with zero active mocks count
-		// This is non-critical for the status endpoint
-		mocks = nil
-	}
+	// Count active mocks from admin store (single source of truth).
 	activeMocks := 0
-	for _, mock := range mocks {
-		if mock.Enabled == nil || *mock.Enabled {
-			activeMocks++
+	if mockStore := a.getMockStore(); mockStore != nil {
+		allMocks, err := mockStore.List(ctx, nil)
+		if err == nil {
+			for _, m := range allMocks {
+				if m.Enabled == nil || *m.Enabled {
+					activeMocks++
+				}
+			}
 		}
 	}
 
@@ -119,17 +118,46 @@ type ConfigImportRequest struct {
 }
 
 // handleExportConfig handles GET /config.
-func (a *API) handleExportConfig(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+// Builds the export from the admin store (single source of truth) instead of
+// querying the engine, so config export works even if the engine is temporarily
+// unavailable.
+func (a *API) handleExportConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.URL.Query().Get("name")
 	if name == "" {
 		name = "mockd-export"
 	}
 
-	collection, err := engine.ExportConfig(ctx, name)
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "engine_unavailable", sanitizeEngineError(err, a.logger(), "export config"))
+	// Build the export collection from the admin store.
+	mockStore := a.getMockStore()
+	if mockStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "store_unavailable", "Data store not available")
 		return
+	}
+
+	mocks, err := mockStore.List(ctx, nil)
+	if err != nil {
+		a.logger().Error("failed to list mocks for export", "error", err)
+		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)
+		return
+	}
+
+	collection := &config.MockCollection{
+		Version: "1.0",
+		Kind:    "MockCollection",
+		Name:    name,
+		Metadata: &config.CollectionMetadata{
+			Name: name,
+		},
+		Mocks: mocks,
+	}
+
+	// Include stateful resources if available.
+	if a.dataStore != nil {
+		resources, err := a.dataStore.StatefulResources().List(ctx)
+		if err == nil && len(resources) > 0 {
+			collection.StatefulResources = resources
+		}
 	}
 
 	// Support YAML export via ?format=yaml query parameter.
@@ -371,11 +399,13 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	// Use the engine's actual import counts, not the submitted count.
 	imported = importResult.Imported
 
-	// Get the updated state
-	collection, _ := engine.ExportConfig(ctx, "imported")
+	// Get the total mock count from the admin store (single source of truth).
 	total := 0
-	if collection != nil {
-		total = len(collection.Mocks)
+	if mockStore != nil {
+		allMocks, err := mockStore.List(ctx, nil)
+		if err == nil {
+			total = len(allMocks)
+		}
 	}
 	response := map[string]any{
 		"message":  "Configuration imported successfully",

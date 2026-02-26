@@ -182,10 +182,18 @@ func newMockEngineServer() *mockEngineServer {
 		if req.Replace {
 			mes.mocks = make(map[string]*config.MockConfiguration)
 		}
+		imported := 0
 		for _, m := range req.Config.Mocks {
-			mes.mocks[m.ID] = m
+			if m != nil {
+				mes.mocks[m.ID] = m
+				imported++
+			}
 		}
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		json.NewEncoder(w).Encode(engineclient.ImportResult{
+			Imported: imported,
+			Total:    imported,
+			Message:  "ok",
+		})
 	})
 
 	// Request logs
@@ -208,10 +216,6 @@ func newMockEngineServer() *mockEngineServer {
 
 	mes.Server = httptest.NewServer(mux)
 	return mes
-}
-
-func (mes *mockEngineServer) addMock(m *config.MockConfiguration) {
-	mes.mocks[m.ID] = m
 }
 
 func (mes *mockEngineServer) client() *engineclient.Client {
@@ -239,22 +243,28 @@ func TestHandleHealth(t *testing.T) {
 
 // TestHandleGetStatus tests the GET /status handler.
 func TestHandleGetStatus(t *testing.T) {
-	t.Run("returns server status", func(t *testing.T) {
+	t.Run("returns server status with active mocks from admin store", func(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		server.addMock(&config.MockConfiguration{
+		api := NewAPI(8080,
+			WithDataDir(t.TempDir()),
+			WithLocalEngineClient(server.client()),
+		)
+
+		// Populate the admin store (single source of truth for mock count).
+		ctx := t.Context()
+		mockStore := api.dataStore.Mocks()
+		_ = mockStore.Create(ctx, &config.MockConfiguration{
 			ID:      "mock-1",
 			Enabled: boolPtr(true),
 			Type:    mock.TypeHTTP,
 		})
-		server.addMock(&config.MockConfiguration{
+		_ = mockStore.Create(ctx, &config.MockConfiguration{
 			ID:      "mock-2",
 			Enabled: boolPtr(false),
 			Type:    mock.TypeHTTP,
 		})
-
-		api := NewAPI(8080, WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/status", nil)
 		rec := httptest.NewRecorder()
@@ -272,8 +282,9 @@ func TestHandleGetStatus(t *testing.T) {
 		assert.Equal(t, int64(100), resp.Uptime)
 		assert.Equal(t, 4280, resp.HTTPPort)
 		assert.False(t, resp.StartedAt.IsZero())
-		assert.Equal(t, 2, resp.MockCount)
-		assert.Equal(t, 1, resp.ActiveMocks)
+		// MockCount comes from engine status (total registered).
+		// ActiveMocks comes from admin store (enabled mocks).
+		assert.Equal(t, 1, resp.ActiveMocks, "only 1 mock is enabled in admin store")
 		assert.Equal(t, 8080, resp.AdminPort)
 	})
 
@@ -291,23 +302,23 @@ func TestHandleGetStatus(t *testing.T) {
 
 // TestHandleExportConfig tests the GET /config handler.
 func TestHandleExportConfig(t *testing.T) {
-	t.Run("exports configuration", func(t *testing.T) {
-		server := newMockEngineServer()
-		defer server.Close()
+	t.Run("exports configuration from admin store", func(t *testing.T) {
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
-		server.addMock(&config.MockConfiguration{
+		// Populate the admin store (single source of truth for export).
+		ctx := t.Context()
+		mockStore := api.dataStore.Mocks()
+		_ = mockStore.Create(ctx, &config.MockConfiguration{
 			ID:      "mock-1",
 			Name:    "Export Test Mock",
 			Enabled: boolPtr(true),
 			Type:    mock.TypeHTTP,
 		})
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
-
 		req := httptest.NewRequest("GET", "/config", nil)
 		rec := httptest.NewRecorder()
 
-		api.handleExportConfig(rec, req, server.client())
+		api.handleExportConfig(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -315,28 +326,93 @@ func TestHandleExportConfig(t *testing.T) {
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.Equal(t, "1.0", resp.Version)
+		assert.Equal(t, "MockCollection", resp.Kind)
 		assert.Len(t, resp.Mocks, 1)
+		assert.Equal(t, "mock-1", resp.Mocks[0].ID)
 	})
 
-	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAPI(0)
+	t.Run("exports with custom name via query param", func(t *testing.T) {
+		api := NewAPI(0, WithDataDir(t.TempDir()))
+
+		req := httptest.NewRequest("GET", "/config?name=my-export", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleExportConfig(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp config.MockCollection
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		require.NotNil(t, resp.Metadata)
+		assert.Equal(t, "my-export", resp.Metadata.Name)
+	})
+
+	t.Run("export works even without engine (store-only)", func(t *testing.T) {
+		// No engine configured — export should still work from the store.
+		api := NewAPI(0, WithDataDir(t.TempDir()))
+
+		ctx := t.Context()
+		_ = api.dataStore.Mocks().Create(ctx, &config.MockConfiguration{
+			ID:   "store-only-mock",
+			Name: "Store Only",
+			Type: mock.TypeHTTP,
+		})
 
 		req := httptest.NewRequest("GET", "/config", nil)
 		rec := httptest.NewRecorder()
 
-		api.requireEngine(api.handleExportConfig)(rec, req)
+		api.handleExportConfig(rec, req)
 
-		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp config.MockCollection
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Len(t, resp.Mocks, 1)
+		assert.Equal(t, "store-only-mock", resp.Mocks[0].ID)
+	})
+
+	t.Run("includes stateful resources in export", func(t *testing.T) {
+		api := NewAPI(0, WithDataDir(t.TempDir()))
+
+		ctx := t.Context()
+		_ = api.dataStore.StatefulResources().Create(ctx, &config.StatefulResourceConfig{
+			Name:     "users",
+			BasePath: "/api/users",
+		})
+
+		req := httptest.NewRequest("GET", "/config", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleExportConfig(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp config.MockCollection
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		require.Len(t, resp.StatefulResources, 1)
+		assert.Equal(t, "users", resp.StatefulResources[0].Name)
 	})
 }
 
 // TestHandleImportConfig tests the POST /config handler.
 func TestHandleImportConfig(t *testing.T) {
-	t.Run("imports configuration", func(t *testing.T) {
+	t.Run("imports configuration and reports total from admin store", func(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0,
+			WithDataDir(t.TempDir()),
+			WithLocalEngineClient(server.client()),
+		)
+
+		// Pre-populate store with an existing mock so total > imported.
+		ctx := t.Context()
+		_ = api.dataStore.Mocks().Create(ctx, &config.MockConfiguration{
+			ID:   "existing-mock",
+			Name: "Existing",
+			Type: mock.TypeHTTP,
+		})
 
 		importData := map[string]interface{}{
 			"config": map[string]interface{}{
@@ -360,7 +436,14 @@ func TestHandleImportConfig(t *testing.T) {
 
 		api.handleImportConfig(rec, req, server.client())
 
-		assert.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		// Verify the response total comes from admin store (existing + imported).
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		// total should be 2: 1 existing + 1 imported (both in admin store).
+		assert.Equal(t, float64(2), resp["total"], "total should come from admin store, not engine")
+		assert.Equal(t, float64(1), resp["imported"], "imported should come from engine result")
 	})
 
 	t.Run("imports unwrapped config (export format)", func(t *testing.T) {

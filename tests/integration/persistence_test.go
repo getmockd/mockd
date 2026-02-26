@@ -299,8 +299,9 @@ func TestPersistenceImportViaAdminAPI(t *testing.T) {
 func TestPersistenceExportViaAdminAPI(t *testing.T) {
 	bundle := setupPersistenceServer(t)
 
-	// Add a mock
-	_, err := bundle.Client.CreateMock(context.Background(), &config.MockConfiguration{
+	// Add a mock through admin API (not engine directly) so it lands in
+	// the admin store — the single source of truth for config export.
+	mockJSON, _ := json.Marshal(&config.MockConfiguration{
 		ID:      "export-mock",
 		Enabled: boolPtr(true),
 		Type:    mock.TypeHTTP,
@@ -316,7 +317,14 @@ func TestPersistenceExportViaAdminAPI(t *testing.T) {
 			},
 		},
 	})
+	createResp, err := http.Post(
+		fmt.Sprintf("http://localhost:%d/mocks", bundle.AdminPort),
+		"application/json",
+		bytes.NewReader(mockJSON),
+	)
 	require.NoError(t, err)
+	createResp.Body.Close()
+	require.Equal(t, http.StatusCreated, createResp.StatusCode)
 
 	// Export config
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/config?name=my-export", bundle.AdminPort))
