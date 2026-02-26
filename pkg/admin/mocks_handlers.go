@@ -1086,6 +1086,11 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteUnifiedMock deletes a mock by ID.
 // DELETE /mocks/{id}
+//
+// The admin store is the source of truth. All mocks — whether loaded from a
+// config file or created via the API — are written to the admin store first,
+// then pushed to the engine. Delete follows the same pattern: store first,
+// then notify the engine to stop serving.
 func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {

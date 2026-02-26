@@ -377,13 +377,22 @@ func runServeWithFlags(flags *serveFlags) error {
 		return err
 	}
 
-	// Handle runtime/pull/local modes and load mocks
-	if err := handleOperatingMode(sctx); err != nil {
+	// Start all servers (engine + admin) BEFORE loading mocks.
+	// Config loading goes through admin so mocks are written to both the
+	// persistent store and the engine — keeping them in sync from the start.
+	if err := startServers(sctx); err != nil {
 		return err
 	}
 
-	// Start all servers
-	if err := startServers(sctx); err != nil {
+	// Load mocks through admin (must happen after servers are up)
+	if err := handleOperatingMode(sctx); err != nil {
+		_ = sctx.server.Stop()
+		_ = sctx.adminAPI.Stop()
+		return err
+	}
+
+	// PID file, MCP server, startup message (needs mock counts)
+	if err := postStartup(sctx); err != nil {
 		return err
 	}
 
@@ -725,19 +734,38 @@ func handlePullMode(sctx *serveContext) error {
 		}
 	}
 
-	// Load pulled content into server
-	if err := sctx.server.LoadConfigFromBytes(content, false); err != nil {
-		return fmt.Errorf("failed to load pulled mocks: %w", err)
+	// Parse pulled content
+	collection, err := config.ParseJSON(content)
+	if err != nil {
+		return fmt.Errorf("failed to parse pulled mocks: %w", err)
+	}
+
+	// Import through admin — writes to persistent store + pushes to engine.
+	if _, err := sctx.adminAPI.ImportConfigDirect(sctx.ctx, collection, false); err != nil {
+		return fmt.Errorf("failed to import pulled mocks: %w", err)
 	}
 
 	fmt.Printf("Pulled mocks from %s\n", f.pull)
 	return nil
 }
 
-// handleLocalMode loads mocks from a local configuration file.
+// handleLocalMode loads mocks from a local configuration file through the admin
+// API so they are written to both the persistent store and the engine.
 func handleLocalMode(sctx *serveContext) error {
-	if err := sctx.server.LoadConfig(sctx.flags.configFile, false); err != nil {
+	// Parse the YAML config file
+	collection, err := config.LoadFromFile(sctx.flags.configFile)
+	if err != nil {
 		return fmt.Errorf("failed to load config file: %w", err)
+	}
+
+	// Set the handler's base directory so relative bodyFile paths resolve
+	// relative to the config file location.
+	baseDir := config.GetMockFileBaseDir(sctx.flags.configFile)
+	sctx.server.Handler().SetBaseDir(baseDir)
+
+	// Import through admin — writes to persistent store + pushes to engine.
+	if _, err := sctx.adminAPI.ImportConfigDirect(sctx.ctx, collection, false); err != nil {
+		return fmt.Errorf("failed to import config: %w", err)
 	}
 	return nil
 }
@@ -804,6 +832,17 @@ func startServers(sctx *serveContext) error {
 		return fmt.Errorf("engine control API did not become healthy: %w", err)
 	}
 
+	return nil
+}
+
+// postStartup runs after both servers are up and mocks are loaded.
+// It writes the PID file, starts MCP, and prints the startup message.
+func postStartup(sctx *serveContext) error {
+	f := sctx.flags
+
+	engineURL := fmt.Sprintf("http://localhost:%d", sctx.server.ManagementPort())
+	engClient := engineclient.New(engineURL)
+
 	// Write PID file for process management (both foreground and detach modes)
 	if f.pidFile != "" {
 		mocksCount, _ := engClient.ListMocks(sctx.ctx)
@@ -836,7 +875,7 @@ func startServers(sctx *serveContext) error {
 		sctx.mcpServer = mcpServer
 	}
 
-	// Print startup message - count mocks and stateful resources
+	// Print startup message — count mocks and stateful resources
 	mocks, _ := engClient.ListMocks(sctx.ctx)
 	mocksLoaded := len(mocks)
 	statefulCount := 0

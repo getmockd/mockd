@@ -392,6 +392,77 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	writeJSON(w, http.StatusOK, response)
 }
 
+// ImportConfigDirect imports a mock collection without going through HTTP.
+// Used by serve.go to load initial config after both the engine and admin are
+// started. This ensures mocks are written to the persistent store AND pushed
+// to the engine — keeping both in sync from the start.
+func (a *API) ImportConfigDirect(ctx context.Context, collection *config.MockCollection, replace bool) (int, error) {
+	engine := a.localEngine.Load()
+	if engine == nil {
+		return 0, errors.New("no engine connected — cannot import config")
+	}
+
+	mockStore := a.getMockStore()
+
+	now := time.Now()
+	for _, m := range collection.Mocks {
+		if m == nil {
+			continue
+		}
+		if m.WorkspaceID == "" {
+			m.WorkspaceID = store.DefaultWorkspaceID
+		}
+		if m.CreatedAt.IsZero() {
+			m.CreatedAt = now
+		}
+		m.UpdatedAt = now
+	}
+
+	// Clear stores if replacing
+	if replace && mockStore != nil {
+		existing, _ := mockStore.List(ctx, nil)
+		for _, em := range existing {
+			_ = mockStore.Delete(ctx, em.ID)
+		}
+	}
+
+	// Write mocks to the admin file store (so CRUD operations find them)
+	if mockStore != nil {
+		for _, m := range collection.Mocks {
+			if m == nil {
+				continue
+			}
+			if m.ID == "" {
+				m.ID = generateMockID(m.Type)
+			}
+			if err := mockStore.Create(ctx, m); err != nil {
+				if errors.Is(err, store.ErrAlreadyExists) {
+					_ = mockStore.Update(ctx, m)
+				} else {
+					a.logger().Warn("failed to write imported mock to file store",
+						"id", m.ID, "error", err)
+				}
+			}
+		}
+	}
+
+	// Persist stateful resources
+	a.persistStatefulResources(ctx, collection, replace)
+
+	// Pre-validate before sending to engine
+	if err := preValidateImportMocks(collection.Mocks); err != nil {
+		return 0, err
+	}
+
+	// Forward to engine for runtime registration
+	importResult, err := engine.ImportConfig(ctx, collection, replace)
+	if err != nil {
+		return 0, fmt.Errorf("engine import failed: %w", err)
+	}
+
+	return importResult.Imported, nil
+}
+
 // handleListRequests handles GET /requests.
 // Supports filtering by protocol, method, path, and protocol-specific fields.
 //
