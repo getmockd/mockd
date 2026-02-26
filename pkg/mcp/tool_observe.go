@@ -46,7 +46,7 @@ func handleGetServerStatus(args map[string]interface{}, session *MCPSession, ser
 	stats, err := client.GetStats()
 	if err == nil && stats != nil {
 		result["uptime"] = stats.Uptime
-		result["totalRequests"] = stats.TotalRequests
+		result["totalRequests"] = stats.RequestCount
 		result["mockCount"] = stats.MockCount
 	}
 

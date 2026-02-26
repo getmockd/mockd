@@ -276,7 +276,7 @@ func handleDeleteMock(args map[string]interface{}, session *MCPSession, server *
 	return ToolResultJSON(result)
 }
 
-// handleToggleMock enables or disables a mock.
+// handleToggleMock enables or disables a mock using PATCH for atomic state change.
 func handleToggleMock(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
@@ -290,19 +290,15 @@ func handleToggleMock(args map[string]interface{}, session *MCPSession, server *
 
 	enabled := getBool(args, "enabled", true)
 
-	mockCfg, err := client.GetMock(id)
+	// Use PATCH to atomically set the enabled state without a GET+PUT race.
+	_, err := client.PatchMock(id, map[string]interface{}{
+		"enabled": enabled,
+	})
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		if isConnectionError(err) {
 			return ToolResultError("failed to toggle mock: " + adminError(err, session.GetAdminURL())), nil
 		}
-		return ToolResultError("mock not found: " + id), nil
-	}
-
-	mockCfg.Enabled = &enabled
-
-	if _, err := client.UpdateMock(id, mockCfg); err != nil {
-		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to toggle mock: " + adminError(err, session.GetAdminURL())), nil
 	}
 

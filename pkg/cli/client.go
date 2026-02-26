@@ -34,6 +34,10 @@ type AdminClient interface {
 	CreateMock(mock *config.MockConfiguration) (*CreateMockResult, error)
 	// UpdateMock updates an existing mock by ID.
 	UpdateMock(id string, mock *config.MockConfiguration) (*config.MockConfiguration, error)
+	// ToggleMock atomically toggles a mock's enabled state via POST /mocks/{id}/toggle.
+	ToggleMock(id string) (*config.MockConfiguration, error)
+	// PatchMock partially updates a mock via PATCH /mocks/{id}.
+	PatchMock(id string, patch map[string]interface{}) (*config.MockConfiguration, error)
 	// DeleteMock deletes a mock by ID.
 	DeleteMock(id string) error
 	// ImportConfig imports a mock collection, optionally replacing existing mocks.
@@ -141,11 +145,11 @@ func (r *CreateMockResult) IsMerge() bool {
 	return r.Action == "merged"
 }
 
-// StatsResult contains server statistics.
+// StatsResult contains server statistics returned by GET /status.
 type StatsResult struct {
-	Uptime        int   `json:"uptime"`
-	TotalRequests int64 `json:"totalRequests"`
-	MockCount     int   `json:"mockCount"`
+	Uptime       int64 `json:"uptime"`
+	RequestCount int64 `json:"requestCount"`
+	MockCount    int   `json:"mockCount"`
 }
 
 // WorkspaceResult contains the result of creating a workspace.
@@ -462,6 +466,69 @@ func (c *adminClient) UpdateMock(id string, mock *config.MockConfiguration) (*co
 	return &envelope.Mock, nil
 }
 
+// ToggleMock atomically toggles a mock's enabled state.
+// POST /mocks/{id}/toggle — flips enabled ↔ disabled server-side.
+func (c *adminClient) ToggleMock(id string) (*config.MockConfiguration, error) {
+	resp, err := c.post("/mocks/"+url.PathEscape(id)+"/toggle", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "mock not found: " + id,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var envelope struct {
+		Mock config.MockConfiguration `json:"mock"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &envelope.Mock, nil
+}
+
+// PatchMock partially updates a mock via PATCH /mocks/{id}.
+// Only the fields present in the patch map are modified.
+func (c *adminClient) PatchMock(id string, patch map[string]interface{}) (*config.MockConfiguration, error) {
+	body, err := json.Marshal(patch)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode patch: %w", err)
+	}
+
+	resp, err := c.doRequest(http.MethodPatch, "/mocks/"+url.PathEscape(id), body)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "mock not found: " + id,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var envelope struct {
+		Mock config.MockConfiguration `json:"mock"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &envelope.Mock, nil
+}
+
 // DeleteMock deletes a mock by ID.
 func (c *adminClient) DeleteMock(id string) error {
 	resp, err := c.delete("/mocks/" + url.PathEscape(id))
@@ -696,9 +763,9 @@ func (c *adminClient) GetMQTTStatus() (map[string]interface{}, error) {
 	return result, nil
 }
 
-// GetStats returns server statistics.
+// GetStats returns server statistics from GET /status.
 func (c *adminClient) GetStats() (*StatsResult, error) {
-	resp, err := c.get("/stats")
+	resp, err := c.get("/status")
 	if err != nil {
 		return nil, err
 	}

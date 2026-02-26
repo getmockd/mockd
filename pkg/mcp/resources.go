@@ -301,7 +301,7 @@ func (p *ResourceProvider) readConfigResource() ([]ResourceContent, *JSONRPCErro
 		// Get stats if available
 		stats, err := p.adminClient.GetStats()
 		if err == nil && stats != nil {
-			content["totalRequests"] = stats.TotalRequests
+			content["totalRequests"] = stats.RequestCount
 			content["uptime"] = stats.Uptime
 		}
 	}
