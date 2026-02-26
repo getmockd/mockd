@@ -333,7 +333,12 @@ func (w *WSDLImporter) generateCollection(def *wsdlDefinitions, originalWSDL []b
 		portTypeMap[def.PortTypes[i].Name] = &def.PortTypes[i]
 	}
 
-	// Generate one mock.Mock per service
+	// Generate one mock per unique path.
+	// When a WSDL defines multiple bindings (SOAP 1.1, SOAP 1.2, HTTP POST) for the
+	// same service, they often share the same path. We merge their operations into a
+	// single mock to avoid ambiguous routing on the same endpoint.
+	mockByPath := make(map[string]*config.MockConfiguration)
+
 	for _, svc := range def.Services {
 		for _, port := range svc.Ports {
 			// Resolve the binding → portType chain
@@ -349,9 +354,31 @@ func (w *WSDLImporter) generateCollection(def *wsdlDefinitions, originalWSDL []b
 			// Determine path from soap:address or fallback
 			path := extractPath(port.Location, svc.Name)
 
-			// Build operations map
-			operations := make(map[string]mock.OperationConfig, len(pt.Operations))
+			// Reuse existing mock for this path, or create a new one
+			m, exists := mockByPath[path]
+			if !exists {
+				m = &config.MockConfiguration{
+					ID:      generateSOAPImportID(),
+					Type:    mock.TypeSOAP,
+					Name:    svc.Name + " - " + port.Name,
+					Enabled: &enabled,
+					SOAP: &mock.SOAPSpec{
+						Path:       path,
+						WSDL:       string(originalWSDL),
+						Operations: make(map[string]mock.OperationConfig),
+					},
+					CreatedAt: now,
+					UpdatedAt: now,
+				}
+				mockByPath[path] = m
+				collection.Mocks = append(collection.Mocks, m)
+			}
+
+			// Merge operations — first binding wins for each operation name
 			for _, op := range pt.Operations {
+				if _, have := m.SOAP.Operations[op.Name]; have {
+					continue // already registered by an earlier binding
+				}
 				opConfig := mock.OperationConfig{
 					SOAPAction: soapActionMap[op.Name],
 				}
@@ -370,24 +397,8 @@ func (w *WSDLImporter) generateCollection(def *wsdlDefinitions, originalWSDL []b
 					}
 				}
 
-				operations[op.Name] = opConfig
+				m.SOAP.Operations[op.Name] = opConfig
 			}
-
-			m := &config.MockConfiguration{
-				ID:      generateSOAPImportID(),
-				Type:    mock.TypeSOAP,
-				Name:    svc.Name + " - " + port.Name,
-				Enabled: &enabled,
-				SOAP: &mock.SOAPSpec{
-					Path:       path,
-					WSDL:       string(originalWSDL),
-					Operations: operations,
-				},
-				CreatedAt: now,
-				UpdatedAt: now,
-			}
-
-			collection.Mocks = append(collection.Mocks, m)
 		}
 	}
 

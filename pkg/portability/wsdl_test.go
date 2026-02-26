@@ -102,6 +102,58 @@ func TestWSDLImporter_ParseUserService_WithXSDTypes(t *testing.T) {
 	assert.Contains(t, getOp.Response, "<user>")
 }
 
+func TestWSDLImporter_MultipleBindingsSamePath(t *testing.T) {
+	// Bug 3: WSDLs with SOAP 1.1 + SOAP 1.2 bindings on the same path should
+	// produce one mock (operations merged by path), not duplicate mocks.
+	wsdl := []byte(`<?xml version="1.0" encoding="UTF-8"?>
+<definitions name="MultiBindService"
+             targetNamespace="http://example.com/multi"
+             xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:tns="http://example.com/multi"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/">
+  <message name="DoThingInput"/>
+  <message name="DoThingOutput"/>
+  <portType name="MultiPort">
+    <operation name="DoThing">
+      <input message="tns:DoThingInput"/>
+      <output message="tns:DoThingOutput"/>
+    </operation>
+  </portType>
+  <binding name="MultiSoap11" type="tns:MultiPort">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="DoThing">
+      <soap:operation soapAction="http://example.com/multi/DoThing"/>
+    </operation>
+  </binding>
+  <binding name="MultiSoap12" type="tns:MultiPort">
+    <soap12:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="DoThing">
+      <soap12:operation soapAction="http://example.com/multi/DoThing"/>
+    </operation>
+  </binding>
+  <service name="MultiService">
+    <port name="Soap11Port" binding="tns:MultiSoap11">
+      <soap:address location="http://localhost/soap/multi"/>
+    </port>
+    <port name="Soap12Port" binding="tns:MultiSoap12">
+      <soap12:address location="http://localhost/soap/multi"/>
+    </port>
+  </service>
+</definitions>`)
+
+	importer := &WSDLImporter{}
+	collection, err := importer.Import(wsdl)
+	require.NoError(t, err)
+
+	// Should produce exactly 1 mock (merged by path), not 2
+	require.Len(t, collection.Mocks, 1, "multiple bindings on same path should merge into one mock")
+
+	m := collection.Mocks[0]
+	assert.Equal(t, "/soap/multi", m.SOAP.Path)
+	assert.Contains(t, m.SOAP.Operations, "DoThing")
+}
+
 func TestWSDLImporter_ParsePrefixedWSDL(t *testing.T) {
 	// user-service.wsdl uses wsdl: prefix — tests namespace-prefixed parsing
 	data := readTestWSDL(t, "user-service.wsdl")
