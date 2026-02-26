@@ -693,3 +693,341 @@ func TestChaosHandlerConcurrency(t *testing.T) {
 		}
 	})
 }
+
+// --- Chaos Profile Tests ---
+
+// TestHandleListChaosProfiles tests the GET /chaos/profiles handler.
+func TestHandleListChaosProfiles(t *testing.T) {
+	t.Run("returns all 10 profiles", func(t *testing.T) {
+		api := NewAPI(0)
+
+		req := httptest.NewRequest("GET", "/chaos/profiles", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleListChaosProfiles(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+		var profiles []chaosProfileResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &profiles)
+		require.NoError(t, err)
+		assert.Len(t, profiles, 10)
+
+		// Verify sorted alphabetically
+		for i := 1; i < len(profiles); i++ {
+			assert.Less(t, profiles[i-1].Name, profiles[i].Name,
+				"profiles should be sorted alphabetically")
+		}
+	})
+
+	t.Run("all profiles have required fields", func(t *testing.T) {
+		api := NewAPI(0)
+
+		req := httptest.NewRequest("GET", "/chaos/profiles", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleListChaosProfiles(rec, req)
+
+		var profiles []chaosProfileResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &profiles)
+		require.NoError(t, err)
+
+		for _, p := range profiles {
+			assert.NotEmpty(t, p.Name, "profile should have a name")
+			assert.NotEmpty(t, p.Description, "profile should have a description")
+			assert.True(t, p.Config.Enabled, "profile config should be enabled")
+		}
+	})
+
+	t.Run("does not require engine", func(t *testing.T) {
+		api := NewAPI(0) // No engine — profiles are static data
+
+		req := httptest.NewRequest("GET", "/chaos/profiles", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleListChaosProfiles(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+}
+
+// TestHandleGetChaosProfile tests the GET /chaos/profiles/{name} handler.
+func TestHandleGetChaosProfile(t *testing.T) {
+	t.Run("returns specific profile", func(t *testing.T) {
+		api := NewAPI(0)
+
+		req := httptest.NewRequest("GET", "/chaos/profiles/slow-api", nil)
+		req.SetPathValue("name", "slow-api")
+		rec := httptest.NewRecorder()
+
+		api.handleGetChaosProfile(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var profile chaosProfileResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &profile)
+		require.NoError(t, err)
+		assert.Equal(t, "slow-api", profile.Name)
+		assert.Equal(t, "Simulates slow upstream API", profile.Description)
+		assert.True(t, profile.Config.Enabled)
+		require.NotNil(t, profile.Config.Latency)
+		assert.Equal(t, "500ms", profile.Config.Latency.Min)
+		assert.Equal(t, "2000ms", profile.Config.Latency.Max)
+		assert.Equal(t, 1.0, profile.Config.Latency.Probability)
+	})
+
+	t.Run("returns profile with error rate", func(t *testing.T) {
+		api := NewAPI(0)
+
+		req := httptest.NewRequest("GET", "/chaos/profiles/offline", nil)
+		req.SetPathValue("name", "offline")
+		rec := httptest.NewRecorder()
+
+		api.handleGetChaosProfile(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var profile chaosProfileResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &profile)
+		require.NoError(t, err)
+		assert.Equal(t, "offline", profile.Name)
+		require.NotNil(t, profile.Config.ErrorRate)
+		assert.Equal(t, 1.0, profile.Config.ErrorRate.Probability)
+		assert.Contains(t, profile.Config.ErrorRate.StatusCodes, 503)
+	})
+
+	t.Run("returns profile with bandwidth", func(t *testing.T) {
+		api := NewAPI(0)
+
+		req := httptest.NewRequest("GET", "/chaos/profiles/mobile-3g", nil)
+		req.SetPathValue("name", "mobile-3g")
+		rec := httptest.NewRecorder()
+
+		api.handleGetChaosProfile(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var profile chaosProfileResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &profile)
+		require.NoError(t, err)
+		assert.Equal(t, "mobile-3g", profile.Name)
+		require.NotNil(t, profile.Config.Latency)
+		require.NotNil(t, profile.Config.ErrorRate)
+		require.NotNil(t, profile.Config.Bandwidth)
+		assert.Equal(t, 51200, profile.Config.Bandwidth.BytesPerSecond)
+	})
+
+	t.Run("returns 404 for unknown profile", func(t *testing.T) {
+		api := NewAPI(0)
+
+		req := httptest.NewRequest("GET", "/chaos/profiles/nonexistent", nil)
+		req.SetPathValue("name", "nonexistent")
+		rec := httptest.NewRecorder()
+
+		api.handleGetChaosProfile(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+
+		var resp ErrorResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "not_found", resp.Error)
+		assert.Contains(t, resp.Message, "nonexistent")
+	})
+
+	t.Run("returns 400 for empty name", func(t *testing.T) {
+		api := NewAPI(0)
+
+		req := httptest.NewRequest("GET", "/chaos/profiles/", nil)
+		req.SetPathValue("name", "")
+		rec := httptest.NewRecorder()
+
+		api.handleGetChaosProfile(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+}
+
+// TestHandleApplyChaosProfile tests the POST /chaos/profiles/{name}/apply handler.
+func TestHandleApplyChaosProfile(t *testing.T) {
+	t.Run("applies slow-api profile", func(t *testing.T) {
+		server := newMockChaosEngineServer()
+		defer server.Close()
+
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
+
+		req := httptest.NewRequest("POST", "/chaos/profiles/slow-api/apply", nil)
+		req.SetPathValue("name", "slow-api")
+		rec := httptest.NewRecorder()
+
+		api.handleApplyChaosProfile(rec, req, server.client())
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp map[string]interface{}
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "ok", resp["status"])
+		assert.Equal(t, "slow-api", resp["profile"])
+
+		// Verify the engine received the config
+		assert.True(t, server.chaosConfig.Enabled)
+		require.NotNil(t, server.chaosConfig.Latency)
+		assert.Equal(t, "500ms", server.chaosConfig.Latency.Min)
+		assert.Equal(t, "2000ms", server.chaosConfig.Latency.Max)
+	})
+
+	t.Run("applies offline profile", func(t *testing.T) {
+		server := newMockChaosEngineServer()
+		defer server.Close()
+
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
+
+		req := httptest.NewRequest("POST", "/chaos/profiles/offline/apply", nil)
+		req.SetPathValue("name", "offline")
+		rec := httptest.NewRecorder()
+
+		api.handleApplyChaosProfile(rec, req, server.client())
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		// Verify the engine received the config
+		assert.True(t, server.chaosConfig.Enabled)
+		require.NotNil(t, server.chaosConfig.ErrorRate)
+		assert.Equal(t, 1.0, server.chaosConfig.ErrorRate.Probability)
+	})
+
+	t.Run("applies overloaded profile with all fault types", func(t *testing.T) {
+		server := newMockChaosEngineServer()
+		defer server.Close()
+
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
+
+		req := httptest.NewRequest("POST", "/chaos/profiles/overloaded/apply", nil)
+		req.SetPathValue("name", "overloaded")
+		rec := httptest.NewRecorder()
+
+		api.handleApplyChaosProfile(rec, req, server.client())
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		// Verify all three fault types are set
+		assert.True(t, server.chaosConfig.Enabled)
+		require.NotNil(t, server.chaosConfig.Latency)
+		require.NotNil(t, server.chaosConfig.ErrorRate)
+		require.NotNil(t, server.chaosConfig.Bandwidth)
+		assert.Equal(t, "1000ms", server.chaosConfig.Latency.Min)
+		assert.Equal(t, "5000ms", server.chaosConfig.Latency.Max)
+		assert.Equal(t, 0.15, server.chaosConfig.ErrorRate.Probability)
+		assert.Equal(t, 102400, server.chaosConfig.Bandwidth.BytesPerSecond)
+	})
+
+	t.Run("returns 404 for unknown profile", func(t *testing.T) {
+		server := newMockChaosEngineServer()
+		defer server.Close()
+
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
+
+		req := httptest.NewRequest("POST", "/chaos/profiles/nonexistent/apply", nil)
+		req.SetPathValue("name", "nonexistent")
+		rec := httptest.NewRecorder()
+
+		api.handleApplyChaosProfile(rec, req, server.client())
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+
+		var resp ErrorResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "not_found", resp.Error)
+	})
+
+	t.Run("returns 400 for empty name", func(t *testing.T) {
+		server := newMockChaosEngineServer()
+		defer server.Close()
+
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
+
+		req := httptest.NewRequest("POST", "/chaos/profiles//apply", nil)
+		req.SetPathValue("name", "")
+		rec := httptest.NewRecorder()
+
+		api.handleApplyChaosProfile(rec, req, server.client())
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("returns error when no engine connected", func(t *testing.T) {
+		api := NewAPI(0) // No engine
+
+		req := httptest.NewRequest("POST", "/chaos/profiles/slow-api/apply", nil)
+		req.SetPathValue("name", "slow-api")
+		rec := httptest.NewRecorder()
+
+		// Use requireEngine wrapper like the real route does
+		api.requireEngine(api.handleApplyChaosProfile)(rec, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+
+		var resp ErrorResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "no_engine", resp.Error)
+	})
+}
+
+// TestChaosConfigToAPI tests the internal conversion from chaos.ChaosConfig to API types.
+func TestChaosConfigToAPI(t *testing.T) {
+	t.Run("converts all 10 profiles without error", func(t *testing.T) {
+		api := NewAPI(0)
+
+		req := httptest.NewRequest("GET", "/chaos/profiles", nil)
+		rec := httptest.NewRecorder()
+
+		api.handleListChaosProfiles(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var profiles []chaosProfileResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &profiles)
+		require.NoError(t, err)
+
+		for _, p := range profiles {
+			assert.True(t, p.Config.Enabled, "profile %s should be enabled", p.Name)
+			// At least one fault type should be configured
+			hasFault := p.Config.Latency != nil || p.Config.ErrorRate != nil || p.Config.Bandwidth != nil
+			assert.True(t, hasFault, "profile %s should have at least one fault type", p.Name)
+		}
+	})
+
+	t.Run("profile apply-then-get roundtrip", func(t *testing.T) {
+		server := newMockChaosEngineServer()
+		defer server.Close()
+
+		api := NewAPI(0, WithLocalEngineClient(server.client()))
+
+		// Apply a profile
+		req := httptest.NewRequest("POST", "/chaos/profiles/degraded/apply", nil)
+		req.SetPathValue("name", "degraded")
+		rec := httptest.NewRecorder()
+		api.handleApplyChaosProfile(rec, req, server.client())
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		// Get the chaos config and verify it matches the profile
+		req = httptest.NewRequest("GET", "/chaos", nil)
+		rec = httptest.NewRecorder()
+		api.handleGetChaos(rec, req, server.client())
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var cfg engineclient.ChaosConfig
+		err := json.Unmarshal(rec.Body.Bytes(), &cfg)
+		require.NoError(t, err)
+		assert.True(t, cfg.Enabled)
+		require.NotNil(t, cfg.Latency)
+		assert.Equal(t, "200ms", cfg.Latency.Min)
+		assert.Equal(t, "800ms", cfg.Latency.Max)
+		require.NotNil(t, cfg.ErrorRate)
+		assert.Equal(t, 0.05, cfg.ErrorRate.Probability)
+	})
+}
