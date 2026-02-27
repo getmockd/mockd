@@ -22,6 +22,7 @@ const (
 	FormatWireMock Format = "wiremock" // WireMock JSON mappings
 	FormatCURL     Format = "curl"     // cURL command
 	FormatWSDL     Format = "wsdl"     // WSDL 1.1 service definition
+	FormatMockoon  Format = "mockoon"  // Mockoon environment JSON
 )
 
 // String returns the string representation of the format.
@@ -32,7 +33,7 @@ func (f Format) String() string {
 // IsValid returns true if the format is a known format.
 func (f Format) IsValid() bool {
 	switch f {
-	case FormatMockd, FormatOpenAPI, FormatPostman, FormatHAR, FormatWireMock, FormatCURL, FormatWSDL:
+	case FormatMockd, FormatOpenAPI, FormatPostman, FormatHAR, FormatWireMock, FormatCURL, FormatWSDL, FormatMockoon:
 		return true
 	default:
 		return false
@@ -42,7 +43,7 @@ func (f Format) IsValid() bool {
 // CanImport returns true if this format supports importing.
 func (f Format) CanImport() bool {
 	switch f {
-	case FormatMockd, FormatOpenAPI, FormatPostman, FormatHAR, FormatWireMock, FormatCURL, FormatWSDL:
+	case FormatMockd, FormatOpenAPI, FormatPostman, FormatHAR, FormatWireMock, FormatCURL, FormatWSDL, FormatMockoon:
 		return true
 	default:
 		return false
@@ -147,6 +148,17 @@ func detectFormatFromJSON(data []byte) Format {
 		if _, hasInfo := raw["info"]; hasInfo {
 			if _, hasItem := raw["item"]; hasItem {
 				return FormatPostman
+			}
+		}
+
+		// Check for Mockoon environment indicators
+		if _, hasRoutes := raw["routes"]; hasRoutes {
+			if _, hasEndpointPrefix := raw["endpointPrefix"]; hasEndpointPrefix {
+				return FormatMockoon
+			}
+			// Routes + port is also a Mockoon indicator
+			if _, hasPort := raw["port"]; hasPort {
+				return FormatMockoon
 			}
 		}
 
@@ -267,6 +279,8 @@ func ParseFormat(s string) Format {
 		return FormatCURL
 	case "wsdl":
 		return FormatWSDL
+	case "mockoon":
+		return FormatMockoon
 	default:
 		return FormatUnknown
 	}
@@ -282,6 +296,7 @@ func AllFormats() []Format {
 		FormatWireMock,
 		FormatCURL,
 		FormatWSDL,
+		FormatMockoon,
 	}
 }
 
@@ -295,6 +310,7 @@ func ImportFormats() []Format {
 		FormatWireMock,
 		FormatCURL,
 		FormatWSDL,
+		FormatMockoon,
 	}
 }
 
