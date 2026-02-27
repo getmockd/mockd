@@ -126,7 +126,11 @@ mockd tunnel enable
 Test how your app handles failures:
 
 ```bash
-mockd chaos enable --latency 500ms --error-rate 0.1 --error-code 503
+# Apply a built-in chaos profile at startup
+mockd serve --chaos-profile flaky --config mockd.yaml
+
+# Or enable chaos at runtime
+mockd chaos apply slow-api
 ```
 
 ### Stateful Mocking

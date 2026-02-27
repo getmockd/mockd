@@ -64,11 +64,14 @@ Immediately removes all chaos injection. Requests return to normal behavior.
 Instead of manually configuring latency and error rates, use one of 10 built-in chaos profiles that simulate common failure scenarios:
 
 ```bash
+# Apply a profile at startup
+mockd serve --chaos-profile flaky
+
+# Or apply at runtime
+mockd chaos apply flaky
+
 # List available profiles
 mockd chaos profiles
-
-# Apply a profile
-mockd chaos apply flaky
 
 # Disable when done
 mockd chaos disable

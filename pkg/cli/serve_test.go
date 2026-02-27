@@ -7,6 +7,8 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/getmockd/mockd/pkg/chaos"
 )
 
 func TestParseLabels(t *testing.T) {
@@ -237,6 +239,191 @@ func TestBuildServerConfiguration(t *testing.T) {
 		}
 		if cfg.RateLimit.BurstSize != 200 {
 			t.Errorf("burst: got %d, want 200", cfg.RateLimit.BurstSize)
+		}
+	})
+}
+
+func TestValidateServeFlags_ChaosProfile(t *testing.T) {
+	t.Run("valid chaos profile", func(t *testing.T) {
+		f := &serveFlags{chaosProfile: "flaky"}
+		err := validateServeFlags(f)
+		if err != nil {
+			t.Errorf("unexpected error for valid chaos profile: %v", err)
+		}
+	})
+
+	t.Run("all 10 profiles are valid", func(t *testing.T) {
+		profiles := []string{
+			"slow-api", "degraded", "flaky", "offline", "timeout",
+			"rate-limited", "mobile-3g", "satellite", "dns-flaky", "overloaded",
+		}
+		for _, p := range profiles {
+			f := &serveFlags{chaosProfile: p}
+			if err := validateServeFlags(f); err != nil {
+				t.Errorf("profile %q should be valid, got error: %v", p, err)
+			}
+		}
+	})
+
+	t.Run("unknown chaos profile", func(t *testing.T) {
+		f := &serveFlags{chaosProfile: "nonexistent"}
+		err := validateServeFlags(f)
+		if err == nil {
+			t.Fatal("expected error for unknown chaos profile")
+		}
+		if !strings.Contains(err.Error(), "unknown chaos profile") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+		if !strings.Contains(err.Error(), "flaky") {
+			t.Errorf("error should list available profiles: %v", err)
+		}
+	})
+
+	t.Run("chaos profile conflicts with chaos-enabled", func(t *testing.T) {
+		f := &serveFlags{chaosProfile: "flaky", chaosEnabled: true}
+		err := validateServeFlags(f)
+		if err == nil {
+			t.Fatal("expected error when combining --chaos-profile with --chaos-enabled")
+		}
+		if !strings.Contains(err.Error(), "cannot be combined") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("chaos profile conflicts with chaos-latency", func(t *testing.T) {
+		f := &serveFlags{chaosProfile: "flaky", chaosLatency: "100ms-500ms"}
+		err := validateServeFlags(f)
+		if err == nil {
+			t.Fatal("expected error when combining --chaos-profile with --chaos-latency")
+		}
+	})
+
+	t.Run("chaos profile conflicts with chaos-error-rate", func(t *testing.T) {
+		f := &serveFlags{chaosProfile: "flaky", chaosErrorRate: 0.3}
+		err := validateServeFlags(f)
+		if err == nil {
+			t.Fatal("expected error when combining --chaos-profile with --chaos-error-rate")
+		}
+	})
+}
+
+func TestConfigureProtocolHandlers_ChaosProfile(t *testing.T) {
+	t.Run("chaos profile builds config", func(t *testing.T) {
+		sctx := &serveContext{
+			flags: &serveFlags{chaosProfile: "flaky"},
+		}
+		if err := configureProtocolHandlers(sctx); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if sctx.chaosConfig == nil {
+			t.Fatal("expected chaosConfig to be set")
+		}
+		if !sctx.chaosConfig.Enabled {
+			t.Error("expected chaos to be enabled")
+		}
+		if sctx.chaosConfig.ErrorRate == nil {
+			t.Error("expected error rate config for flaky profile")
+		}
+	})
+
+	t.Run("chaos-enabled builds config", func(t *testing.T) {
+		sctx := &serveContext{
+			flags: &serveFlags{
+				chaosEnabled:   true,
+				chaosLatency:   "100ms-500ms",
+				chaosErrorRate: 0.2,
+			},
+		}
+		if err := configureProtocolHandlers(sctx); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if sctx.chaosConfig == nil {
+			t.Fatal("expected chaosConfig to be set")
+		}
+		if !sctx.chaosConfig.Enabled {
+			t.Error("expected chaos to be enabled")
+		}
+		if sctx.chaosConfig.Latency == nil {
+			t.Error("expected latency config")
+		}
+		if sctx.chaosConfig.ErrorRate == nil {
+			t.Error("expected error rate config")
+		}
+		if sctx.chaosConfig.ErrorRate.Probability != 0.2 {
+			t.Errorf("expected error rate 0.2, got %f", sctx.chaosConfig.ErrorRate.Probability)
+		}
+	})
+
+	t.Run("no chaos flags leaves config nil", func(t *testing.T) {
+		sctx := &serveContext{
+			flags: &serveFlags{},
+		}
+		if err := configureProtocolHandlers(sctx); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if sctx.chaosConfig != nil {
+			t.Error("expected chaosConfig to be nil when no chaos flags set")
+		}
+	})
+
+	t.Run("slow-api profile has latency config", func(t *testing.T) {
+		sctx := &serveContext{
+			flags: &serveFlags{chaosProfile: "slow-api"},
+		}
+		if err := configureProtocolHandlers(sctx); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if sctx.chaosConfig.Latency == nil {
+			t.Fatal("expected latency config for slow-api profile")
+		}
+		if sctx.chaosConfig.ErrorRate != nil {
+			t.Error("slow-api profile should not have error rate")
+		}
+	})
+
+	t.Run("mobile-3g profile has bandwidth config", func(t *testing.T) {
+		sctx := &serveContext{
+			flags: &serveFlags{chaosProfile: "mobile-3g"},
+		}
+		if err := configureProtocolHandlers(sctx); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if sctx.chaosConfig.Bandwidth == nil {
+			t.Fatal("expected bandwidth config for mobile-3g profile")
+		}
+	})
+
+	t.Run("offline profile has full error rate", func(t *testing.T) {
+		sctx := &serveContext{
+			flags: &serveFlags{chaosProfile: "offline"},
+		}
+		if err := configureProtocolHandlers(sctx); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if sctx.chaosConfig.ErrorRate == nil {
+			t.Fatal("expected error rate config for offline profile")
+		}
+		if sctx.chaosConfig.ErrorRate.Probability != 1.0 {
+			t.Errorf("expected 100%% error rate, got %f", sctx.chaosConfig.ErrorRate.Probability)
+		}
+	})
+}
+
+func TestChaosProfileToAPIConfig(t *testing.T) {
+	t.Run("all 10 profiles convert without panic", func(t *testing.T) {
+		profiles := []string{
+			"slow-api", "degraded", "flaky", "offline", "timeout",
+			"rate-limited", "mobile-3g", "satellite", "dns-flaky", "overloaded",
+		}
+		for _, name := range profiles {
+			p, ok := chaos.GetProfile(name)
+			if !ok {
+				t.Fatalf("profile %q not found", name)
+			}
+			cfg := chaosProfileToAPIConfig(&p.Config)
+			if !cfg.Enabled {
+				t.Errorf("profile %q: expected enabled=true", name)
+			}
 		}
 	})
 }

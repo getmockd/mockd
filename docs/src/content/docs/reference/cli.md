@@ -165,9 +165,12 @@ mockd serve [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--chaos-enabled` | Enable chaos injection |
+| `--chaos-profile` | Apply a built-in chaos profile at startup (e.g., `slow-api`, `flaky`, `offline`) |
+| `--chaos-enabled` | Enable chaos injection with custom settings |
 | `--chaos-latency` | Add random latency (e.g., "10ms-100ms") |
 | `--chaos-error-rate` | Error rate (0.0-1.0) |
+
+> **Note:** `--chaos-profile` cannot be combined with `--chaos-enabled`, `--chaos-latency`, or `--chaos-error-rate`. Use either a profile or custom settings, not both.
 
 **MCP Flags:**
 

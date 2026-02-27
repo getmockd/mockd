@@ -148,6 +148,7 @@ func initServeCmd() {
 	serveCmd.Flags().BoolVar(&f.chaosEnabled, "chaos-enabled", false, "Enable chaos injection")
 	serveCmd.Flags().StringVar(&f.chaosLatency, "chaos-latency", "", "Add random latency (e.g., '10ms-100ms')")
 	serveCmd.Flags().Float64Var(&f.chaosErrorRate, "chaos-error-rate", 0, "Error rate (0.0-1.0)")
+	serveCmd.Flags().StringVar(&f.chaosProfile, "chaos-profile", "", "Apply a built-in chaos profile at startup (e.g., slow-api, flaky, offline)")
 
 	// Validation flags
 	serveCmd.Flags().StringVar(&f.validateSpec, "validate-spec", "", "Path to OpenAPI spec for request validation")
@@ -243,6 +244,7 @@ type serveFlags struct {
 	chaosEnabled   bool
 	chaosLatency   string
 	chaosErrorRate float64
+	chaosProfile   string
 
 	// Validation flags
 	validateSpec string
@@ -288,7 +290,7 @@ type serveContext struct {
 	adminAPI      *admin.API
 	runtimeClient *runtime.Client
 	mqttBroker    *mqtt.Broker
-	chaosInjector *chaos.Injector
+	chaosConfig   *engineclient.ChaosConfig // Chaos config to apply after engine starts
 	mcpServer     MCPStopper
 	store         *file.FileStore
 	log           *slog.Logger
@@ -435,6 +437,17 @@ func validateServeFlags(f *serveFlags) error {
 		f.token = os.Getenv("MOCKD_TOKEN")
 		if f.token == "" {
 			return errors.New("--token is required when using --pull (or set MOCKD_TOKEN)")
+		}
+	}
+
+	// Validate chaos flag combinations
+	if f.chaosProfile != "" {
+		if _, ok := chaos.GetProfile(f.chaosProfile); !ok {
+			names := chaos.ProfileNames()
+			return fmt.Errorf("unknown chaos profile %q — available profiles: %s", f.chaosProfile, strings.Join(names, ", "))
+		}
+		if f.chaosEnabled || f.chaosLatency != "" || f.chaosErrorRate > 0 {
+			return errors.New("--chaos-profile cannot be combined with --chaos-enabled, --chaos-latency, or --chaos-error-rate")
 		}
 	}
 
@@ -621,45 +634,72 @@ func initializePersistentStore(sctx *serveContext) error {
 	return nil
 }
 
-// configureProtocolHandlers sets up chaos injection.
+// configureProtocolHandlers builds the chaos config from flags.
+// The config is applied to the engine in startServers after the engine is healthy.
 // Note: MQTT/gRPC are now started dynamically when mocks are added via the admin API.
 func configureProtocolHandlers(sctx *serveContext) error {
 	f := sctx.flags
 
-	// Configure chaos if enabled
-	if f.chaosEnabled {
-		chaosCfg := &chaos.ChaosConfig{
-			Enabled: true,
-		}
+	// Build chaos config from --chaos-profile or individual flags
+	if f.chaosProfile != "" {
+		profile, _ := chaos.GetProfile(f.chaosProfile) // already validated in validateServeFlags
+		apiCfg := chaosProfileToAPIConfig(&profile.Config)
+		sctx.chaosConfig = &apiCfg
+	} else if f.chaosEnabled {
+		cfg := &engineclient.ChaosConfig{Enabled: true}
 		if f.chaosLatency != "" {
 			min, max := ParseLatencyRange(f.chaosLatency)
-			chaosCfg.GlobalRules = &chaos.GlobalChaosRules{
-				Latency: &chaos.LatencyFault{
-					Min:         min,
-					Max:         max,
-					Probability: 1.0,
-				},
+			cfg.Latency = &engineclient.LatencyConfig{
+				Min:         min,
+				Max:         max,
+				Probability: 1.0,
 			}
 		}
 		if f.chaosErrorRate > 0 {
-			if chaosCfg.GlobalRules == nil {
-				chaosCfg.GlobalRules = &chaos.GlobalChaosRules{}
-			}
-			chaosCfg.GlobalRules.ErrorRate = &chaos.ErrorRateFault{
+			cfg.ErrorRate = &engineclient.ErrorRateConfig{
 				Probability: f.chaosErrorRate,
 				DefaultCode: 500,
 			}
 		}
-
-		injector, err := chaos.NewInjector(chaosCfg)
-		if err != nil {
-			return fmt.Errorf("failed to create chaos injector: %w", err)
-		}
-		sctx.chaosInjector = injector
-		fmt.Println("Chaos injection enabled")
+		sctx.chaosConfig = cfg
 	}
 
 	return nil
+}
+
+// chaosProfileToAPIConfig converts a chaos.ChaosConfig to the API-level
+// engineclient.ChaosConfig for applying via the engine control API.
+// This mirrors admin/chaos_handlers.go chaosConfigToAPI.
+func chaosProfileToAPIConfig(src *chaos.ChaosConfig) engineclient.ChaosConfig {
+	cfg := engineclient.ChaosConfig{
+		Enabled: src.Enabled,
+	}
+	if src.GlobalRules != nil {
+		if src.GlobalRules.Latency != nil {
+			cfg.Latency = &engineclient.LatencyConfig{
+				Min:         src.GlobalRules.Latency.Min,
+				Max:         src.GlobalRules.Latency.Max,
+				Probability: src.GlobalRules.Latency.Probability,
+			}
+		}
+		if src.GlobalRules.ErrorRate != nil {
+			cfg.ErrorRate = &engineclient.ErrorRateConfig{
+				Probability: src.GlobalRules.ErrorRate.Probability,
+				DefaultCode: src.GlobalRules.ErrorRate.DefaultCode,
+			}
+			if len(src.GlobalRules.ErrorRate.StatusCodes) > 0 {
+				cfg.ErrorRate.StatusCodes = make([]int, len(src.GlobalRules.ErrorRate.StatusCodes))
+				copy(cfg.ErrorRate.StatusCodes, src.GlobalRules.ErrorRate.StatusCodes)
+			}
+		}
+		if src.GlobalRules.Bandwidth != nil {
+			cfg.Bandwidth = &engineclient.BandwidthConfig{
+				BytesPerSecond: src.GlobalRules.Bandwidth.BytesPerSecond,
+				Probability:    src.GlobalRules.Bandwidth.Probability,
+			}
+		}
+	}
+	return cfg
 }
 
 // handleOperatingMode handles runtime/pull/local modes and loads mocks.
@@ -830,6 +870,20 @@ func startServers(sctx *serveContext) error {
 		_ = sctx.server.Stop()
 		_ = sctx.adminAPI.Stop()
 		return fmt.Errorf("engine control API did not become healthy: %w", err)
+	}
+
+	// Apply chaos config to engine (from --chaos-profile or --chaos-enabled flags)
+	if sctx.chaosConfig != nil {
+		if err := engClient.SetChaos(sctx.ctx, sctx.chaosConfig); err != nil {
+			_ = sctx.server.Stop()
+			_ = sctx.adminAPI.Stop()
+			return fmt.Errorf("failed to apply chaos config: %w", err)
+		}
+		if sctx.flags.chaosProfile != "" {
+			fmt.Printf("Chaos profile %q applied\n", sctx.flags.chaosProfile)
+		} else {
+			fmt.Println("Chaos injection enabled")
+		}
 	}
 
 	return nil

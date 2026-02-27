@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Near-miss debugging** — When no mock matches a request, the 404 response now includes a `nearMisses` array with detailed field-by-field breakdown (method, path, headers, query params) showing what almost matched and why. Each near-miss includes match percentage, score, and a human-readable reason like `path matched, but method expected "GET", got "DELETE"`. Response includes `X-Mockd-Near-Misses` header with count
 - **Unmatched request filtering** — `GET /requests?unmatchedOnly=true` returns only unmatched requests. CLI: `mockd logs --requests --unmatched`. MCP tool: `get_request_logs` with `unmatchedOnly: true`. Near-miss data is attached to request log entries for post-hoc debugging
 - **`mockd mcp` auto-start** — MCP server now auto-starts a background daemon if no mockd server is running, so AI assistants work with zero setup. The daemon survives the MCP session and is shared across multiple sessions. Use `--data-dir` for project-scoped isolation with a separate daemon. Stop with `mockd stop`
+- **`--chaos-profile` startup flag** — `mockd serve --chaos-profile flaky` applies a built-in chaos profile at startup. Available profiles: `slow-api`, `degraded`, `flaky`, `offline`, `timeout`, `rate-limited`, `mobile-3g`, `satellite`, `dns-flaky`, `overloaded`. Validates profile name and rejects conflicting flags (`--chaos-enabled`, `--chaos-latency`, `--chaos-error-rate`)
 
 ## [0.4.4] - 2026-02-27
 
@@ -43,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCP drift — toggle_mock atomicity** — `toggle_mock` was using GET+PUT workaround instead of `PATCH /mocks/{id}`. Fixed to use atomic PATCH
 - **Chaos config JSON shape** — MCP `set_chaos_config` was sending flat fields (`latencyMinMs`, `errorRate`) but admin API expects nested typed structs (`latency.min`, `errorRate.probability`). Fixed to build correct nested shape. Profile activation uses `POST /chaos/profiles/{name}/apply` endpoint
 - **Data race in engine handler tests** — Added mutex to `mockEngineServer` in `engine_handlers_test.go` to eliminate race condition in CI
+- **`--chaos-enabled` startup flag was dead code** — `mockd serve --chaos-enabled --chaos-error-rate 0.5` created a chaos injector but never wired it to the engine. Chaos flags now apply via the engine control API after health check, same path as runtime `mockd chaos apply`
 
 ### Dependencies
 
