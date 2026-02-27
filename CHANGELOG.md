@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **10 built-in chaos profiles** — Pre-configured chaos scenarios: `slow-api`, `degraded`, `flaky`, `offline`, `timeout`, `rate-limited`, `mobile-3g`, `satellite`, `dns-flaky`, `overloaded`. Apply with `mockd chaos apply <name>` or `POST /chaos/profiles/{name}/apply`
 - **23 new faker types** (34 total) — Internet (`ipv4`, `ipv6`, `macAddress`, `userAgent`), Finance (`creditCard` with Luhn validation, `creditCardExp`, `cvv`, `currencyCode`, `currency`, `iban`), Commerce (`price`, `productName`, `color`, `hexColor`), Identity (`ssn`, `passport`, `jobTitle`), Geo (`latitude`, `longitude`), Text (`words`, `slug`), Data (`mimeType`, `fileExtension`). Parameterized syntax: `{{faker.words(5)}}`
 - **`POST /state/resources` endpoint** — Dedicated REST endpoint for creating stateful resources at runtime through all layers (engine → admin → CLI → MCP), replacing the previous `ImportConfig` wrapper
+- **`mockd verify` CLI command** — Full verification command tree (`status`, `check`, `invocations`, `reset`) for asserting mock call counts and inspecting request details from the CLI. `check` returns non-zero exit codes on failure for CI scripting. Supports `--exactly`, `--at-least`, `--at-most`, and `--never` assertion flags
 
 ### Fixed
 

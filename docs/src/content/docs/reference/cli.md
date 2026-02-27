@@ -2967,6 +2967,169 @@ mockd chaos disable
 
 ---
 
+## Verification Commands
+
+### mockd verify
+
+Verify mock call counts and inspect invocations. Useful for integration testing where you need to prove your code makes the correct API calls.
+
+```bash
+mockd verify <subcommand> [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| `status` | Show call count and last-called time for a mock |
+| `check` | Assert that a mock was called the expected number of times |
+| `invocations` | List recorded request details for a mock |
+| `reset` | Clear verification data (call counts and invocation history) |
+
+---
+
+#### mockd verify status
+
+Show the call count and last-called timestamp for a specific mock.
+
+```bash
+mockd verify status <mock-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--admin-url` | Admin API base URL | `http://localhost:4290` |
+| `--json` | Output in JSON format | |
+
+**Examples:**
+
+```bash
+# Check how many times a mock was called
+mockd verify status http_abc123
+
+# Output:
+# Mock: http_abc123
+#   Call count: 5
+#   Last called: 2026-02-26 19:30:45
+
+# JSON output
+mockd verify status http_abc123 --json
+```
+
+---
+
+#### mockd verify check
+
+Assert call count expectations for a mock. Returns exit code 0 on pass and exit code 1 on failure — suitable for CI scripts and test automation.
+
+At least one assertion flag is required.
+
+```bash
+mockd verify check <mock-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--exactly` | Assert mock was called exactly N times | |
+| `--at-least` | Assert mock was called at least N times | |
+| `--at-most` | Assert mock was called at most N times | |
+| `--never` | Assert mock was never called | |
+| `--admin-url` | Admin API base URL | `http://localhost:4290` |
+| `--json` | Output in JSON format | |
+
+**Examples:**
+
+```bash
+# Assert exactly 3 calls
+mockd verify check http_abc123 --exactly 3
+# PASS: called exactly 3 time(s) (called 3 time(s))
+
+# Assert at least 1 call
+mockd verify check http_abc123 --at-least 1
+# PASS: called at least 1 time(s) (called 5 time(s))
+
+# Assert never called (useful for negative testing)
+mockd verify check http_abc123 --never
+# FAIL: expected never called but was called 5 time(s)
+
+# Assert a range (combine flags)
+mockd verify check http_abc123 --at-least 1 --at-most 10
+
+# Use in CI — non-zero exit code on failure
+mockd verify check http_abc123 --exactly 1 || echo "Verification failed!"
+```
+
+---
+
+#### mockd verify invocations
+
+List all recorded invocation details (method, path, timestamp, body) for a specific mock.
+
+```bash
+mockd verify invocations <mock-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--admin-url` | Admin API base URL | `http://localhost:4290` |
+| `--json` | Output in JSON format | |
+
+**Examples:**
+
+```bash
+# List all invocations for a mock
+mockd verify invocations http_abc123
+
+# Output:
+# Mock: http_abc123 (3 invocation(s))
+#
+#   [1] 19:30:45.123 GET /api/users at http_abc123
+#   [2] 19:31:02.456 POST /api/users at http_abc123
+#       Body: {"name":"Alice","email":"alice@example.com"}
+#   [3] 19:31:15.789 GET /api/users at http_abc123
+
+# JSON output (full request details)
+mockd verify invocations http_abc123 --json
+```
+
+---
+
+#### mockd verify reset
+
+Clear verification data (call counts and invocation history) for a specific mock or all mocks. Use between test runs for isolation.
+
+```bash
+mockd verify reset [mock-id] [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--all` | Reset verification data for all mocks | |
+| `--admin-url` | Admin API base URL | `http://localhost:4290` |
+| `--json` | Output in JSON format | |
+
+**Examples:**
+
+```bash
+# Reset a specific mock
+mockd verify reset http_abc123
+# Verification data cleared for mock: http_abc123
+
+# Reset all mocks (useful between test suites)
+mockd verify reset --all
+# All verification data cleared
+```
+
+---
+
 ## See Also
 
 - [Configuration Reference](/reference/configuration) - Config file format
