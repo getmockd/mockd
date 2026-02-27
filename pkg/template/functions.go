@@ -3,7 +3,7 @@ package template
 import (
 	cryptorand "crypto/rand"
 	"fmt"
-	"math/rand/v2"
+	mathrand "math/rand/v2"
 	"strconv"
 	"strings"
 )
@@ -22,38 +22,28 @@ func funcUUID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
-// funcUUIDShort returns the first 8 characters of a UUID v4
-func funcUUIDShort() string {
-	uuid := funcUUID()
-	if uuid == "" {
-		return ""
-	}
-	if len(uuid) < 8 {
-		return uuid
-	}
-	return uuid[:8]
-}
-
 // Random functions
 
-// funcRandomInt returns a random integer between min and max (inclusive) as a string
-func funcRandomInt(min, max int) string {
+// funcRandomInt returns a random integer between min and max (inclusive) as a string.
+// When rng is non-nil, uses the seeded PRNG for deterministic output.
+func funcRandomInt(rng *mathrand.Rand, min, max int) string {
 	if min > max {
 		return ""
 	}
-	// Use math/rand/v2 which is automatically seeded
-	n := rand.IntN(max-min+1) + min
+	n := rngIntN(rng, max-min+1) + min
 	return strconv.Itoa(n)
 }
 
-// funcRandomFloat returns a random float between 0 and 1 as a string
-func funcRandomFloat() string {
-	return fmt.Sprintf("%f", rand.Float64())
+// funcRandomFloat returns a random float between 0 and 1 as a string.
+// When rng is non-nil, uses the seeded PRNG for deterministic output.
+func funcRandomFloat(rng *mathrand.Rand) string {
+	return fmt.Sprintf("%f", rngFloat64(rng))
 }
 
 // funcRandomFloatRange returns a random float in a range with optional precision.
 // minStr and maxStr are parsed as float64; precisionStr is parsed as int (-1 if empty).
-func funcRandomFloatRange(minStr, maxStr, precisionStr string) string {
+// When rng is non-nil, uses the seeded PRNG for deterministic output.
+func funcRandomFloatRange(rng *mathrand.Rand, minStr, maxStr, precisionStr string) string {
 	minVal, _ := strconv.ParseFloat(minStr, 64)
 	maxVal, _ := strconv.ParseFloat(maxStr, 64)
 	precision := -1
@@ -65,7 +55,7 @@ func funcRandomFloatRange(minStr, maxStr, precisionStr string) string {
 		maxVal = minVal + 1
 	}
 
-	val := minVal + rand.Float64()*(maxVal-minVal)
+	val := minVal + rngFloat64(rng)*(maxVal-minVal)
 
 	if precision >= 0 {
 		format := fmt.Sprintf("%%.%df", precision)
@@ -75,11 +65,12 @@ func funcRandomFloatRange(minStr, maxStr, precisionStr string) string {
 }
 
 // funcRandomString returns a random alphanumeric string of the given length.
-func funcRandomString(length int) string {
+// When rng is non-nil, uses the seeded PRNG for deterministic output.
+func funcRandomString(rng *mathrand.Rand, length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = charset[rand.IntN(len(charset))]
+		b[i] = charset[rngIntN(rng, len(charset))]
 	}
 	return string(b)
 }

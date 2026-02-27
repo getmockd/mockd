@@ -2,6 +2,7 @@ package template
 
 import (
 	"encoding/json"
+	mathrand "math/rand/v2"
 	"net/http"
 
 	"github.com/getmockd/mockd/pkg/mtls"
@@ -12,6 +13,12 @@ type Context struct {
 	Request RequestContext
 	MTLS    MTLSContext
 	MQTT    MQTTContext
+
+	// Rand is an optional seeded RNG for deterministic template output.
+	// When nil, template functions use the global math/rand/v2 source.
+	// When set, all random/faker/uuid template functions use this RNG,
+	// producing repeatable output for the same seed.
+	Rand *mathrand.Rand
 }
 
 // MQTTContext holds MQTT-specific template data.

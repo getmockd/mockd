@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	mathrand "math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -401,6 +402,12 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 		if identity := mtls.FromContext(r.Context()); identity != nil {
 			tmplCtx.SetMTLSFromIdentity(identity)
 		}
+
+		// Seed the template RNG for deterministic responses.
+		// Priority: query param > header > config field.
+		if seed, ok := resolveSeed(r, resp); ok {
+			tmplCtx.Rand = mathrand.New(mathrand.NewPCG(uint64(seed), 0))
+		}
 	}
 
 	// Set headers (with template expansion).
@@ -577,4 +584,30 @@ func (h *Handler) writeHTTPValidationError(w http.ResponseWriter, result *valida
 	resp := validation.NewErrorResponse(result, status)
 	resp.WriteResponse(w)
 	return status
+}
+
+// resolveSeed extracts a seed value for deterministic template output.
+// Priority order: ?_mockd_seed query param > X-Mockd-Seed header > resp.Seed config.
+// Returns the seed and true if one was found, or 0 and false otherwise.
+func resolveSeed(r *http.Request, resp *mock.HTTPResponse) (int64, bool) {
+	// 1. Query parameter (highest priority)
+	if seedStr := r.URL.Query().Get("_mockd_seed"); seedStr != "" {
+		if seed, err := strconv.ParseInt(seedStr, 10, 64); err == nil {
+			return seed, true
+		}
+	}
+
+	// 2. HTTP header
+	if seedStr := r.Header.Get("X-Mockd-Seed"); seedStr != "" {
+		if seed, err := strconv.ParseInt(seedStr, 10, 64); err == nil {
+			return seed, true
+		}
+	}
+
+	// 3. Config-level seed
+	if resp.Seed != nil {
+		return *resp.Seed, true
+	}
+
+	return 0, false
 }
