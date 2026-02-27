@@ -428,104 +428,104 @@ type SSEConfig struct {
 
 // SSEEventDef defines a single SSE event.
 type SSEEventDef struct {
-	Type    string `json:"type,omitempty"`
-	Data    any    `json:"data"`
-	ID      string `json:"id,omitempty"`
-	Retry   int    `json:"retry,omitempty"`
-	Comment string `json:"comment,omitempty"`
-	Delay   *int   `json:"delay,omitempty"`
+	Type    string `json:"type,omitempty" yaml:"type,omitempty"`
+	Data    any    `json:"data" yaml:"data"`
+	ID      string `json:"id,omitempty" yaml:"id,omitempty"`
+	Retry   int    `json:"retry,omitempty" yaml:"retry,omitempty"`
+	Comment string `json:"comment,omitempty" yaml:"comment,omitempty"`
+	Delay   *int   `json:"delay,omitempty" yaml:"delay,omitempty"`
 }
 
 // SSEEventGenerator configures dynamic event generation.
 type SSEEventGenerator struct {
-	Type     string                `json:"type"`
-	Count    int                   `json:"count,omitempty"`
-	Sequence *SSESequenceGenerator `json:"sequence,omitempty"`
-	Random   *SSERandomGenerator   `json:"random,omitempty"`
-	Template *SSETemplateGenerator `json:"template,omitempty"`
+	Type     string                `json:"type" yaml:"type"`
+	Count    int                   `json:"count,omitempty" yaml:"count,omitempty"`
+	Sequence *SSESequenceGenerator `json:"sequence,omitempty" yaml:"sequence,omitempty"`
+	Random   *SSERandomGenerator   `json:"random,omitempty" yaml:"random,omitempty"`
+	Template *SSETemplateGenerator `json:"template,omitempty" yaml:"template,omitempty"`
 }
 
 // SSESequenceGenerator produces incrementing numeric events.
 type SSESequenceGenerator struct {
-	Start     int    `json:"start"`
-	Increment int    `json:"increment"`
-	Format    string `json:"format,omitempty"`
+	Start     int    `json:"start" yaml:"start"`
+	Increment int    `json:"increment" yaml:"increment"`
+	Format    string `json:"format,omitempty" yaml:"format,omitempty"`
 }
 
 // SSERandomGenerator produces random data events.
 type SSERandomGenerator struct {
-	Schema map[string]any `json:"schema"`
+	Schema map[string]any `json:"schema" yaml:"schema"`
 }
 
 // SSETemplateGenerator repeats events from a list.
 type SSETemplateGenerator struct {
-	Events []SSEEventDef `json:"events"`
-	Repeat int           `json:"repeat,omitempty"`
+	Events []SSEEventDef `json:"events" yaml:"events"`
+	Repeat int           `json:"repeat,omitempty" yaml:"repeat,omitempty"`
 }
 
 // SSETimingConfig controls event delivery timing.
 type SSETimingConfig struct {
-	FixedDelay     *int                  `json:"fixedDelay,omitempty"`
-	RandomDelay    *SSERandomDelayConfig `json:"randomDelay,omitempty"`
-	PerEventDelays []int                 `json:"perEventDelays,omitempty"`
-	Burst          *SSEBurstConfig       `json:"burst,omitempty"`
-	InitialDelay   int                   `json:"initialDelay,omitempty"`
+	FixedDelay     *int                  `json:"fixedDelay,omitempty" yaml:"fixedDelay,omitempty"`
+	RandomDelay    *SSERandomDelayConfig `json:"randomDelay,omitempty" yaml:"randomDelay,omitempty"`
+	PerEventDelays []int                 `json:"perEventDelays,omitempty" yaml:"perEventDelays,omitempty"`
+	Burst          *SSEBurstConfig       `json:"burst,omitempty" yaml:"burst,omitempty"`
+	InitialDelay   int                   `json:"initialDelay,omitempty" yaml:"initialDelay,omitempty"`
 }
 
 // SSERandomDelayConfig defines a random delay range.
 type SSERandomDelayConfig struct {
-	Min int `json:"min"`
-	Max int `json:"max"`
+	Min int `json:"min" yaml:"min"`
+	Max int `json:"max" yaml:"max"`
 }
 
 // SSEBurstConfig defines burst delivery mode.
 type SSEBurstConfig struct {
-	Count    int `json:"count"`
-	Interval int `json:"interval"`
-	Pause    int `json:"pause"`
+	Count    int `json:"count" yaml:"count"`
+	Interval int `json:"interval" yaml:"interval"`
+	Pause    int `json:"pause" yaml:"pause"`
 }
 
 // SSELifecycleConfig controls connection behavior.
 type SSELifecycleConfig struct {
-	KeepaliveInterval  int                  `json:"keepaliveInterval,omitempty"`
-	MaxEvents          int                  `json:"maxEvents,omitempty"`
-	Timeout            int                  `json:"timeout,omitempty"`
-	ConnectionTimeout  int                  `json:"connectionTimeout,omitempty"`
-	Termination        SSETerminationConfig `json:"termination,omitempty"`
-	SimulateDisconnect *int                 `json:"simulateDisconnect,omitempty"`
+	KeepaliveInterval  int                  `json:"keepaliveInterval,omitempty" yaml:"keepaliveInterval,omitempty"`
+	MaxEvents          int                  `json:"maxEvents,omitempty" yaml:"maxEvents,omitempty"`
+	Timeout            int                  `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	ConnectionTimeout  int                  `json:"connectionTimeout,omitempty" yaml:"connectionTimeout,omitempty"`
+	Termination        SSETerminationConfig `json:"termination,omitempty" yaml:"termination,omitempty"`
+	SimulateDisconnect *int                 `json:"simulateDisconnect,omitempty" yaml:"simulateDisconnect,omitempty"`
 }
 
 // SSETerminationConfig defines how the stream ends.
 type SSETerminationConfig struct {
-	Type       string       `json:"type,omitempty"`
-	FinalEvent *SSEEventDef `json:"finalEvent,omitempty"`
-	ErrorEvent *SSEEventDef `json:"errorEvent,omitempty"`
-	CloseDelay int          `json:"closeDelay,omitempty"`
+	Type       string       `json:"type,omitempty" yaml:"type,omitempty"`
+	FinalEvent *SSEEventDef `json:"finalEvent,omitempty" yaml:"finalEvent,omitempty"`
+	ErrorEvent *SSEEventDef `json:"errorEvent,omitempty" yaml:"errorEvent,omitempty"`
+	CloseDelay int          `json:"closeDelay,omitempty" yaml:"closeDelay,omitempty"`
 }
 
 // SSEResumeConfig controls Last-Event-ID resumption.
 type SSEResumeConfig struct {
-	Enabled    bool `json:"enabled"`
-	BufferSize int  `json:"bufferSize,omitempty"`
-	MaxAge     int  `json:"maxAge,omitempty"`
+	Enabled    bool `json:"enabled" yaml:"enabled"`
+	BufferSize int  `json:"bufferSize,omitempty" yaml:"bufferSize,omitempty"`
+	MaxAge     int  `json:"maxAge,omitempty" yaml:"maxAge,omitempty"`
 }
 
 // SSERateLimitConfig controls event delivery rate.
 type SSERateLimitConfig struct {
-	EventsPerSecond float64 `json:"eventsPerSecond"`
-	BurstSize       int     `json:"burstSize,omitempty"`
-	Strategy        string  `json:"strategy,omitempty"`
-	Headers         bool    `json:"headers,omitempty"`
+	EventsPerSecond float64 `json:"eventsPerSecond" yaml:"eventsPerSecond"`
+	BurstSize       int     `json:"burstSize,omitempty" yaml:"burstSize,omitempty"`
+	Strategy        string  `json:"strategy,omitempty" yaml:"strategy,omitempty"`
+	Headers         bool    `json:"headers,omitempty" yaml:"headers,omitempty"`
 }
 
 // ChunkedConfig configures HTTP chunked transfer encoding.
 type ChunkedConfig struct {
-	ChunkSize   int    `json:"chunkSize,omitempty"`
-	ChunkDelay  int    `json:"chunkDelay,omitempty"`
-	Data        string `json:"data,omitempty"`
-	DataFile    string `json:"dataFile,omitempty"`
-	Format      string `json:"format,omitempty"`
-	NDJSONItems []any  `json:"ndjsonItems,omitempty"`
+	ChunkSize   int    `json:"chunkSize,omitempty" yaml:"chunkSize,omitempty"`
+	ChunkDelay  int    `json:"chunkDelay,omitempty" yaml:"chunkDelay,omitempty"`
+	Data        string `json:"data,omitempty" yaml:"data,omitempty"`
+	DataFile    string `json:"dataFile,omitempty" yaml:"dataFile,omitempty"`
+	Format      string `json:"format,omitempty" yaml:"format,omitempty"`
+	NDJSONItems []any  `json:"ndjsonItems,omitempty" yaml:"ndjsonItems,omitempty"`
 }
 
 // ============================================================================
