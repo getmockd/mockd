@@ -151,6 +151,11 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /chaos/stats", a.requireEngine(a.handleGetChaosStats))
 	mux.HandleFunc("POST /chaos/stats/reset", a.requireEngine(a.handleResetChaosStats))
 
+	// Chaos profiles (built-in presets)
+	mux.HandleFunc("GET /chaos/profiles", a.handleListChaosProfiles)
+	mux.HandleFunc("GET /chaos/profiles/{name}", a.handleGetChaosProfile)
+	mux.HandleFunc("POST /chaos/profiles/{name}/apply", a.requireEngine(a.handleApplyChaosProfile))
+
 	// gRPC server management (convenience — proxies to /mocks?type=grpc)
 	mux.HandleFunc("GET /grpc", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

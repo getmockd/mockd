@@ -54,6 +54,12 @@ type AdminClient interface {
 	GetChaosConfig() (map[string]interface{}, error)
 	// SetChaosConfig updates the chaos configuration.
 	SetChaosConfig(config map[string]interface{}) error
+	// ListChaosProfiles returns all available built-in chaos profiles.
+	ListChaosProfiles() ([]ChaosProfileInfo, error)
+	// GetChaosProfile returns a specific chaos profile by name.
+	GetChaosProfile(name string) (*ChaosProfileInfo, error)
+	// ApplyChaosProfile applies a named chaos profile.
+	ApplyChaosProfile(name string) error
 	// GetMQTTStatus returns the current MQTT broker status.
 	GetMQTTStatus() (map[string]interface{}, error)
 	// GetStats returns server statistics.
@@ -161,6 +167,13 @@ type CreateMockResult struct {
 // IsMerge returns true if this result was a merge operation.
 func (r *CreateMockResult) IsMerge() bool {
 	return r.Action == "merged"
+}
+
+// ChaosProfileInfo describes a built-in chaos profile.
+type ChaosProfileInfo struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Config      map[string]interface{} `json:"config"`
 }
 
 // StatsResult contains server statistics returned by GET /status.
@@ -784,6 +797,58 @@ func (c *adminClient) GetChaosStats() (map[string]interface{}, error) {
 // ResetChaosStats resets chaos injection statistics counters.
 func (c *adminClient) ResetChaosStats() error {
 	resp, err := c.post("/chaos/stats/reset", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// ListChaosProfiles returns all available built-in chaos profiles.
+func (c *adminClient) ListChaosProfiles() ([]ChaosProfileInfo, error) {
+	resp, err := c.get("/chaos/profiles")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result []ChaosProfileInfo
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result, nil
+}
+
+// GetChaosProfile returns a specific chaos profile by name.
+func (c *adminClient) GetChaosProfile(name string) (*ChaosProfileInfo, error) {
+	resp, err := c.get("/chaos/profiles/" + url.PathEscape(name))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result ChaosProfileInfo
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// ApplyChaosProfile applies a named chaos profile.
+func (c *adminClient) ApplyChaosProfile(name string) error {
+	resp, err := c.post("/chaos/profiles/"+url.PathEscape(name)+"/apply", nil)
 	if err != nil {
 		return err
 	}

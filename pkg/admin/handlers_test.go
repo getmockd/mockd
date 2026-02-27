@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,9 +24,32 @@ func boolPtr(b bool) *bool { return &b }
 // It allows tests to control responses for various endpoints.
 type mockEngineServer struct {
 	*httptest.Server
+	mu           sync.RWMutex
 	mocks        map[string]*config.MockConfiguration
 	requestCount int64
 	uptime       int64
+}
+
+// mockCount returns the number of mocks in a thread-safe manner.
+func (mes *mockEngineServer) mockCount() int {
+	mes.mu.RLock()
+	defer mes.mu.RUnlock()
+	return len(mes.mocks)
+}
+
+// hasMock returns true if a mock with the given ID exists (thread-safe).
+func (mes *mockEngineServer) hasMock(id string) bool {
+	mes.mu.RLock()
+	defer mes.mu.RUnlock()
+	_, ok := mes.mocks[id]
+	return ok
+}
+
+// setMock stores a mock by ID (thread-safe, for test setup outside handlers).
+func (mes *mockEngineServer) setMock(id string, m *config.MockConfiguration) {
+	mes.mu.Lock()
+	defer mes.mu.Unlock()
+	mes.mocks[id] = m
 }
 
 func newMockEngineServer() *mockEngineServer {
@@ -39,12 +63,15 @@ func newMockEngineServer() *mockEngineServer {
 
 	// Status endpoint
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
+		mes.mu.RLock()
+		mockCount := len(mes.mocks)
+		mes.mu.RUnlock()
 		resp := engineclient.StatusResponse{
 			ID:           "test-engine",
 			Name:         "Test Engine",
 			Status:       "running",
 			Uptime:       mes.uptime,
-			MockCount:    len(mes.mocks),
+			MockCount:    mockCount,
 			RequestCount: mes.requestCount,
 			Protocols: map[string]engineclient.ProtocolStatus{
 				"http": {
@@ -59,10 +86,12 @@ func newMockEngineServer() *mockEngineServer {
 
 	// List mocks
 	mux.HandleFunc("GET /mocks", func(w http.ResponseWriter, r *http.Request) {
+		mes.mu.RLock()
 		mocks := make([]*config.MockConfiguration, 0, len(mes.mocks))
 		for _, m := range mes.mocks {
 			mocks = append(mocks, m)
 		}
+		mes.mu.RUnlock()
 		json.NewEncoder(w).Encode(engineclient.MockListResponse{
 			Mocks: mocks,
 			Count: len(mocks),
@@ -72,7 +101,9 @@ func newMockEngineServer() *mockEngineServer {
 	// Get mock by ID
 	mux.HandleFunc("GET /mocks/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
+		mes.mu.RLock()
 		m, ok := mes.mocks[id]
+		mes.mu.RUnlock()
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "not_found", Message: "Mock not found"})
@@ -89,8 +120,10 @@ func newMockEngineServer() *mockEngineServer {
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid_json", Message: err.Error()})
 			return
 		}
+		mes.mu.Lock()
 		// Check for duplicate
 		if _, exists := mes.mocks[m.ID]; exists {
+			mes.mu.Unlock()
 			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "duplicate_id", Message: "Mock with this ID already exists"})
 			return
@@ -100,6 +133,7 @@ func newMockEngineServer() *mockEngineServer {
 			m.ID = "mock-" + time.Now().Format("20060102150405")
 		}
 		mes.mocks[m.ID] = &m
+		mes.mu.Unlock()
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(&m)
 	})
@@ -107,7 +141,10 @@ func newMockEngineServer() *mockEngineServer {
 	// Update mock
 	mux.HandleFunc("PUT /mocks/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		if _, ok := mes.mocks[id]; !ok {
+		mes.mu.RLock()
+		_, ok := mes.mocks[id]
+		mes.mu.RUnlock()
+		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "not_found", Message: "Mock not found"})
 			return
@@ -119,27 +156,35 @@ func newMockEngineServer() *mockEngineServer {
 			return
 		}
 		m.ID = id
+		mes.mu.Lock()
 		mes.mocks[id] = &m
+		mes.mu.Unlock()
 		json.NewEncoder(w).Encode(&m)
 	})
 
 	// Delete mock
 	mux.HandleFunc("DELETE /mocks/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		if _, ok := mes.mocks[id]; !ok {
+		mes.mu.Lock()
+		_, ok := mes.mocks[id]
+		if !ok {
+			mes.mu.Unlock()
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "not_found", Message: "Mock not found"})
 			return
 		}
 		delete(mes.mocks, id)
+		mes.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	})
 
 	// Toggle mock
 	mux.HandleFunc("POST /mocks/{id}/toggle", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
+		mes.mu.Lock()
 		m, ok := mes.mocks[id]
 		if !ok {
+			mes.mu.Unlock()
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "not_found", Message: "Mock not found"})
 			return
@@ -148,20 +193,24 @@ func newMockEngineServer() *mockEngineServer {
 			Enabled bool `json:"enabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			mes.mu.Unlock()
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid_json", Message: err.Error()})
 			return
 		}
 		m.Enabled = &req.Enabled
+		mes.mu.Unlock()
 		json.NewEncoder(w).Encode(m)
 	})
 
 	// Export config
 	mux.HandleFunc("GET /export", func(w http.ResponseWriter, r *http.Request) {
+		mes.mu.RLock()
 		mocks := make([]*config.MockConfiguration, 0, len(mes.mocks))
 		for _, m := range mes.mocks {
 			mocks = append(mocks, m)
 		}
+		mes.mu.RUnlock()
 		json.NewEncoder(w).Encode(config.MockCollection{
 			Version: "1.0",
 			Mocks:   mocks,
@@ -179,6 +228,7 @@ func newMockEngineServer() *mockEngineServer {
 			json.NewEncoder(w).Encode(ErrorResponse{Error: "invalid_json", Message: err.Error()})
 			return
 		}
+		mes.mu.Lock()
 		if req.Replace {
 			mes.mocks = make(map[string]*config.MockConfiguration)
 		}
@@ -189,6 +239,7 @@ func newMockEngineServer() *mockEngineServer {
 				imported++
 			}
 		}
+		mes.mu.Unlock()
 		json.NewEncoder(w).Encode(engineclient.ImportResult{
 			Imported: imported,
 			Total:    imported,
