@@ -19,12 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Config export completeness** — `Export()` now includes `statefulResources` and `customOperations` (previously only exported mocks)
 - **Config merge completeness** — `MergeProjectConfigs()` now merges `customOperations` by name
 - **Custom-op validation CLI improvements** — `mockd stateful custom validate` now supports `--strict` (fail on warnings) and `--check-expressions-runtime` with `--fixtures-file` for no-write runtime expression checks before registration
+- **MCP tool expansion** — 16 multiplexed tools (consolidated from 19 via action-based dispatching): `manage_mock`, `manage_state`, `manage_context`, `manage_workspace`, plus 3 chaos tools (`get_chaos_config`, `set_chaos_config`, `reset_chaos_stats`), 3 verification tools (`verify_mock`, `get_mock_invocations`, `reset_verification`), custom operations tool (`manage_custom_operation`), and 2 MCP resources (`mock://chaos`, `mock://verification/{mockId}`)
+- **10 built-in chaos profiles** — Pre-configured chaos scenarios: `slow-api`, `degraded`, `flaky`, `offline`, `timeout`, `rate-limited`, `mobile-3g`, `satellite`, `dns-flaky`, `overloaded`. Apply with `mockd chaos apply <name>` or `POST /chaos/profiles/{name}/apply`
+- **23 new faker types** (34 total) — Internet (`ipv4`, `ipv6`, `macAddress`, `userAgent`), Finance (`creditCard` with Luhn validation, `creditCardExp`, `cvv`, `currencyCode`, `currency`, `iban`), Commerce (`price`, `productName`, `color`, `hexColor`), Identity (`ssn`, `passport`, `jobTitle`), Geo (`latitude`, `longitude`), Text (`words`, `slug`), Data (`mimeType`, `fileExtension`). Parameterized syntax: `{{faker.words(5)}}`
+- **`POST /state/resources` endpoint** — Dedicated REST endpoint for creating stateful resources at runtime through all layers (engine → admin → CLI → MCP), replacing the previous `ImportConfig` wrapper
 
 ### Fixed
 
 - **SOAP validation rejected stateful operations** — Validator required `response` or `fault` on every SOAP operation, blocking stateful-only operations that get their response from the stateful resource. Now accepts `statefulResource` as a valid alternative.
 - **Custom operations silently ignored** — `loadCollection()` parsed `customOperations` from config but never registered them on the stateful Bridge. They now wire through correctly.
 - **StatefulAction validation** — Added validation that `statefulAction` is a valid CRUD action and that `statefulResource` and `statefulAction` are set together (both or neither)
+- **MCP drift — GetStats endpoint** — `get_server_status` was calling `/stats` instead of `/status`, returning empty data. Fixed to call the correct endpoint
+- **MCP drift — toggle_mock atomicity** — `toggle_mock` was using GET+PUT workaround instead of `PATCH /mocks/{id}`. Fixed to use atomic PATCH
+- **Chaos config JSON shape** — MCP `set_chaos_config` was sending flat fields (`latencyMinMs`, `errorRate`) but admin API expects nested typed structs (`latency.min`, `errorRate.probability`). Fixed to build correct nested shape. Profile activation uses `POST /chaos/profiles/{name}/apply` endpoint
+- **Data race in engine handler tests** — Added mutex to `mockEngineServer` in `engine_handlers_test.go` to eliminate race condition in CI
 
 ### Dependencies
 
@@ -229,7 +237,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **MCP server overhaul** — 19 tools across all protocols with session-scoped context switching, `switch_context` for multi-environment workflows, and both stdio and HTTP transports (`mockd mcp` / `mockd serve --mcp`)
+- **MCP server overhaul** — 16 multiplexed tools across all protocols with session-scoped context switching, chaos engineering, mock verification, stateful resource management, and both stdio and HTTP transports (`mockd mcp` / `mockd serve --mcp`)
 - **OpenRouter AI provider** — First-class support via `MOCKD_AI_PROVIDER=openrouter` with google/gemini-2.5-flash default. Access 200+ models through a single API key
 - **AI mock validation pipeline** — Generated mocks are now validated before export, with invalid mocks skipped and warnings printed
 - **Multi-protocol QUIC tunnel** (`mockd tunnel-quic`) — Expose local mocks to the internet through a single QUIC connection. All 7 protocols tunneled through port 443 with zero configuration

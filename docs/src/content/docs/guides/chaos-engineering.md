@@ -59,6 +59,49 @@ mockd chaos disable
 
 Immediately removes all chaos injection. Requests return to normal behavior.
 
+## Chaos Profiles
+
+Instead of manually configuring latency and error rates, use one of 10 built-in chaos profiles that simulate common failure scenarios:
+
+```bash
+# List available profiles
+mockd chaos profiles
+
+# Apply a profile
+mockd chaos apply flaky
+
+# Disable when done
+mockd chaos disable
+```
+
+### Available Profiles
+
+| Profile | Description | Latency | Error Rate | Bandwidth |
+|---------|-------------|---------|------------|-----------|
+| `slow-api` | Slow upstream API | 500ms-2s | — | — |
+| `degraded` | Partially degraded service | 200ms-800ms | 5% (503) | — |
+| `flaky` | Unreliable with random errors | 0-100ms | 20% (500/502/503) | — |
+| `offline` | Service completely down | — | 100% (503) | — |
+| `timeout` | Connection timeout simulation | 30s fixed | — | — |
+| `rate-limited` | Rate-limited API | 50ms-200ms | 30% (429) | — |
+| `mobile-3g` | Mobile 3G network conditions | 300ms-800ms | 2% (503) | 50 KB/s |
+| `satellite` | Satellite internet simulation | 600ms-2s | 5% (503) | 20 KB/s |
+| `dns-flaky` | Intermittent DNS resolution failures | — | 10% (503) | — |
+| `overloaded` | Overloaded server under heavy load | 1s-5s | 15% (500/502/503/504) | 100 KB/s |
+
+### Admin API for Profiles
+
+```bash
+# List all profiles
+curl http://localhost:4290/chaos/profiles
+
+# Get a specific profile
+curl http://localhost:4290/chaos/profiles/flaky
+
+# Apply a profile
+curl -X POST http://localhost:4290/chaos/profiles/flaky/apply
+```
+
 ## Examples
 
 ### Fixed Latency

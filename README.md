@@ -196,11 +196,13 @@ curl -X POST http://localhost:4290/import \
 
 ### AI Mock Generation (MCP)
 
-mockd includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server. AI assistants can create, update, and query mocks directly:
+mockd includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server with **16 tools** for full mock lifecycle management from AI-powered editors (Cursor, Windsurf, Claude Code):
 
 ```bash
 mockd mcp  # Start the MCP server (stdio transport)
 ```
+
+Tools cover mock CRUD, import/export, chaos engineering (10 built-in profiles), mock verification, stateful resource management, custom operations, and multi-environment context switching.
 
 ### Configuration
 

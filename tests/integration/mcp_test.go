@@ -582,9 +582,9 @@ func TestMCP_ToolsList(t *testing.T) {
 		}
 	}
 
-	// Verify total count is 19
-	if len(result.Tools) != 19 {
-		t.Errorf("expected 19 tools, got %d", len(result.Tools))
+	// Verify total count is 16 (after multiplexing consolidation: 19 → 27 → 16)
+	if len(result.Tools) != 16 {
+		t.Errorf("expected 16 tools, got %d", len(result.Tools))
 	}
 }
 

@@ -381,6 +381,28 @@ Reset all stateful resources to their seed data.
 
 List all stateful resources (returns array).
 
+#### POST /state/resources
+
+Create a new stateful resource at runtime.
+
+**Request:**
+
+```json
+{
+  "name": "products",
+  "path": "/api/products",
+  "idField": "id"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Resource name (must be unique) |
+| `path` | string | No | URL base path for auto-generated CRUD endpoints |
+| `idField` | string | No | Custom ID field name (default: `id`) |
+
+**Response:** `201 Created`
+
 #### GET /state/resources/{name}
 
 Get details for a specific resource (item count, seed count, basePath).
@@ -1173,6 +1195,38 @@ Update chaos configuration.
 | `probability` | float | Probability of returning an error (0.0 to 1.0) |
 | `statusCodes` | int[] | List of HTTP status codes to randomly choose from |
 | `defaultCode` | int | Default status code if statusCodes is empty (e.g., 500) |
+
+#### GET /chaos/stats
+
+Get chaos injection statistics (total injected, latency count, error count, bandwidth count).
+
+#### DELETE /chaos/stats
+
+Reset chaos injection statistics counters to zero.
+
+#### GET /chaos/profiles
+
+List all available chaos profiles.
+
+**Response:**
+
+```json
+[
+  {"name": "slow-api", "description": "Simulates slow upstream API"},
+  {"name": "flaky", "description": "Unreliable service with random errors"},
+  {"name": "offline", "description": "Service completely down"}
+]
+```
+
+#### GET /chaos/profiles/{name}
+
+Get a specific chaos profile's configuration.
+
+#### POST /chaos/profiles/{name}/apply
+
+Apply a named chaos profile. This overwrites the current chaos configuration with the profile's settings.
+
+**Available profiles:** `slow-api`, `degraded`, `flaky`, `offline`, `timeout`, `rate-limited`, `mobile-3g`, `satellite`, `dns-flaky`, `overloaded`
 
 ---
 

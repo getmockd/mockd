@@ -227,7 +227,7 @@ Templates work in headers too:
 
 ## Faker Functions
 
-Generate realistic sample data:
+Generate realistic sample data with 34 built-in faker types:
 
 ```json
 {
@@ -237,13 +237,78 @@ Generate realistic sample data:
       "email": "{{faker.email}}",
       "phone": "{{faker.phone}}",
       "company": "{{faker.company}}",
-      "address": "{{faker.address}}"
+      "card": "{{faker.creditCard}}",
+      "ip": "{{faker.ipv4}}",
+      "job": "{{faker.jobTitle}}",
+      "price": "{{faker.price}}"
     }
   }
 }
 ```
 
-Available faker types: `name`, `firstName`, `lastName`, `email`, `phone`, `company`, `address`, `word`, `sentence`, `boolean`, `uuid`.
+### Basic
+
+| Faker Type | Example Output |
+|------------|---------------|
+| `faker.name` | John Smith |
+| `faker.firstName` | Alice |
+| `faker.lastName` | Williams |
+| `faker.email` | alice42@example.com |
+| `faker.phone` | +1-555-123-4567 |
+| `faker.company` | Acme Corp |
+| `faker.address` | 123 Main St, New York, NY 10001 |
+| `faker.word` | delta |
+| `faker.sentence` | Lorem ipsum dolor sit amet. |
+| `faker.words` | alpha gamma epsilon (3-5 random words) |
+| `faker.words(n)` | alpha beta gamma (exactly n words) |
+| `faker.boolean` | true |
+| `faker.uuid` | a1b2c3d4-e5f6-7890-abcd-ef1234567890 |
+
+### Internet
+
+| Faker Type | Example Output |
+|------------|---------------|
+| `faker.ipv4` | 192.168.1.42 |
+| `faker.ipv6` | 2001:0db8:85a3:0000:0000:8a2e:0370:7334 |
+| `faker.macAddress` | 00:1A:2B:3C:4D:5E |
+| `faker.userAgent` | Mozilla/5.0 (Windows NT 10.0; ...) |
+
+### Finance
+
+| Faker Type | Example Output |
+|------------|---------------|
+| `faker.creditCard` | 4532015112830366 (Luhn-valid) |
+| `faker.creditCardExp` | 08/28 (MM/YY, always future) |
+| `faker.cvv` | 847 |
+| `faker.currencyCode` | USD (ISO 4217) |
+| `faker.currency` | US Dollar |
+| `faker.iban` | GB29NWBK60161331926819 |
+| `faker.price` | 49.99 |
+
+### Commerce & Identity
+
+| Faker Type | Example Output |
+|------------|---------------|
+| `faker.productName` | Ergonomic Steel Chair |
+| `faker.color` | indigo |
+| `faker.hexColor` | #4A90D9 |
+| `faker.ssn` | 123-45-6789 |
+| `faker.passport` | X12345678 |
+| `faker.jobTitle` | Senior Software Engineer |
+
+### Geo & Data
+
+| Faker Type | Example Output |
+|------------|---------------|
+| `faker.latitude` | 37.774929 |
+| `faker.longitude` | -122.419416 |
+| `faker.slug` | ergonomic-steel-chair |
+| `faker.mimeType` | application/json |
+| `faker.fileExtension` | pdf |
+
+:::tip
+`faker.words(n)` is the only parameterized faker type. Use it to generate exactly *n* space-separated words: `{{faker.words(5)}}` → `alpha beta gamma delta epsilon`.
+:::
 
 ## Sequences
 
@@ -346,6 +411,10 @@ Response:
 | `{{default value fallback}}` | Default if empty |
 | `{{faker.name}}` | Random person name |
 | `{{faker.email}}` | Random email address |
+| `{{faker.creditCard}}` | Luhn-valid credit card number |
+| `{{faker.ipv4}}` | Random IPv4 address |
+| `{{faker.price}}` | Random price (e.g., 49.99) |
+| `{{faker.*}}` | [34 types total](#faker-functions) |
 
 ## Next Steps
 
