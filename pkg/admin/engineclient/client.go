@@ -689,6 +689,24 @@ func (c *Client) CreateStatefulItem(ctx context.Context, resourceName string, da
 	return item, nil
 }
 
+// RegisterStatefulResource registers a new stateful resource definition on the engine.
+func (c *Client) RegisterStatefulResource(ctx context.Context, cfg *config.StatefulResourceConfig) error {
+	resp, err := c.post(ctx, "/state/resources", cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	switch resp.StatusCode {
+	case http.StatusCreated:
+		return nil
+	case http.StatusConflict:
+		return fmt.Errorf("%w: resource %q already exists", ErrConflict, cfg.Name)
+	default:
+		return c.parseError(resp)
+	}
+}
+
 // ListCustomOperations returns all registered custom operations.
 func (c *Client) ListCustomOperations(ctx context.Context) ([]CustomOperationInfo, error) {
 	resp, err := c.get(ctx, "/state/operations")

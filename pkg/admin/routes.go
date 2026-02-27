@@ -96,6 +96,7 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /state", a.requireEngine(a.handleStateOverview))
 	mux.HandleFunc("POST /state/reset", a.requireEngine(a.handleStateReset))
 	mux.HandleFunc("GET /state/resources", a.requireEngine(a.handleListStateResources))
+	mux.HandleFunc("POST /state/resources", a.requireEngine(a.handleCreateStateResource))
 	mux.HandleFunc("GET /state/resources/{name}", a.requireEngine(a.handleGetStateResource))
 	mux.HandleFunc("POST /state/resources/{name}/reset", a.requireEngine(a.handleResetStateResource))
 	mux.HandleFunc("DELETE /state/resources/{name}", a.requireEngine(a.handleClearStateResource))

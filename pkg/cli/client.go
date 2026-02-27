@@ -69,6 +69,8 @@ type AdminClient interface {
 	// GetPortsVerbose returns all ports with optional extended info.
 	GetPortsVerbose(verbose bool) ([]PortInfo, error)
 
+	// CreateStatefulResource registers a new stateful resource definition.
+	CreateStatefulResource(name, basePath, idField string) error
 	// GetStateOverview returns an overview of all stateful resources.
 	GetStateOverview() (*StateOverviewResult, error)
 	// ListStatefulItems returns paginated items for a stateful resource.
@@ -1045,6 +1047,40 @@ func (c *adminClient) GetPortsVerbose(verbose bool) ([]PortInfo, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	return result.Ports, nil
+}
+
+// CreateStatefulResource registers a new stateful resource definition via POST /state/resources.
+func (c *adminClient) CreateStatefulResource(name, basePath, idField string) error {
+	if idField == "" {
+		idField = "id"
+	}
+	payload := map[string]interface{}{
+		"name":     name,
+		"basePath": basePath,
+		"idField":  idField,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to encode request: %w", err)
+	}
+
+	resp, err := c.post("/state/resources", body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusConflict {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "conflict",
+			Message:    "resource already exists: " + name,
+		}
+	}
+	if resp.StatusCode != http.StatusCreated {
+		return c.parseError(resp)
+	}
+	return nil
 }
 
 // GetStateOverview returns an overview of all stateful resources.

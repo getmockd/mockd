@@ -361,10 +361,11 @@ var defClearRequestLogs = ToolDefinition{
 
 var defManageState = ToolDefinition{
 	Name: "manage_state",
-	Description: `Manage stateful mock resources — CRUD collections that persist data across requests. Use 'overview' to see all resources, 'list_items' to browse items in a resource, 'get_item' for a specific item, 'create_item' to add data, or 'reset' to restore seed data.
+	Description: `Manage stateful mock resources — CRUD collections that persist data across requests. Use 'overview' to see all resources, 'add_resource' to create a new resource, 'list_items' to browse items in a resource, 'get_item' for a specific item, 'create_item' to add data, or 'reset' to restore seed data.
 
 Examples:
   Overview:    {"action":"overview"}
+  Add resource:{"action":"add_resource","resource":"users","path":"/api/users"}
   List items:  {"action":"list_items","resource":"users","limit":10}
   Get item:    {"action":"get_item","resource":"users","item_id":"abc123"}
   Create item: {"action":"create_item","resource":"users","data":{"name":"Alice"}}
@@ -375,11 +376,19 @@ Examples:
 			"action": map[string]interface{}{
 				"type":        "string",
 				"description": "Operation to perform",
-				"enum":        []string{"overview", "list_items", "get_item", "create_item", "reset"},
+				"enum":        []string{"overview", "add_resource", "list_items", "get_item", "create_item", "reset"},
 			},
 			"resource": map[string]interface{}{
 				"type":        "string",
-				"description": "Resource name (required for list_items/get_item/create_item/reset)",
+				"description": "Resource name (required for add_resource/list_items/get_item/create_item/reset)",
+			},
+			"path": map[string]interface{}{
+				"type":        "string",
+				"description": "URL base path for the resource (e.g., /api/users). Omit for bridge-only mode (for add_resource)",
+			},
+			"id_field": map[string]interface{}{
+				"type":        "string",
+				"description": "Custom ID field name (default: 'id', for add_resource)",
 			},
 			"item_id": map[string]interface{}{
 				"type":        "string",
