@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // Engine processes templates with variable substitution.
@@ -82,14 +80,21 @@ func (e *Engine) Process(template string, ctx *Context) (string, error) {
 func (e *Engine) evaluate(expr string, ctx *Context) string {
 	expr = strings.TrimSpace(expr)
 
+	// Extract the seeded RNG from context (nil = use global source).
+	rng := ctxRNG(ctx)
+
 	// Handle simple built-in variables (no arguments)
 	switch expr {
 	case "now":
 		return time.Now().Format(time.RFC3339)
 	case "uuid":
-		return uuid.New().String()
+		return rngUUID(rng)
 	case "uuid.short":
-		return funcUUIDShort()
+		u := rngUUID(rng)
+		if len(u) >= 8 {
+			return u[:8]
+		}
+		return u
 	case "timestamp":
 		return strconv.FormatInt(time.Now().Unix(), 10)
 	case "timestamp.iso":
@@ -99,19 +104,28 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 	case "timestamp.unix_ms":
 		return strconv.FormatInt(time.Now().UnixMilli(), 10)
 	case "random":
+		// {{random}} (bare) stays crypto/rand for security when unseeded;
+		// when seeded, uses the PRNG for reproducibility.
+		if rng != nil {
+			b := make([]byte, 4)
+			for i := range b {
+				b[i] = byte(rng.IntN(256))
+			}
+			return hex.EncodeToString(b)
+		}
 		b := make([]byte, 4)
 		if _, err := cryptorand.Read(b); err != nil {
 			return ""
 		}
 		return hex.EncodeToString(b)
 	case "random.float":
-		return funcRandomFloat()
+		return funcRandomFloat(rng)
 	case "random.int":
 		// No-arg form: random int 0-100
-		return funcRandomInt(0, 100)
+		return funcRandomInt(rng, 0, 100)
 	case "random.string":
 		// No-arg form: random alphanumeric string of length 10
-		return funcRandomString(10)
+		return funcRandomString(rng, 10)
 	}
 
 	// Handle MQTT context variables
@@ -127,12 +141,12 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 	}
 
 	// Handle parenthesized function calls: random.int(1, 100), sequence("name"), etc.
-	if result, handled := e.evaluateParenthesized(expr, ctx); handled {
+	if result, handled := e.evaluateParenthesized(expr, ctx, rng); handled {
 		return result
 	}
 
 	// Handle legacy space-separated function calls: random.int 1 100, upper value, etc.
-	if result, handled := e.evaluateSpaceSeparated(expr, ctx); handled {
+	if result, handled := e.evaluateSpaceSeparated(expr, ctx, rng); handled {
 		return result
 	}
 
@@ -148,12 +162,12 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 
 	// Handle parameterized faker.type(args) patterns
 	if matches := fakerParamPattern.FindStringSubmatch(expr); matches != nil {
-		return resolveFakerParam(matches[1], matches[2])
+		return resolveFakerParam(rng, matches[1], matches[2])
 	}
 
 	// Handle faker.* patterns (no args)
 	if matches := fakerPattern.FindStringSubmatch(expr); matches != nil {
-		return resolveFaker(matches[1])
+		return resolveFaker(rng, matches[1])
 	}
 
 	// Handle request context fields
@@ -171,13 +185,13 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 }
 
 // evaluateParenthesized handles function-call syntax: func(arg1, arg2)
-func (e *Engine) evaluateParenthesized(expr string, ctx *Context) (string, bool) {
+func (e *Engine) evaluateParenthesized(expr string, ctx *Context, rng *mathrand.Rand) (string, bool) {
 	// random.int(min, max)
 	if matches := randomIntPattern.FindStringSubmatch(expr); matches != nil {
 		if matches[1] != "" && matches[2] != "" {
 			min, _ := strconv.Atoi(matches[1])
 			max, _ := strconv.Atoi(matches[2])
-			return funcRandomInt(min, max), true
+			return funcRandomInt(rng, min, max), true
 		}
 		return "", false // no parens — will be caught by simple switch
 	}
@@ -185,7 +199,7 @@ func (e *Engine) evaluateParenthesized(expr string, ctx *Context) (string, bool)
 	// random.float(min, max) or random.float(min, max, precision)
 	if matches := randomFloatPattern.FindStringSubmatch(expr); matches != nil {
 		if matches[1] != "" && matches[2] != "" {
-			return funcRandomFloatRange(matches[1], matches[2], matches[3]), true
+			return funcRandomFloatRange(rng, matches[1], matches[2], matches[3]), true
 		}
 		return "", false // no parens
 	}
@@ -198,7 +212,7 @@ func (e *Engine) evaluateParenthesized(expr string, ctx *Context) (string, bool)
 				length = n
 			}
 		}
-		return funcRandomString(length), true
+		return funcRandomString(rng, length), true
 	}
 
 	// sequence("name") or sequence("name", start)
@@ -233,7 +247,7 @@ func (e *Engine) evaluateParenthesized(expr string, ctx *Context) (string, bool)
 }
 
 // evaluateSpaceSeparated handles legacy space-separated syntax: func arg1 arg2
-func (e *Engine) evaluateSpaceSeparated(expr string, ctx *Context) (string, bool) {
+func (e *Engine) evaluateSpaceSeparated(expr string, ctx *Context, rng *mathrand.Rand) (string, bool) {
 	parts := strings.Fields(expr)
 	if len(parts) < 2 {
 		return "", false
@@ -252,7 +266,7 @@ func (e *Engine) evaluateSpaceSeparated(expr string, ctx *Context) (string, bool
 		if err1 != nil || err2 != nil {
 			return "", true
 		}
-		return funcRandomInt(min, max), true
+		return funcRandomInt(rng, min, max), true
 
 	case "upper":
 		if len(args) != 1 {
@@ -423,45 +437,46 @@ func formatValue(val any) string {
 }
 
 // resolveFaker resolves faker.* patterns with realistic-looking sample data.
+// When rng is non-nil, uses the seeded PRNG for deterministic output.
 //
 //nolint:gocyclo // Flat switch over faker types is intentional; splitting would add indirection without benefit.
-func resolveFaker(fakerType string) string {
+func resolveFaker(rng *mathrand.Rand, fakerType string) string {
 	switch fakerType {
 	case "uuid":
-		return uuid.New().String()
+		return rngUUID(rng)
 	case "boolean":
-		if mathrand.IntN(2) == 0 {
+		if rngIntN(rng, 2) == 0 {
 			return "false"
 		}
 		return "true"
 	case "name":
 		names := []string{"John Smith", "Jane Doe", "Bob Johnson", "Alice Williams", "Charlie Brown"}
-		return names[mathrand.IntN(len(names))]
+		return names[rngIntN(rng, len(names))]
 	case "firstName":
 		names := []string{"John", "Jane", "Bob", "Alice", "Charlie", "Diana", "Edward", "Fiona"}
-		return names[mathrand.IntN(len(names))]
+		return names[rngIntN(rng, len(names))]
 	case "lastName":
 		names := []string{"Smith", "Doe", "Johnson", "Williams", "Brown", "Davis", "Miller", "Wilson"}
-		return names[mathrand.IntN(len(names))]
+		return names[rngIntN(rng, len(names))]
 	case "email":
 		domains := []string{"example.com", "test.com", "mock.io", "demo.org"}
 		fnames := []string{"john", "jane", "bob", "alice", "charlie"}
-		return fnames[mathrand.IntN(len(fnames))] + strconv.Itoa(mathrand.IntN(1000)) + "@" + domains[mathrand.IntN(len(domains))]
+		return fnames[rngIntN(rng, len(fnames))] + strconv.Itoa(rngIntN(rng, 1000)) + "@" + domains[rngIntN(rng, len(domains))]
 	case "address":
 		streets := []string{"Main St", "Oak Ave", "Elm St", "Park Blvd", "Cedar Ln", "Maple Dr", "Pine Rd", "Lake Way"}
 		cities := []string{"New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Seattle", "Denver", "Boston"}
 		states := []string{"NY", "CA", "IL", "TX", "AZ", "WA", "CO", "MA"}
-		streetNum := mathrand.IntN(9999) + 1
-		idx := mathrand.IntN(len(cities))
-		return fmt.Sprintf("%d %s, %s, %s %05d", streetNum, streets[mathrand.IntN(len(streets))], cities[idx], states[idx], mathrand.IntN(99999))
+		streetNum := rngIntN(rng, 9999) + 1
+		idx := rngIntN(rng, len(cities))
+		return fmt.Sprintf("%d %s, %s, %s %05d", streetNum, streets[rngIntN(rng, len(streets))], cities[idx], states[idx], rngIntN(rng, 99999))
 	case "phone":
-		return fmt.Sprintf("+1-%03d-%03d-%04d", mathrand.IntN(900)+100, mathrand.IntN(900)+100, mathrand.IntN(10000))
+		return fmt.Sprintf("+1-%03d-%03d-%04d", rngIntN(rng, 900)+100, rngIntN(rng, 900)+100, rngIntN(rng, 10000))
 	case "company":
 		companies := []string{"Acme Corp", "Globex Inc", "Initech", "Umbrella Corp", "Stark Industries", "Wayne Enterprises", "Cyberdyne Systems", "Tyrell Corp"}
-		return companies[mathrand.IntN(len(companies))]
+		return companies[rngIntN(rng, len(companies))]
 	case "word":
 		words := []string{"alpha", "beta", "gamma", "delta", "epsilon", "zeta", "theta", "lambda", "sigma", "omega"}
-		return words[mathrand.IntN(len(words))]
+		return words[rngIntN(rng, len(words))]
 	case "sentence":
 		sentences := []string{
 			"The quick brown fox jumps over the lazy dog.",
@@ -470,71 +485,71 @@ func resolveFaker(fakerType string) string {
 			"Sensor data transmitted successfully.",
 			"System status nominal.",
 		}
-		return sentences[mathrand.IntN(len(sentences))]
+		return sentences[rngIntN(rng, len(sentences))]
 
 	// --- Internet ---
 	case "ipv4":
-		return fakerIPv4()
+		return fakerIPv4(rng)
 	case "ipv6":
-		return fakerIPv6()
+		return fakerIPv6(rng)
 	case "macAddress":
-		return fakerMACAddress()
+		return fakerMACAddress(rng)
 	case "userAgent":
-		return fakerUserAgents[mathrand.IntN(len(fakerUserAgents))]
+		return fakerUserAgents[rngIntN(rng, len(fakerUserAgents))]
 
 	// --- Finance ---
 	case "creditCard":
-		return fakerCreditCard()
+		return fakerCreditCard(rng)
 	case "creditCardExp":
-		return fakerCreditCardExp()
+		return fakerCreditCardExp(rng)
 	case "cvv":
-		return fakerCVV()
+		return fakerCVV(rng)
 	case "currencyCode":
-		return fakerCurrencyCodes[mathrand.IntN(len(fakerCurrencyCodes))]
+		return fakerCurrencyCodes[rngIntN(rng, len(fakerCurrencyCodes))]
 	case "currency":
-		return fakerCurrencyNames[mathrand.IntN(len(fakerCurrencyNames))]
+		return fakerCurrencyNames[rngIntN(rng, len(fakerCurrencyNames))]
 	case "iban":
-		return fakerIBAN()
+		return fakerIBAN(rng)
 
 	// --- Commerce ---
 	case "price":
-		return fakerPrice()
+		return fakerPrice(rng)
 	case "productName":
-		return fakerProductAdjectives[mathrand.IntN(len(fakerProductAdjectives))] + " " +
-			fakerProductMaterials[mathrand.IntN(len(fakerProductMaterials))] + " " +
-			fakerProductNouns[mathrand.IntN(len(fakerProductNouns))]
+		return fakerProductAdjectives[rngIntN(rng, len(fakerProductAdjectives))] + " " +
+			fakerProductMaterials[rngIntN(rng, len(fakerProductMaterials))] + " " +
+			fakerProductNouns[rngIntN(rng, len(fakerProductNouns))]
 	case "color":
-		return fakerColors[mathrand.IntN(len(fakerColors))]
+		return fakerColors[rngIntN(rng, len(fakerColors))]
 	case "hexColor":
-		return fakerHexColor()
+		return fakerHexColor(rng)
 
 	// --- Identity ---
 	case "ssn":
-		return fakerSSN()
+		return fakerSSN(rng)
 	case "passport":
-		return fakerPassport()
+		return fakerPassport(rng)
 	case "jobTitle":
-		return fakerJobLevels[mathrand.IntN(len(fakerJobLevels))] + " " +
-			fakerJobFields[mathrand.IntN(len(fakerJobFields))] + " " +
-			fakerJobRoles[mathrand.IntN(len(fakerJobRoles))]
+		return fakerJobLevels[rngIntN(rng, len(fakerJobLevels))] + " " +
+			fakerJobFields[rngIntN(rng, len(fakerJobFields))] + " " +
+			fakerJobRoles[rngIntN(rng, len(fakerJobRoles))]
 
 	// --- Geo ---
 	case "latitude":
-		return fakerLatitude()
+		return fakerLatitude(rng)
 	case "longitude":
-		return fakerLongitude()
+		return fakerLongitude(rng)
 
 	// --- Text ---
 	case "words":
-		return fakerWords(mathrand.IntN(3) + 3) // default 3-5 words
+		return fakerWords(rng, rngIntN(rng, 3)+3) // default 3-5 words
 	case "slug":
-		return fakerSlug()
+		return fakerSlug(rng)
 
 	// --- Data ---
 	case "mimeType":
-		return fakerMIMETypes[mathrand.IntN(len(fakerMIMETypes))]
+		return fakerMIMETypes[rngIntN(rng, len(fakerMIMETypes))]
 	case "fileExtension":
-		return fakerFileExtensions[mathrand.IntN(len(fakerFileExtensions))]
+		return fakerFileExtensions[rngIntN(rng, len(fakerFileExtensions))]
 
 	default:
 		return ""
@@ -542,16 +557,17 @@ func resolveFaker(fakerType string) string {
 }
 
 // resolveFakerParam resolves parameterized faker.type(args) patterns.
+// When rng is non-nil, uses the seeded PRNG for deterministic output.
 // Currently supports:
 //   - faker.words(n) — generate n random words, space-separated
-func resolveFakerParam(fakerType, argsStr string) string {
+func resolveFakerParam(rng *mathrand.Rand, fakerType, argsStr string) string {
 	switch fakerType {
 	case "words":
 		n, err := strconv.Atoi(strings.TrimSpace(argsStr))
 		if err != nil || n <= 0 {
-			return fakerWords(3) // default fallback
+			return fakerWords(rng, 3) // default fallback
 		}
-		return fakerWords(n)
+		return fakerWords(rng, n)
 	default:
 		return ""
 	}

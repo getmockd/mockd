@@ -169,39 +169,43 @@ var fakerWordList = []string{
 
 // =============================================================================
 // Faker Generation Functions
+//
+// All generation functions accept an rng parameter. When non-nil, the seeded
+// PRNG is used for deterministic output. When nil, the global math/rand/v2
+// source is used.
 // =============================================================================
 
 // fakerIPv4 generates a random IPv4 address.
-func fakerIPv4() string {
+func fakerIPv4(rng *mathrand.Rand) string {
 	return fmt.Sprintf("%d.%d.%d.%d",
-		mathrand.IntN(256), mathrand.IntN(256),
-		mathrand.IntN(256), mathrand.IntN(256))
+		rngIntN(rng, 256), rngIntN(rng, 256),
+		rngIntN(rng, 256), rngIntN(rng, 256))
 }
 
 // fakerIPv6 generates a random IPv6 address in full expanded notation.
-func fakerIPv6() string {
+func fakerIPv6(rng *mathrand.Rand) string {
 	groups := make([]string, 8)
 	for i := range groups {
-		groups[i] = fmt.Sprintf("%04x", mathrand.IntN(65536))
+		groups[i] = fmt.Sprintf("%04x", rngIntN(rng, 65536))
 	}
 	return strings.Join(groups, ":")
 }
 
 // fakerMACAddress generates a random MAC address in uppercase hex notation.
-func fakerMACAddress() string {
+func fakerMACAddress(rng *mathrand.Rand) string {
 	return fmt.Sprintf("%02X:%02X:%02X:%02X:%02X:%02X",
-		mathrand.IntN(256), mathrand.IntN(256),
-		mathrand.IntN(256), mathrand.IntN(256),
-		mathrand.IntN(256), mathrand.IntN(256))
+		rngIntN(rng, 256), rngIntN(rng, 256),
+		rngIntN(rng, 256), rngIntN(rng, 256),
+		rngIntN(rng, 256), rngIntN(rng, 256))
 }
 
 // fakerCreditCard generates a Luhn-valid 16-digit credit card number.
 // Uses a Visa-like prefix (starts with 4).
-func fakerCreditCard() string {
+func fakerCreditCard(rng *mathrand.Rand) string {
 	digits := make([]int, 16)
 	digits[0] = 4 // Visa-like prefix
 	for i := 1; i < 15; i++ {
-		digits[i] = mathrand.IntN(10)
+		digits[i] = rngIntN(rng, 10)
 	}
 
 	// Calculate Luhn check digit.
@@ -228,9 +232,9 @@ func fakerCreditCard() string {
 }
 
 // fakerIBAN generates a simplified IBAN string with a realistic structure.
-func fakerIBAN() string {
-	prefix := fakerIBANPrefixes[mathrand.IntN(len(fakerIBANPrefixes))]
-	checkDigits := fmt.Sprintf("%02d", mathrand.IntN(90)+10)
+func fakerIBAN(rng *mathrand.Rand) string {
+	prefix := fakerIBANPrefixes[rngIntN(rng, len(fakerIBANPrefixes))]
+	checkDigits := fmt.Sprintf("%02d", rngIntN(rng, 90)+10)
 
 	// Fill remaining length with random digits
 	remaining := prefix.length - len(prefix.country) - 2 - len(prefix.bankPrefix)
@@ -239,86 +243,86 @@ func fakerIBAN() string {
 	sb.WriteString(checkDigits)
 	sb.WriteString(prefix.bankPrefix)
 	for i := 0; i < remaining; i++ {
-		sb.WriteByte(byte('0' + mathrand.IntN(10)))
+		sb.WriteByte(byte('0' + rngIntN(rng, 10)))
 	}
 	return sb.String()
 }
 
 // fakerPrice generates a random price string with 2 decimal places.
-func fakerPrice() string {
-	dollars := mathrand.IntN(999) + 1
-	cents := mathrand.IntN(100)
+func fakerPrice(rng *mathrand.Rand) string {
+	dollars := rngIntN(rng, 999) + 1
+	cents := rngIntN(rng, 100)
 	return fmt.Sprintf("%d.%02d", dollars, cents)
 }
 
 // fakerSSN generates a random SSN in ###-##-#### format.
-func fakerSSN() string {
-	area := mathrand.IntN(899) + 100
-	group := mathrand.IntN(99) + 1
-	serial := mathrand.IntN(9999) + 1
+func fakerSSN(rng *mathrand.Rand) string {
+	area := rngIntN(rng, 899) + 100
+	group := rngIntN(rng, 99) + 1
+	serial := rngIntN(rng, 9999) + 1
 	return fmt.Sprintf("%03d-%02d-%04d", area, group, serial)
 }
 
 // fakerPassport generates a random passport number (2 uppercase letters + 7 digits).
-func fakerPassport() string {
+func fakerPassport(rng *mathrand.Rand) string {
 	var sb strings.Builder
-	sb.WriteByte(byte('A' + mathrand.IntN(26)))
-	sb.WriteByte(byte('A' + mathrand.IntN(26)))
+	sb.WriteByte(byte('A' + rngIntN(rng, 26)))
+	sb.WriteByte(byte('A' + rngIntN(rng, 26)))
 	for i := 0; i < 7; i++ {
-		sb.WriteByte(byte('0' + mathrand.IntN(10)))
+		sb.WriteByte(byte('0' + rngIntN(rng, 10)))
 	}
 	return sb.String()
 }
 
 // fakerCreditCardExp generates a future credit card expiration date in MM/YY format.
-func fakerCreditCardExp() string {
+func fakerCreditCardExp(rng *mathrand.Rand) string {
 	now := time.Now()
 	// Random month 1-12, random year 1-5 years in the future
-	month := mathrand.IntN(12) + 1
-	year := now.Year() + mathrand.IntN(5) + 1
+	month := rngIntN(rng, 12) + 1
+	year := now.Year() + rngIntN(rng, 5) + 1
 	return fmt.Sprintf("%02d/%02d", month, year%100)
 }
 
 // fakerCVV generates a random 3-digit CVV code.
-func fakerCVV() string {
-	return fmt.Sprintf("%03d", mathrand.IntN(1000))
+func fakerCVV(rng *mathrand.Rand) string {
+	return fmt.Sprintf("%03d", rngIntN(rng, 1000))
 }
 
 // fakerHexColor generates a random hex color string (e.g., "#FF5733").
-func fakerHexColor() string {
+func fakerHexColor(rng *mathrand.Rand) string {
 	return fmt.Sprintf("#%02X%02X%02X",
-		mathrand.IntN(256), mathrand.IntN(256), mathrand.IntN(256))
+		rngIntN(rng, 256), rngIntN(rng, 256), rngIntN(rng, 256))
 }
 
 // fakerLatitude generates a random latitude between -90.0 and 90.0 with 6 decimal places.
-func fakerLatitude() string {
-	lat := mathrand.Float64()*180.0 - 90.0
+func fakerLatitude(rng *mathrand.Rand) string {
+	lat := rngFloat64(rng)*180.0 - 90.0
 	return fmt.Sprintf("%.6f", lat)
 }
 
 // fakerLongitude generates a random longitude between -180.0 and 180.0 with 6 decimal places.
-func fakerLongitude() string {
-	lng := mathrand.Float64()*360.0 - 180.0
+func fakerLongitude(rng *mathrand.Rand) string {
+	lng := rngFloat64(rng)*360.0 - 180.0
 	return fmt.Sprintf("%.6f", lng)
 }
 
 // fakerWords generates n random words from the word list, space-separated.
-func fakerWords(n int) string {
+func fakerWords(rng *mathrand.Rand, n int) string {
 	if n <= 0 {
 		n = 3
 	}
 	words := make([]string, n)
 	for i := range words {
-		words[i] = fakerWordList[mathrand.IntN(len(fakerWordList))]
+		words[i] = fakerWordList[rngIntN(rng, len(fakerWordList))]
 	}
 	return strings.Join(words, " ")
 }
 
 // fakerSlug generates a URL-friendly slug of 3 hyphen-separated words.
-func fakerSlug() string {
+func fakerSlug(rng *mathrand.Rand) string {
 	words := make([]string, 3)
 	for i := range words {
-		words[i] = fakerWordList[mathrand.IntN(len(fakerWordList))]
+		words[i] = fakerWordList[rngIntN(rng, len(fakerWordList))]
 	}
 	return strings.Join(words, "-")
 }

@@ -307,6 +307,11 @@ type HTTPResponse struct {
 	Body       string            `json:"body" yaml:"body"`
 	BodyFile   string            `json:"bodyFile,omitempty" yaml:"bodyFile,omitempty"`
 	DelayMs    int               `json:"delayMs,omitempty" yaml:"delayMs,omitempty"`
+	// Seed sets a fixed PRNG seed for this response, making all random/faker/uuid
+	// template expressions deterministic. When omitted or nil, the global
+	// (non-deterministic) source is used. Can also be set per-request via
+	// the ?_mockd_seed=N query parameter or X-Mockd-Seed header.
+	Seed *int64 `json:"seed,omitempty" yaml:"seed,omitempty"`
 }
 
 // UnmarshalJSON handles the Body field accepting both a string and a JSON object/array.
@@ -320,6 +325,7 @@ func (r *HTTPResponse) UnmarshalJSON(data []byte) error {
 		Body       json.RawMessage   `json:"body"`
 		BodyFile   string            `json:"bodyFile,omitempty"`
 		DelayMs    int               `json:"delayMs,omitempty"`
+		Seed       *int64            `json:"seed,omitempty"`
 	}
 	if err := json.Unmarshal(data, &proxy); err != nil {
 		return err
@@ -329,6 +335,7 @@ func (r *HTTPResponse) UnmarshalJSON(data []byte) error {
 	r.Headers = proxy.Headers
 	r.BodyFile = proxy.BodyFile
 	r.DelayMs = proxy.DelayMs
+	r.Seed = proxy.Seed
 
 	// Handle body: could be string, object, array, number, boolean, or null
 	if len(proxy.Body) == 0 {
