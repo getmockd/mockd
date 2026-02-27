@@ -85,6 +85,24 @@ type AdminClient interface {
 	// ExecuteCustomOperation executes a custom operation with the given input.
 	ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error)
 
+	// Chaos stats
+	// GetChaosStats returns chaos injection statistics.
+	GetChaosStats() (map[string]interface{}, error)
+	// ResetChaosStats resets chaos injection statistics counters.
+	ResetChaosStats() error
+
+	// Verification
+	// GetMockVerification returns verification status for a mock.
+	GetMockVerification(id string) (map[string]interface{}, error)
+	// VerifyMock posts expected verification criteria and returns pass/fail.
+	VerifyMock(id string, expected map[string]interface{}) (map[string]interface{}, error)
+	// ListMockInvocations returns recorded invocations for a mock.
+	ListMockInvocations(id string) (map[string]interface{}, error)
+	// ResetMockVerification clears verification data for a specific mock.
+	ResetMockVerification(id string) error
+	// ResetAllVerification clears verification data for all mocks.
+	ResetAllVerification() error
+
 	// ListWorkspaces returns all workspaces on the admin server.
 	ListWorkspaces() ([]*WorkspaceDTO, error)
 	// CreateWorkspace creates a new workspace on the admin.
@@ -739,6 +757,157 @@ func (c *adminClient) SetChaosConfig(chaosConfig map[string]interface{}) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetChaosStats returns chaos injection statistics.
+func (c *adminClient) GetChaosStats() (map[string]interface{}, error) {
+	resp, err := c.get("/chaos/stats")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result, nil
+}
+
+// ResetChaosStats resets chaos injection statistics counters.
+func (c *adminClient) ResetChaosStats() error {
+	resp, err := c.post("/chaos/stats/reset", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetMockVerification returns verification status for a mock.
+func (c *adminClient) GetMockVerification(id string) (map[string]interface{}, error) {
+	resp, err := c.get("/mocks/" + url.PathEscape(id) + "/verify")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "mock not found: " + id,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result, nil
+}
+
+// VerifyMock posts expected verification criteria and returns pass/fail.
+func (c *adminClient) VerifyMock(id string, expected map[string]interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(expected)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode request: %w", err)
+	}
+
+	resp, err := c.post("/mocks/"+url.PathEscape(id)+"/verify", body)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "mock not found: " + id,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result, nil
+}
+
+// ListMockInvocations returns recorded invocations for a mock.
+func (c *adminClient) ListMockInvocations(id string) (map[string]interface{}, error) {
+	resp, err := c.get("/mocks/" + url.PathEscape(id) + "/invocations")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "mock not found: " + id,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result, nil
+}
+
+// ResetMockVerification clears verification data for a specific mock.
+func (c *adminClient) ResetMockVerification(id string) error {
+	resp, err := c.delete("/mocks/" + url.PathEscape(id) + "/invocations")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "mock not found: " + id,
+		}
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// ResetAllVerification clears verification data for all mocks.
+func (c *adminClient) ResetAllVerification() error {
+	resp, err := c.delete("/verify")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		return c.parseError(resp)
 	}
 	return nil
