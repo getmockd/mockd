@@ -402,6 +402,41 @@ func (s *Server) handleResetChaosStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "chaos stats reset"})
 }
 
+func (s *Server) handleGetStatefulFaultStats(w http.ResponseWriter, _ *http.Request) {
+	stats := s.engine.GetStatefulFaultStats()
+	if stats == nil {
+		writeJSON(w, http.StatusOK, StatefulFaultStats{})
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleTripCircuitBreaker(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	if key == "" {
+		writeError(w, http.StatusBadRequest, "missing_key", "circuit breaker key is required")
+		return
+	}
+	if err := s.engine.TripCircuitBreaker(key); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "circuit breaker tripped", "key": key})
+}
+
+func (s *Server) handleResetCircuitBreaker(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	if key == "" {
+		writeError(w, http.StatusBadRequest, "missing_key", "circuit breaker key is required")
+		return
+	}
+	if err := s.engine.ResetCircuitBreaker(key); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "circuit breaker reset", "key": key})
+}
+
 // State handlers
 
 func (s *Server) handleGetState(w http.ResponseWriter, r *http.Request) {

@@ -52,9 +52,11 @@ func (r *ToolRegistry) registerBuiltinTools() {
 		"clear_request_logs": handleClearRequestLogs,
 
 		// Chaos Engineering
-		"get_chaos_config":  handleGetChaosConfig,
-		"set_chaos_config":  handleSetChaosConfig,
-		"reset_chaos_stats": handleResetChaosStats,
+		"get_chaos_config":       handleGetChaosConfig,
+		"set_chaos_config":       handleSetChaosConfig,
+		"reset_chaos_stats":      handleResetChaosStats,
+		"get_stateful_faults":    handleGetStatefulFaults,
+		"manage_circuit_breaker": handleManageCircuitBreaker,
 
 		// Verification
 		"verify_mock":          handleVerifyMock,

@@ -151,6 +151,61 @@ func (a *API) handleApplyChaosProfile(w http.ResponseWriter, r *http.Request, en
 	})
 }
 
+// handleGetStatefulFaultStats returns stats for all stateful chaos faults.
+func (a *API) handleGetStatefulFaultStats(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+
+	stats, err := engine.GetStatefulFaultStats(ctx)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get stateful fault stats"))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, stats)
+}
+
+// handleTripCircuitBreaker forces a circuit breaker to the open state.
+func (a *API) handleTripCircuitBreaker(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+
+	key := r.PathValue("key")
+	if key == "" {
+		writeError(w, http.StatusBadRequest, "missing_key", "circuit breaker key is required")
+		return
+	}
+
+	if err := engine.TripCircuitBreaker(ctx, key); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "circuit breaker not found: "+key)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": "circuit breaker tripped",
+		"key":     key,
+	})
+}
+
+// handleResetCircuitBreaker forces a circuit breaker to the closed state.
+func (a *API) handleResetCircuitBreaker(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+
+	key := r.PathValue("key")
+	if key == "" {
+		writeError(w, http.StatusBadRequest, "missing_key", "circuit breaker key is required")
+		return
+	}
+
+	if err := engine.ResetCircuitBreaker(ctx, key); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "circuit breaker not found: "+key)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": "circuit breaker reset",
+		"key":     key,
+	})
+}
+
 // chaosConfigToAPI converts an internal chaos.ChaosConfig to the API-level
 // engineclient.ChaosConfig used for admin-engine communication.
 func chaosConfigToAPI(src *chaos.ChaosConfig) engineclient.ChaosConfig {
@@ -182,6 +237,26 @@ func chaosConfigToAPI(src *chaos.ChaosConfig) engineclient.ChaosConfig {
 				Probability:    src.GlobalRules.Bandwidth.Probability,
 			}
 		}
+	}
+
+	// Convert path-specific rules
+	for _, rule := range src.Rules {
+		apiRule := engineclient.ChaosRuleConfig{
+			PathPattern: rule.PathPattern,
+			Probability: rule.Probability,
+		}
+		if len(rule.Methods) > 0 {
+			apiRule.Methods = make([]string, len(rule.Methods))
+			copy(apiRule.Methods, rule.Methods)
+		}
+		for _, f := range rule.Faults {
+			apiRule.Faults = append(apiRule.Faults, engineclient.ChaosFaultConfig{
+				Type:        string(f.Type),
+				Probability: f.Probability,
+				Config:      f.Config,
+			})
+		}
+		cfg.Rules = append(cfg.Rules, apiRule)
 	}
 
 	return cfg

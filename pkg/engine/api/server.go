@@ -52,6 +52,9 @@ type EngineController interface {
 	SetChaosConfig(cfg *ChaosConfig) error
 	GetChaosStats() *ChaosStats
 	ResetChaosStats()
+	GetStatefulFaultStats() *StatefulFaultStats
+	TripCircuitBreaker(key string) error
+	ResetCircuitBreaker(key string) error
 
 	// Stateful resources
 	GetStateOverview() *StateOverview
@@ -182,6 +185,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /chaos", s.handleSetChaos)
 	mux.HandleFunc("GET /chaos/stats", s.handleGetChaosStats)
 	mux.HandleFunc("POST /chaos/stats/reset", s.handleResetChaosStats)
+	mux.HandleFunc("GET /chaos/faults", s.handleGetStatefulFaultStats)
+	mux.HandleFunc("POST /chaos/circuit-breakers/{key}/trip", s.handleTripCircuitBreaker)
+	mux.HandleFunc("POST /chaos/circuit-breakers/{key}/reset", s.handleResetCircuitBreaker)
 
 	// State management
 	mux.HandleFunc("GET /state", s.handleGetState)

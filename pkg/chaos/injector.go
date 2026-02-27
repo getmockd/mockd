@@ -18,6 +18,11 @@ type Injector struct {
 	rng    *rand.Rand
 	mu     sync.Mutex
 	stats  *ChaosStats
+
+	// Stateful fault managers (keyed by "ruleIdx:faultIdx")
+	circuitBreakers map[string]*CircuitBreaker
+	retryTrackers   map[string]*RetryAfterTracker
+	progressives    map[string]*ProgressiveDegradation
 }
 
 type compiledRule struct {
@@ -36,19 +41,39 @@ func NewInjector(config *ChaosConfig) (*Injector, error) {
 	// Clamp probability/rate values to [0.0, 1.0]
 	config.Clamp()
 
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	i := &Injector{
-		config: config,
-		rng:    rand.New(rand.NewSource(time.Now().UnixNano())),
-		stats:  NewChaosStats(),
+		config:          config,
+		rng:             rng,
+		stats:           NewChaosStats(),
+		circuitBreakers: make(map[string]*CircuitBreaker),
+		retryTrackers:   make(map[string]*RetryAfterTracker),
+		progressives:    make(map[string]*ProgressiveDegradation),
 	}
 
-	// Compile rules
-	for _, rule := range config.Rules {
+	// Compile rules and initialize stateful fault managers
+	for ruleIdx, rule := range config.Rules {
 		compiled, err := compileRule(rule)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile rule for pattern %q: %w", rule.PathPattern, err)
 		}
 		i.rules = append(i.rules, compiled)
+
+		// Create stateful fault managers for this rule
+		for faultIdx, fault := range rule.Faults {
+			key := statefulFaultKey(ruleIdx, faultIdx)
+			switch fault.Type { //nolint:exhaustive // only stateful types need initialization
+			case FaultCircuitBreaker:
+				cfg := ParseCircuitBreakerConfig(fault.Config)
+				i.circuitBreakers[key] = NewCircuitBreaker(cfg, rng)
+			case FaultRetryAfter:
+				cfg := ParseRetryAfterConfig(fault.Config)
+				i.retryTrackers[key] = NewRetryAfterTracker(cfg)
+			case FaultProgressiveDegradation:
+				cfg := ParseProgressiveDegradationConfig(fault.Config)
+				i.progressives[key] = NewProgressiveDegradation(cfg)
+			}
+		}
 	}
 
 	return i, nil
@@ -100,7 +125,7 @@ func (i *Injector) ShouldInject(r *http.Request) []FaultConfig {
 	pathRuleMatched := false
 
 	// Check path-specific rules first
-	for _, rule := range i.rules {
+	for ruleIdx, rule := range i.rules {
 		if !rule.pattern.MatchString(r.URL.Path) {
 			continue
 		}
@@ -121,7 +146,21 @@ func (i *Injector) ShouldInject(r *http.Request) []FaultConfig {
 		}
 
 		// Check each fault's probability
-		for _, fault := range rule.faults {
+		for faultIdx, fault := range rule.faults {
+			// Stateful faults always pass through — the state machine decides
+			if isStatefulFault(fault.Type) {
+				key := statefulFaultKey(ruleIdx, faultIdx)
+				faultCopy := fault
+				if faultCopy.Config == nil {
+					faultCopy.Config = make(map[string]interface{})
+				}
+				faultCopy.Config["_stateKey"] = key
+				faults = append(faults, faultCopy)
+				i.stats.InjectedFaults++
+				i.stats.FaultsByType[fault.Type]++
+				continue
+			}
+
 			if i.rng.Float64() <= fault.Probability {
 				faults = append(faults, fault)
 				i.stats.InjectedFaults++
@@ -243,6 +282,18 @@ func getIntOrDefault(m map[string]interface{}, key string, defaultVal int) int {
 	return defaultVal
 }
 
+// getFloat64OrDefault extracts a float64 value from a map.
+// Returns defaultVal if not found or not a numeric type.
+func getFloat64OrDefault(m map[string]interface{}, key string, defaultVal float64) float64 {
+	if v, ok := m[key].(float64); ok {
+		return v
+	}
+	if v, ok := m[key].(int); ok {
+		return float64(v)
+	}
+	return defaultVal
+}
+
 // getIntSlice extracts an int slice from a map, handling []interface{} and []int types.
 func getIntSlice(m map[string]interface{}, key string) []int {
 	if v, ok := m[key].([]int); ok {
@@ -260,6 +311,11 @@ func getIntSlice(m map[string]interface{}, key string) []int {
 		return result
 	}
 	return nil
+}
+
+// statefulFaultKey generates a unique key for a stateful fault within a rule.
+func statefulFaultKey(ruleIdx, faultIdx int) string {
+	return fmt.Sprintf("%d:%d", ruleIdx, faultIdx)
 }
 
 // InjectLatencyFromConfig injects latency from a FaultConfig
@@ -377,6 +433,61 @@ func (i *Injector) GetConfig() *ChaosConfig {
 	return i.config
 }
 
+// isStatefulFault returns true for fault types that require internal state machines.
+func isStatefulFault(ft FaultType) bool {
+	switch ft {
+	case FaultCircuitBreaker, FaultRetryAfter, FaultProgressiveDegradation:
+		return true
+	default:
+		return false
+	}
+}
+
+// HandleCircuitBreaker processes a request through a circuit breaker.
+// Returns true if the request was rejected (response written).
+func (i *Injector) HandleCircuitBreaker(key string, w http.ResponseWriter) bool {
+	cb, ok := i.circuitBreakers[key]
+	if !ok {
+		return false
+	}
+	return cb.Handle(w)
+}
+
+// HandleRetryAfter processes a request through a retry-after tracker.
+// Returns true if the request was rate-limited (response written).
+func (i *Injector) HandleRetryAfter(key string, w http.ResponseWriter) bool {
+	tracker, ok := i.retryTrackers[key]
+	if !ok {
+		return false
+	}
+	return tracker.Handle(w)
+}
+
+// HandleProgressiveDegradation processes a request through a progressive degradation tracker.
+// Returns true if an error was returned (the request should not continue).
+func (i *Injector) HandleProgressiveDegradation(key string, ctx context.Context, w http.ResponseWriter) bool {
+	pd, ok := i.progressives[key]
+	if !ok {
+		return false
+	}
+	return pd.Handle(ctx, w)
+}
+
+// GetCircuitBreakers returns all circuit breakers (for admin API introspection).
+func (i *Injector) GetCircuitBreakers() map[string]*CircuitBreaker {
+	return i.circuitBreakers
+}
+
+// GetRetryTrackers returns all retry-after trackers (for admin API introspection).
+func (i *Injector) GetRetryTrackers() map[string]*RetryAfterTracker {
+	return i.retryTrackers
+}
+
+// GetProgressives returns all progressive degradation trackers (for admin API introspection).
+func (i *Injector) GetProgressives() map[string]*ProgressiveDegradation {
+	return i.progressives
+}
+
 // UpdateConfig updates the chaos configuration
 func (i *Injector) UpdateConfig(config *ChaosConfig) error {
 	if config == nil {
@@ -396,11 +507,36 @@ func (i *Injector) UpdateConfig(config *ChaosConfig) error {
 		newRules = append(newRules, compiled)
 	}
 
+	// Build new stateful fault managers
+	newCBs := make(map[string]*CircuitBreaker)
+	newRTs := make(map[string]*RetryAfterTracker)
+	newPDs := make(map[string]*ProgressiveDegradation)
+
+	for ruleIdx, rule := range config.Rules {
+		for faultIdx, fault := range rule.Faults {
+			key := statefulFaultKey(ruleIdx, faultIdx)
+			switch fault.Type { //nolint:exhaustive // only stateful types need initialization
+			case FaultCircuitBreaker:
+				cfg := ParseCircuitBreakerConfig(fault.Config)
+				newCBs[key] = NewCircuitBreaker(cfg, i.rng)
+			case FaultRetryAfter:
+				cfg := ParseRetryAfterConfig(fault.Config)
+				newRTs[key] = NewRetryAfterTracker(cfg)
+			case FaultProgressiveDegradation:
+				cfg := ParseProgressiveDegradationConfig(fault.Config)
+				newPDs[key] = NewProgressiveDegradation(cfg)
+			}
+		}
+	}
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
 	i.config = config
 	i.rules = newRules
+	i.circuitBreakers = newCBs
+	i.retryTrackers = newRTs
+	i.progressives = newPDs
 
 	return nil
 }

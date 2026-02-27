@@ -45,6 +45,10 @@ type (
 	CustomOperationInfo             = types.CustomOperationInfo
 	CustomOperationDetail           = types.CustomOperationDetail
 	CustomOperationStep             = types.CustomOperationStep
+	StatefulFaultStats              = types.StatefulFaultStats
+	CircuitBreakerStatus            = types.CircuitBreakerStatus
+	RetryAfterStatus                = types.RetryAfterStatus
+	ProgressiveDegradationStatus    = types.ProgressiveDegradationStatus
 )
 
 // ProtocolStatusInfo is an alias for ProtocolStatus for backward compatibility.

@@ -56,6 +56,22 @@ func handleSetChaosConfig(args map[string]interface{}, session *MCPSession, serv
 		})
 	}
 
+	// Check if raw rules were provided — send them directly to the admin API.
+	if rules, ok := args["rules"]; ok {
+		chaosConfig := map[string]interface{}{
+			"enabled": getBool(args, "enabled", true),
+			"rules":   rules,
+		}
+		if err := client.SetChaosConfig(chaosConfig); err != nil {
+			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+			return ToolResultError("failed to set chaos rules: " + adminError(err, session.GetAdminURL())), nil
+		}
+		return ToolResultJSON(map[string]interface{}{
+			"applied": true,
+			"config":  chaosConfig,
+		})
+	}
+
 	// Build config matching the admin API's types.ChaosConfig shape:
 	//   { "enabled": bool, "latency": {...}, "errorRate": {...}, "bandwidth": {...} }
 	chaosConfig := map[string]interface{}{
@@ -137,4 +153,65 @@ func handleResetChaosStats(args map[string]interface{}, session *MCPSession, ser
 		"reset":   true,
 		"message": "chaos statistics counters reset to zero",
 	})
+}
+
+// handleGetStatefulFaults retrieves status of all stateful fault instances.
+func handleGetStatefulFaults(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+	client := session.GetAdminClient()
+	if client == nil {
+		return ToolResultError("admin client not available"), nil
+	}
+
+	stats, err := client.GetStatefulFaultStats()
+	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+		return ToolResultError("failed to get stateful fault stats: " + adminError(err, session.GetAdminURL())), nil
+	}
+
+	return ToolResultJSON(stats)
+}
+
+// handleManageCircuitBreaker manually trips or resets a circuit breaker.
+func handleManageCircuitBreaker(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+	client := session.GetAdminClient()
+	if client == nil {
+		return ToolResultError("admin client not available"), nil
+	}
+
+	action := getString(args, "action", "")
+	key := getString(args, "key", "")
+
+	if action == "" {
+		return ToolResultError("action is required (trip or reset)"), nil
+	}
+	if key == "" {
+		return ToolResultError("key is required (e.g., \"0:0\")"), nil
+	}
+
+	switch action {
+	case "trip":
+		if err := client.TripCircuitBreaker(key); err != nil {
+			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+			return ToolResultError("failed to trip circuit breaker: " + adminError(err, session.GetAdminURL())), nil
+		}
+		return ToolResultJSON(map[string]interface{}{
+			"action":  "tripped",
+			"key":     key,
+			"message": fmt.Sprintf("circuit breaker %q manually tripped to OPEN state", key),
+		})
+
+	case "reset":
+		if err := client.ResetCircuitBreaker(key); err != nil {
+			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+			return ToolResultError("failed to reset circuit breaker: " + adminError(err, session.GetAdminURL())), nil
+		}
+		return ToolResultJSON(map[string]interface{}{
+			"action":  "reset",
+			"key":     key,
+			"message": fmt.Sprintf("circuit breaker %q manually reset to CLOSED state", key),
+		})
+
+	default:
+		return ToolResultError("invalid action: " + action + " (must be 'trip' or 'reset')"), nil
+	}
 }

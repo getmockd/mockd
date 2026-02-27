@@ -98,6 +98,13 @@ type AdminClient interface {
 	GetChaosStats() (map[string]interface{}, error)
 	// ResetChaosStats resets chaos injection statistics counters.
 	ResetChaosStats() error
+	// GetStatefulFaultStats returns the status of all stateful fault instances
+	// (circuit breakers, retry-after trackers, progressive degradation).
+	GetStatefulFaultStats() (map[string]interface{}, error)
+	// TripCircuitBreaker manually trips a circuit breaker by state key.
+	TripCircuitBreaker(key string) error
+	// ResetCircuitBreaker manually resets a circuit breaker by state key.
+	ResetCircuitBreaker(key string) error
 
 	// Verification
 	// GetMockVerification returns verification status for a mock.
@@ -808,6 +815,67 @@ func (c *adminClient) ResetChaosStats() error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetStatefulFaultStats returns the status of all stateful fault instances.
+func (c *adminClient) GetStatefulFaultStats() (map[string]interface{}, error) {
+	resp, err := c.get("/chaos/faults")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result, nil
+}
+
+// TripCircuitBreaker manually trips a circuit breaker by state key.
+func (c *adminClient) TripCircuitBreaker(key string) error {
+	resp, err := c.post("/chaos/circuit-breakers/"+url.PathEscape(key)+"/trip", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "circuit breaker not found: " + key,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// ResetCircuitBreaker manually resets a circuit breaker by state key.
+func (c *adminClient) ResetCircuitBreaker(key string) error {
+	resp, err := c.post("/chaos/circuit-breakers/"+url.PathEscape(key)+"/reset", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "circuit breaker not found: " + key,
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
 	}

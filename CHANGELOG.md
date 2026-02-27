@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Stateful chaos faults** — Four new advanced fault types for chaos engineering: `circuit_breaker` (CLOSED/OPEN/HALF_OPEN state machine with deterministic or probabilistic tripping, configurable recovery), `retry_after` (429/503 rate limiting with Retry-After header and automatic recovery), `progressive_degradation` (increasing latency per request with error threshold and counter reset), and `chunked_dribble` (timed chunk delivery simulating slow streaming responses)
+- **Chaos fault introspection API** — `GET /chaos/faults` returns live state of all active stateful fault instances including circuit breaker state, trip/rejection counts, retry-after limiter stats, and progressive degradation delay/error counters
+- **Manual circuit breaker control** — `POST /chaos/circuit-breakers/{key}/trip` and `POST /chaos/circuit-breakers/{key}/reset` for manual state override during testing
+- **MCP tools for stateful faults** — `get_stateful_faults` tool for introspection, `manage_circuit_breaker` tool for trip/reset operations, and `set_chaos_config` now accepts raw `rules` parameter for advanced fault configuration
+- **Chaos config from YAML** — `serverConfig.chaos` section in YAML config files is now applied at startup via `mockd serve --config`, supporting all fault types including the new stateful faults
+- **`mock://chaos` MCP resource enhanced** — Now includes stateful fault status alongside existing chaos config and stats
+
 ## [0.4.5] - 2026-02-27
 
 ### Added

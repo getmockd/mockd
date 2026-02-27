@@ -238,3 +238,91 @@ func (dw *DelayedWriter) Flush() {
 func (dw *DelayedWriter) Unwrap() http.ResponseWriter {
 	return dw.w
 }
+
+// ChunkedDribbleWriter delivers response body in timed chunks, simulating
+// slow streaming or chunked transfer encoding delays.
+type ChunkedDribbleWriter struct {
+	w            http.ResponseWriter
+	chunkSize    int
+	chunkDelay   time.Duration
+	initialDelay time.Duration
+	firstWrite   bool
+	mu           sync.Mutex
+}
+
+// NewChunkedDribbleWriter creates a writer that delivers body in timed chunks.
+func NewChunkedDribbleWriter(w http.ResponseWriter, chunkSize int, chunkDelay, initialDelay time.Duration) *ChunkedDribbleWriter {
+	if chunkSize <= 0 {
+		chunkSize = 1024
+	}
+	return &ChunkedDribbleWriter{
+		w:            w,
+		chunkSize:    chunkSize,
+		chunkDelay:   chunkDelay,
+		initialDelay: initialDelay,
+		firstWrite:   true,
+	}
+}
+
+// Header returns the header map.
+func (cw *ChunkedDribbleWriter) Header() http.Header {
+	return cw.w.Header()
+}
+
+// WriteHeader writes the status code.
+func (cw *ChunkedDribbleWriter) WriteHeader(statusCode int) {
+	cw.w.WriteHeader(statusCode)
+}
+
+// Write delivers bytes in timed chunks.
+func (cw *ChunkedDribbleWriter) Write(p []byte) (int, error) {
+	cw.mu.Lock()
+	defer cw.mu.Unlock()
+
+	// Initial delay on first write
+	if cw.firstWrite {
+		cw.firstWrite = false
+		if cw.initialDelay > 0 {
+			time.Sleep(cw.initialDelay)
+		}
+	}
+
+	totalWritten := 0
+	for len(p) > 0 {
+		chunk := cw.chunkSize
+		if chunk > len(p) {
+			chunk = len(p)
+		}
+
+		n, err := cw.w.Write(p[:chunk])
+		totalWritten += n
+		if err != nil {
+			return totalWritten, err
+		}
+		p = p[n:]
+
+		// Flush after each chunk
+		if f, ok := cw.w.(http.Flusher); ok {
+			f.Flush()
+		}
+
+		// Delay between chunks (not after the last one)
+		if len(p) > 0 && cw.chunkDelay > 0 {
+			time.Sleep(cw.chunkDelay)
+		}
+	}
+
+	return totalWritten, nil
+}
+
+// Flush flushes the underlying writer.
+func (cw *ChunkedDribbleWriter) Flush() {
+	if f, ok := cw.w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap returns the underlying ResponseWriter.
+func (cw *ChunkedDribbleWriter) Unwrap() http.ResponseWriter {
+	return cw.w
+}

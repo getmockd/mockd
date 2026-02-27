@@ -45,11 +45,13 @@ func allToolDefinitions() []ToolDefinition {
 		defClearRequestLogs,
 
 		// =====================================================================
-		// Chaos Engineering (3 tools)
+		// Chaos Engineering (5 tools)
 		// =====================================================================
 		defGetChaosConfig,
 		defSetChaosConfig,
 		defResetChaosStats,
+		defGetStatefulFaults,
+		defManageCircuitBreaker,
 
 		// =====================================================================
 		// Verification (3 tools)
@@ -444,7 +446,7 @@ var defGetChaosConfig = ToolDefinition{
 
 var defSetChaosConfig = ToolDefinition{
 	Name:        "set_chaos_config",
-	Description: "Configure chaos fault injection rules. Set latency ranges, error rates with specific HTTP status codes, and bandwidth throttling. Pass enabled=false to disable all chaos. For pre-built configurations, use named profiles like \"slow-api\", \"flaky\", or \"offline\".",
+	Description: "Configure chaos fault injection rules. For simple chaos: set latency ranges, error rates, or bandwidth throttling. For advanced stateful faults: pass raw rules with fault types like circuit_breaker, retry_after, progressive_degradation, or chunked_dribble. Pass enabled=false to disable all chaos. For pre-built configurations, use named profiles like \"slow-api\" or \"flaky\".",
 	Annotations: idempotentAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
@@ -483,6 +485,49 @@ var defSetChaosConfig = ToolDefinition{
 				"description": "Named chaos profile",
 				"enum":        []string{"slow-api", "degraded", "flaky", "offline", "timeout", "rate-limited", "mobile-3g", "satellite", "dns-flaky", "overloaded"},
 			},
+			"rules": map[string]interface{}{
+				"type":        "array",
+				"description": "Raw chaos rules for advanced fault types. Each rule has probability (0-1), optional pathPattern, optional methods, and faults array. Fault types: latency, error, slow_body, corrupt_body, partial_response, connection_reset, circuit_breaker, retry_after, progressive_degradation, chunked_dribble. Each fault has type, probability (0-1), and config object.",
+				"items": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"probability": map[string]interface{}{
+							"type":        "number",
+							"description": "Rule match probability 0.0-1.0",
+						},
+						"pathPattern": map[string]interface{}{
+							"type":        "string",
+							"description": "Regex pattern to match request paths (empty = all paths)",
+						},
+						"methods": map[string]interface{}{
+							"type":        "array",
+							"description": "HTTP methods to match (empty = all methods)",
+							"items":       map[string]interface{}{"type": "string"},
+						},
+						"faults": map[string]interface{}{
+							"type":        "array",
+							"description": "Faults to inject when rule matches",
+							"items": map[string]interface{}{
+								"type": "object",
+								"properties": map[string]interface{}{
+									"type": map[string]interface{}{
+										"type":        "string",
+										"description": "Fault type",
+									},
+									"probability": map[string]interface{}{
+										"type":        "number",
+										"description": "Fault injection probability 0.0-1.0",
+									},
+									"config": map[string]interface{}{
+										"type":        "object",
+										"description": "Fault-specific configuration",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		"required": []string{"enabled"},
 	},
@@ -496,6 +541,37 @@ var defResetChaosStats = ToolDefinition{
 		"properties": map[string]interface{}{},
 	},
 	Annotations: destructiveAnnotations,
+}
+
+var defGetStatefulFaults = ToolDefinition{
+	Name:        "get_stateful_faults",
+	Description: "Retrieve the status of all stateful chaos fault instances: circuit breakers (state, trip count, request count), retry-after trackers (limited/passed counts), and progressive degradation (current delay, request count, error count). Use this to monitor active fault state machines after configuring advanced chaos rules.",
+	InputSchema: map[string]interface{}{
+		"type":       "object",
+		"properties": map[string]interface{}{},
+	},
+	Annotations: readOnlyAnnotations,
+}
+
+var defManageCircuitBreaker = ToolDefinition{
+	Name:        "manage_circuit_breaker",
+	Description: "Manually trip or reset a chaos circuit breaker by its state key. Circuit breaker keys follow the format \"ruleIdx:faultIdx\" (e.g., \"0:0\" for the first fault in the first rule). Use get_stateful_faults to discover active circuit breaker keys.",
+	Annotations: idempotentAnnotations,
+	InputSchema: map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"action": map[string]interface{}{
+				"type":        "string",
+				"description": "Action to perform on the circuit breaker",
+				"enum":        []string{"trip", "reset"},
+			},
+			"key": map[string]interface{}{
+				"type":        "string",
+				"description": "Circuit breaker state key (e.g., \"0:0\")",
+			},
+		},
+		"required": []string{"action", "key"},
+	},
 }
 
 // =============================================================================

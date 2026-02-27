@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/getmockd/mockd/pkg/chaos"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/graphql"
 	"github.com/getmockd/mockd/pkg/logging"
@@ -399,6 +400,24 @@ func (cl *ConfigLoader) mergeServerConfig(src *config.ServerConfiguration) {
 	if len(dst.OAuth) == 0 && len(src.OAuth) > 0 {
 		dst.OAuth = src.OAuth
 		cl.log.Info("OAuth configured from config file", "count", len(src.OAuth))
+	}
+
+	// Chaos: merge if not already configured
+	if dst.Chaos == nil && src.Chaos != nil {
+		dst.Chaos = src.Chaos
+		cl.log.Info("chaos injection configured from config file",
+			"enabled", src.Chaos.Enabled,
+			"rules", len(src.Chaos.Rules))
+		// If middleware chain already exists, create and install an injector dynamically.
+		if src.Chaos.Enabled && cl.server.middlewareChain != nil {
+			injector, err := chaos.NewInjector(src.Chaos)
+			if err != nil {
+				cl.log.Error("failed to create chaos injector from config", "error", err)
+			} else {
+				cl.server.middlewareChain.SetChaosInjector(injector)
+				cl.log.Info("chaos injector installed from config file")
+			}
+		}
 	}
 }
 

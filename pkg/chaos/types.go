@@ -53,6 +53,17 @@ const (
 	FaultConnectionReset FaultType = "connection_reset"
 	// FaultPartialResponse truncates response at random point
 	FaultPartialResponse FaultType = "partial_response"
+
+	// --- Stateful Fault Types (T3-1) ---
+
+	// FaultRetryAfter returns 429/503 with Retry-After header and recovers after a duration
+	FaultRetryAfter FaultType = "retry_after"
+	// FaultCircuitBreaker implements a closed→open→half-open state machine
+	FaultCircuitBreaker FaultType = "circuit_breaker"
+	// FaultProgressiveDegradation increases latency over time, optionally producing errors
+	FaultProgressiveDegradation FaultType = "progressive_degradation"
+	// FaultChunkedDribble delivers response body in timed chunks
+	FaultChunkedDribble FaultType = "chunked_dribble"
 )
 
 // LatencyFault adds random latency to responses

@@ -292,6 +292,12 @@ func (p *ResourceProvider) readChaosResource() ([]ResourceContent, *JSONRPCError
 		content["stats"] = chaosStats
 	}
 
+	// Include stateful fault status if available.
+	statefulFaults, err := p.adminClient.GetStatefulFaultStats()
+	if err == nil && statefulFaults != nil {
+		content["statefulFaults"] = statefulFaults
+	}
+
 	text, _ := json.Marshal(content)
 	return []ResourceContent{
 		{
