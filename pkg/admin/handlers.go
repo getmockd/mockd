@@ -490,15 +490,18 @@ func (a *API) ImportConfigDirect(ctx context.Context, collection *config.MockCol
 		return 0, fmt.Errorf("engine import failed: %w", err)
 	}
 
-	// Apply chaos config from collection if present
+	// Apply chaos config from collection if present — fan out to all engines
 	if collection.ServerConfig != nil && collection.ServerConfig.Chaos != nil && collection.ServerConfig.Chaos.Enabled {
 		chaosAPI := chaosConfigToAPI(collection.ServerConfig.Chaos)
-		if err := engine.SetChaos(ctx, &chaosAPI); err != nil {
-			a.logger().Warn("failed to apply chaos config from collection", "error", err)
-		} else {
-			a.logger().Info("chaos config applied from config file",
-				"enabled", chaosAPI.Enabled,
-				"rules", len(chaosAPI.Rules))
+		for _, target := range a.allEngineTargets() {
+			if err := target.client.SetChaos(ctx, &chaosAPI); err != nil {
+				a.logger().Warn("failed to apply chaos config to engine", "engine", target.label, "error", err)
+			} else {
+				a.logger().Info("chaos config applied from config file",
+					"engine", target.label,
+					"enabled", chaosAPI.Enabled,
+					"rules", len(chaosAPI.Rules))
+			}
 		}
 	}
 
