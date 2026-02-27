@@ -112,6 +112,37 @@ type Schema struct {
 	Items      *Schema            `json:"items,omitempty" yaml:"items,omitempty"`
 	Example    interface{}        `json:"example,omitempty" yaml:"example,omitempty"`
 	Ref        string             `json:"$ref,omitempty" yaml:"$ref,omitempty"`
+
+	// Validation / enumeration
+	Enum    []interface{} `json:"enum,omitempty" yaml:"enum,omitempty"`
+	Default interface{}   `json:"default,omitempty" yaml:"default,omitempty"`
+
+	// Object constraints
+	Required []string `json:"required,omitempty" yaml:"required,omitempty"`
+
+	// String constraints
+	MinLength *int   `json:"minLength,omitempty" yaml:"minLength,omitempty"`
+	MaxLength *int   `json:"maxLength,omitempty" yaml:"maxLength,omitempty"`
+	Pattern   string `json:"pattern,omitempty" yaml:"pattern,omitempty"`
+
+	// Numeric constraints
+	Minimum *float64 `json:"minimum,omitempty" yaml:"minimum,omitempty"`
+	Maximum *float64 `json:"maximum,omitempty" yaml:"maximum,omitempty"`
+
+	// Array constraints
+	MinItems *int `json:"minItems,omitempty" yaml:"minItems,omitempty"`
+	MaxItems *int `json:"maxItems,omitempty" yaml:"maxItems,omitempty"`
+
+	// Composition
+	AllOf []*Schema `json:"allOf,omitempty" yaml:"allOf,omitempty"`
+	OneOf []*Schema `json:"oneOf,omitempty" yaml:"oneOf,omitempty"`
+	AnyOf []*Schema `json:"anyOf,omitempty" yaml:"anyOf,omitempty"`
+
+	// Description (for field-name heuristic)
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+
+	// Vendor extension for explicit faker binding
+	XMockdFaker string `json:"x-mockd-faker,omitempty" yaml:"x-mockd-faker,omitempty"`
 }
 
 // OpenAPIComponents contains reusable components.
@@ -791,112 +822,15 @@ func parseStatusCode(s string) int {
 }
 
 // generateExampleFromSchema generates an example value from a JSON Schema.
-// It handles objects (from properties), arrays (from items), and primitive types.
+// It delegates to SchemaGenerator for realistic, format-aware data generation
+// with support for enums, constraints, composition, and field-name heuristics.
 // Returns nil if no meaningful example can be generated.
 func generateExampleFromSchema(schema *Schema, components *OpenAPIComponents) interface{} {
 	if schema == nil {
 		return nil
 	}
-
-	// If the schema itself has an example, use it directly.
-	if schema.Example != nil {
-		return schema.Example
-	}
-
-	// Resolve $ref if present.
-	if schema.Ref != "" {
-		resolved := resolveSchemaRef(schema, components)
-		if resolved == schema {
-			return nil // Couldn't resolve
-		}
-		return generateExampleFromSchema(resolved, components)
-	}
-
-	switch schema.Type {
-	case "object":
-		if len(schema.Properties) == 0 {
-			return nil
-		}
-		obj := make(map[string]interface{}, len(schema.Properties))
-		for name, prop := range schema.Properties {
-			resolved := resolveSchemaRef(prop, components)
-			if resolved != nil && resolved.Example != nil {
-				obj[name] = resolved.Example
-			} else {
-				obj[name] = defaultForType(resolved)
-			}
-		}
-		return obj
-
-	case "array":
-		if schema.Items != nil {
-			item := generateExampleFromSchema(schema.Items, components)
-			if item != nil {
-				return []interface{}{item}
-			}
-		}
-		return []interface{}{}
-
-	case "string":
-		return "string"
-	case "integer":
-		return 0
-	case "number":
-		return 0.0
-	case "boolean":
-		return true
-
-	default:
-		// If type is empty but properties exist, treat as object.
-		if len(schema.Properties) > 0 {
-			obj := make(map[string]interface{}, len(schema.Properties))
-			for name, prop := range schema.Properties {
-				resolved := resolveSchemaRef(prop, components)
-				if resolved != nil && resolved.Example != nil {
-					obj[name] = resolved.Example
-				} else {
-					obj[name] = defaultForType(resolved)
-				}
-			}
-			return obj
-		}
-		return nil
-	}
-}
-
-// defaultForType returns a default placeholder value for a schema type.
-func defaultForType(schema *Schema) interface{} {
-	if schema == nil {
-		return nil
-	}
-	if schema.Example != nil {
-		return schema.Example
-	}
-	switch schema.Type {
-	case "string":
-		if schema.Format == "date-time" {
-			return "2024-01-01T00:00:00Z"
-		}
-		if schema.Format == "email" {
-			return "user@example.com"
-		}
-		if schema.Format == "uuid" {
-			return "00000000-0000-0000-0000-000000000000"
-		}
-		return "string"
-	case "integer":
-		return 0
-	case "number":
-		return 0.0
-	case "boolean":
-		return true
-	case "array":
-		return []interface{}{}
-	case "object":
-		return map[string]interface{}{}
-	default:
-		return nil
-	}
+	gen := NewSchemaGenerator(components)
+	return gen.Generate(schema)
 }
 
 // generateDefaultBody generates a default response body for a status code.
