@@ -64,9 +64,9 @@ func handleSetChaosConfig(args map[string]interface{}, session *MCPSession, serv
 
 	// Latency: admin expects { "min": "100ms", "max": "500ms", "probability": 1.0 }
 	// MCP tool accepts latency_ms (fixed) or latency_min_ms/latency_max_ms (range) in milliseconds.
-	latencyMs := getFloat(args, "latency_ms", 0)
-	latencyMinMs := getFloat(args, "latency_min_ms", 0)
-	latencyMaxMs := getFloat(args, "latency_max_ms", 0)
+	latencyMs := getFloat(args, "latency_ms")
+	latencyMinMs := getFloat(args, "latency_min_ms")
+	latencyMaxMs := getFloat(args, "latency_max_ms")
 
 	if latencyMs > 0 {
 		// Fixed latency: use the same value for min and max.
@@ -91,7 +91,7 @@ func handleSetChaosConfig(args map[string]interface{}, session *MCPSession, serv
 	}
 
 	// Error rate: admin expects { "probability": 0.2, "statusCodes": [500, 502] }
-	errorRate := getFloat(args, "error_rate", 0)
+	errorRate := getFloat(args, "error_rate")
 	if errorRate > 0 {
 		errConfig := map[string]interface{}{
 			"probability": errorRate,

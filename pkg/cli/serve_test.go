@@ -312,9 +312,7 @@ func TestConfigureProtocolHandlers_ChaosProfile(t *testing.T) {
 		sctx := &serveContext{
 			flags: &serveFlags{chaosProfile: "flaky"},
 		}
-		if err := configureProtocolHandlers(sctx); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		configureProtocolHandlers(sctx)
 		if sctx.chaosConfig == nil {
 			t.Fatal("expected chaosConfig to be set")
 		}
@@ -334,9 +332,7 @@ func TestConfigureProtocolHandlers_ChaosProfile(t *testing.T) {
 				chaosErrorRate: 0.2,
 			},
 		}
-		if err := configureProtocolHandlers(sctx); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		configureProtocolHandlers(sctx)
 		if sctx.chaosConfig == nil {
 			t.Fatal("expected chaosConfig to be set")
 		}
@@ -358,9 +354,7 @@ func TestConfigureProtocolHandlers_ChaosProfile(t *testing.T) {
 		sctx := &serveContext{
 			flags: &serveFlags{},
 		}
-		if err := configureProtocolHandlers(sctx); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		configureProtocolHandlers(sctx)
 		if sctx.chaosConfig != nil {
 			t.Error("expected chaosConfig to be nil when no chaos flags set")
 		}
@@ -370,9 +364,7 @@ func TestConfigureProtocolHandlers_ChaosProfile(t *testing.T) {
 		sctx := &serveContext{
 			flags: &serveFlags{chaosProfile: "slow-api"},
 		}
-		if err := configureProtocolHandlers(sctx); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		configureProtocolHandlers(sctx)
 		if sctx.chaosConfig.Latency == nil {
 			t.Fatal("expected latency config for slow-api profile")
 		}
@@ -385,9 +377,7 @@ func TestConfigureProtocolHandlers_ChaosProfile(t *testing.T) {
 		sctx := &serveContext{
 			flags: &serveFlags{chaosProfile: "mobile-3g"},
 		}
-		if err := configureProtocolHandlers(sctx); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		configureProtocolHandlers(sctx)
 		if sctx.chaosConfig.Bandwidth == nil {
 			t.Fatal("expected bandwidth config for mobile-3g profile")
 		}
@@ -397,9 +387,7 @@ func TestConfigureProtocolHandlers_ChaosProfile(t *testing.T) {
 		sctx := &serveContext{
 			flags: &serveFlags{chaosProfile: "offline"},
 		}
-		if err := configureProtocolHandlers(sctx); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		configureProtocolHandlers(sctx)
 		if sctx.chaosConfig.ErrorRate == nil {
 			t.Fatal("expected error rate config for offline profile")
 		}

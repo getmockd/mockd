@@ -37,7 +37,7 @@ func handleManageMock(args map[string]interface{}, session *MCPSession, server *
 }
 
 // handleListMocks lists all configured mocks across all protocols.
-func handleListMocks(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleListMocks(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
 		return ToolResultError("admin client not available"), nil
@@ -132,7 +132,7 @@ func mockSummaryLine(m *config.MockConfiguration) string {
 }
 
 // handleGetMock retrieves full configuration for a specific mock.
-func handleGetMock(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleGetMock(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
 		return ToolResultError("admin client not available"), nil

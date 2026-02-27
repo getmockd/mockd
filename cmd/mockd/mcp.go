@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/cli"
@@ -210,7 +211,7 @@ func ensureProjectDaemon(log *slog.Logger, dataDir, configFile string, port, adm
 			// Verify it's actually healthy.
 			healthClient := &http.Client{Timeout: 2 * time.Second}
 			if resp, err := healthClient.Get(url + "/health"); err == nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				if resp.StatusCode == http.StatusOK {
 					log.Info("connected to project daemon", "adminUrl", url, "dataDir", absDataDir)
 					return url, nil
@@ -224,8 +225,8 @@ func ensureProjectDaemon(log *slog.Logger, dataDir, configFile string, port, adm
 
 	extraArgs := []string{
 		"--data-dir", absDataDir,
-		"--port", fmt.Sprintf("%d", port),
-		"--admin-port", fmt.Sprintf("%d", adminPort),
+		"--port", strconv.Itoa(port),
+		"--admin-port", strconv.Itoa(adminPort),
 		"--pid-file", pidPath,
 	}
 	if configFile != "" {
@@ -247,7 +248,8 @@ func startDaemon(log *slog.Logger, pidPath string, extraArgs []string) (string, 
 		binary = "mockd"
 	}
 
-	cmdArgs := []string{"start", "--detach", "--no-auth"}
+	cmdArgs := make([]string, 0, 3+len(extraArgs))
+	cmdArgs = append(cmdArgs, "start", "--detach", "--no-auth")
 	cmdArgs = append(cmdArgs, extraArgs...)
 
 	cmd := exec.Command(binary, cmdArgs...)
@@ -284,7 +286,7 @@ func startDaemon(log *slog.Logger, pidPath string, extraArgs []string) (string, 
 	for time.Now().Before(healthDeadline) {
 		resp, err := healthClient.Get(adminURL + "/health")
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				return adminURL, nil
 			}

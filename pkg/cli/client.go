@@ -892,14 +892,15 @@ func (c *adminClient) GetMockVerification(id string) (map[string]interface{}, er
 	return result, nil
 }
 
-// VerifyMock posts expected verification criteria and returns pass/fail.
-func (c *adminClient) VerifyMock(id string, expected map[string]interface{}) (map[string]interface{}, error) {
-	body, err := json.Marshal(expected)
+// postJSONMap posts a JSON-encoded map to the given path and decodes the response as a map.
+// notFoundMsg is used when the server returns 404.
+func (c *adminClient) postJSONMap(path string, payload map[string]interface{}, notFoundMsg string) (map[string]interface{}, error) {
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode request: %w", err)
 	}
 
-	resp, err := c.post("/mocks/"+url.PathEscape(id)+"/verify", body)
+	resp, err := c.post(path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -909,7 +910,7 @@ func (c *adminClient) VerifyMock(id string, expected map[string]interface{}) (ma
 		return nil, &APIError{
 			StatusCode: resp.StatusCode,
 			ErrorCode:  "not_found",
-			Message:    "mock not found: " + id,
+			Message:    notFoundMsg,
 		}
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -921,6 +922,11 @@ func (c *adminClient) VerifyMock(id string, expected map[string]interface{}) (ma
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	return result, nil
+}
+
+// VerifyMock posts expected verification criteria and returns pass/fail.
+func (c *adminClient) VerifyMock(id string, expected map[string]interface{}) (map[string]interface{}, error) {
+	return c.postJSONMap("/mocks/"+url.PathEscape(id)+"/verify", expected, "mock not found: "+id)
 }
 
 // ListMockInvocations returns recorded invocations for a mock.
@@ -1310,33 +1316,7 @@ func (c *adminClient) DeleteCustomOperation(name string) error {
 
 // ExecuteCustomOperation executes a custom operation with the given input.
 func (c *adminClient) ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error) {
-	body, err := json.Marshal(input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode request: %w", err)
-	}
-
-	resp, err := c.post("/state/operations/"+url.PathEscape(name)+"/execute", body)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, &APIError{
-			StatusCode: resp.StatusCode,
-			ErrorCode:  "not_found",
-			Message:    "custom operation not found: " + name,
-		}
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, c.parseError(resp)
-	}
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-	return result, nil
+	return c.postJSONMap("/state/operations/"+url.PathEscape(name)+"/execute", input, "custom operation not found: "+name)
 }
 
 // ListWorkspaces lists all workspaces on the admin.

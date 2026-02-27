@@ -374,10 +374,8 @@ func runServeWithFlags(flags *serveFlags) error {
 		defer func() { _ = sctx.store.Close() }()
 	}
 
-	// Configure protocol handlers (MQTT, chaos injection)
-	if err := configureProtocolHandlers(sctx); err != nil {
-		return err
-	}
+	// Configure protocol handlers (chaos injection from flags)
+	configureProtocolHandlers(sctx)
 
 	// Start all servers (engine + admin) BEFORE loading mocks.
 	// Config loading goes through admin so mocks are written to both the
@@ -637,7 +635,7 @@ func initializePersistentStore(sctx *serveContext) error {
 // configureProtocolHandlers builds the chaos config from flags.
 // The config is applied to the engine in startServers after the engine is healthy.
 // Note: MQTT/gRPC are now started dynamically when mocks are added via the admin API.
-func configureProtocolHandlers(sctx *serveContext) error {
+func configureProtocolHandlers(sctx *serveContext) {
 	f := sctx.flags
 
 	// Build chaos config from --chaos-profile or individual flags
@@ -663,8 +661,6 @@ func configureProtocolHandlers(sctx *serveContext) error {
 		}
 		sctx.chaosConfig = cfg
 	}
-
-	return nil
 }
 
 // chaosProfileToAPIConfig converts a chaos.ChaosConfig to the API-level

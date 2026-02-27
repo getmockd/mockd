@@ -27,7 +27,7 @@ Use --standalone for a dedicated embedded server tied to this session.`,
 		// Handle --help / -h manually since cobra flag parsing is disabled.
 		for _, a := range args {
 			if a == "--help" || a == "-h" {
-				cmd.Help()
+				_ = cmd.Help()
 				os.Exit(0)
 			}
 		}

@@ -40,7 +40,7 @@ func handleManageWorkspace(args map[string]interface{}, session *MCPSession, ser
 }
 
 // handleGetCurrentContext shows the active context and all available contexts.
-func handleGetCurrentContext(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleGetCurrentContext(_ map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	// Load all configured contexts (read-only)
 	ctxConfig, _ := cliconfig.LoadContextConfig()
 
@@ -124,7 +124,7 @@ func handleSwitchContext(args map[string]interface{}, session *MCPSession, serve
 }
 
 // handleListWorkspaces lists workspaces on the current admin server.
-func handleListWorkspaces(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleListWorkspaces(_ map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
 		return ToolResultError("admin client not available"), nil
@@ -166,7 +166,7 @@ func handleListWorkspaces(args map[string]interface{}, session *MCPSession, serv
 }
 
 // handleSwitchWorkspace switches the active workspace (session-scoped, not persisted).
-func handleSwitchWorkspace(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleSwitchWorkspace(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	id := getString(args, "id", "")
 	if id == "" {
 		return ToolResultError("id is required"), nil

@@ -182,125 +182,11 @@ func MatchBreakdown(matcher *mock.HTTPMatcher, r *http.Request, body []byte) *Ne
 		result.MaxPossibleScore += maxScore
 	}
 
-	// Body equals
-	if matcher.BodyEquals != "" {
-		matched := string(body) == matcher.BodyEquals
-		score := 0
-		if matched {
-			score = ScoreBodyEquals
-		}
-		// Truncate actual body for display
-		actual := truncate(string(body), 200)
-		result.Fields = append(result.Fields, FieldResult{
-			Field:    "bodyEquals",
-			Matched:  matched,
-			Score:    score,
-			MaxScore: ScoreBodyEquals,
-			Expected: truncate(matcher.BodyEquals, 200),
-			Actual:   actual,
-		})
-		result.Score += score
-		result.MaxPossibleScore += ScoreBodyEquals
-	}
-
-	// Body contains
-	if matcher.BodyContains != "" {
-		matched := strings.Contains(string(body), matcher.BodyContains)
-		score := 0
-		if matched {
-			score = ScoreBodyContains
-		}
-		actual := "(body does not contain substring)"
-		if matched {
-			actual = "(body contains substring)"
-		}
-		result.Fields = append(result.Fields, FieldResult{
-			Field:    "bodyContains",
-			Matched:  matched,
-			Score:    score,
-			MaxScore: ScoreBodyContains,
-			Expected: fmt.Sprintf("contains %q", matcher.BodyContains),
-			Actual:   actual,
-		})
-		result.Score += score
-		result.MaxPossibleScore += ScoreBodyContains
-	}
-
-	// Body pattern (regex)
-	if matcher.BodyPattern != "" {
-		bpScore := MatchBodyPattern(matcher.BodyPattern, body)
-		matched := bpScore > 0
-		score := 0
-		if matched {
-			score = bpScore
-		}
-		actual := "(body does not match pattern)"
-		if matched {
-			actual = "(body matches pattern)"
-		}
-		result.Fields = append(result.Fields, FieldResult{
-			Field:    "bodyPattern",
-			Matched:  matched,
-			Score:    score,
-			MaxScore: ScoreBodyPattern,
-			Expected: matcher.BodyPattern,
-			Actual:   actual,
-		})
-		result.Score += score
-		result.MaxPossibleScore += ScoreBodyPattern
-	}
-
-	// JSONPath
-	if len(matcher.BodyJSONPath) > 0 {
-		jpResult := MatchJSONPath(matcher.BodyJSONPath, body)
-		matched := jpResult.Score > 0
-		score := 0
-		if matched {
-			score = jpResult.Score
-		}
-		maxScore := len(matcher.BodyJSONPath) * ScoreJSONPathCondition
-		result.Fields = append(result.Fields, FieldResult{
-			Field:    "bodyJSONPath",
-			Matched:  matched,
-			Score:    score,
-			MaxScore: maxScore,
-			Expected: matcher.BodyJSONPath,
-		})
-		result.Score += score
-		result.MaxPossibleScore += maxScore
-	}
+	// Body matchers
+	matchBodyFields(matcher, body, result)
 
 	// mTLS
-	if matcher.MTLS != nil {
-		identity := mtls.FromContext(r.Context())
-		if identity == nil {
-			// mTLS required but no client cert — everything fails
-			mtlsMaxScore := estimateMTLSMaxScore(matcher.MTLS)
-			result.Fields = append(result.Fields, FieldResult{
-				Field:    "mtls",
-				Matched:  false,
-				Score:    0,
-				MaxScore: mtlsMaxScore,
-				Expected: "client certificate required",
-				Actual:   "(no client certificate)",
-			})
-			result.MaxPossibleScore += mtlsMaxScore
-		} else {
-			mtlsScore := matchMTLS(matcher.MTLS, identity)
-			mtlsMaxScore := estimateMTLSMaxScore(matcher.MTLS)
-			matched := mtlsScore > 0
-			if matched {
-				result.Score += mtlsScore
-			}
-			result.Fields = append(result.Fields, FieldResult{
-				Field:    "mtls",
-				Matched:  matched,
-				Score:    mtlsScore,
-				MaxScore: mtlsMaxScore,
-			})
-			result.MaxPossibleScore += mtlsMaxScore
-		}
-	}
+	matchMTLSField(matcher, r, result)
 
 	// Calculate percentage
 	if result.MaxPossibleScore > 0 {
@@ -489,6 +375,128 @@ func estimateMTLSMaxScore(m *mock.MTLSMatch) int {
 		}
 	}
 	return score
+}
+
+// matchBodyFields evaluates body-related matcher fields (equals, contains, pattern, JSONPath)
+// and appends FieldResults to the NearMiss.
+func matchBodyFields(matcher *mock.HTTPMatcher, body []byte, result *NearMiss) {
+	if matcher.BodyEquals != "" {
+		matched := string(body) == matcher.BodyEquals
+		score := 0
+		if matched {
+			score = ScoreBodyEquals
+		}
+		result.Fields = append(result.Fields, FieldResult{
+			Field:    "bodyEquals",
+			Matched:  matched,
+			Score:    score,
+			MaxScore: ScoreBodyEquals,
+			Expected: truncate(matcher.BodyEquals, 200),
+			Actual:   truncate(string(body), 200),
+		})
+		result.Score += score
+		result.MaxPossibleScore += ScoreBodyEquals
+	}
+
+	if matcher.BodyContains != "" {
+		matched := strings.Contains(string(body), matcher.BodyContains)
+		score := 0
+		if matched {
+			score = ScoreBodyContains
+		}
+		actual := "(body does not contain substring)"
+		if matched {
+			actual = "(body contains substring)"
+		}
+		result.Fields = append(result.Fields, FieldResult{
+			Field:    "bodyContains",
+			Matched:  matched,
+			Score:    score,
+			MaxScore: ScoreBodyContains,
+			Expected: fmt.Sprintf("contains %q", matcher.BodyContains),
+			Actual:   actual,
+		})
+		result.Score += score
+		result.MaxPossibleScore += ScoreBodyContains
+	}
+
+	if matcher.BodyPattern != "" {
+		bpScore := MatchBodyPattern(matcher.BodyPattern, body)
+		matched := bpScore > 0
+		score := 0
+		if matched {
+			score = bpScore
+		}
+		actual := "(body does not match pattern)"
+		if matched {
+			actual = "(body matches pattern)"
+		}
+		result.Fields = append(result.Fields, FieldResult{
+			Field:    "bodyPattern",
+			Matched:  matched,
+			Score:    score,
+			MaxScore: ScoreBodyPattern,
+			Expected: matcher.BodyPattern,
+			Actual:   actual,
+		})
+		result.Score += score
+		result.MaxPossibleScore += ScoreBodyPattern
+	}
+
+	if len(matcher.BodyJSONPath) > 0 {
+		jpResult := MatchJSONPath(matcher.BodyJSONPath, body)
+		matched := jpResult.Score > 0
+		score := 0
+		if matched {
+			score = jpResult.Score
+		}
+		maxScore := len(matcher.BodyJSONPath) * ScoreJSONPathCondition
+		result.Fields = append(result.Fields, FieldResult{
+			Field:    "bodyJSONPath",
+			Matched:  matched,
+			Score:    score,
+			MaxScore: maxScore,
+			Expected: matcher.BodyJSONPath,
+		})
+		result.Score += score
+		result.MaxPossibleScore += maxScore
+	}
+}
+
+// matchMTLSField evaluates mTLS matcher fields and appends a FieldResult to the NearMiss.
+func matchMTLSField(matcher *mock.HTTPMatcher, r *http.Request, result *NearMiss) {
+	if matcher.MTLS == nil {
+		return
+	}
+
+	identity := mtls.FromContext(r.Context())
+	if identity == nil {
+		mtlsMaxScore := estimateMTLSMaxScore(matcher.MTLS)
+		result.Fields = append(result.Fields, FieldResult{
+			Field:    "mtls",
+			Matched:  false,
+			Score:    0,
+			MaxScore: mtlsMaxScore,
+			Expected: "client certificate required",
+			Actual:   "(no client certificate)",
+		})
+		result.MaxPossibleScore += mtlsMaxScore
+		return
+	}
+
+	mtlsScore := matchMTLS(matcher.MTLS, identity)
+	mtlsMaxScore := estimateMTLSMaxScore(matcher.MTLS)
+	matched := mtlsScore > 0
+	if matched {
+		result.Score += mtlsScore
+	}
+	result.Fields = append(result.Fields, FieldResult{
+		Field:    "mtls",
+		Matched:  matched,
+		Score:    mtlsScore,
+		MaxScore: mtlsMaxScore,
+	})
+	result.MaxPossibleScore += mtlsMaxScore
 }
 
 // truncate shortens a string to maxLen, appending "..." if truncated.

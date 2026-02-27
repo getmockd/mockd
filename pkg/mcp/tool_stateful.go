@@ -34,7 +34,7 @@ func handleManageState(args map[string]interface{}, session *MCPSession, server 
 }
 
 // handleAddStatefulResource creates a new stateful resource definition.
-func handleAddStatefulResource(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleAddStatefulResource(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
 		return ToolResultError("admin client not available"), nil
@@ -73,7 +73,7 @@ func handleAddStatefulResource(args map[string]interface{}, session *MCPSession,
 }
 
 // handleListStatefulItems lists items in a stateful resource with pagination.
-func handleListStatefulItems(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleListStatefulItems(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
 		return ToolResultError("admin client not available"), nil
@@ -109,7 +109,7 @@ func handleListStatefulItems(args map[string]interface{}, session *MCPSession, s
 }
 
 // handleGetStatefulItem retrieves a specific item from a stateful resource.
-func handleGetStatefulItem(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleGetStatefulItem(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
 		return ToolResultError("admin client not available"), nil
@@ -140,7 +140,7 @@ func handleGetStatefulItem(args map[string]interface{}, session *MCPSession, ser
 }
 
 // handleCreateStatefulItem creates a new item in a stateful resource.
-func handleCreateStatefulItem(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleCreateStatefulItem(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
 		return ToolResultError("admin client not available"), nil
@@ -166,7 +166,7 @@ func handleCreateStatefulItem(args map[string]interface{}, session *MCPSession, 
 }
 
 // handleGetStateOverview returns an overview of all stateful mock resources.
-func handleGetStateOverview(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleGetStateOverview(_ map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
 		return ToolResultError("admin client not available"), nil
@@ -183,7 +183,7 @@ func handleGetStateOverview(args map[string]interface{}, session *MCPSession, se
 
 // handleResetStatefulData resets a stateful resource to its seed data.
 // Resource is required — no accidental full resets.
-func handleResetStatefulData(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+func handleResetStatefulData(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
 		return ToolResultError("admin client not available"), nil

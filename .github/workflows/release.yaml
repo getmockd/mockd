@@ -54,7 +54,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          SCOOP_TAP_TOKEN: ${{ secrets.SCOOP_TAP_TOKEN }}
+          SCOOP_TAP_TOKEN: ${{ secrets.SCOOP_TAP_TOKEN || '' }}
 
       # Generate per-binary SHA256 sidecar files for setup-mockd compatibility.
       # Goreleaser uploads bare binaries (mockd-linux-amd64, etc.) to the release

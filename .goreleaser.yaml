@@ -118,6 +118,7 @@ scoops:
       owner: getmockd
       name: scoop-mockd
       token: "{{ .Env.SCOOP_TAP_TOKEN }}"
+    skip_upload: "{{ if .Env.SCOOP_TAP_TOKEN }}false{{ else }}true{{ end }}"
     homepage: "https://mockd.io"
     description: "High-performance multi-protocol API mocking server"
     license: "Apache-2.0"

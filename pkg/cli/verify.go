@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -85,7 +86,7 @@ At least one assertion flag is required.`,
 		}
 
 		if len(criteria) == 0 {
-			return fmt.Errorf("at least one assertion flag is required (--exactly, --at-least, --at-most, --never)")
+			return errors.New("at least one assertion flag is required (--exactly, --at-least, --at-most, --never)")
 		}
 
 		client := NewAdminClientWithAuth(adminURL)
@@ -113,7 +114,7 @@ At least one assertion flag is required.`,
 		// Exit with non-zero code on failure for CI usage
 		if passed, _ := data["passed"].(bool); !passed {
 			// Return an error so cobra exits with code 1
-			return fmt.Errorf("verification failed")
+			return errors.New("verification failed")
 		}
 		return nil
 	},
