@@ -43,6 +43,13 @@ func allToolDefinitions() []ToolDefinition {
 		defResetChaosStats,
 
 		// =====================================================================
+		// Verification (3 tools)
+		// =====================================================================
+		defVerifyMock,
+		defGetMockInvocations,
+		defResetVerification,
+
+		// =====================================================================
 		// Stateful Resources (4 tools)
 		// =====================================================================
 		defListStatefulItems,
@@ -578,5 +585,70 @@ var defResetChaosStats = ToolDefinition{
 	InputSchema: map[string]interface{}{
 		"type":       "object",
 		"properties": map[string]interface{}{},
+	},
+}
+
+// =============================================================================
+// Verification Definitions
+// =============================================================================
+
+var defVerifyMock = ToolDefinition{
+	Name:        "verify_mock",
+	Description: "Check whether a mock was called the expected number of times and with the expected request patterns. Returns pass/fail status, actual call count, and details of each invocation. Use this to assert your application is making the right API calls.",
+	InputSchema: map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"id": map[string]interface{}{
+				"type":        "string",
+				"description": "Mock ID to verify",
+			},
+			"expected_count": map[string]interface{}{
+				"type":        "integer",
+				"description": "Expected number of invocations (exact match)",
+			},
+			"at_least": map[string]interface{}{
+				"type":        "integer",
+				"description": "Minimum invocations expected",
+			},
+			"at_most": map[string]interface{}{
+				"type":        "integer",
+				"description": "Maximum invocations expected",
+			},
+		},
+		"required": []string{"id"},
+	},
+}
+
+var defGetMockInvocations = ToolDefinition{
+	Name:        "get_mock_invocations",
+	Description: "List all recorded invocations (request/response pairs) for a specific mock. Shows method, path, headers, body, and timestamp for each call. Use this to debug what requests actually hit a mock.",
+	InputSchema: map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"id": map[string]interface{}{
+				"type":        "string",
+				"description": "Mock ID",
+			},
+			"limit": map[string]interface{}{
+				"type":        "integer",
+				"description": "Max invocations to return (default 50)",
+				"default":     50,
+			},
+		},
+		"required": []string{"id"},
+	},
+}
+
+var defResetVerification = ToolDefinition{
+	Name:        "reset_verification",
+	Description: "Clear verification data (invocation records and counters) for a specific mock or all mocks. Use this to reset counters before running a new test scenario.",
+	InputSchema: map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"id": map[string]interface{}{
+				"type":        "string",
+				"description": "Mock ID to reset. Omit to reset ALL mocks.",
+			},
+		},
 	},
 }

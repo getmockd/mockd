@@ -63,6 +63,11 @@ func (r *ToolRegistry) registerBuiltinTools() {
 		"set_chaos_config":  handleSetChaosConfig,
 		"reset_chaos_stats": handleResetChaosStats,
 
+		// Verification
+		"verify_mock":          handleVerifyMock,
+		"get_mock_invocations": handleGetMockInvocations,
+		"reset_verification":   handleResetVerification,
+
 		// Stateful Resources
 		"list_stateful_items":  handleListStatefulItems,
 		"get_stateful_item":    handleGetStatefulItem,
