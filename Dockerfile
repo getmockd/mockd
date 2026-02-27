@@ -42,7 +42,8 @@ FROM gcr.io/distroless/static-debian12:nonroot
 LABEL org.opencontainers.image.title="mockd" \
       org.opencontainers.image.description="High-performance API mocking engine" \
       org.opencontainers.image.vendor="mockd" \
-      org.opencontainers.image.source="https://github.com/getmockd/mockd"
+      org.opencontainers.image.source="https://github.com/getmockd/mockd" \
+      io.modelcontextprotocol.server.name="io.mockd/mockd"
 
 # Copy timezone data from builder (for time-based operations)
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
