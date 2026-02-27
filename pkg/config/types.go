@@ -128,8 +128,11 @@ type RateLimitConfig struct {
 
 // ServerConfiguration defines the mock server runtime settings and operational parameters.
 type ServerConfiguration struct {
-	// HTTPPort is the port for the HTTP server (0 = disabled)
+	// HTTPPort is the port for the HTTP server (0 = disabled unless HTTPAutoPort is true)
 	HTTPPort int `json:"httpPort,omitempty" yaml:"httpPort,omitempty"`
+	// HTTPAutoPort enables OS-assigned port when HTTPPort is 0.
+	// Used by `mockd engine --port 0` to let the OS pick a free port.
+	HTTPAutoPort bool `json:"-" yaml:"-"` // Not serialized — runtime-only flag
 	// HTTPSPort is the port for the HTTPS server (0 = disabled)
 	HTTPSPort int `json:"httpsPort,omitempty" yaml:"httpsPort,omitempty"`
 	// AdminPort is the port for the admin API (required)

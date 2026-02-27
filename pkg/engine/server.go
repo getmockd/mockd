@@ -70,6 +70,7 @@ type Server struct {
 	log             *slog.Logger  // For operational logging (developer-facing)
 	httpServer      *http.Server
 	httpsServer     *http.Server
+	httpActualPort  int // Actual port after listener bind (handles port-0 auto-assign)
 	handler         *Handler
 	httpHandler     http.Handler // The actual handler used by servers (may be wrapped with middleware)
 	middlewareChain *MiddlewareChain
@@ -311,8 +312,9 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	// Start HTTP server if configured
-	if s.cfg.HTTPPort > 0 {
+	// Start HTTP server if configured (port > 0 = explicit port, port == 0 with
+	// HTTPAutoPort = auto-assign, port == 0 without HTTPAutoPort = disabled)
+	if s.cfg.HTTPPort > 0 || (s.cfg.HTTPPort == 0 && s.cfg.HTTPAutoPort) {
 		s.httpServer = &http.Server{
 			Addr:         fmt.Sprintf(":%d", s.cfg.HTTPPort),
 			Handler:      s.httpHandler,
@@ -326,12 +328,20 @@ func (s *Server) Start() error {
 			s.teardownOnStartupFailure()
 			return fmt.Errorf("failed to listen on HTTP port %d: %w", s.cfg.HTTPPort, err)
 		}
+
+		// Store the actual port (handles port-0 auto-assignment)
+		if tcpAddr, ok := httpLn.Addr().(*net.TCPAddr); ok {
+			s.httpActualPort = tcpAddr.Port
+		} else {
+			s.httpActualPort = s.cfg.HTTPPort
+		}
+
 		// Apply connection limit if configured
 		if s.cfg.MaxConnections > 0 {
 			httpLn = netutil.LimitListener(httpLn, s.cfg.MaxConnections)
 			s.log.Info("connection limit enabled", "maxConnections", s.cfg.MaxConnections)
 		}
-		s.log.Info("starting HTTP server", "port", s.cfg.HTTPPort)
+		s.log.Info("starting HTTP server", "port", s.httpActualPort)
 		httpServer := s.httpServer
 		go func() {
 			if err := httpServer.Serve(httpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -528,6 +538,15 @@ func (s *Server) Uptime() int {
 // Config returns the server configuration.
 func (s *Server) Config() *config.ServerConfiguration {
 	return s.cfg
+}
+
+// HTTPPort returns the actual HTTP mock server port.
+// This resolves port-0 (OS auto-assignment) to the real bound port.
+func (s *Server) HTTPPort() int {
+	if s.httpActualPort > 0 {
+		return s.httpActualPort
+	}
+	return s.cfg.HTTPPort
 }
 
 // ManagementPort returns the port the management API is running on.

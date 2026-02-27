@@ -1284,6 +1284,28 @@ func TestServerAccessors(t *testing.T) {
 		// Port should be set during initialization
 		assert.GreaterOrEqual(t, srv.ManagementPort(), 0)
 	})
+
+	t.Run("HTTPPort returns config port before start", func(t *testing.T) {
+		t.Parallel()
+		srv := NewServer(&config.ServerConfiguration{
+			HTTPPort: 12345,
+		})
+		assert.Equal(t, 12345, srv.HTTPPort())
+	})
+
+	t.Run("HTTPPort with auto-assign resolves actual port", func(t *testing.T) {
+		t.Parallel()
+		srv := NewServer(&config.ServerConfiguration{
+			HTTPPort:     0,
+			HTTPAutoPort: true,
+		})
+		err := srv.Start()
+		require.NoError(t, err)
+		defer srv.Stop()
+
+		port := srv.HTTPPort()
+		assert.Greater(t, port, 0, "auto-assigned port should be > 0")
+	})
 }
 
 func TestServerSetLogger(t *testing.T) {
