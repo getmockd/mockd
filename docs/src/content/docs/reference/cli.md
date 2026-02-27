@@ -384,6 +384,71 @@ mockd status --pid-file /tmp/mockd.pid
 
 ---
 
+### mockd mcp
+
+Start the MCP (Model Context Protocol) server in stdio mode. Reads JSON-RPC from stdin, writes responses to stdout. Used by AI-powered editors (Claude Code, Cursor, Windsurf) to interact with mockd directly.
+
+If no mockd server is running, **auto-starts a background daemon** so AI assistants work with zero setup. The daemon survives the MCP session and is shared across multiple sessions.
+
+```bash
+mockd mcp [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--admin-url` | Connect to a specific admin API URL (skips auto-start) | |
+| `--data-dir` | Project-scoped data directory (starts separate daemon) | |
+| `--config` | Config file to load on daemon startup | |
+| `--port` | Mock server port for project daemon | `4280` (or `14280` with `--data-dir`) |
+| `--admin-port` | Admin API port for project daemon | `4290` (or `14290` with `--data-dir`) |
+| `--log-level` | Log level for stderr output (debug, info, warn, error) | `warn` |
+
+**Connection Strategy:**
+
+1. If `--admin-url` is given, connects directly to that server
+2. Otherwise, checks the PID file and default URL for a running server
+3. If nothing is running, auto-starts `mockd start --detach --no-auth`
+
+**Examples:**
+
+```bash
+# Basic usage — auto-starts daemon if needed
+mockd mcp
+
+# Connect to a specific server (no auto-start)
+mockd mcp --admin-url http://localhost:4290
+
+# Project-scoped isolation (separate daemon per project)
+mockd mcp --data-dir ./mockd-data
+
+# Load a config file when auto-starting
+mockd mcp --data-dir ./mockd-data --config mocks.yaml
+
+# Custom ports for project daemon
+mockd mcp --data-dir ./mockd-data --port 5000 --admin-port 5001
+```
+
+**Editor Integration:**
+
+Add to your MCP config file:
+
+```json
+{
+  "mcpServers": {
+    "mockd": {
+      "command": "mockd",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+See the [MCP Server guide](/guides/mcp-server/) for detailed editor setup (Claude Code, Cursor, Windsurf).
+
+---
+
 ### mockd up
 
 Start local admins and engines defined in `mockd.yaml`. Validates the project configuration, starts servers, and bootstraps workspaces seamlessly.

@@ -19,11 +19,50 @@ mockd is the **only** API mocking tool with a built-in MCP server. No competitor
 
 ```bash
 # Start mockd with MCP support (stdio transport)
+# Auto-starts a background daemon if no server is running — zero setup needed.
 mockd mcp
 
 # Or enable MCP alongside the mock server (HTTP transport)
 mockd serve --mcp
 ```
+
+## Zero-Setup: Auto-Start Daemon
+
+When you run `mockd mcp`, it automatically handles server lifecycle:
+
+1. **Already running?** Connects to the existing mockd server (via PID file or default URL)
+2. **Nothing running?** Auto-starts a background daemon (`mockd start --detach --no-auth`)
+3. **Daemon is shared** — it survives the MCP session, so multiple AI assistants (e.g., two Claude windows) share the same server and mocks persist across sessions
+
+Stop the daemon with `mockd stop` when you're done.
+
+### Project-Scoped Isolation
+
+Use `--data-dir` to start a separate daemon per project, avoiding conflicts when working across multiple codebases:
+
+```json
+{
+  "mcpServers": {
+    "mockd": {
+      "command": "mockd",
+      "args": ["mcp", "--data-dir", "./mockd-data"]
+    }
+  }
+}
+```
+
+Project daemons run on different ports (14280/14290 by default) and store their PID file inside the data directory. Multiple sessions in the same project share the same daemon.
+
+### `mockd mcp` Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--admin-url` | Connect to a specific admin API URL (skips auto-start) | |
+| `--data-dir` | Project-scoped data directory (starts separate daemon) | |
+| `--config` | Config file to load on daemon startup | |
+| `--port` | Mock server port for project daemon | `4280` (or `14280` with `--data-dir`) |
+| `--admin-port` | Admin API port for project daemon | `4290` (or `14290` with `--data-dir`) |
+| `--log-level` | Log level for stderr output | `warn` |
 
 ## Editor Setup
 
@@ -197,6 +236,22 @@ mockd supports two MCP transports:
 | **HTTP** | `mockd serve --mcp` | Remote access, shared server |
 
 The stdio transport is recommended for local editor integration. The HTTP transport runs alongside the mock server and is useful when the mockd server is running on a remote machine or in a container.
+
+## CLI Equivalents
+
+Every MCP tool has a corresponding CLI command. Use these interchangeably:
+
+| MCP Tool | CLI Equivalent |
+|----------|---------------|
+| `manage_mock` (create) | `mockd add http --path /api/users --status 200` |
+| `verify_mock` | `mockd verify check <mock-id> --exactly 3` |
+| `get_mock_invocations` | `mockd verify invocations <mock-id>` |
+| `set_chaos_config` (profile) | `mockd chaos apply flaky` |
+| `get_request_logs` | `mockd logs --requests` |
+| `import_mocks` | `mockd import openapi.yaml` |
+| `export_mocks` | `mockd export --format yaml` |
+
+See the [CLI Reference](/reference/cli/) for the full command list, including [`mockd mcp`](/reference/cli/#mockd-mcp) and [`mockd verify`](/reference/cli/#mockd-verify).
 
 ## Next Steps
 
