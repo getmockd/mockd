@@ -18,6 +18,7 @@ import (
 	"fmt"
 	mathrand "math/rand/v2"
 	"strings"
+	"time"
 )
 
 // =============================================================================
@@ -45,6 +46,14 @@ var fakerCurrencyCodes = []string{
 	"USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "CNY",
 	"SEK", "NZD", "MXN", "SGD", "HKD", "NOK", "KRW", "TRY",
 	"INR", "RUB", "BRL", "ZAR",
+}
+
+// fakerCurrencyNames contains full currency names (paired with fakerCurrencyCodes).
+var fakerCurrencyNames = []string{
+	"US Dollar", "Euro", "British Pound", "Japanese Yen", "Australian Dollar",
+	"Canadian Dollar", "Swiss Franc", "Chinese Yuan", "Swedish Krona", "New Zealand Dollar",
+	"Mexican Peso", "Singapore Dollar", "Hong Kong Dollar", "Norwegian Krone", "South Korean Won",
+	"Turkish Lira", "Indian Rupee", "Russian Ruble", "Brazilian Real", "South African Rand",
 }
 
 // fakerIBANPrefix defines country code, total IBAN length, and a sample bank code.
@@ -140,6 +149,22 @@ var fakerFileExtensions = []string{
 	"js", "json", "xml", "zip", "tar", "gz",
 	"mp3", "mp4", "wav", "avi", "mov", "svg",
 	"ppt", "pptx", "md", "yaml", "toml", "log",
+}
+
+// =============================================================================
+// Faker Data — Text
+// =============================================================================
+
+// fakerWordList contains common English words for word/slug generation.
+var fakerWordList = []string{
+	"ocean", "river", "mountain", "forest", "desert", "valley", "island", "canyon",
+	"cloud", "storm", "thunder", "breeze", "shadow", "light", "flame", "frost",
+	"crystal", "silver", "golden", "iron", "stone", "marble", "pearl", "amber",
+	"falcon", "eagle", "wolf", "tiger", "bear", "hawk", "raven", "lion",
+	"horizon", "summit", "harbor", "bridge", "tower", "garden", "palace", "castle",
+	"dream", "vision", "spirit", "echo", "pulse", "spark", "bloom", "drift",
+	"brave", "swift", "calm", "bold", "keen", "vast", "deep", "pure",
+	"design", "craft", "build", "forge", "shape", "blend", "carve", "weave",
 }
 
 // =============================================================================
@@ -243,4 +268,57 @@ func fakerPassport() string {
 		sb.WriteByte(byte('0' + mathrand.IntN(10)))
 	}
 	return sb.String()
+}
+
+// fakerCreditCardExp generates a future credit card expiration date in MM/YY format.
+func fakerCreditCardExp() string {
+	now := time.Now()
+	// Random month 1-12, random year 1-5 years in the future
+	month := mathrand.IntN(12) + 1
+	year := now.Year() + mathrand.IntN(5) + 1
+	return fmt.Sprintf("%02d/%02d", month, year%100)
+}
+
+// fakerCVV generates a random 3-digit CVV code.
+func fakerCVV() string {
+	return fmt.Sprintf("%03d", mathrand.IntN(1000))
+}
+
+// fakerHexColor generates a random hex color string (e.g., "#FF5733").
+func fakerHexColor() string {
+	return fmt.Sprintf("#%02X%02X%02X",
+		mathrand.IntN(256), mathrand.IntN(256), mathrand.IntN(256))
+}
+
+// fakerLatitude generates a random latitude between -90.0 and 90.0 with 6 decimal places.
+func fakerLatitude() string {
+	lat := mathrand.Float64()*180.0 - 90.0
+	return fmt.Sprintf("%.6f", lat)
+}
+
+// fakerLongitude generates a random longitude between -180.0 and 180.0 with 6 decimal places.
+func fakerLongitude() string {
+	lng := mathrand.Float64()*360.0 - 180.0
+	return fmt.Sprintf("%.6f", lng)
+}
+
+// fakerWords generates n random words from the word list, space-separated.
+func fakerWords(n int) string {
+	if n <= 0 {
+		n = 3
+	}
+	words := make([]string, n)
+	for i := range words {
+		words[i] = fakerWordList[mathrand.IntN(len(fakerWordList))]
+	}
+	return strings.Join(words, " ")
+}
+
+// fakerSlug generates a URL-friendly slug of 3 hyphen-separated words.
+func fakerSlug() string {
+	words := make([]string, 3)
+	for i := range words {
+		words[i] = fakerWordList[mathrand.IntN(len(fakerWordList))]
+	}
+	return strings.Join(words, "-")
 }
