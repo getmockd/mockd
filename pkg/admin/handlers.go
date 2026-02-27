@@ -427,8 +427,8 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 // started. This ensures mocks are written to the persistent store AND pushed
 // to the engine — keeping both in sync from the start.
 func (a *API) ImportConfigDirect(ctx context.Context, collection *config.MockCollection, replace bool) (int, error) {
-	engine := a.localEngine.Load()
-	if engine == nil {
+	// Ensure at least one engine is reachable.
+	if targets := a.allEngineTargets(); len(targets) == 0 {
 		return 0, errors.New("no engine connected — cannot import config")
 	}
 
@@ -484,8 +484,8 @@ func (a *API) ImportConfigDirect(ctx context.Context, collection *config.MockCol
 		return 0, err
 	}
 
-	// Forward to engine for runtime registration
-	importResult, err := engine.ImportConfig(ctx, collection, replace)
+	// Forward to all engines for runtime registration
+	importResult, err := a.pushImportToEngines(ctx, collection, replace)
 	if err != nil {
 		return 0, fmt.Errorf("engine import failed: %w", err)
 	}
@@ -531,21 +531,16 @@ func (a *API) mockCreator() MockCreatorFunc {
 			}
 		}
 
-		// 2. Push to the engine so it starts serving the mock.
-		if engine := a.localEngine.Load(); engine != nil {
-			created, err := engine.CreateMock(ctx, m)
-			if err != nil {
-				// Rollback store on engine failure.
-				if mockStore != nil {
-					_ = mockStore.Delete(ctx, m.ID)
-				}
-				return nil, fmt.Errorf("engine create failed: %w", err)
+		// 2. Push to all engines so they start serving the mock.
+		created, err := a.pushCreateToEngines(ctx, m)
+		if err != nil {
+			// Rollback store on engine failure.
+			if mockStore != nil {
+				_ = mockStore.Delete(ctx, m.ID)
 			}
-			return created, nil
+			return nil, fmt.Errorf("engine create failed: %w", err)
 		}
-
-		// No engine — store-only is fine; engine will sync on reconnect.
-		return m, nil
+		return created, nil
 	}
 }
 

@@ -53,6 +53,11 @@ func New(baseURL string, opts ...Option) *Client {
 	return c
 }
 
+// BaseURL returns the base URL of the engine client.
+func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
 // Health checks if the engine is healthy.
 func (c *Client) Health(ctx context.Context) error {
 	resp, err := c.get(ctx, "/health")

@@ -641,19 +641,23 @@ func (a *API) handleGetEngineConfig(w http.ResponseWriter, r *http.Request) {
 //   - Engine registration (first or re-registration after crash)
 //   - Heartbeat offline→online transition (engine was unreachable, now back)
 //
-// A sync.Mutex ensures only one sync runs at a time; concurrent attempts are
-// skipped (the in-flight sync will push the latest state).
+// Per-engine mutexes ensure concurrent syncs to different engines don't block
+// each other, while duplicate syncs to the same engine are skipped.
 func (a *API) syncAdminStoreToEngine(client *engineclient.Client, reason string) {
 	if a.dataStore == nil || client == nil {
 		return
 	}
 
-	// Try-lock: skip if another sync is already running.
-	if !a.engineSyncMu.TryLock() {
-		a.logger().Debug("skipping engine sync, already in progress", "reason", reason)
+	// Use per-engine mutex so syncs to different engines run concurrently,
+	// but duplicate syncs to the same engine are serialized / skipped.
+	engineURL := client.BaseURL()
+	mu := a.perEngineSync.get(engineURL)
+	if !mu.TryLock() {
+		a.logger().Debug("skipping engine sync, already in progress",
+			"reason", reason, "engine", engineURL)
 		return
 	}
-	defer a.engineSyncMu.Unlock()
+	defer mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
 	defer cancel()
