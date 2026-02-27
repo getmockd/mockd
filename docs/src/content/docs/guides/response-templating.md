@@ -227,7 +227,7 @@ Templates work in headers too:
 
 ## Faker Functions
 
-Generate realistic sample data with 34 built-in faker types:
+Generate realistic sample data with 34 built-in faker types. Faker functions work in **all protocols** — HTTP, GraphQL, gRPC, SOAP, WebSocket, SSE, and MQTT response bodies.
 
 ```json
 {

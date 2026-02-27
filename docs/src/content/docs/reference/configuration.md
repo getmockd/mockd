@@ -979,7 +979,7 @@ See the [Validation Guide](/guides/validation) for comprehensive examples.
 
 ## Template Variables
 
-Response bodies support template variables:
+Response bodies support template variables. Templates work in **all protocols** (HTTP, GraphQL, gRPC, SOAP, WebSocket, SSE, MQTT).
 
 ```yaml
 body: |
@@ -990,8 +990,10 @@ body: |
     "body": {{request.body}},
     "field": "{{jsonPath request.body '$.field'}}",
     "timestamp": "{{now}}",
-    "unix": "{{timestamp}}",
     "uuid": "{{uuid}}",
+    "name": "{{faker.name}}",
+    "email": "{{faker.email}}",
+    "card": "{{faker.creditCard}}",
     "random": {{randomInt 1 100}}
   }
 ```
@@ -1010,11 +1012,36 @@ body: |
 | `{{jsonPath request.body '$.path'}}` | JSONPath extraction |
 | `{{now}}` | ISO 8601 timestamp |
 | `{{timestamp}}` | Unix timestamp (seconds) |
+| `{{timestamp.iso}}` | ISO timestamp (RFC3339Nano UTC) |
+| `{{timestamp.unix_ms}}` | Unix timestamp (milliseconds) |
 | `{{uuid}}` | Random UUID |
+| `{{uuid.short}}` | Short random ID (hex) |
 | `{{randomInt min max}}` | Random integer |
 | `{{randomFloat min max}}` | Random float |
+| `{{random.string(length)}}` | Random alphanumeric string |
+| `{{sequence("name")}}` | Auto-incrementing counter |
+| `{{upper value}}` | Uppercase string |
+| `{{lower value}}` | Lowercase string |
+| `{{default value fallback}}` | Default if empty |
 
-See `mockd help templating` for the complete list.
+### Faker Functions (34 types)
+
+Generate realistic sample data in response bodies. See the [Response Templating guide](/guides/response-templating/#faker-functions) for full details and example output.
+
+| Category | Types |
+|----------|-------|
+| **Basic** | `name`, `firstName`, `lastName`, `email`, `phone`, `company`, `address`, `word`, `sentence`, `words`, `words(n)`, `boolean`, `uuid` |
+| **Internet** | `ipv4`, `ipv6`, `macAddress`, `userAgent` |
+| **Finance** | `creditCard`, `creditCardExp`, `cvv`, `currencyCode`, `currency`, `iban`, `price` |
+| **Commerce** | `productName`, `color`, `hexColor` |
+| **Identity** | `ssn`, `passport`, `jobTitle` |
+| **Geo** | `latitude`, `longitude` |
+| **Text** | `slug` |
+| **Data** | `mimeType`, `fileExtension` |
+
+Usage: `{{faker.name}}`, `{{faker.creditCard}}`, `{{faker.words(5)}}`, etc.
+
+See `mockd help templating` for the complete reference.
 
 ---
 

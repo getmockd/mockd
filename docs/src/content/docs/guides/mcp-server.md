@@ -5,6 +5,16 @@ description: Use mockd from AI-powered editors like Cursor, Windsurf, and Claude
 
 mockd includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server with 16 tools for creating, managing, and debugging mocks directly from AI-powered editors.
 
+## What is MCP?
+
+The Model Context Protocol (MCP) is an open standard from [Anthropic](https://anthropic.com) that lets AI assistants interact with external tools and data sources. Instead of copy-pasting curl commands or switching between your editor and terminal, your AI assistant talks to mockd directly — creating mocks, inspecting traffic, injecting chaos, and verifying behavior in a single conversation.
+
+mockd's MCP server is built on the official [mcp-go SDK](https://github.com/mark3labs/mcp-go) and exposes mockd's full capabilities as structured tools that any MCP-compatible client can discover and invoke.
+
+:::note
+mockd is the **only** API mocking tool with a built-in MCP server. No competitor (WireMock, Postman, Mockoon, MSW, Microcks) offers this.
+:::
+
 ## Quick Start
 
 ```bash
@@ -49,7 +59,7 @@ Add to `.cursor/mcp.json` in your project root:
 
 ### Windsurf
 
-Add to your MCP configuration:
+Add to `~/.codeium/windsurf/mcp_config.json`:
 
 ```json
 {
@@ -61,6 +71,10 @@ Add to your MCP configuration:
   }
 }
 ```
+
+:::tip[Prerequisites]
+mockd must be installed and in your `PATH`. Verify with `mockd version`. If you installed via Docker, MCP stdio transport won't work — use the binary install (`brew install getmockd/tap/mockd` or `curl -sSL https://get.mockd.io | sh`).
+:::
 
 ## Available Tools (16)
 
@@ -122,16 +136,47 @@ mockd's MCP server exposes 16 tools organized by function:
 | `manage_context` | get, switch | Switch between mockd server contexts (multi-environment) |
 | `manage_workspace` | list, switch | Switch between isolated workspace configurations |
 
-## Example Workflow
+## Example: Creating a Mock via MCP
 
-Here's what a typical AI-assisted workflow looks like:
+When you ask your AI editor "Create an endpoint that returns a list of users," the AI calls the `manage_mock` tool behind the scenes:
 
-1. **Create mocks** — Ask your AI editor: "Create a REST API for a todo app with GET, POST, PUT, DELETE"
+**Tool call** (`manage_mock` with action `create`):
+```json
+{
+  "action": "create",
+  "type": "http",
+  "http": {
+    "matcher": { "method": "GET", "path": "/api/users" },
+    "response": {
+      "statusCode": 200,
+      "headers": { "Content-Type": "application/json" },
+      "body": "[{\"id\":1,\"name\":\"{{faker.name}}\",\"email\":\"{{faker.email}}\"}]"
+    }
+  }
+}
+```
+
+**Tool response:**
+```json
+{
+  "action": "created",
+  "id": "http_a1b2c3d4",
+  "message": "Created http mock"
+}
+```
+
+The AI can then verify it works by calling `verify_mock` after sending test traffic, or inject chaos with `set_chaos_config` to test your app's error handling — all without leaving the editor.
+
+## Typical Workflow
+
+Here's what a full AI-assisted development session looks like:
+
+1. **Create mocks** — "Create a REST API for a todo app with GET, POST, PUT, DELETE"
 2. **Send test traffic** — The AI calls `get_request_logs` to verify traffic is flowing
-3. **Verify behavior** — Use `verify_mock` to assert the right endpoints were called
+3. **Verify behavior** — `verify_mock` asserts the right endpoints were called the right number of times
 4. **Inject chaos** — Apply the `flaky` profile with `set_chaos_config` to test resilience
-5. **Manage state** — Use `manage_state` to create, inspect, and reset CRUD resources
-6. **Export** — Save the configuration with `export_mocks` for version control
+5. **Manage state** — `manage_state` creates CRUD collections, seeds data, resets between tests
+6. **Export** — `export_mocks` saves the full configuration for version control
 
 ## MCP Resources
 

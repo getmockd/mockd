@@ -509,8 +509,75 @@ test('handles rate limiting', async () => {
 });
 ```
 
+## Mock Verification
+
+After running your tests, verify that your code made the expected API calls. mockd tracks every request matched to a mock, so you can assert call counts and inspect invocation details.
+
+### Assert Call Counts
+
+```javascript
+test('payment endpoint is called exactly once', async () => {
+  // Create mock
+  const res = await fetch('http://localhost:4290/mocks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'http',
+      http: {
+        matcher: { method: 'POST', path: '/api/payments' },
+        response: { statusCode: 201, body: '{"id": "pay_123"}' }
+      }
+    })
+  });
+  const { id: mockId } = await res.json();
+
+  // Run your application code...
+  await myApp.processOrder({ amount: 49.99 });
+
+  // Verify: payment endpoint called exactly once
+  const verify = await fetch(`http://localhost:4290/mocks/${mockId}/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ exactly: 1 })
+  });
+  const result = await verify.json();
+  expect(result.passed).toBe(true);
+});
+```
+
+### Inspect Invocations
+
+```bash
+# View every request that hit a specific mock
+curl http://localhost:4290/mocks/http_a1b2c3d4/invocations
+```
+
+Returns timestamps, request headers, bodies, and matched response details for each call.
+
+### Reset Between Tests
+
+```javascript
+beforeEach(async () => {
+  // Reset all verification data (call counts + invocation history)
+  await fetch('http://localhost:4290/verify', { method: 'DELETE' });
+});
+```
+
+### Verification API Reference
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/mocks/{id}/verify` | GET | Get call count and last-called timestamp |
+| `/mocks/{id}/verify` | POST | Assert call count (`exactly`, `atLeast`, `atMost`, `never`) |
+| `/mocks/{id}/invocations` | GET | List all request/response pairs |
+| `/mocks/{id}/invocations` | DELETE | Reset invocations for one mock |
+| `/verify` | DELETE | Reset all verification data |
+
+For full details, see the [Mock Verification guide](/guides/mock-verification/).
+
 ## Next Steps
 
 - [Basic Mocks](/examples/basic-mocks) - Simple mock examples
 - [CRUD API](/examples/crud-api) - Stateful API example
+- [Mock Verification](/guides/mock-verification/) - Full verification guide
 - [Admin API](/reference/admin-api) - Runtime management

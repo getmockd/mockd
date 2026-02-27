@@ -2795,6 +2795,8 @@ mockd chaos <subcommand> [flags]
 - `enable` - Enable chaos injection
 - `disable` - Disable chaos injection
 - `status` - Show current chaos configuration
+- `profiles` - List available chaos profiles
+- `apply` - Apply a named chaos profile
 
 ---
 
@@ -2877,6 +2879,90 @@ mockd chaos status [flags]
 ```bash
 mockd chaos status
 mockd chaos status --json
+```
+
+---
+
+#### mockd chaos profiles
+
+List all available chaos profiles. Profiles are pre-built chaos configurations for common failure scenarios.
+
+```bash
+mockd chaos profiles [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--admin-url` | Admin API base URL | `http://localhost:4290` |
+| `--json` | Output in JSON format (includes full config for each profile) | |
+
+**Examples:**
+
+```bash
+# List all profiles
+mockd chaos profiles
+
+# List with full configuration details
+mockd chaos profiles --json
+```
+
+**Output:**
+
+```
+Available chaos profiles:
+
+  degraded        Partially degraded service
+  dns-flaky       Intermittent DNS resolution failures
+  flaky           Unreliable service with random errors
+  mobile-3g       Mobile 3G network conditions
+  offline         Service completely down
+  overloaded      Overloaded server under heavy load
+  rate-limited    Rate-limited API
+  satellite       Satellite internet simulation
+  slow-api        Simulates slow upstream API
+  timeout         Connection timeout simulation
+
+Apply a profile with: mockd chaos apply <profile-name>
+```
+
+---
+
+#### mockd chaos apply
+
+Apply a named chaos profile. This replaces the current chaos configuration with the profile's settings.
+
+```bash
+mockd chaos apply <profile-name> [flags]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `profile-name` | Name of the chaos profile to apply (see `mockd chaos profiles`) |
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--admin-url` | Admin API base URL | `http://localhost:4290` |
+
+**Examples:**
+
+```bash
+# Simulate a flaky service (20% errors, 0-100ms latency)
+mockd chaos apply flaky
+
+# Simulate mobile network conditions (300-800ms, 50KB/s, 2% errors)
+mockd chaos apply mobile-3g
+
+# Take the service completely offline (100% 503 errors)
+mockd chaos apply offline
+
+# Disable when done
+mockd chaos disable
 ```
 
 ---
