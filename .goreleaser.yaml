@@ -6,6 +6,11 @@ before:
   hooks:
     - go mod tidy
     - go generate ./...
+    # Generate shell completions for packaging
+    - mkdir -p completions
+    - sh -c "go run ./cmd/mockd completion bash > completions/mockd.bash"
+    - sh -c "go run ./cmd/mockd completion zsh > completions/mockd.zsh"
+    - sh -c "go run ./cmd/mockd completion fish > completions/mockd.fish"
 
 builds:
   - id: mockd
@@ -20,15 +25,20 @@ builds:
     goarch:
       - amd64
       - arm64
+    flags:
+      - -trimpath
     ldflags:
       - -s -w
       - -X main.Version={{.Version}}
       - -X main.Commit={{.Commit}}
       - -X main.BuildDate={{.Date}}
 
+# ── Archives ────────────────────────────────────────────
+# Tar.gz/zip archives with docs and completions
 archives:
   - id: default
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -36,18 +46,35 @@ archives:
       {{- .Arch }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - LICENSE
       - README.md
       - NOTICE
+      - src: completions/*
+        dst: completions
+        strip_parent: true
 
+  # Bare binaries for setup-mockd GitHub Action compatibility
+  # These produce: mockd-linux-amd64, mockd-darwin-arm64, etc.
+  - id: bare
+    formats:
+      - binary
+    name_template: >-
+      {{ .ProjectName }}-
+      {{- .Os }}-
+      {{- .Arch }}
+
+# ── Checksums ───────────────────────────────────────────
 checksum:
   name_template: "checksums.txt"
 
+# ── Snapshot ────────────────────────────────────────────
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
+# ── Changelog ───────────────────────────────────────────
 changelog:
   sort: asc
   filters:
@@ -59,8 +86,13 @@ changelog:
       - Merge pull request
       - Merge branch
 
+# ── Homebrew ────────────────────────────────────────────
+# Using brews (deprecated but functional) until Cask migration is planned.
+# Homebrew Casks require signed/notarized binaries for clean install on macOS.
 brews:
   - name: mockd
+    ids:
+      - default
     repository:
       owner: getmockd
       name: homebrew-tap
@@ -73,24 +105,110 @@ brews:
       system "#{bin}/mockd", "--version"
     install: |
       bin.install "mockd"
+      bash_completion.install "completions/mockd.bash" => "mockd"
+      zsh_completion.install "completions/mockd.zsh" => "_mockd"
+      fish_completion.install "completions/mockd.fish"
 
-dockers:
-  - image_templates:
-      - "ghcr.io/getmockd/mockd:{{ .Tag }}"
-      - "ghcr.io/getmockd/mockd:v{{ .Major }}"
-      - "ghcr.io/getmockd/mockd:v{{ .Major }}.{{ .Minor }}"
-      - "ghcr.io/getmockd/mockd:latest"
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--label=org.opencontainers.image.licenses=Apache-2.0"
-      - "--platform=linux/amd64"
+# ── Scoop (Windows) ────────────────────────────────────
+scoops:
+  - ids:
+      - default
+    name: mockd
+    repository:
+      owner: getmockd
+      name: scoop-mockd
+      token: "{{ .Env.SCOOP_TAP_TOKEN }}"
+    homepage: "https://mockd.io"
+    description: "High-performance multi-protocol API mocking server"
+    license: "Apache-2.0"
 
+# ── Linux packages (deb, rpm, apk) ─────────────────────
+nfpms:
+  - id: mockd-nfpm
+    package_name: mockd
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    maintainer: "Mockd LLC <packages@mockd.io>"
+    homepage: "https://mockd.io"
+    description: "High-performance multi-protocol API mocking server"
+    license: "Apache-2.0"
+    section: devel
+    priority: optional
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    contents:
+      - src: ./LICENSE
+        dst: /usr/share/doc/mockd/copyright
+        file_info:
+          mode: 0644
+      - src: ./completions/mockd.bash
+        dst: /usr/share/bash-completion/completions/mockd
+        file_info:
+          mode: 0644
+      - src: ./completions/mockd.zsh
+        dst: /usr/share/zsh/vendor-completions/_mockd
+        file_info:
+          mode: 0644
+      - src: ./completions/mockd.fish
+        dst: /usr/share/fish/vendor_completions.d/mockd.fish
+        file_info:
+          mode: 0644
+    rpm:
+      compression: lzma
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+        - changelog-file-missing-in-native-package
+
+# ── Docker (multi-arch via dockers_v2) ──────────────────
+dockers_v2:
+  - images:
+      - "ghcr.io/getmockd/mockd"
+    tags:
+      - "{{ .Tag }}"
+      - "v{{ .Major }}"
+      - "v{{ .Major }}.{{ .Minor }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    dockerfile: Dockerfile.goreleaser
+    labels:
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.title": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+      "org.opencontainers.image.licenses": "Apache-2.0"
+      "io.modelcontextprotocol.server.name": "io.mockd/mockd"
+
+# ── Signing (cosign keyless via Sigstore) ───────────────
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - "sign-blob"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+
+docker_signs:
+  - cmd: cosign
+    args:
+      - "sign"
+      - "${artifact}"
+      - "--yes"
+
+# ── SBOMs (Syft, SPDX format) ──────────────────────────
+sboms:
+  - artifacts: archive
+
+# ── Release ─────────────────────────────────────────────
 release:
   github:
     owner: getmockd
@@ -98,3 +216,5 @@ release:
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"
+  # Per-binary SHA256 sidecar files are uploaded separately in the CI workflow
+  # to maintain setup-mockd GitHub Action compatibility.

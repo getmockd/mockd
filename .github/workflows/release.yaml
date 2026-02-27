@@ -7,26 +7,13 @@ on:
 
 permissions:
   contents: write
+  packages: write
+  id-token: write  # Required for cosign keyless signing
 
 jobs:
-  build:
-    name: Build Binaries
+  goreleaser:
+    name: Release
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-          - goos: windows
-            goarch: arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,111 +23,64 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25.7"
+          go-version: "1.25"
           cache: true
 
-      - name: Extract version
-        id: version
-        run: |
-          VERSION="${{ github.ref_name }}"
-          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+      - name: Setup QEMU (multi-arch Docker)
+        uses: docker/setup-qemu-action@v3
 
-      - name: Build binary
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install Syft (SBOM)
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Run goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          SCOOP_TAP_TOKEN: ${{ secrets.SCOOP_TAP_TOKEN }}
+
+      # Generate per-binary SHA256 files for setup-mockd compatibility.
+      # Goreleaser's checksums.txt has all checksums, but setup-mockd expects
+      # individual .sha256 sidecar files (mockd-linux-amd64.sha256, etc.).
+      - name: Generate per-binary checksums
         run: |
-          output="mockd-${{ matrix.goos }}-${{ matrix.goarch }}"
-          if [ "$GOOS" = "windows" ]; then
-            output="${output}.exe"
-          fi
-          go build \
-            -ldflags="-s -w -X main.Version=${{ steps.version.outputs.version }} -X main.Commit=${{ github.sha }}" \
-            -trimpath \
-            -o "$output" \
-            ./cmd/mockd
+          cd dist
+          for f in mockd-*; do
+            # Skip checksum, signature, and cert files
+            [[ "$f" == *.sha256 ]] && continue
+            [[ "$f" == *.sig ]] && continue
+            [[ "$f" == *.pem ]] && continue
+            [[ "$f" == *.json ]] && continue
+            if [ -f "$f" ]; then
+              sha256sum "$f" > "${f}.sha256"
+              echo "Created ${f}.sha256"
+            fi
+          done
 
-      - name: Create checksum
-        run: |
-          output="mockd-${{ matrix.goos }}-${{ matrix.goarch }}"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            output="${output}.exe"
-          fi
-          sha256sum "$output" > "${output}.sha256"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mockd-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            mockd-${{ matrix.goos }}-${{ matrix.goarch }}*
-          retention-days: 1
-
-  release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          # Get the previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-
-          if [ -z "$PREV_TAG" ]; then
-            echo "No previous tag found, including all commits"
-            COMMITS=$(git log --oneline --no-decorate)
-          else
-            echo "Previous tag: $PREV_TAG"
-            COMMITS=$(git log --oneline --no-decorate "${PREV_TAG}..HEAD")
-          fi
-
-          # Build changelog
-          {
-            echo "changelog<<EOF"
-            echo "## What's Changed"
-            echo ""
-            echo "$COMMITS" | while read -r line; do
-              echo "- $line"
-            done
-            echo ""
-            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${{ github.ref_name }}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }}
-          body: ${{ steps.changelog.outputs.changelog }}
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          files: |
-            dist/*
-          fail_on_unmatched_files: true
-
-  update-homebrew:
-    name: Update Homebrew Formula
-    runs-on: ubuntu-latest
-    needs: release
-    if: ${{ !contains(github.ref_name, '-') }}
-    steps:
-      - name: Trigger Homebrew formula update
-        run: |
-          gh api repos/getmockd/homebrew-tap/dispatches \
-            -f event_type=update-formula \
-            -f "client_payload[tag]=${{ github.ref_name }}"
+      - name: Upload per-binary checksums to release
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          for f in dist/*.sha256; do
+            [ -f "$f" ] || continue
+            echo "Uploading $(basename "$f")"
+            gh release upload "$TAG" "$f" --clobber
+          done

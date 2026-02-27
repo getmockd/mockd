@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Unmatched request filtering** — `GET /requests?unmatchedOnly=true` returns only unmatched requests. CLI: `mockd logs --requests --unmatched`. MCP tool: `get_request_logs` with `unmatchedOnly: true`. Near-miss data is attached to request log entries for post-hoc debugging
 - **`mockd mcp` auto-start** — MCP server now auto-starts a background daemon if no mockd server is running, so AI assistants work with zero setup. The daemon survives the MCP session and is shared across multiple sessions. Use `--data-dir` for project-scoped isolation with a separate daemon. Stop with `mockd stop`
 - **`--chaos-profile` startup flag** — `mockd serve --chaos-profile flaky` applies a built-in chaos profile at startup. Available profiles: `slow-api`, `degraded`, `flaky`, `offline`, `timeout`, `rate-limited`, `mobile-3g`, `satellite`, `dns-flaky`, `overloaded`. Validates profile name and rejects conflicting flags (`--chaos-enabled`, `--chaos-latency`, `--chaos-error-rate`)
+- **goreleaser-based release pipeline** — Migrated from hand-rolled CI to goreleaser v2 with: deb/rpm/apk Linux packages (via nFPM), cosign keyless signing (Sigstore), SBOM generation (Syft/SPDX), multi-arch Docker images (amd64 + arm64), Scoop bucket for Windows, shell completions in archives, `-trimpath` reproducible builds
 
 ## [0.4.4] - 2026-02-27
 

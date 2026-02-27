@@ -106,3 +106,6 @@ test-mqtt.json
 
 # Runtime data
 tmp-data/
+
+# Generated shell completions (goreleaser before hook)
+completions/

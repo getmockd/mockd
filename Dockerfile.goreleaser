@@ -1,0 +1,24 @@
+# Dockerfile.goreleaser — used by goreleaser dockers_v2 to package pre-built binaries.
+# The binary is already built by goreleaser; this just packages it.
+# goreleaser dockers_v2 places binaries in $TARGETPLATFORM/ subdirectories.
+FROM gcr.io/distroless/static-debian12:nonroot
+
+ARG TARGETPLATFORM
+
+LABEL org.opencontainers.image.title="mockd" \
+      org.opencontainers.image.description="High-performance API mocking engine" \
+      org.opencontainers.image.vendor="mockd" \
+      org.opencontainers.image.source="https://github.com/getmockd/mockd" \
+      io.modelcontextprotocol.server.name="io.mockd/mockd"
+
+COPY ${TARGETPLATFORM}/mockd /usr/local/bin/mockd
+
+EXPOSE 4280 4290
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["/usr/local/bin/mockd", "health", "--admin-port", "4290"]
+
+USER nonroot:nonroot
+
+ENTRYPOINT ["/usr/local/bin/mockd"]
+CMD ["start", "--port", "4280", "--admin-port", "4290"]
