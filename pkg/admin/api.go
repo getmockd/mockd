@@ -55,9 +55,13 @@ type API struct {
 	cancel                 context.CancelFunc
 	log                    atomic.Pointer[slog.Logger]
 
-	// engineSyncMu prevents concurrent admin-store-to-engine syncs.
-	// Used by syncAdminStoreToEngine to ensure only one sync runs at a time.
+	// engineSyncMu prevents concurrent admin-store-to-engine syncs (legacy global mutex).
+	// Used as fallback when per-engine mutex is not applicable.
 	engineSyncMu sync.Mutex
+
+	// perEngineSync manages per-engine sync mutexes so concurrent full-syncs
+	// to different engines don't block each other.
+	perEngineSync *perEngineSyncMu
 
 	// Token management for engine authentication
 	registrationTokens map[string]storedToken // token -> storedToken
@@ -113,6 +117,7 @@ func NewAPI(port int, opts ...Option) *API {
 		mqttRecordingManager:        NewMQTTRecordingManager(),
 		soapRecordingManager:        NewSOAPRecordingManager(),
 		engineRegistry:              store.NewEngineRegistry(),
+		perEngineSync:               newPerEngineSyncMu(),
 		port:                        port,
 		startTime:                   time.Now(),
 		ctx:                         ctx,

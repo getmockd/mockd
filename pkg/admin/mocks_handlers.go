@@ -753,28 +753,26 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Notify the engine so it can serve the mock (Admin = control plane, Engine = data plane)
-	if engine := a.localEngine.Load(); engine != nil {
-		// config.MockConfiguration is an alias for mock.Mock, so pass directly
-		if _, err := engine.CreateMock(r.Context(), &m); err != nil {
-			// Rollback the store operation - mock can't actually run
-			if deleteErr := mockStore.Delete(r.Context(), m.ID); deleteErr != nil {
-				a.logger().Warn("failed to rollback mock after engine error", "id", m.ID, "error", deleteErr)
-			}
-
-			a.logger().Error("failed to activate mock in engine", "id", m.ID, "error", err)
-			errMsg := err.Error()
-			switch {
-			case isPortError(errMsg):
-				writeError(w, http.StatusConflict, "port_unavailable",
-					"Failed to start mock: the port may be in use by another process")
-			case isValidationError(errMsg):
-				writeError(w, http.StatusBadRequest, "validation_error", errMsg)
-			default:
-				writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
-			}
-			return
+	// Push to all engines (local + registered remote) via fan-out.
+	// Admin = control plane, Engine(s) = data plane.
+	if _, err := a.pushCreateToEngines(r.Context(), &m); err != nil {
+		// Rollback the store operation - mock can't actually run
+		if deleteErr := mockStore.Delete(r.Context(), m.ID); deleteErr != nil {
+			a.logger().Warn("failed to rollback mock after engine error", "id", m.ID, "error", deleteErr)
 		}
+
+		a.logger().Error("failed to activate mock in engine(s)", "id", m.ID, "error", err)
+		errMsg := err.Error()
+		switch {
+		case isPortError(errMsg):
+			writeError(w, http.StatusConflict, "port_unavailable",
+				"Failed to start mock: the port may be in use by another process")
+		case isValidationError(errMsg):
+			writeError(w, http.StatusBadRequest, "validation_error", errMsg)
+		default:
+			writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
+		}
+		return
 	}
 
 	// Return created response with action indicator
@@ -822,12 +820,10 @@ func (a *API) handleMergeMock(w http.ResponseWriter, r *http.Request, newMock *m
 		return
 	}
 
-	// Notify engine to reload the mock with new services/topics
-	if engine := a.localEngine.Load(); engine != nil {
-		if _, err := engine.UpdateMock(r.Context(), target.ID, target); err != nil {
-			a.logger().Warn("failed to notify engine of merged mock", "id", target.ID, "error", err)
-			// Don't fail - the mock is updated in store, engine will pick it up on next load
-		}
+	// Push merged mock update to all engines via fan-out
+	if _, err := a.pushUpdateToEngines(r.Context(), target.ID, target); err != nil {
+		a.logger().Warn("failed to notify engine(s) of merged mock", "id", target.ID, "error", err)
+		// Don't fail - the mock is updated in store, engine will pick it up on next sync
 	}
 
 	// Build response
@@ -934,26 +930,24 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Notify engine so it can update the running mock
-	if engine := a.localEngine.Load(); engine != nil {
-		if _, err := engine.UpdateMock(r.Context(), id, &m); err != nil {
-			a.logger().Error("failed to update mock in engine", "id", m.ID, "error", err)
-			errMsg := err.Error()
-			// Rollback the store operation - restore the existing mock
-			if rollbackErr := mockStore.Update(r.Context(), existing); rollbackErr != nil {
-				a.logger().Warn("failed to rollback mock update after engine error", "id", m.ID, "error", rollbackErr)
-			}
-			// Check if this is a port-related error
-			if isPortError(errMsg) {
-				writeError(w, http.StatusConflict, "port_unavailable",
-					"Failed to update mock: the port may be in use by another process")
-				return
-			}
-			// For other engine errors, also fail — store and engine must stay in sync
-			writeError(w, http.StatusServiceUnavailable, "engine_error",
-				sanitizeEngineError(err, a.logger(), "update mock in engine"))
+	// Push update to all engines via fan-out
+	if _, err := a.pushUpdateToEngines(r.Context(), id, &m); err != nil {
+		a.logger().Error("failed to update mock in engine(s)", "id", m.ID, "error", err)
+		errMsg := err.Error()
+		// Rollback the store operation - restore the existing mock
+		if rollbackErr := mockStore.Update(r.Context(), existing); rollbackErr != nil {
+			a.logger().Warn("failed to rollback mock update after engine error", "id", m.ID, "error", rollbackErr)
+		}
+		// Check if this is a port-related error
+		if isPortError(errMsg) {
+			writeError(w, http.StatusConflict, "port_unavailable",
+				"Failed to update mock: the port may be in use by another process")
 			return
 		}
+		// For other engine errors, also fail — store and engine must stay in sync
+		writeError(w, http.StatusServiceUnavailable, "engine_error",
+			sanitizeEngineError(err, a.logger(), "update mock in engine"))
+		return
 	}
 
 	response := map[string]interface{}{
@@ -1012,18 +1006,16 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Notify engine so it can update the running mock
-	if engine := a.localEngine.Load(); engine != nil {
-		if _, err := engine.UpdateMock(r.Context(), id, existing); err != nil {
-			a.logger().Error("failed to apply mock patch in engine", "id", existing.ID, "error", err)
-			// Rollback the store to pre-patch state
-			if rollbackErr := mockStore.Update(r.Context(), &prePatch); rollbackErr != nil {
-				a.logger().Warn("failed to rollback mock patch after engine error", "id", id, "error", rollbackErr)
-			}
-			writeError(w, http.StatusServiceUnavailable, "engine_error",
-				sanitizeEngineError(err, a.logger(), "apply mock patch in engine"))
-			return
+	// Push patch update to all engines via fan-out
+	if _, err := a.pushUpdateToEngines(r.Context(), id, existing); err != nil {
+		a.logger().Error("failed to apply mock patch in engine(s)", "id", existing.ID, "error", err)
+		// Rollback the store to pre-patch state
+		if rollbackErr := mockStore.Update(r.Context(), &prePatch); rollbackErr != nil {
+			a.logger().Warn("failed to rollback mock patch after engine error", "id", id, "error", rollbackErr)
 		}
+		writeError(w, http.StatusServiceUnavailable, "engine_error",
+			sanitizeEngineError(err, a.logger(), "apply mock patch in engine"))
+		return
 	}
 
 	response := map[string]interface{}{
@@ -1078,18 +1070,16 @@ func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Notify engine so it can stop serving the mock
-	if engine := a.localEngine.Load(); engine != nil {
-		if err := engine.DeleteMock(r.Context(), id); err != nil {
-			a.logger().Error("failed to delete mock from engine", "id", id, "error", err)
-			// Rollback: re-create the mock in the store
-			if rollbackErr := mockStore.Create(r.Context(), existing); rollbackErr != nil {
-				a.logger().Warn("failed to rollback mock deletion after engine error", "id", id, "error", rollbackErr)
-			}
-			writeError(w, http.StatusServiceUnavailable, "engine_error",
-				sanitizeEngineError(err, a.logger(), "delete mock from engine"))
-			return
+	// Push delete to all engines via fan-out
+	if err := a.pushDeleteToEngines(r.Context(), id); err != nil {
+		a.logger().Error("failed to delete mock from engine(s)", "id", id, "error", err)
+		// Rollback: re-create the mock in the store
+		if rollbackErr := mockStore.Create(r.Context(), existing); rollbackErr != nil {
+			a.logger().Warn("failed to rollback mock deletion after engine error", "id", id, "error", rollbackErr)
 		}
+		writeError(w, http.StatusServiceUnavailable, "engine_error",
+			sanitizeEngineError(err, a.logger(), "delete mock from engine"))
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -1131,14 +1121,8 @@ func (a *API) handleDeleteAllUnifiedMocks(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Notify engine so it can stop serving the deleted mocks
-	if engine := a.localEngine.Load(); engine != nil {
-		for _, m := range mocksToDelete {
-			if err := engine.DeleteMock(r.Context(), m.ID); err != nil {
-				a.logger().Warn("failed to notify engine of mock deletion (delete-all)", "id", m.ID, "error", err)
-			}
-		}
-	}
+	// Push deletes to all engines via fan-out
+	a.pushDeleteBulkToEngines(r.Context(), mocksToDelete)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -1182,19 +1166,17 @@ func (a *API) handleToggleUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Notify engine so the runtime state matches
-	if engine := a.localEngine.Load(); engine != nil {
-		if _, err := engine.ToggleMock(r.Context(), id, newEnabled); err != nil {
-			a.logger().Error("failed to toggle mock in engine", "id", id, "error", err)
-			// Rollback store
-			m.Enabled = &currentEnabled
-			if rollbackErr := mockStore.Update(r.Context(), m); rollbackErr != nil {
-				a.logger().Warn("failed to rollback toggle after engine error", "id", id, "error", rollbackErr)
-			}
-			writeError(w, http.StatusServiceUnavailable, "engine_error",
-				sanitizeEngineError(err, a.logger(), "toggle mock in engine"))
-			return
+	// Push toggle to all engines via fan-out
+	if _, err := a.pushToggleToEngines(r.Context(), id, newEnabled); err != nil {
+		a.logger().Error("failed to toggle mock in engine(s)", "id", id, "error", err)
+		// Rollback store
+		m.Enabled = &currentEnabled
+		if rollbackErr := mockStore.Update(r.Context(), m); rollbackErr != nil {
+			a.logger().Warn("failed to rollback toggle after engine error", "id", id, "error", rollbackErr)
 		}
+		writeError(w, http.StatusServiceUnavailable, "engine_error",
+			sanitizeEngineError(err, a.logger(), "toggle mock in engine"))
+		return
 	}
 
 	state := "disabled"
@@ -1343,10 +1325,8 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 		for _, m := range mocks {
 			if m.ID != "" {
 				_ = mockStore.Delete(r.Context(), m.ID) // Ignore not-found errors
-				// Also remove from engine so it re-creates cleanly
-				if engine := a.localEngine.Load(); engine != nil {
-					_ = engine.DeleteMock(r.Context(), m.ID)
-				}
+				// Also remove from all engines so they re-create cleanly
+				_ = a.pushDeleteToEngines(r.Context(), m.ID)
 			}
 		}
 	}
@@ -1371,28 +1351,26 @@ func (a *API) handleBulkCreateUnifiedMocks(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Notify the engine for each mock (Admin = control plane, Engine = data plane)
-	// Track any engine errors for reporting and roll back failed mocks from store
+	// Push each mock to all engines via fan-out.
+	// Track any engine errors for reporting and roll back failed mocks from store.
 	var engineErrors []string
 	var failedIDs []string
-	if engine := a.localEngine.Load(); engine != nil {
-		for _, m := range mocks {
-			if _, err := engine.CreateMock(r.Context(), m); err != nil {
-				a.logger().Warn("failed to notify engine of bulk mock create", "id", m.ID, "error", err)
-				failedIDs = append(failedIDs, m.ID)
-				if isPortError(err.Error()) {
-					engineErrors = append(engineErrors, m.ID+": port may be in use by another process")
-				} else {
-					engineErrors = append(engineErrors, m.ID+": "+err.Error())
-				}
+	for _, m := range mocks {
+		if _, err := a.pushCreateToEngines(r.Context(), m); err != nil {
+			a.logger().Warn("failed to push bulk mock create to engine(s)", "id", m.ID, "error", err)
+			failedIDs = append(failedIDs, m.ID)
+			if isPortError(err.Error()) {
+				engineErrors = append(engineErrors, m.ID+": port may be in use by another process")
+			} else {
+				engineErrors = append(engineErrors, m.ID+": "+err.Error())
 			}
 		}
+	}
 
-		// Roll back mocks that failed to register with the engine
-		for _, failedID := range failedIDs {
-			if err := mockStore.Delete(r.Context(), failedID); err != nil {
-				a.logger().Warn("failed to roll back mock from store after engine error", "id", failedID, "error", err)
-			}
+	// Roll back mocks that failed to register with the engine
+	for _, failedID := range failedIDs {
+		if err := mockStore.Delete(r.Context(), failedID); err != nil {
+			a.logger().Warn("failed to roll back mock from store after engine error", "id", failedID, "error", err)
 		}
 	}
 
