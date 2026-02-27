@@ -72,14 +72,16 @@ func handleGetRequestLogs(args map[string]interface{}, session *MCPSession, serv
 	pathPrefix := getString(args, "pathPrefix", "")
 	mockID := getString(args, "mockId", "")
 	protocol := getString(args, "protocol", "")
+	unmatchedOnly := getBool(args, "unmatchedOnly", false)
 
 	filter := &cli.LogFilter{
-		Protocol:  protocol,
-		Limit:     limit,
-		Offset:    offset,
-		Method:    method,
-		Path:      pathPrefix,
-		MatchedID: mockID,
+		Protocol:      protocol,
+		Limit:         limit,
+		Offset:        offset,
+		Method:        method,
+		Path:          pathPrefix,
+		MatchedID:     mockID,
+		UnmatchedOnly: unmatchedOnly,
 	}
 
 	logsResult, err := client.GetLogs(filter)
@@ -90,7 +92,7 @@ func handleGetRequestLogs(args map[string]interface{}, session *MCPSession, serv
 
 	entries := make([]RequestLogEntry, 0, len(logsResult.Requests))
 	for _, log := range logsResult.Requests {
-		entries = append(entries, RequestLogEntry{
+		entry := RequestLogEntry{
 			ID:        log.ID,
 			Method:    log.Method,
 			Path:      log.Path,
@@ -98,7 +100,20 @@ func handleGetRequestLogs(args map[string]interface{}, session *MCPSession, serv
 			Duration:  fmt.Sprintf("%dms", log.DurationMs),
 			Timestamp: log.Timestamp,
 			MockID:    log.MatchedMockID,
-		})
+		}
+		// Include near-miss data for unmatched requests
+		if len(log.NearMisses) > 0 {
+			entry.NearMisses = make([]NearMissEntry, len(log.NearMisses))
+			for i, nm := range log.NearMisses {
+				entry.NearMisses[i] = NearMissEntry{
+					MockID:          nm.MockID,
+					MockName:        nm.MockName,
+					MatchPercentage: nm.MatchPercentage,
+					Reason:          nm.Reason,
+				}
+			}
+		}
+		entries = append(entries, entry)
 	}
 
 	return ToolResultJSON(entries)

@@ -152,6 +152,9 @@ type RequestLogEntry struct {
 	DurationMs    int                 `json:"durationMs"`
 	Error         string              `json:"error,omitempty"`
 
+	// Near-miss debugging data (populated for unmatched requests).
+	NearMisses []requestlog.NearMissInfo `json:"nearMisses,omitempty"`
+
 	// Protocol-specific metadata (only one populated based on Protocol).
 	GRPC      *requestlog.GRPCMeta      `json:"grpc,omitempty"`
 	WebSocket *requestlog.WebSocketMeta `json:"websocket,omitempty"`

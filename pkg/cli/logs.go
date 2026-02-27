@@ -528,7 +528,11 @@ func printTableLogs(requests []*requestlog.Entry) error {
 		}
 		matched := req.MatchedMockID
 		if matched == "" {
-			matched = "(none)"
+			if len(req.NearMisses) > 0 {
+				matched = fmt.Sprintf("(none, %d near)", len(req.NearMisses))
+			} else {
+				matched = "(none)"
+			}
 		} else if len(matched) > 12 {
 			matched = matched[:12] + "..."
 		}
@@ -725,6 +729,19 @@ func printVerboseEntry(req *requestlog.Entry) {
 		fmt.Printf("  Body: %s\n", body)
 	} else {
 		fmt.Println("  Body: (empty)")
+	}
+
+	// Show near-miss data for unmatched requests
+	if len(req.NearMisses) > 0 {
+		fmt.Println("  Near misses:")
+		for _, nm := range req.NearMisses {
+			name := nm.MockID
+			if nm.MockName != "" {
+				name = fmt.Sprintf("%q (%s)", nm.MockName, nm.MockID)
+			}
+			fmt.Printf("    → %s — %d%% match\n", name, nm.MatchPercentage)
+			fmt.Printf("      %s\n", nm.Reason)
+		}
 	}
 	fmt.Println()
 }

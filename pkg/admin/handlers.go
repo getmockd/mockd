@@ -613,6 +613,11 @@ func buildRequestFilter(query interface{ Get(string) string }) *requestlog.Filte
 			clientFilter.HasError = &parsed
 		}
 	}
+	if unmatchedOnly := query.Get("unmatchedOnly"); unmatchedOnly != "" {
+		if parsed, err := strconv.ParseBool(unmatchedOnly); err == nil && parsed {
+			clientFilter.UnmatchedOnly = true
+		}
+	}
 	// Protocol-specific filters
 	if v := query.Get("grpcService"); v != "" {
 		clientFilter.GRPCService = v

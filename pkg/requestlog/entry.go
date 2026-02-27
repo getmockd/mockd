@@ -61,6 +61,10 @@ type Entry struct {
 	// Error contains error message if the request failed.
 	Error string `json:"error,omitempty"`
 
+	// NearMisses contains the closest mocks for unmatched requests.
+	// Only populated when MatchedMockID is empty (404 responses).
+	NearMisses []NearMissInfo `json:"nearMisses,omitempty"`
+
 	// Protocol-specific metadata (only one will be populated based on Protocol).
 	GRPC      *GRPCMeta      `json:"grpc,omitempty"`
 	WebSocket *WebSocketMeta `json:"websocket,omitempty"`

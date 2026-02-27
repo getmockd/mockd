@@ -127,12 +127,13 @@ type AdminClient interface {
 
 // LogFilter specifies filtering criteria for request logs.
 type LogFilter struct {
-	Protocol  string // Filter by protocol (http, grpc, mqtt, soap, graphql, websocket, sse)
-	Method    string
-	Path      string
-	MatchedID string
-	Limit     int
-	Offset    int
+	Protocol      string // Filter by protocol (http, grpc, mqtt, soap, graphql, websocket, sse)
+	Method        string
+	Path          string
+	MatchedID     string
+	Limit         int
+	Offset        int
+	UnmatchedOnly bool // Only return unmatched requests (with near-miss data)
 }
 
 // LogResult contains request log query results.
@@ -672,6 +673,9 @@ func (c *adminClient) GetLogs(filter *LogFilter) (*LogResult, error) {
 		}
 		if filter.Offset > 0 {
 			params.Set("offset", strconv.Itoa(filter.Offset))
+		}
+		if filter.UnmatchedOnly {
+			params.Set("unmatchedOnly", "true")
 		}
 	}
 

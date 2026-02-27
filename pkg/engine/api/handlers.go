@@ -267,6 +267,13 @@ func (s *Server) handleListRequests(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parse unmatchedOnly filter
+	if v := r.URL.Query().Get("unmatchedOnly"); v != "" {
+		if parsed, err := strconv.ParseBool(v); err == nil && parsed {
+			filter.UnmatchedOnly = true
+		}
+	}
+
 	// Parse status code filter
 	if v := r.URL.Query().Get("status"); v != "" {
 		if code, err := strconv.Atoi(v); err == nil {
@@ -319,6 +326,7 @@ func entryToAPI(e *requestlog.Entry) *RequestLogEntry {
 		ResponseBody:  e.ResponseBody,
 		DurationMs:    e.DurationMs,
 		Error:         e.Error,
+		NearMisses:    e.NearMisses,
 		GRPC:          e.GRPC,
 		WebSocket:     e.WebSocket,
 		SSE:           e.SSE,

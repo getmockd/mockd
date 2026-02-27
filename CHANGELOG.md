@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Near-miss debugging** — When no mock matches a request, the 404 response now includes a `nearMisses` array with detailed field-by-field breakdown (method, path, headers, query params) showing what almost matched and why. Each near-miss includes match percentage, score, and a human-readable reason like `path matched, but method expected "GET", got "DELETE"`. Response includes `X-Mockd-Near-Misses` header with count
+- **Unmatched request filtering** — `GET /requests?unmatchedOnly=true` returns only unmatched requests. CLI: `mockd logs --requests --unmatched`. MCP tool: `get_request_logs` with `unmatchedOnly: true`. Near-miss data is attached to request log entries for post-hoc debugging
 - **`mockd mcp` auto-start** — MCP server now auto-starts a background daemon if no mockd server is running, so AI assistants work with zero setup. The daemon survives the MCP session and is shared across multiple sessions. Use `--data-dir` for project-scoped isolation with a separate daemon. Stop with `mockd stop`
 
 ## [0.4.4] - 2026-02-27

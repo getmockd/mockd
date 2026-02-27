@@ -395,13 +395,22 @@ type PaginationMeta = types.PaginationMeta
 
 // RequestLogEntry represents a captured request log entry.
 type RequestLogEntry struct {
-	ID        string    `json:"id"`
-	Method    string    `json:"method"`
-	Path      string    `json:"path"`
-	Status    int       `json:"status"`
-	Duration  string    `json:"duration"`
-	Timestamp time.Time `json:"timestamp"`
-	MockID    string    `json:"mockId,omitempty"`
+	ID         string          `json:"id"`
+	Method     string          `json:"method"`
+	Path       string          `json:"path"`
+	Status     int             `json:"status"`
+	Duration   string          `json:"duration"`
+	Timestamp  time.Time       `json:"timestamp"`
+	MockID     string          `json:"mockId,omitempty"`
+	NearMisses []NearMissEntry `json:"nearMisses,omitempty"`
+}
+
+// NearMissEntry is a near-miss summary for MCP tool output.
+type NearMissEntry struct {
+	MockID          string `json:"mockId"`
+	MockName        string `json:"mockName,omitempty"`
+	MatchPercentage int    `json:"matchPercentage"`
+	Reason          string `json:"reason"`
 }
 
 // Notification Types

@@ -341,6 +341,10 @@ var defGetRequestLogs = ToolDefinition{
 				"description": "Filter by protocol type",
 				"enum":        []string{"http", "grpc", "mqtt", "soap", "graphql", "websocket", "sse"},
 			},
+			"unmatchedOnly": map[string]interface{}{
+				"type":        "boolean",
+				"description": "If true, only return unmatched requests with near-miss analysis showing which mocks almost matched and why they didn't",
+			},
 		},
 	},
 }

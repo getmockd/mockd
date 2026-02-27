@@ -47,6 +47,10 @@ type Filter struct {
 	// HasError filters by error presence.
 	HasError *bool
 
+	// UnmatchedOnly filters to only return requests with no matched mock.
+	// When true, only entries where MatchedMockID is empty are returned.
+	UnmatchedOnly bool
+
 	// Limit is the maximum number of entries to return.
 	Limit int
 

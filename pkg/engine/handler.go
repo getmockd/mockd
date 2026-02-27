@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -202,7 +203,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 				if jsonBytes, jsonErr := json.Marshal(errResp); jsonErr == nil {
 					_, _ = w.Write(jsonBytes)
 				}
-				h.logRequest(startTime, r, nil, bodyBytes, "", http.StatusRequestEntityTooLarge)
+				h.logRequest(startTime, r, nil, bodyBytes, "", http.StatusRequestEntityTooLarge, nil)
 				return
 			}
 			h.log.Warn("failed to read request body", "path", r.URL.Path, "error", err)
@@ -216,13 +217,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 
 	var statusCode int
 	var matchedID string
+	var nearMissInfos []requestlog.NearMissInfo
 
 	// Check stateful resources first
 	if h.statefulStore != nil {
 		if resource, itemID, pathParams := h.statefulStore.MatchPath(r.URL.Path); resource != nil {
 			statusCode = h.handleStateful(w, r, resource, itemID, pathParams, bodyBytes)
 			matchedID = "stateful:" + resource.Name()
-			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode, nil)
 			return
 		}
 	}
@@ -270,7 +272,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 		if match.HTTP != nil && match.HTTP.SSE != nil {
 			h.sseHandler.ServeHTTP(w, r, match)
 			statusCode = http.StatusOK
-			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode, nil)
 			return
 		}
 
@@ -278,7 +280,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 		if match.HTTP != nil && match.HTTP.Chunked != nil {
 			h.chunkedHandler.ServeHTTP(w, r, match)
 			statusCode = http.StatusOK
-			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode, nil)
 			return
 		}
 
@@ -288,7 +290,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 			if validationResult != nil && !validationResult.Valid {
 				statusCode = h.writeHTTPValidationError(w, validationResult, match.HTTP.Validation)
 				if statusCode != 0 {
-					h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+					h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode, nil)
 					return
 				}
 				// statusCode 0 means permissive/warn mode — continue to response
@@ -298,7 +300,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 		// Check for stateful custom operation
 		if match.HTTP != nil && match.HTTP.StatefulOperation != "" {
 			statusCode = h.handleCustomOperation(w, r, match.HTTP.StatefulOperation, bodyBytes)
-			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode, nil)
 			return
 		}
 
@@ -311,38 +313,57 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 		switch r.URL.Path {
 		case "/health":
 			h.handleHealth(w, r)
-			h.logRequest(startTime, r, headers, bodyBytes, "__mockd:health", http.StatusOK)
+			h.logRequest(startTime, r, headers, bodyBytes, "__mockd:health", http.StatusOK, nil)
 			return
 		case "/ready":
 			h.handleReady(w, r)
-			h.logRequest(startTime, r, headers, bodyBytes, "__mockd:ready", http.StatusOK)
+			h.logRequest(startTime, r, headers, bodyBytes, "__mockd:ready", http.StatusOK, nil)
 			return
 		}
-		// No match found - return 404 with informative message
+		// No match found — run near-miss analysis to help debugging
+		nearMisses := matching.CollectNearMisses(mocks, r, bodyBytes, 3)
+
 		statusCode = http.StatusNotFound
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Mockd-Near-Misses", strconv.Itoa(len(nearMisses)))
 		w.WriteHeader(statusCode)
-		// Use json.Marshal for proper escaping to prevent JSON injection
-		errResp := map[string]string{
+
+		// Build response with near-miss data
+		errResp := map[string]interface{}{
 			"error":   "no_match",
 			"message": "No mock matched the request",
 			"path":    r.URL.Path,
 			"method":  r.Method,
 		}
+		if len(nearMisses) > 0 {
+			errResp["nearMisses"] = nearMisses
+		}
 		if jsonBytes, err := json.Marshal(errResp); err == nil {
 			_, _ = w.Write(jsonBytes)
 		} else {
-			// Fallback with static message if marshaling fails
 			_, _ = w.Write([]byte(`{"error": "no_match", "message": "No mock matched the request"}`))
+		}
+
+		// Convert near-misses to log-friendly format
+		if len(nearMisses) > 0 {
+			nearMissInfos = make([]requestlog.NearMissInfo, len(nearMisses))
+			for i, nm := range nearMisses {
+				nearMissInfos[i] = requestlog.NearMissInfo{
+					MockID:          nm.MockID,
+					MockName:        nm.MockName,
+					MatchPercentage: nm.MatchPercentage,
+					Reason:          nm.Reason,
+				}
+			}
 		}
 	}
 
-	// Log the request
-	h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode)
+	// Log the request (with near-miss data if any)
+	h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode, nearMissInfos)
 }
 
 // logRequest logs a request to the logger.
-func (h *Handler) logRequest(startTime time.Time, r *http.Request, headers map[string][]string, bodyBytes []byte, matchedID string, statusCode int) {
+func (h *Handler) logRequest(startTime time.Time, r *http.Request, headers map[string][]string, bodyBytes []byte, matchedID string, statusCode int, nearMisses []requestlog.NearMissInfo) {
 	if h.logger != nil {
 		entry := &requestlog.Entry{
 			Timestamp:      startTime,
@@ -357,6 +378,7 @@ func (h *Handler) logRequest(startTime time.Time, r *http.Request, headers map[s
 			MatchedMockID:  matchedID,
 			ResponseStatus: statusCode,
 			DurationMs:     int(time.Since(startTime).Milliseconds()),
+			NearMisses:     nearMisses,
 		}
 		h.logger.Log(entry)
 	}

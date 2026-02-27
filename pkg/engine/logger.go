@@ -163,6 +163,9 @@ func matchesFilter(entry *requestlog.Entry, filter *requestlog.Filter) bool { //
 			return false
 		}
 	}
+	if filter.UnmatchedOnly && entry.MatchedMockID != "" {
+		return false
+	}
 
 	// Protocol-specific filters
 	if filter.GRPCService != "" {

@@ -210,6 +210,9 @@ func (c *Client) ListRequests(ctx context.Context, filter *requestlog.Filter) (*
 				q.Set("hasError", "false")
 			}
 		}
+		if filter.UnmatchedOnly {
+			q.Set("unmatchedOnly", "true")
+		}
 		// Protocol-specific filters
 		if filter.GRPCService != "" {
 			q.Set("grpcService", filter.GRPCService)
