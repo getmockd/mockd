@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"sync"
 	"time"
+
+	templatepkg "github.com/getmockd/mockd/pkg/template"
 )
 
 // MockResponse represents a configured mock response for MQTT
@@ -20,7 +22,7 @@ type MockResponse struct {
 type ResponseHandler struct {
 	broker    *Broker
 	responses []*MockResponse
-	sequences *SequenceStore
+	sequences *templatepkg.SequenceStore
 	mu        sync.RWMutex
 }
 
@@ -29,7 +31,7 @@ func NewResponseHandler(broker *Broker) *ResponseHandler {
 	return &ResponseHandler{
 		broker:    broker,
 		responses: make([]*MockResponse, 0),
-		sequences: NewSequenceStore(),
+		sequences: templatepkg.NewSequenceStore(),
 	}
 }
 
@@ -100,13 +102,8 @@ func (h *ResponseHandler) executeResponse(resp *MockResponse, triggerTopic strin
 	var payloadMap map[string]any
 	_ = json.Unmarshal(payload, &payloadMap)
 
-	// Build template context
-	ctx := &TemplateContext{
-		Topic:        triggerTopic,
-		WildcardVals: wildcards,
-		ClientID:     clientID,
-		Payload:      payloadMap,
-	}
+	// Build template context using the unified template engine
+	ctx := NewTemplateContext(triggerTopic, clientID, payloadMap, wildcards)
 
 	// Render response topic
 	responseTopic := resp.ResponseTopic
@@ -118,8 +115,8 @@ func (h *ResponseHandler) executeResponse(resp *MockResponse, triggerTopic strin
 		responseTopic = RenderTopicTemplate(responseTopic, wildcards)
 	}
 
-	// Render payload template (MQTT-specific variables first, then shared variables)
-	responsePayload := ProcessMQTTTemplate(resp.PayloadTemplate, ctx, h.sequences)
+	// Render payload template via unified template engine
+	responsePayload := ProcessTemplate(resp.PayloadTemplate, ctx, h.sequences)
 
 	// Prevent infinite loop: mark this topic as an active mock response.
 	// If the topic is already marked, a loop has been detected.
