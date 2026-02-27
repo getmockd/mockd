@@ -216,5 +216,5 @@ release:
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"
-  # Per-binary SHA256 sidecar files are uploaded separately in the CI workflow
-  # to maintain setup-mockd GitHub Action compatibility.
+  # Per-binary SHA256 sidecar files are extracted from checksums.txt and uploaded
+  # separately in the CI workflow to maintain setup-mockd GitHub Action compatibility.

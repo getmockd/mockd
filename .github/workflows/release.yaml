@@ -56,30 +56,27 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           SCOOP_TAP_TOKEN: ${{ secrets.SCOOP_TAP_TOKEN }}
 
-      # Generate per-binary SHA256 files for setup-mockd compatibility.
-      # Goreleaser's checksums.txt has all checksums, but setup-mockd expects
-      # individual .sha256 sidecar files (mockd-linux-amd64.sha256, etc.).
-      - name: Generate per-binary checksums
+      # Generate per-binary SHA256 sidecar files for setup-mockd compatibility.
+      # Goreleaser uploads bare binaries (mockd-linux-amd64, etc.) to the release
+      # and records their checksums in checksums.txt. setup-mockd expects individual
+      # .sha256 sidecar files alongside each bare binary, so we extract them here.
+      - name: Generate per-binary checksum sidecars
         run: |
           cd dist
-          for f in mockd-*; do
-            # Skip checksum, signature, and cert files
-            [[ "$f" == *.sha256 ]] && continue
-            [[ "$f" == *.sig ]] && continue
-            [[ "$f" == *.pem ]] && continue
-            [[ "$f" == *.json ]] && continue
-            if [ -f "$f" ]; then
-              sha256sum "$f" > "${f}.sha256"
-              echo "Created ${f}.sha256"
-            fi
+          # Extract bare binary entries from checksums.txt (mockd-{os}-{arch} pattern)
+          grep -E '^[a-f0-9]+  mockd-(linux|darwin|windows)-(amd64|arm64)' checksums.txt | while read -r checksum filename; do
+            echo "${checksum}  ${filename}" > "${filename}.sha256"
+            echo "Created ${filename}.sha256"
           done
+          echo "--- Generated sidecar files ---"
+          ls -la *.sha256 2>/dev/null || echo "No .sha256 files generated"
 
-      - name: Upload per-binary checksums to release
+      - name: Upload per-binary checksum sidecars to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          for f in dist/*.sha256; do
+          for f in dist/mockd-*.sha256; do
             [ -f "$f" ] || continue
             echo "Uploading $(basename "$f")"
             gh release upload "$TAG" "$f" --clobber
