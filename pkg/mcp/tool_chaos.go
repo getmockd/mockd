@@ -1,8 +1,18 @@
 package mcp
 
+import "fmt"
+
 // =============================================================================
 // Chaos Engineering Handlers
 // =============================================================================
+
+// formatDurationMs converts a millisecond value to a Go duration string (e.g., "500ms", "2s").
+func formatDurationMs(ms float64) string {
+	if ms >= 1000 && float64(int(ms)) == ms && int(ms)%1000 == 0 {
+		return fmt.Sprintf("%ds", int(ms)/1000)
+	}
+	return fmt.Sprintf("%dms", int(ms))
+}
 
 // handleGetChaosConfig retrieves the current chaos configuration and stats.
 func handleGetChaosConfig(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
@@ -33,48 +43,71 @@ func handleSetChaosConfig(args map[string]interface{}, session *MCPSession, serv
 		return ToolResultError("admin client not available"), nil
 	}
 
-	// Check if a named profile was requested
+	// Check if a named profile was requested — use the dedicated admin endpoint.
 	profile := getString(args, "profile", "")
 	if profile != "" {
-		// TODO: Support chaos profiles from pkg/chaos/profiles.go when available.
-		// For now, map well-known profile names to inline configs.
-		profileConfig := resolveProfile(profile)
-		if profileConfig == nil {
-			return ToolResultError("unknown chaos profile: " + profile + ". Supported: slow-api, degraded, flaky, offline, timeout, rate-limited, mobile-3g, satellite, dns-flaky, overloaded"), nil
-		}
-		if err := client.SetChaosConfig(profileConfig); err != nil {
+		if err := client.ApplyChaosProfile(profile); err != nil {
 			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-			return ToolResultError("failed to set chaos config: " + adminError(err, session.GetAdminURL())), nil
+			return ToolResultError("failed to apply chaos profile: " + adminError(err, session.GetAdminURL())), nil
 		}
 		return ToolResultJSON(map[string]interface{}{
 			"applied": true,
 			"profile": profile,
-			"config":  profileConfig,
 		})
 	}
 
-	// Build config from individual params
-	chaosConfig := make(map[string]interface{})
+	// Build config matching the admin API's types.ChaosConfig shape:
+	//   { "enabled": bool, "latency": {...}, "errorRate": {...}, "bandwidth": {...} }
+	chaosConfig := map[string]interface{}{
+		"enabled": getBool(args, "enabled", true),
+	}
 
-	chaosConfig["enabled"] = getBool(args, "enabled", true)
+	// Latency: admin expects { "min": "100ms", "max": "500ms", "probability": 1.0 }
+	// MCP tool accepts latency_ms (fixed) or latency_min_ms/latency_max_ms (range) in milliseconds.
+	latencyMs := getFloat(args, "latency_ms", 0)
+	latencyMinMs := getFloat(args, "latency_min_ms", 0)
+	latencyMaxMs := getFloat(args, "latency_max_ms", 0)
 
-	if v, ok := args["latency_ms"]; ok {
-		chaosConfig["latencyMs"] = v
+	if latencyMs > 0 {
+		// Fixed latency: use the same value for min and max.
+		chaosConfig["latency"] = map[string]interface{}{
+			"min":         formatDurationMs(latencyMs),
+			"max":         formatDurationMs(latencyMs),
+			"probability": 1.0,
+		}
+	} else if latencyMinMs > 0 || latencyMaxMs > 0 {
+		// Range latency.
+		if latencyMinMs <= 0 {
+			latencyMinMs = latencyMaxMs
+		}
+		if latencyMaxMs <= 0 {
+			latencyMaxMs = latencyMinMs
+		}
+		chaosConfig["latency"] = map[string]interface{}{
+			"min":         formatDurationMs(latencyMinMs),
+			"max":         formatDurationMs(latencyMaxMs),
+			"probability": 1.0,
+		}
 	}
-	if v, ok := args["latency_min_ms"]; ok {
-		chaosConfig["latencyMinMs"] = v
+
+	// Error rate: admin expects { "probability": 0.2, "statusCodes": [500, 502] }
+	errorRate := getFloat(args, "error_rate", 0)
+	if errorRate > 0 {
+		errConfig := map[string]interface{}{
+			"probability": errorRate,
+		}
+		if codes, ok := args["error_codes"]; ok {
+			errConfig["statusCodes"] = codes
+		}
+		chaosConfig["errorRate"] = errConfig
 	}
-	if v, ok := args["latency_max_ms"]; ok {
-		chaosConfig["latencyMaxMs"] = v
-	}
-	if v, ok := args["error_rate"]; ok {
-		chaosConfig["errorRate"] = v
-	}
-	if v, ok := args["error_codes"]; ok {
-		chaosConfig["errorCodes"] = v
-	}
-	if v, ok := args["bandwidth_bytes_per_sec"]; ok {
-		chaosConfig["bandwidthBytesPerSec"] = v
+
+	// Bandwidth: admin expects { "bytesPerSecond": 50000, "probability": 1.0 }
+	if bw, ok := args["bandwidth_bytes_per_sec"]; ok {
+		chaosConfig["bandwidth"] = map[string]interface{}{
+			"bytesPerSecond": bw,
+			"probability":    1.0,
+		}
 	}
 
 	if err := client.SetChaosConfig(chaosConfig); err != nil {
@@ -104,69 +137,4 @@ func handleResetChaosStats(args map[string]interface{}, session *MCPSession, ser
 		"reset":   true,
 		"message": "chaos statistics counters reset to zero",
 	})
-}
-
-// resolveProfile maps a named chaos profile to its configuration.
-// Returns nil if the profile name is not recognized.
-func resolveProfile(name string) map[string]interface{} {
-	profiles := map[string]map[string]interface{}{
-		"slow-api": {
-			"enabled":      true,
-			"latencyMinMs": 500,
-			"latencyMaxMs": 2000,
-		},
-		"degraded": {
-			"enabled":      true,
-			"latencyMinMs": 100,
-			"latencyMaxMs": 500,
-			"errorRate":    0.05,
-			"errorCodes":   []int{500, 503},
-		},
-		"flaky": {
-			"enabled":    true,
-			"errorRate":  0.2,
-			"errorCodes": []int{500, 502, 503},
-		},
-		"offline": {
-			"enabled":    true,
-			"errorRate":  1.0,
-			"errorCodes": []int{503},
-		},
-		"timeout": {
-			"enabled":      true,
-			"latencyMinMs": 30000,
-			"latencyMaxMs": 60000,
-		},
-		"rate-limited": {
-			"enabled":    true,
-			"errorRate":  0.5,
-			"errorCodes": []int{429},
-		},
-		"mobile-3g": {
-			"enabled":              true,
-			"latencyMinMs":         100,
-			"latencyMaxMs":         500,
-			"bandwidthBytesPerSec": 50000,
-		},
-		"satellite": {
-			"enabled":              true,
-			"latencyMinMs":         500,
-			"latencyMaxMs":         1500,
-			"bandwidthBytesPerSec": 10000,
-		},
-		"dns-flaky": {
-			"enabled":    true,
-			"errorRate":  0.1,
-			"errorCodes": []int{502, 504},
-		},
-		"overloaded": {
-			"enabled":      true,
-			"latencyMinMs": 1000,
-			"latencyMaxMs": 5000,
-			"errorRate":    0.3,
-			"errorCodes":   []int{500, 502, 503, 504},
-		},
-	}
-
-	return profiles[name]
 }

@@ -138,6 +138,20 @@ func getInt(args map[string]interface{}, key string, defaultVal int) int {
 	return defaultVal
 }
 
+func getFloat(args map[string]interface{}, key string, defaultVal float64) float64 {
+	if v, ok := args[key]; ok {
+		switch n := v.(type) {
+		case float64:
+			return n
+		case int:
+			return float64(n)
+		case int64:
+			return float64(n)
+		}
+	}
+	return defaultVal
+}
+
 func getBool(args map[string]interface{}, key string, defaultVal bool) bool {
 	if v, ok := args[key]; ok {
 		if b, ok := v.(bool); ok {
