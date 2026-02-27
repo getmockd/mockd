@@ -3,13 +3,15 @@ title: JSON Schema Reference
 description: JSON Schema for mockd configuration validation, including editor setup and programmatic validation examples.
 ---
 
-mockd provides JSON Schema for configuration validation. Use this schema with your editor for autocompletion and validation.
+mockd provides a JSON Schema (Draft-07) for configuration validation. Use this schema with your editor for instant autocompletion and validation of `mockd.yaml` and `mockd.json` config files.
 
 ## Schema URL
 
 ```
-https://getmockd.github.io/mockd/schema/config.json
+https://raw.githubusercontent.com/getmockd/mockd/main/schema/mockd.schema.json
 ```
+
+The schema covers all 7 protocols (HTTP, GraphQL, gRPC, WebSocket, MQTT, SOAP, OAuth), stateful resources, custom operations, chaos config, and server settings.
 
 ## Editor Setup
 
@@ -21,29 +23,47 @@ Add to your `.vscode/settings.json`:
 {
   "json.schemas": [
     {
-      "fileMatch": ["mockd.json", "mocks.json", "**/mocks/*.json"],
-      "url": "https://getmockd.github.io/mockd/schema/config.json"
+      "fileMatch": ["mockd.json", "mockd.yaml", "mockd.yml", "mocks.json", "mocks.yaml"],
+      "url": "https://raw.githubusercontent.com/getmockd/mockd/main/schema/mockd.schema.json"
     }
-  ]
+  ],
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/getmockd/mockd/main/schema/mockd.schema.json": ["mockd.yaml", "mockd.yml", "mocks.yaml"]
+  }
 }
 ```
 
-Or add directly in your config file:
+Or add directly in your JSON config file:
 
 ```json
 {
-  "$schema": "https://getmockd.github.io/mockd/schema/config.json",
-  "mocks": [...]
+  "$schema": "https://raw.githubusercontent.com/getmockd/mockd/main/schema/mockd.schema.json",
+  "mocks": []
 }
+```
+
+For YAML config files, add a schema comment at the top:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/getmockd/mockd/main/schema/mockd.schema.json
+mocks:
+  - type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/users
+      response:
+        statusCode: 200
+        body: '[]'
 ```
 
 ### JetBrains IDEs
 
 1. Open Settings -> Languages & Frameworks -> Schemas and DTDs -> JSON Schema Mappings
-2. Add new mapping with URL: `https://getmockd.github.io/mockd/schema/config.json`
-3. Set file pattern: `mockd.json`, `mocks.json`
+2. Add new mapping with URL: `https://raw.githubusercontent.com/getmockd/mockd/main/schema/mockd.schema.json`
+3. Set file pattern: `mockd.json`, `mockd.yaml`, `mocks.json`, `mocks.yaml`
 
-### Vim/Neovim (with coc.nvim)
+### Vim/Neovim (with coc.nvim or nvim-lspconfig)
 
 Add to `coc-settings.json`:
 
@@ -52,7 +72,7 @@ Add to `coc-settings.json`:
   "json.schemas": [
     {
       "fileMatch": ["mockd.json", "mocks.json"],
-      "url": "https://getmockd.github.io/mockd/schema/config.json"
+      "url": "https://raw.githubusercontent.com/getmockd/mockd/main/schema/mockd.schema.json"
     }
   ]
 }

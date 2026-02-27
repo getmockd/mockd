@@ -1,0 +1,731 @@
+{
+  "$id": "https://json.schemastore.org/mockd.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "mockd configuration",
+  "description": "Configuration file for mockd, a multi-protocol API mock server supporting HTTP, GraphQL, gRPC, WebSocket, MQTT, SSE, SOAP, and OAuth",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Configuration file version"
+    },
+    "name": {
+      "type": "string",
+      "description": "Name of this mock collection"
+    },
+    "mocks": {
+      "type": "array",
+      "description": "List of mock endpoint definitions",
+      "items": {
+        "$ref": "#/definitions/mock"
+      }
+    },
+    "statefulResources": {
+      "type": "array",
+      "description": "Stateful CRUD resources that persist data across requests",
+      "items": {
+        "$ref": "#/definitions/statefulResource"
+      }
+    },
+    "customOperations": {
+      "type": "array",
+      "description": "Multi-step operations on stateful resources",
+      "items": {
+        "$ref": "#/definitions/customOperation"
+      }
+    },
+    "serverConfig": {
+      "$ref": "#/definitions/serverConfig"
+    }
+  },
+  "definitions": {
+    "mock": {
+      "type": "object",
+      "description": "A mock endpoint definition. The 'type' field determines which protocol spec to use.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this mock. Auto-generated if omitted."
+        },
+        "type": {
+          "type": "string",
+          "description": "Protocol type for this mock",
+          "enum": ["http", "websocket", "graphql", "grpc", "soap", "mqtt", "oauth"]
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for this mock"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of what this mock does"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether this mock is active (default: true)",
+          "default": true
+        },
+        "folderId": {
+          "type": "string",
+          "description": "Folder this mock belongs to"
+        },
+        "workspaceId": {
+          "type": "string",
+          "description": "Workspace this mock belongs to"
+        },
+        "http": {
+          "$ref": "#/definitions/httpSpec"
+        },
+        "websocket": {
+          "$ref": "#/definitions/websocketSpec"
+        },
+        "graphql": {
+          "$ref": "#/definitions/graphqlSpec"
+        },
+        "grpc": {
+          "$ref": "#/definitions/grpcSpec"
+        },
+        "soap": {
+          "$ref": "#/definitions/soapSpec"
+        },
+        "mqtt": {
+          "$ref": "#/definitions/mqttSpec"
+        },
+        "oauth": {
+          "$ref": "#/definitions/oauthSpec"
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "httpSpec": {
+      "type": "object",
+      "description": "HTTP mock specification",
+      "properties": {
+        "priority": {
+          "type": "integer",
+          "description": "Match priority (higher wins when multiple mocks match)",
+          "default": 0
+        },
+        "matcher": {
+          "$ref": "#/definitions/httpMatcher"
+        },
+        "response": {
+          "$ref": "#/definitions/httpResponse"
+        },
+        "sse": {
+          "type": "object",
+          "description": "Server-Sent Events configuration (mutually exclusive with response)",
+          "additionalProperties": true,
+          "properties": {
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string", "description": "Event type" },
+                  "data": { "description": "Event data (string or object)" },
+                  "id": { "type": "string" },
+                  "delay": { "type": "integer", "description": "Delay in ms before this event" }
+                }
+              }
+            }
+          }
+        },
+        "chunked": {
+          "type": "object",
+          "description": "Chunked transfer encoding configuration",
+          "additionalProperties": true,
+          "properties": {
+            "chunkSize": { "type": "integer" },
+            "chunkDelay": { "type": "integer", "description": "Delay between chunks in ms" },
+            "data": { "type": "string" },
+            "dataFile": { "type": "string" }
+          }
+        },
+        "validation": {
+          "$ref": "#/definitions/requestValidation"
+        },
+        "statefulOperation": {
+          "type": "string",
+          "description": "Name of a custom operation to execute instead of a static response"
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "httpMatcher": {
+      "type": "object",
+      "description": "Request matching rules",
+      "properties": {
+        "method": {
+          "type": "string",
+          "description": "HTTP method to match",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+        },
+        "path": {
+          "type": "string",
+          "description": "URL path to match. Supports {param} patterns (e.g., /api/users/{id})"
+        },
+        "pathPattern": {
+          "type": "string",
+          "description": "Regex pattern for path matching (mutually exclusive with path)"
+        },
+        "headers": {
+          "type": "object",
+          "description": "Headers to match (glob patterns with * supported)",
+          "additionalProperties": { "type": "string" }
+        },
+        "queryParams": {
+          "type": "object",
+          "description": "Query parameters to match (exact match)",
+          "additionalProperties": { "type": "string" }
+        },
+        "bodyContains": {
+          "type": "string",
+          "description": "Match requests containing this substring in the body"
+        },
+        "bodyEquals": {
+          "type": "string",
+          "description": "Match requests with this exact body"
+        },
+        "bodyPattern": {
+          "type": "string",
+          "description": "Regex pattern to match against the request body"
+        },
+        "bodyJsonPath": {
+          "type": "object",
+          "description": "JSONPath expressions to match against the request body",
+          "additionalProperties": true
+        },
+        "mtls": {
+          "type": "object",
+          "description": "mTLS client certificate matching",
+          "additionalProperties": true,
+          "properties": {
+            "requireAuth": { "type": "boolean" },
+            "cn": { "type": "string", "description": "Common Name to match" },
+            "cnPattern": { "type": "string", "description": "Regex pattern for CN" },
+            "ou": { "type": "string" },
+            "o": { "type": "string" },
+            "fingerprint": { "type": "string" }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "httpResponse": {
+      "type": "object",
+      "description": "Response configuration. Supports template expressions like {{uuid}}, {{faker.name}}, {{request.Path}}",
+      "properties": {
+        "statusCode": {
+          "type": "integer",
+          "description": "HTTP status code",
+          "minimum": 100,
+          "maximum": 599,
+          "default": 200
+        },
+        "headers": {
+          "type": "object",
+          "description": "Response headers",
+          "additionalProperties": { "type": "string" }
+        },
+        "body": {
+          "description": "Response body (string or JSON object). Supports template expressions: {{uuid}}, {{faker.name}}, {{faker.email}}, {{now}}, {{random.Int 1 100}}, {{request.Method}}, etc."
+        },
+        "bodyFile": {
+          "type": "string",
+          "description": "Path to a file to use as the response body (relative to config file)"
+        },
+        "delayMs": {
+          "type": "integer",
+          "description": "Response delay in milliseconds",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "websocketSpec": {
+      "type": "object",
+      "description": "WebSocket mock specification",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "description": "WebSocket endpoint path" },
+        "subprotocols": { "type": "array", "items": { "type": "string" } },
+        "echoMode": { "type": "boolean", "description": "Echo received messages back" },
+        "maxMessageSize": { "type": "integer" },
+        "maxConnections": { "type": "integer" },
+        "idleTimeout": { "type": "string", "description": "Duration string (e.g., '30s')" },
+        "matchers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "match": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string", "enum": ["exact", "contains", "regex", "jsonpath"] },
+                  "value": { "type": "string" }
+                }
+              },
+              "response": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string", "enum": ["text", "json", "binary"] },
+                  "value": { "description": "Response value" },
+                  "delay": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "heartbeat": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval": { "type": "string" }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "graphqlSpec": {
+      "type": "object",
+      "description": "GraphQL mock specification",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "description": "GraphQL endpoint path" },
+        "schema": { "type": "string", "description": "Inline GraphQL SDL schema" },
+        "schemaFile": { "type": "string", "description": "Path to GraphQL schema file" },
+        "introspection": { "type": "boolean", "description": "Enable introspection queries" },
+        "resolvers": {
+          "type": "object",
+          "description": "Map of operation names to resolver configs",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "response": { "description": "Response data (string or object)" },
+              "delay": { "type": "string" },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "message": { "type": "string" },
+                  "path": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        },
+        "subscriptions": {
+          "type": "object",
+          "description": "Map of subscription names to configs",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "data": { "description": "Event data" },
+                    "delay": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "grpcSpec": {
+      "type": "object",
+      "description": "gRPC mock specification",
+      "properties": {
+        "port": { "type": "integer", "description": "gRPC server port" },
+        "protoFile": { "type": "string", "description": "Path to .proto file" },
+        "protoFiles": { "type": "array", "items": { "type": "string" } },
+        "importPaths": { "type": "array", "items": { "type": "string" } },
+        "reflection": { "type": "boolean", "description": "Enable gRPC reflection" },
+        "services": {
+          "type": "object",
+          "description": "Map of service names to configs",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "methods": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "response": { "description": "Response data" },
+                    "responses": { "type": "array", "description": "Streaming responses" },
+                    "delay": { "type": "string" },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": { "type": "string", "description": "gRPC status code (e.g., NOT_FOUND)" },
+                        "message": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "soapSpec": {
+      "type": "object",
+      "description": "SOAP mock specification",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "description": "SOAP endpoint path" },
+        "wsdlFile": { "type": "string", "description": "Path to WSDL file" },
+        "wsdl": { "type": "string", "description": "Inline WSDL content" },
+        "operations": {
+          "type": "object",
+          "description": "Map of operation names to configs",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "soapAction": { "type": "string" },
+              "response": { "type": "string", "description": "XML response body" },
+              "delay": { "type": "string" },
+              "statefulResource": { "type": "string", "description": "Stateful resource to read/write" },
+              "statefulAction": { "type": "string", "enum": ["read", "create", "update", "delete", "list"] },
+              "fault": {
+                "type": "object",
+                "properties": {
+                  "code": { "type": "string" },
+                  "message": { "type": "string" },
+                  "detail": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "mqttSpec": {
+      "type": "object",
+      "description": "MQTT mock broker specification",
+      "properties": {
+        "port": { "type": "integer", "description": "MQTT broker port" },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "certFile": { "type": "string" },
+            "keyFile": { "type": "string" }
+          }
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "users": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "username": { "type": "string" },
+                  "password": { "type": "string" },
+                  "acl": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "topic": { "type": "string" },
+                        "access": { "type": "string", "enum": ["read", "write", "readwrite"] }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "topics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["topic"],
+            "properties": {
+              "topic": { "type": "string", "description": "MQTT topic pattern" },
+              "qos": { "type": "integer", "minimum": 0, "maximum": 2 },
+              "retain": { "type": "boolean" },
+              "messages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "payload": { "type": "string" },
+                    "delay": { "type": "string" },
+                    "repeat": { "type": "boolean" },
+                    "interval": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "oauthSpec": {
+      "type": "object",
+      "description": "OAuth 2.0 / OIDC mock provider specification",
+      "required": ["issuer"],
+      "properties": {
+        "issuer": { "type": "string", "description": "OAuth issuer URL" },
+        "tokenExpiry": { "type": "string", "description": "Token expiry duration (e.g., '1h')" },
+        "refreshExpiry": { "type": "string" },
+        "defaultScopes": { "type": "array", "items": { "type": "string" } },
+        "clients": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["clientId", "clientSecret"],
+            "properties": {
+              "clientId": { "type": "string" },
+              "clientSecret": { "type": "string" },
+              "redirectUris": { "type": "array", "items": { "type": "string" } },
+              "grantTypes": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "users": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["username", "password"],
+            "properties": {
+              "username": { "type": "string" },
+              "password": { "type": "string" },
+              "claims": { "type": "object", "additionalProperties": true }
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "statefulResource": {
+      "type": "object",
+      "description": "A stateful CRUD resource that persists data across requests",
+      "required": ["name", "basePath"],
+      "properties": {
+        "name": { "type": "string", "description": "Resource name (used in URLs)" },
+        "basePath": { "type": "string", "description": "URL base path (e.g., /api/users)" },
+        "idField": { "type": "string", "description": "Field to use as item ID", "default": "id" },
+        "maxItems": { "type": "integer", "description": "Maximum items in the collection" },
+        "seedData": {
+          "type": "array",
+          "description": "Initial data to populate the resource",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "validation": {
+          "type": "object",
+          "description": "Validation rules for create/update operations",
+          "additionalProperties": true,
+          "properties": {
+            "auto": { "type": "boolean", "description": "Auto-infer validation from seed data" },
+            "required": { "type": "array", "items": { "type": "string" } },
+            "fields": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/definitions/fieldValidator" }
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "customOperation": {
+      "type": "object",
+      "description": "A multi-step operation on stateful resources (e.g., TransferFunds)",
+      "required": ["name", "steps"],
+      "properties": {
+        "name": { "type": "string", "description": "Operation name" },
+        "consistency": { "type": "string", "enum": ["best_effort", "atomic"], "default": "best_effort" },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": { "type": "string", "enum": ["read", "update", "delete", "create", "set"] },
+              "resource": { "type": "string" },
+              "id": { "type": "string", "description": "Item ID (supports expressions)" },
+              "as": { "type": "string", "description": "Variable name to store result" },
+              "set": { "type": "object", "additionalProperties": { "type": "string" } },
+              "var": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        },
+        "response": {
+          "type": "object",
+          "description": "Expression map for the response",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "serverConfig": {
+      "type": "object",
+      "description": "Server-level configuration for ports, TLS, CORS, rate limiting, etc.",
+      "properties": {
+        "httpPort": { "type": "integer", "default": 4280 },
+        "httpsPort": { "type": "integer", "default": 0 },
+        "adminPort": { "type": "integer", "default": 4290 },
+        "logRequests": { "type": "boolean" },
+        "maxLogEntries": { "type": "integer" },
+        "readTimeout": { "type": "integer", "description": "Read timeout in seconds" },
+        "writeTimeout": { "type": "integer", "description": "Write timeout in seconds" },
+        "maxConnections": { "type": "integer" },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "certFile": { "type": "string" },
+            "keyFile": { "type": "string" },
+            "autoGenerateCert": { "type": "boolean" }
+          }
+        },
+        "cors": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "allowOrigins": { "type": "array", "items": { "type": "string" } },
+            "allowMethods": { "type": "array", "items": { "type": "string" } },
+            "allowHeaders": { "type": "array", "items": { "type": "string" } },
+            "allowCredentials": { "type": "boolean" },
+            "maxAge": { "type": "integer" }
+          }
+        },
+        "rateLimit": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "requestsPerSecond": { "type": "number" },
+            "burstSize": { "type": "integer" }
+          }
+        },
+        "chaos": {
+          "$ref": "#/definitions/chaosConfig"
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "chaosConfig": {
+      "type": "object",
+      "description": "Chaos fault injection configuration",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "global": {
+          "type": "object",
+          "properties": {
+            "latency": {
+              "type": "object",
+              "properties": {
+                "min": { "type": "string" },
+                "max": { "type": "string" },
+                "probability": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            },
+            "errorRate": {
+              "type": "object",
+              "properties": {
+                "probability": { "type": "number", "minimum": 0, "maximum": 1 },
+                "statusCodes": { "type": "array", "items": { "type": "integer" } }
+              }
+            },
+            "bandwidth": {
+              "type": "object",
+              "properties": {
+                "bytesPerSecond": { "type": "integer" },
+                "probability": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pathPattern": { "type": "string" },
+              "methods": { "type": "array", "items": { "type": "string" } },
+              "probability": { "type": "number", "minimum": 0, "maximum": 1 },
+              "faults": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": { "type": "string", "enum": ["latency", "error", "timeout", "corrupt_body", "empty_response", "slow_body", "connection_reset", "partial_response"] },
+                    "probability": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "config": { "type": "object", "additionalProperties": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "requestValidation": {
+      "type": "object",
+      "description": "Request validation rules",
+      "properties": {
+        "required": { "type": "array", "items": { "type": "string" } },
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/fieldValidator" }
+        },
+        "mode": { "type": "string", "enum": ["strict", "warn", "permissive"] },
+        "failStatus": { "type": "integer" }
+      },
+      "additionalProperties": true
+    },
+
+    "fieldValidator": {
+      "type": "object",
+      "description": "Field validation rules",
+      "properties": {
+        "type": { "type": "string", "enum": ["string", "number", "integer", "boolean", "array", "object"] },
+        "required": { "type": "boolean" },
+        "nullable": { "type": "boolean" },
+        "minLength": { "type": "integer" },
+        "maxLength": { "type": "integer" },
+        "pattern": { "type": "string" },
+        "format": { "type": "string", "enum": ["email", "uuid", "date", "datetime", "uri", "ipv4", "ipv6", "hostname"] },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "minItems": { "type": "integer" },
+        "maxItems": { "type": "integer" },
+        "uniqueItems": { "type": "boolean" },
+        "enum": { "type": "array" },
+        "message": { "type": "string", "description": "Custom error message" }
+      },
+      "additionalProperties": true
+    }
+  }
+}
