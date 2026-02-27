@@ -9,13 +9,15 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	templatepkg "github.com/getmockd/mockd/pkg/template"
 )
 
 // Simulator generates mock IoT data by publishing messages to configured topics
 type Simulator struct {
 	broker              *Broker
 	topics              []TopicConfig
-	sequences           *SequenceStore
+	sequences           *templatepkg.SequenceStore
 	done                chan struct{}
 	wg                  sync.WaitGroup
 	perTopicDeviceSims  map[string]*PerTopicDeviceSimulator // key: topic pattern
@@ -27,7 +29,7 @@ type PerTopicDeviceSimulator struct {
 	broker       *Broker
 	topic        TopicConfig
 	settings     *DeviceSimulationSettings
-	sequences    *SequenceStore
+	sequences    *templatepkg.SequenceStore
 	devices      []*perTopicSimulatedDevice
 	done         chan struct{}
 	wg           sync.WaitGroup
@@ -59,9 +61,9 @@ type PerTopicDeviceSimulationStatus struct {
 }
 
 // NewSimulator creates a new IoT device simulator
-func NewSimulator(broker *Broker, topics []TopicConfig, sequences *SequenceStore) *Simulator {
+func NewSimulator(broker *Broker, topics []TopicConfig, sequences *templatepkg.SequenceStore) *Simulator {
 	if sequences == nil {
-		sequences = NewSequenceStore()
+		sequences = templatepkg.NewSequenceStore()
 	}
 	return &Simulator{
 		broker:             broker,
@@ -138,9 +140,9 @@ func (s *Simulator) GetPerTopicDeviceSimulationStatus() map[string]*PerTopicDevi
 }
 
 // NewPerTopicDeviceSimulator creates a new per-topic device simulator
-func NewPerTopicDeviceSimulator(broker *Broker, topic TopicConfig, sequences *SequenceStore) *PerTopicDeviceSimulator {
+func NewPerTopicDeviceSimulator(broker *Broker, topic TopicConfig, sequences *templatepkg.SequenceStore) *PerTopicDeviceSimulator {
 	if sequences == nil {
-		sequences = NewSequenceStore()
+		sequences = templatepkg.NewSequenceStore()
 	}
 	return &PerTopicDeviceSimulator{
 		broker:       broker,
@@ -382,13 +384,10 @@ func (p *PerTopicDeviceSimulator) generatePayload(deviceID string) []byte {
 		return []byte(fmt.Sprintf(`{"deviceId":"%s","timestamp":%d}`, deviceID, time.Now().UnixMilli()))
 	}
 
-	// Use the template engine
-	ctx := &TemplateContext{
-		DeviceID: deviceID,
-		Topic:    p.generateTopic(deviceID),
-	}
+	// Use the unified template engine
+	ctx := NewDeviceTemplateContext(deviceID, p.generateTopic(deviceID))
 
-	rendered := ProcessMQTTTemplate(payloadTemplate, ctx, p.sequences)
+	rendered := ProcessTemplate(payloadTemplate, ctx, p.sequences)
 	if rendered == "" {
 		return []byte(payloadTemplate)
 	}
@@ -456,11 +455,9 @@ func (s *Simulator) publishMessage(topic TopicConfig, msg MessageConfig) {
 
 // processPayload processes the payload through the template engine
 func (s *Simulator) processPayload(rawPayload, topicName string) []byte {
-	ctx := &TemplateContext{
-		Topic: topicName,
-	}
+	ctx := NewDeviceTemplateContext("", topicName)
 
-	rendered := ProcessMQTTTemplate(rawPayload, ctx, s.sequences)
+	rendered := ProcessTemplate(rawPayload, ctx, s.sequences)
 	if rendered == "" {
 		slog.Default().Warn("MQTT simulator: template rendered empty, using raw payload", "topic", topicName)
 		return []byte(rawPayload)
@@ -583,7 +580,7 @@ func (d *DeviceSimulator) runGenerator(subTopic string, generator MessageGenerat
 type MultiDeviceSimulator struct {
 	broker    *Broker
 	config    *MultiDeviceSimulationConfig
-	sequences *SequenceStore
+	sequences *templatepkg.SequenceStore
 	devices   []*simulatedDevice
 	done      chan struct{}
 	wg        sync.WaitGroup
@@ -611,7 +608,7 @@ func NewMultiDeviceSimulator(broker *Broker, config *MultiDeviceSimulationConfig
 	return &MultiDeviceSimulator{
 		broker:    broker,
 		config:    config,
-		sequences: NewSequenceStore(),
+		sequences: templatepkg.NewSequenceStore(),
 		done:      make(chan struct{}),
 	}, nil
 }
@@ -842,12 +839,10 @@ func (m *MultiDeviceSimulator) generatePayload(deviceID string) []byte {
 		return []byte(fmt.Sprintf(`{"deviceId":"%s","timestamp":%d}`, deviceID, time.Now().UnixMilli()))
 	}
 
-	// Use the template engine
-	ctx := &TemplateContext{
-		DeviceID: deviceID,
-	}
+	// Use the unified template engine
+	ctx := NewDeviceTemplateContext(deviceID, "")
 
-	rendered := ProcessMQTTTemplate(m.config.PayloadTemplate, ctx, m.sequences)
+	rendered := ProcessTemplate(m.config.PayloadTemplate, ctx, m.sequences)
 	if rendered == "" {
 		return []byte(m.config.PayloadTemplate)
 	}

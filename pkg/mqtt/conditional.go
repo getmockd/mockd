@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	templatepkg "github.com/getmockd/mockd/pkg/template"
 	"github.com/ohler55/ojg/jp"
 	"github.com/ohler55/ojg/oj"
 )
@@ -336,7 +337,7 @@ type ConditionalResponseHandler struct {
 	broker               *Broker
 	conditionalResponses []*ConditionalResponse
 	evaluator            *ConditionEvaluator
-	sequences            *SequenceStore
+	sequences            *templatepkg.SequenceStore
 	mu                   sync.RWMutex
 }
 
@@ -346,7 +347,7 @@ func NewConditionalResponseHandler(broker *Broker) *ConditionalResponseHandler {
 		broker:               broker,
 		conditionalResponses: make([]*ConditionalResponse, 0),
 		evaluator:            NewConditionEvaluator(),
-		sequences:            NewSequenceStore(),
+		sequences:            templatepkg.NewSequenceStore(),
 	}
 }
 
@@ -493,13 +494,8 @@ func (h *ConditionalResponseHandler) executeResponse(cfg responseConfig, trigger
 	var payloadMap map[string]any
 	_ = json.Unmarshal(payload, &payloadMap)
 
-	// Build template context
-	ctx := &TemplateContext{
-		Topic:        triggerTopic,
-		WildcardVals: wildcards,
-		ClientID:     clientID,
-		Payload:      payloadMap,
-	}
+	// Build template context using the unified template engine
+	ctx := NewTemplateContext(triggerTopic, clientID, payloadMap, wildcards)
 
 	// Render response topic
 	responseTopic := cfg.responseTopic
@@ -509,8 +505,8 @@ func (h *ConditionalResponseHandler) executeResponse(cfg responseConfig, trigger
 		responseTopic = RenderTopicTemplate(responseTopic, wildcards)
 	}
 
-	// Render payload template (MQTT-specific variables first, then shared variables)
-	responsePayload := ProcessMQTTTemplate(cfg.payloadTemplate, ctx, h.sequences)
+	// Render payload template via unified template engine
+	responsePayload := ProcessTemplate(cfg.payloadTemplate, ctx, h.sequences)
 
 	// Prevent infinite loop: mark this topic as an active mock response.
 	// If the topic is already marked, a loop has been detected.
