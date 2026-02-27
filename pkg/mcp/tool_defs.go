@@ -50,12 +50,18 @@ func allToolDefinitions() []ToolDefinition {
 		defResetVerification,
 
 		// =====================================================================
-		// Stateful Resources (4 tools)
+		// Stateful Resources (5 tools)
 		// =====================================================================
+		defGetStateOverview,
 		defListStatefulItems,
 		defGetStatefulItem,
 		defCreateStatefulItem,
 		defResetStatefulData,
+
+		// =====================================================================
+		// Custom Operations (1 multiplexed tool)
+		// =====================================================================
+		defManageCustomOperation,
 	}
 }
 
@@ -415,6 +421,11 @@ var defGetRequestLogs = ToolDefinition{
 				"type":        "string",
 				"description": "Filter by mock ID that handled the request",
 			},
+			"protocol": map[string]interface{}{
+				"type":        "string",
+				"description": "Filter by protocol type",
+				"enum":        []string{"http", "grpc", "mqtt", "soap", "graphql", "websocket", "sse"},
+			},
 		},
 	},
 }
@@ -650,5 +661,50 @@ var defResetVerification = ToolDefinition{
 				"description": "Mock ID to reset. Omit to reset ALL mocks.",
 			},
 		},
+	},
+}
+
+// =============================================================================
+// Stateful Overview Definition
+// =============================================================================
+
+var defGetStateOverview = ToolDefinition{
+	Name:        "get_state_overview",
+	Description: "Get a summary of all stateful mock resources — names, item counts, and types. Use this to see what stateful data exists before querying specific resources with list_stateful_items.",
+	InputSchema: map[string]interface{}{
+		"type":       "object",
+		"properties": map[string]interface{}{},
+	},
+}
+
+// =============================================================================
+// Custom Operations Definition
+// =============================================================================
+
+var defManageCustomOperation = ToolDefinition{
+	Name:        "manage_custom_operation",
+	Description: "Manage custom operations on stateful resources. Use 'list' to see all operations, 'get' for details, 'register' to create new ones, 'delete' to remove, or 'execute' to run an operation with input data.",
+	InputSchema: map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"action": map[string]interface{}{
+				"type":        "string",
+				"description": "Operation action",
+				"enum":        []string{"list", "get", "register", "delete", "execute"},
+			},
+			"name": map[string]interface{}{
+				"type":        "string",
+				"description": "Operation name (required for get, delete, execute)",
+			},
+			"definition": map[string]interface{}{
+				"type":        "object",
+				"description": "Operation definition (required for register). Must include name, steps, and optionally consistency and response.",
+			},
+			"input": map[string]interface{}{
+				"type":        "object",
+				"description": "Input data for execute action",
+			},
+		},
+		"required": []string{"action"},
 	},
 }

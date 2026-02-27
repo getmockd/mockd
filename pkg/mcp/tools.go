@@ -69,10 +69,14 @@ func (r *ToolRegistry) registerBuiltinTools() {
 		"reset_verification":   handleResetVerification,
 
 		// Stateful Resources
+		"get_state_overview":   handleGetStateOverview,
 		"list_stateful_items":  handleListStatefulItems,
 		"get_stateful_item":    handleGetStatefulItem,
 		"create_stateful_item": handleCreateStatefulItem,
 		"reset_stateful_data":  handleResetStatefulData,
+
+		// Custom Operations
+		"manage_custom_operation": handleManageCustomOperation,
 	}
 
 	// Register in definition order (from tool_defs.go) to guarantee

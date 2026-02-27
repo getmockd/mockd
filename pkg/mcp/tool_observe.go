@@ -71,8 +71,10 @@ func handleGetRequestLogs(args map[string]interface{}, session *MCPSession, serv
 	method := getString(args, "method", "")
 	pathPrefix := getString(args, "pathPrefix", "")
 	mockID := getString(args, "mockId", "")
+	protocol := getString(args, "protocol", "")
 
 	filter := &cli.LogFilter{
+		Protocol:  protocol,
 		Limit:     limit,
 		Offset:    offset,
 		Method:    method,

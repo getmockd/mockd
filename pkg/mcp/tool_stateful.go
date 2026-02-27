@@ -98,6 +98,22 @@ func handleCreateStatefulItem(args map[string]interface{}, session *MCPSession, 
 	return ToolResultJSON(item)
 }
 
+// handleGetStateOverview returns an overview of all stateful mock resources.
+func handleGetStateOverview(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+	client := session.GetAdminClient()
+	if client == nil {
+		return ToolResultError("admin client not available"), nil
+	}
+
+	overview, err := client.GetStateOverview()
+	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+		return ToolResultError("failed to get state overview: " + adminError(err, session.GetAdminURL())), nil
+	}
+
+	return ToolResultJSON(overview)
+}
+
 // handleResetStatefulData resets a stateful resource to its seed data.
 // Resource is required — no accidental full resets.
 func handleResetStatefulData(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
