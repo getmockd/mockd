@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-02-27
+
 ### Added
 
 - **Near-miss debugging** — When no mock matches a request, the 404 response now includes a `nearMisses` array with detailed field-by-field breakdown (method, path, headers, query params) showing what almost matched and why. Each near-miss includes match percentage, score, and a human-readable reason like `path matched, but method expected "GET", got "DELETE"`. Response includes `X-Mockd-Near-Misses` header with count
@@ -14,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`mockd mcp` auto-start** — MCP server now auto-starts a background daemon if no mockd server is running, so AI assistants work with zero setup. The daemon survives the MCP session and is shared across multiple sessions. Use `--data-dir` for project-scoped isolation with a separate daemon. Stop with `mockd stop`
 - **`--chaos-profile` startup flag** — `mockd serve --chaos-profile flaky` applies a built-in chaos profile at startup. Available profiles: `slow-api`, `degraded`, `flaky`, `offline`, `timeout`, `rate-limited`, `mobile-3g`, `satellite`, `dns-flaky`, `overloaded`. Validates profile name and rejects conflicting flags (`--chaos-enabled`, `--chaos-latency`, `--chaos-error-rate`)
 - **goreleaser-based release pipeline** — Migrated from hand-rolled CI to goreleaser v2 with: deb/rpm/apk Linux packages (via nFPM), cosign keyless signing (Sigstore), SBOM generation (Syft/SPDX), multi-arch Docker images (amd64 + arm64), Scoop bucket for Windows, shell completions in archives, `-trimpath` reproducible builds
+
+### Fixed
+
+- **Bare binary checksum sidecars** — goreleaser `format: binary` archives don't produce standalone files in `dist/`; release workflow now extracts checksums from `checksums.txt` for setup-mockd compatibility
 
 ## [0.4.4] - 2026-02-27
 
