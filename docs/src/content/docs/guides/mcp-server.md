@@ -255,6 +255,7 @@ See the [CLI Reference](/reference/cli/) for the full command list, including [`
 
 ## Next Steps
 
+- [AI Agent Setup](/guides/ai-agent-setup/) — Pre-built config templates for Claude Code, Cursor, and Copilot
 - [Chaos Engineering](/guides/chaos-engineering/) — Fault injection and chaos profiles
 - [Mock Verification](/guides/mock-verification/) — Verify mock call counts and invocations
 - [Stateful Mocking](/guides/stateful-mocking/) — CRUD simulation and custom operations
