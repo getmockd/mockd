@@ -3,7 +3,7 @@
   "name": "io.mockd/mockd",
   "title": "mockd",
   "description": "Mock HTTP, GraphQL, gRPC, WebSocket, MQTT, SSE, and SOAP APIs with 16 AI tools.",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "websiteUrl": "https://mockd.io",
   "repository": {
     "url": "https://github.com/getmockd/mockd",

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-02-27
+
 ### Added
 
 - **Stateful Protocol Bridge** — SOAP operations can now read/write stateful CRUD resources that were previously HTTP-only. A REST `POST /api/users` creates a user that a SOAP `GetUser` can retrieve, and vice versa. All protocols share the same in-memory state store.
@@ -24,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **23 new faker types** (34 total) — Internet (`ipv4`, `ipv6`, `macAddress`, `userAgent`), Finance (`creditCard` with Luhn validation, `creditCardExp`, `cvv`, `currencyCode`, `currency`, `iban`), Commerce (`price`, `productName`, `color`, `hexColor`), Identity (`ssn`, `passport`, `jobTitle`), Geo (`latitude`, `longitude`), Text (`words`, `slug`), Data (`mimeType`, `fileExtension`). Parameterized syntax: `{{faker.words(5)}}`
 - **`POST /state/resources` endpoint** — Dedicated REST endpoint for creating stateful resources at runtime through all layers (engine → admin → CLI → MCP), replacing the previous `ImportConfig` wrapper
 - **`mockd verify` CLI command** — Full verification command tree (`status`, `check`, `invocations`, `reset`) for asserting mock call counts and inspecting request details from the CLI. `check` returns non-zero exit codes on failure for CI scripting. Supports `--exactly`, `--at-least`, `--at-most`, and `--never` assertion flags
+- **MCP Registry metadata** — `server.json` for official MCP Registry submission (`io.mockd/mockd`) with OCI container label for registry verification
 
 ### Fixed
 
