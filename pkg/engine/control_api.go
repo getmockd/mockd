@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	types "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/chaos"
@@ -287,6 +288,105 @@ func (a *ControlAPIAdapter) ResetChaosStats() {
 	if injector != nil {
 		injector.ResetStats()
 	}
+}
+
+// GetStatefulFaultStats implements api.EngineController.
+func (a *ControlAPIAdapter) GetStatefulFaultStats() *api.StatefulFaultStats {
+	injector := a.server.ChaosInjector()
+	if injector == nil {
+		return nil
+	}
+
+	result := &api.StatefulFaultStats{}
+
+	// Collect circuit breaker stats
+	cbs := injector.GetCircuitBreakers()
+	if len(cbs) > 0 {
+		result.CircuitBreakers = make(map[string]api.CircuitBreakerStatus, len(cbs))
+		for key, cb := range cbs {
+			s := cb.Stats()
+			result.CircuitBreakers[key] = api.CircuitBreakerStatus{
+				State:                s.State,
+				ConsecutiveFailures:  s.ConsecutiveFailures,
+				ConsecutiveSuccesses: s.ConsecutiveSuccesses,
+				TotalRequests:        s.TotalRequests,
+				TotalTrips:           s.TotalTrips,
+				TotalRejected:        s.TotalRejected,
+				TotalPassed:          s.TotalPassed,
+				TotalHalfOpen:        s.TotalHalfOpen,
+				StateChanges:         s.StateChanges,
+				OpenedAt:             s.OpenedAt,
+			}
+		}
+	}
+
+	// Collect retry-after tracker stats
+	rts := injector.GetRetryTrackers()
+	if len(rts) > 0 {
+		result.RetryAfterTrackers = make(map[string]api.RetryAfterStatus, len(rts))
+		for key, rt := range rts {
+			s := rt.Stats()
+			result.RetryAfterTrackers[key] = api.RetryAfterStatus{
+				IsLimited:    s.IsLimited,
+				StatusCode:   s.StatusCode,
+				RetryAfterMs: s.RetryAfterMs,
+				TotalLimited: s.TotalLimited,
+				TotalPassed:  s.TotalPassed,
+				LimitedAt:    s.LimitedAt,
+			}
+		}
+	}
+
+	// Collect progressive degradation stats
+	pds := injector.GetProgressives()
+	if len(pds) > 0 {
+		result.ProgressiveDegradations = make(map[string]api.ProgressiveDegradationStatus, len(pds))
+		for key, pd := range pds {
+			s := pd.Stats()
+			result.ProgressiveDegradations[key] = api.ProgressiveDegradationStatus{
+				RequestCount:   s.RequestCount,
+				CurrentDelayMs: s.CurrentDelayMs,
+				MaxDelayMs:     s.MaxDelayMs,
+				ErrorAfter:     s.ErrorAfter,
+				ResetAfter:     s.ResetAfter,
+				TotalErrors:    s.TotalErrors,
+				TotalResets:    s.TotalResets,
+				IsErroring:     s.IsErroring,
+			}
+		}
+	}
+
+	return result
+}
+
+// TripCircuitBreaker implements api.EngineController.
+func (a *ControlAPIAdapter) TripCircuitBreaker(key string) error {
+	injector := a.server.ChaosInjector()
+	if injector == nil {
+		return errors.New("chaos is not enabled")
+	}
+	cbs := injector.GetCircuitBreakers()
+	cb, ok := cbs[key]
+	if !ok {
+		return fmt.Errorf("circuit breaker %q not found", key)
+	}
+	cb.Trip()
+	return nil
+}
+
+// ResetCircuitBreaker implements api.EngineController.
+func (a *ControlAPIAdapter) ResetCircuitBreaker(key string) error {
+	injector := a.server.ChaosInjector()
+	if injector == nil {
+		return errors.New("chaos is not enabled")
+	}
+	cbs := injector.GetCircuitBreakers()
+	cb, ok := cbs[key]
+	if !ok {
+		return fmt.Errorf("circuit breaker %q not found", key)
+	}
+	cb.Reset()
+	return nil
 }
 
 // GetStateOverview implements api.EngineController.

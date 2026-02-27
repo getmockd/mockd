@@ -190,6 +190,18 @@ func (m *mockEngine) ResetChaosStats() {
 	m.chaosStats = &ChaosStats{FaultsByType: make(map[string]int64)}
 }
 
+func (m *mockEngine) GetStatefulFaultStats() *StatefulFaultStats {
+	return &StatefulFaultStats{}
+}
+
+func (m *mockEngine) TripCircuitBreaker(_ string) error {
+	return nil
+}
+
+func (m *mockEngine) ResetCircuitBreaker(_ string) error {
+	return nil
+}
+
 func (m *mockEngine) GetStateOverview() *StateOverview {
 	return m.stateOverview
 }

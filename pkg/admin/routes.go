@@ -152,6 +152,11 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /chaos/stats", a.requireEngine(a.handleGetChaosStats))
 	mux.HandleFunc("POST /chaos/stats/reset", a.requireEngine(a.handleResetChaosStats))
 
+	// Stateful fault introspection
+	mux.HandleFunc("GET /chaos/faults", a.requireEngine(a.handleGetStatefulFaultStats))
+	mux.HandleFunc("POST /chaos/circuit-breakers/{key}/trip", a.requireEngine(a.handleTripCircuitBreaker))
+	mux.HandleFunc("POST /chaos/circuit-breakers/{key}/reset", a.requireEngine(a.handleResetCircuitBreaker))
+
 	// Chaos profiles (built-in presets)
 	mux.HandleFunc("GET /chaos/profiles", a.handleListChaosProfiles)
 	mux.HandleFunc("GET /chaos/profiles/{name}", a.handleGetChaosProfile)

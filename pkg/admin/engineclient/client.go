@@ -535,6 +535,53 @@ func (c *Client) ResetChaosStats(ctx context.Context) error {
 	return nil
 }
 
+// GetStatefulFaultStats returns stats for all stateful chaos faults.
+func (c *Client) GetStatefulFaultStats(ctx context.Context) (*StatefulFaultStats, error) {
+	resp, err := c.get(ctx, "/chaos/faults")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var stats StatefulFaultStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("failed to decode stateful fault stats: %w", err)
+	}
+	return &stats, nil
+}
+
+// TripCircuitBreaker forces a circuit breaker to the open state.
+func (c *Client) TripCircuitBreaker(ctx context.Context, key string) error {
+	resp, err := c.post(ctx, "/chaos/circuit-breakers/"+key+"/trip", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// ResetCircuitBreaker forces a circuit breaker to the closed state.
+func (c *Client) ResetCircuitBreaker(ctx context.Context, key string) error {
+	resp, err := c.post(ctx, "/chaos/circuit-breakers/"+key+"/reset", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
 // GetStateOverview returns overview of all stateful resources.
 func (c *Client) GetStateOverview(ctx context.Context) (*StateOverview, error) {
 	resp, err := c.get(ctx, "/state")

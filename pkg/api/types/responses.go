@@ -247,6 +247,49 @@ type ChaosStats struct {
 	FaultsByType     map[string]int64 `json:"faultsByType"`
 }
 
+// StatefulFaultStats contains stats for all stateful chaos faults.
+type StatefulFaultStats struct {
+	CircuitBreakers         map[string]CircuitBreakerStatus         `json:"circuitBreakers,omitempty"`
+	RetryAfterTrackers      map[string]RetryAfterStatus             `json:"retryAfterTrackers,omitempty"`
+	ProgressiveDegradations map[string]ProgressiveDegradationStatus `json:"progressiveDegradations,omitempty"`
+}
+
+// CircuitBreakerStatus represents the current state of a circuit breaker.
+type CircuitBreakerStatus struct {
+	State                string `json:"state"`
+	ConsecutiveFailures  int    `json:"consecutiveFailures"`
+	ConsecutiveSuccesses int    `json:"consecutiveSuccesses"`
+	TotalRequests        int64  `json:"totalRequests"`
+	TotalTrips           int64  `json:"totalTrips"`
+	TotalRejected        int64  `json:"totalRejected"`
+	TotalPassed          int64  `json:"totalPassed"`
+	TotalHalfOpen        int64  `json:"totalHalfOpen"`
+	StateChanges         int64  `json:"stateChanges"`
+	OpenedAt             string `json:"openedAt,omitempty"`
+}
+
+// RetryAfterStatus represents the current state of a retry-after tracker.
+type RetryAfterStatus struct {
+	IsLimited    bool   `json:"isLimited"`
+	StatusCode   int    `json:"statusCode"`
+	RetryAfterMs int64  `json:"retryAfterMs"`
+	TotalLimited int64  `json:"totalLimited"`
+	TotalPassed  int64  `json:"totalPassed"`
+	LimitedAt    string `json:"limitedAt,omitempty"`
+}
+
+// ProgressiveDegradationStatus represents the state of a progressive degradation tracker.
+type ProgressiveDegradationStatus struct {
+	RequestCount   int64 `json:"requestCount"`
+	CurrentDelayMs int64 `json:"currentDelayMs"`
+	MaxDelayMs     int64 `json:"maxDelayMs"`
+	ErrorAfter     int   `json:"errorAfter"`
+	ResetAfter     int   `json:"resetAfter"`
+	TotalErrors    int64 `json:"totalErrors"`
+	TotalResets    int64 `json:"totalResets"`
+	IsErroring     bool  `json:"isErroring"`
+}
+
 // --- Stateful Resources ---
 
 // StatefulResource represents a stateful mock resource for the API.
