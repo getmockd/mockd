@@ -1,7 +1,23 @@
 package mcp
 
-// allToolDefinitions returns all 19 tool definitions in display order.
-// Tools are grouped by category: CRUD, Context, Import/Export, Observability, Stateful.
+// Annotation helpers to reduce boilerplate.
+var (
+	readOnlyAnnotations = map[string]interface{}{
+		"readOnlyHint":   true,
+		"idempotentHint": true,
+	}
+	destructiveAnnotations = map[string]interface{}{
+		"destructiveHint": true,
+		"idempotentHint":  true,
+	}
+	idempotentAnnotations = map[string]interface{}{
+		"idempotentHint": true,
+	}
+)
+
+// allToolDefinitions returns all 27 tool definitions in display order.
+// Tools are grouped by category: CRUD, Context, Import/Export, Observability,
+// Chaos, Verification, Stateful, Custom Operations.
 func allToolDefinitions() []ToolDefinition {
 	return []ToolDefinition{
 		// =====================================================================
@@ -71,7 +87,7 @@ func allToolDefinitions() []ToolDefinition {
 
 var defListMocks = ToolDefinition{
 	Name:        "list_mocks",
-	Description: "List all configured mocks across all protocols (HTTP, WebSocket, GraphQL, gRPC, SOAP, MQTT, OAuth). Returns ID, type, name, enabled status, and a summary for each mock. Use this to see what mocks exist.",
+	Description: "List all configured mocks across all protocols (HTTP, WebSocket, GraphQL, gRPC, SOAP, MQTT, OAuth). Returns ID, type, name, enabled status, and a summary for each mock. Use this FIRST to discover mock IDs before calling get_mock or other per-mock tools.",
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -86,11 +102,12 @@ var defListMocks = ToolDefinition{
 			},
 		},
 	},
+	Annotations: readOnlyAnnotations,
 }
 
 var defGetMock = ToolDefinition{
 	Name:        "get_mock",
-	Description: "Get the full configuration for a specific mock by ID. Returns the complete mock object including all protocol-specific settings. Use this to inspect a mock's details after you have its ID from list_mocks.",
+	Description: "Retrieve the full configuration for a specific mock by ID. Returns the complete mock object including all protocol-specific settings. Use this to inspect a mock's details after discovering its ID from list_mocks.",
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -101,13 +118,12 @@ var defGetMock = ToolDefinition{
 		},
 		"required": []string{"id"},
 	},
+	Annotations: readOnlyAnnotations,
 }
 
 var defCreateMock = ToolDefinition{
 	Name: "create_mock",
-	Description: `Create a new mock for any supported protocol. The 'type' field determines which protocol spec to populate.
-
-Minimal examples by protocol:
+	Description: `Create a new mock for any supported protocol. Set 'type' and populate the matching protocol object. For gRPC and MQTT, mocks on the same port are automatically merged.
 
 HTTP: {"type":"http","http":{"matcher":{"method":"GET","path":"/api/hello"},"response":{"statusCode":200,"body":"{\"msg\":\"hello\"}"}}}
 WebSocket: {"type":"websocket","websocket":{"path":"/ws/chat","echoMode":true}}
@@ -115,9 +131,7 @@ GraphQL: {"type":"graphql","graphql":{"path":"/graphql","schema":"type Query { u
 gRPC: {"type":"grpc","grpc":{"port":50051,"protoFile":"./service.proto","reflection":true,"services":{"pkg.Svc":{"methods":{"Get":{"response":{}}}}}}}
 MQTT: {"type":"mqtt","mqtt":{"port":1883,"topics":[{"topic":"sensors/temp","messages":[{"payload":"{\"temp\":72}"}]}]}}
 SOAP: {"type":"soap","soap":{"path":"/soap","operations":{"GetWeather":{"response":"<Temp>72</Temp>"}}}}
-OAuth: {"type":"oauth","oauth":{"issuer":"http://localhost:9999/oauth","clients":[{"clientId":"app","clientSecret":"secret"}]}}
-
-For gRPC and MQTT, mocks on the same port are automatically merged.`,
+OAuth: {"type":"oauth","oauth":{"issuer":"http://localhost:9999/oauth","clients":[{"clientId":"app","clientSecret":"secret"}]}}`,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -215,7 +229,8 @@ For gRPC and MQTT, mocks on the same port are automatically merged.`,
 
 var defUpdateMock = ToolDefinition{
 	Name:        "update_mock",
-	Description: "Update an existing mock's configuration. Fetches the current mock, merges provided fields, and saves. Works with any protocol type.",
+	Description: "Update an existing mock's configuration by ID. Fetches the current mock, merges provided fields, and saves. Works with any protocol type. Only the fields you provide are changed.",
+	Annotations: idempotentAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -245,7 +260,8 @@ var defUpdateMock = ToolDefinition{
 
 var defDeleteMock = ToolDefinition{
 	Name:        "delete_mock",
-	Description: "Delete a mock by ID. The mock will no longer respond to requests.",
+	Description: "Permanently delete a mock by ID. The mock is removed and will no longer respond to requests. To disable a mock without deleting it, use toggle_mock instead.",
+	Annotations: destructiveAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -260,7 +276,8 @@ var defDeleteMock = ToolDefinition{
 
 var defToggleMock = ToolDefinition{
 	Name:        "toggle_mock",
-	Description: "Enable or disable a mock without deleting it. Disabled mocks are preserved but do not respond to requests.",
+	Description: "Enable or disable a mock without deleting it. Disabled mocks are preserved but do not respond to requests. To set a specific state, use the enabled parameter (true = enable, false = disable).",
+	Annotations: idempotentAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -288,11 +305,13 @@ var defGetCurrentContext = ToolDefinition{
 		"type":       "object",
 		"properties": map[string]interface{}{},
 	},
+	Annotations: readOnlyAnnotations,
 }
 
 var defSwitchContext = ToolDefinition{
 	Name:        "switch_context",
-	Description: "Switch to a different context (admin server). This changes which mockd server this session communicates with. The change is session-scoped and does NOT persist to disk. Available contexts are defined in ~/.config/mockd/contexts.yaml.",
+	Description: "Switch to a different context (admin server). Changes which mockd server this session communicates with. The change is session-scoped and does NOT persist to disk. Available contexts are defined in ~/.config/mockd/contexts.yaml.",
+	Annotations: idempotentAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -307,16 +326,18 @@ var defSwitchContext = ToolDefinition{
 
 var defListWorkspaces = ToolDefinition{
 	Name:        "list_workspaces",
-	Description: "List workspaces available on the current admin server. Workspaces isolate groups of mocks. Shows which workspace is currently active.",
+	Description: "List workspaces available on the current admin server. Returns workspace names, IDs, and which one is currently active. Workspaces isolate groups of mocks.",
 	InputSchema: map[string]interface{}{
 		"type":       "object",
 		"properties": map[string]interface{}{},
 	},
+	Annotations: readOnlyAnnotations,
 }
 
 var defSwitchWorkspace = ToolDefinition{
 	Name:        "switch_workspace",
-	Description: "Switch the active workspace. Subsequent mock operations will be scoped to this workspace. The change is session-scoped and does NOT persist to disk.",
+	Description: "Switch the active workspace. Routes subsequent mock operations to a specific workspace. The change is session-scoped and does NOT persist to disk.",
+	Annotations: idempotentAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -335,7 +356,7 @@ var defSwitchWorkspace = ToolDefinition{
 
 var defImportMocks = ToolDefinition{
 	Name:        "import_mocks",
-	Description: "Import mocks from inline content. Supports mockd YAML/JSON, OpenAPI, Postman, HAR, WireMock, and cURL formats. Format is auto-detected if not specified.",
+	Description: "Import mocks from inline content. Supports OpenAPI, Postman, HAR, WireMock, cURL, and mockd YAML/JSON formats. Format is auto-detected if not specified. Use dryRun=true to preview without applying.",
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -366,7 +387,8 @@ var defImportMocks = ToolDefinition{
 
 var defExportMocks = ToolDefinition{
 	Name:        "export_mocks",
-	Description: "Export all current mocks as configuration. Returns the full mock configuration in the requested format.",
+	Description: "Export all current mocks as YAML or JSON configuration. Returns the full mock collection for backup, sharing, or version control.",
+	Annotations: readOnlyAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -391,11 +413,13 @@ var defGetServerStatus = ToolDefinition{
 		"type":       "object",
 		"properties": map[string]interface{}{},
 	},
+	Annotations: readOnlyAnnotations,
 }
 
 var defGetRequestLogs = ToolDefinition{
 	Name:        "get_request_logs",
-	Description: "Retrieve captured HTTP request/response logs. Useful for verifying that expected API calls were made to the mock server.",
+	Description: "Retrieve captured request/response logs. Filter by method, path, mock ID, or protocol. Use this to verify that expected API calls were made to the mock server.",
+	Annotations: readOnlyAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -432,11 +456,12 @@ var defGetRequestLogs = ToolDefinition{
 
 var defClearRequestLogs = ToolDefinition{
 	Name:        "clear_request_logs",
-	Description: "Clear all captured request logs. Useful for test isolation between test runs.",
+	Description: "Permanently remove all captured request/response logs. Use this for test isolation between test runs. This action cannot be undone.",
 	InputSchema: map[string]interface{}{
 		"type":       "object",
 		"properties": map[string]interface{}{},
 	},
+	Annotations: destructiveAnnotations,
 }
 
 // =============================================================================
@@ -445,7 +470,8 @@ var defClearRequestLogs = ToolDefinition{
 
 var defListStatefulItems = ToolDefinition{
 	Name:        "list_stateful_items",
-	Description: "List items in a stateful mock resource with pagination. Stateful resources provide CRUD operations backed by in-memory data stores.",
+	Description: "List items in a stateful mock resource with pagination. Use get_state_overview first to find resource names. Supports sort and order parameters.",
+	Annotations: readOnlyAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -481,7 +507,8 @@ var defListStatefulItems = ToolDefinition{
 
 var defGetStatefulItem = ToolDefinition{
 	Name:        "get_stateful_item",
-	Description: "Get a specific item from a stateful resource by ID.",
+	Description: "Retrieve a specific item from a stateful resource by its ID. Returns the full item object with all fields.",
+	Annotations: readOnlyAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -519,7 +546,8 @@ var defCreateStatefulItem = ToolDefinition{
 
 var defResetStatefulData = ToolDefinition{
 	Name:        "reset_stateful_data",
-	Description: "Reset a stateful resource to its initial seed data state. Useful for test cleanup. The resource parameter is required to prevent accidental full resets.",
+	Description: "Reset a stateful resource to its initial seed data. Restores seed data and removes all runtime-created items. The resource parameter is required to prevent accidental full resets.",
+	Annotations: destructiveAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -543,11 +571,13 @@ var defGetChaosConfig = ToolDefinition{
 		"type":       "object",
 		"properties": map[string]interface{}{},
 	},
+	Annotations: readOnlyAnnotations,
 }
 
 var defSetChaosConfig = ToolDefinition{
 	Name:        "set_chaos_config",
 	Description: "Configure chaos fault injection rules. Set latency ranges, error rates with specific HTTP status codes, and bandwidth throttling. Pass enabled=false to disable all chaos. For pre-built configurations, use named profiles like \"slow-api\", \"flaky\", or \"offline\".",
+	Annotations: idempotentAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -597,6 +627,7 @@ var defResetChaosStats = ToolDefinition{
 		"type":       "object",
 		"properties": map[string]interface{}{},
 	},
+	Annotations: destructiveAnnotations,
 }
 
 // =============================================================================
@@ -605,7 +636,8 @@ var defResetChaosStats = ToolDefinition{
 
 var defVerifyMock = ToolDefinition{
 	Name:        "verify_mock",
-	Description: "Check whether a mock was called the expected number of times and with the expected request patterns. Returns pass/fail status, actual call count, and details of each invocation. Use this to assert your application is making the right API calls.",
+	Description: "Check whether a mock was called the expected number of times. Returns pass/fail status, actual call count, and invocation details. Optionally assert with expected_count, at_least, or at_most parameters. Use this to assert your application is making the right API calls.",
+	Annotations: readOnlyAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -633,6 +665,7 @@ var defVerifyMock = ToolDefinition{
 var defGetMockInvocations = ToolDefinition{
 	Name:        "get_mock_invocations",
 	Description: "List all recorded invocations (request/response pairs) for a specific mock. Shows method, path, headers, body, and timestamp for each call. Use this to debug what requests actually hit a mock.",
+	Annotations: readOnlyAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -653,6 +686,7 @@ var defGetMockInvocations = ToolDefinition{
 var defResetVerification = ToolDefinition{
 	Name:        "reset_verification",
 	Description: "Clear verification data (invocation records and counters) for a specific mock or all mocks. Use this to reset counters before running a new test scenario.",
+	Annotations: destructiveAnnotations,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -675,6 +709,7 @@ var defGetStateOverview = ToolDefinition{
 		"type":       "object",
 		"properties": map[string]interface{}{},
 	},
+	Annotations: readOnlyAnnotations,
 }
 
 // =============================================================================
