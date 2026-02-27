@@ -36,6 +36,13 @@ func allToolDefinitions() []ToolDefinition {
 		defClearRequestLogs,
 
 		// =====================================================================
+		// Chaos Engineering (3 tools)
+		// =====================================================================
+		defGetChaosConfig,
+		defSetChaosConfig,
+		defResetChaosStats,
+
+		// =====================================================================
 		// Stateful Resources (4 tools)
 		// =====================================================================
 		defListStatefulItems,
@@ -504,5 +511,72 @@ var defResetStatefulData = ToolDefinition{
 			},
 		},
 		"required": []string{"resource"},
+	},
+}
+
+// =============================================================================
+// Chaos Engineering Definitions
+// =============================================================================
+
+var defGetChaosConfig = ToolDefinition{
+	Name:        "get_chaos_config",
+	Description: "Retrieve the current chaos fault injection configuration including latency, error rate, and bandwidth throttle settings. Returns the active chaos config and injection statistics. Use this to check what chaos rules are active before modifying them.",
+	InputSchema: map[string]interface{}{
+		"type":       "object",
+		"properties": map[string]interface{}{},
+	},
+}
+
+var defSetChaosConfig = ToolDefinition{
+	Name:        "set_chaos_config",
+	Description: "Configure chaos fault injection rules. Set latency ranges, error rates with specific HTTP status codes, and bandwidth throttling. Pass enabled=false to disable all chaos. For pre-built configurations, use named profiles like \"slow-api\", \"flaky\", or \"offline\".",
+	InputSchema: map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"enabled": map[string]interface{}{
+				"type":        "boolean",
+				"description": "Enable or disable chaos injection",
+			},
+			"latency_ms": map[string]interface{}{
+				"type":        "integer",
+				"description": "Fixed latency in milliseconds",
+			},
+			"latency_min_ms": map[string]interface{}{
+				"type":        "integer",
+				"description": "Minimum random latency in milliseconds",
+			},
+			"latency_max_ms": map[string]interface{}{
+				"type":        "integer",
+				"description": "Maximum random latency in milliseconds",
+			},
+			"error_rate": map[string]interface{}{
+				"type":        "number",
+				"description": "Error rate 0.0-1.0 (e.g., 0.2 = 20% of requests fail)",
+			},
+			"error_codes": map[string]interface{}{
+				"type":        "array",
+				"description": "HTTP status codes to return on error (e.g., [500, 502, 503])",
+				"items":       map[string]interface{}{"type": "integer"},
+			},
+			"bandwidth_bytes_per_sec": map[string]interface{}{
+				"type":        "integer",
+				"description": "Bandwidth throttle in bytes/sec",
+			},
+			"profile": map[string]interface{}{
+				"type":        "string",
+				"description": "Named chaos profile",
+				"enum":        []string{"slow-api", "degraded", "flaky", "offline", "timeout", "rate-limited", "mobile-3g", "satellite", "dns-flaky", "overloaded"},
+			},
+		},
+		"required": []string{"enabled"},
+	},
+}
+
+var defResetChaosStats = ToolDefinition{
+	Name:        "reset_chaos_stats",
+	Description: "Reset chaos injection statistics counters to zero without changing the active chaos configuration. Use this to start fresh measurement after modifying chaos rules.",
+	InputSchema: map[string]interface{}{
+		"type":       "object",
+		"properties": map[string]interface{}{},
 	},
 }

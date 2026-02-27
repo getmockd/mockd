@@ -22,8 +22,8 @@ type ToolRegistry struct {
 // NewToolRegistry creates a new tool registry and registers all built-in tools.
 func NewToolRegistry(server *Server) *ToolRegistry {
 	r := &ToolRegistry{
-		tools:  make([]*Tool, 0, 19),
-		byName: make(map[string]*Tool, 19),
+		tools:  make([]*Tool, 0, 27),
+		byName: make(map[string]*Tool, 27),
 		server: server,
 	}
 
@@ -57,6 +57,11 @@ func (r *ToolRegistry) registerBuiltinTools() {
 		"get_server_status":  handleGetServerStatus,
 		"get_request_logs":   handleGetRequestLogs,
 		"clear_request_logs": handleClearRequestLogs,
+
+		// Chaos Engineering
+		"get_chaos_config":  handleGetChaosConfig,
+		"set_chaos_config":  handleSetChaosConfig,
+		"reset_chaos_stats": handleResetChaosStats,
 
 		// Stateful Resources
 		"list_stateful_items":  handleListStatefulItems,

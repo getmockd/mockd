@@ -76,6 +76,14 @@ func (p *ResourceProvider) List() []ResourceDefinition {
 		}
 	}
 
+	// Add chaos resource
+	resources = append(resources, ResourceDefinition{
+		URI:         "mock://chaos",
+		Name:        "Chaos Configuration",
+		Description: "Active chaos injection rules and statistics",
+		MimeType:    "application/json",
+	})
+
 	// Add system resources
 	resources = append(resources, ResourceDefinition{
 		URI:         "mock://logs",
@@ -111,6 +119,8 @@ func (p *ResourceProvider) Read(uri string) ([]ResourceContent, *JSONRPCError) {
 		return p.readMockResource(uri)
 	case "stateful":
 		return p.readStatefulResource(path)
+	case "chaos":
+		return p.readChaosResource()
 	case "logs":
 		return p.readLogsResource()
 	case "config":
@@ -134,6 +144,9 @@ func parseResourceURI(uri string) (resourceType, path, method string) {
 	// Check for special resource types
 	if strings.HasPrefix(rest, "stateful/") {
 		return "stateful", strings.TrimPrefix(rest, "stateful/"), ""
+	}
+	if rest == "chaos" {
+		return "chaos", "", ""
 	}
 	if rest == "logs" {
 		return "logs", "", ""
@@ -236,6 +249,35 @@ func (p *ResourceProvider) readStatefulResource(name string) ([]ResourceContent,
 	return []ResourceContent{
 		{
 			URI:      "mock://stateful/" + name,
+			MimeType: "application/json",
+			Text:     string(text),
+		},
+	}, nil
+}
+
+// readChaosResource reads the chaos configuration and statistics resource.
+func (p *ResourceProvider) readChaosResource() ([]ResourceContent, *JSONRPCError) {
+	if p.adminClient == nil {
+		return nil, InternalError(nil)
+	}
+
+	content := make(map[string]interface{})
+
+	chaosConfig, err := p.adminClient.GetChaosConfig()
+	if err != nil {
+		return nil, InternalError(err)
+	}
+	content["config"] = chaosConfig
+
+	chaosStats, err := p.adminClient.GetChaosStats()
+	if err == nil && chaosStats != nil {
+		content["stats"] = chaosStats
+	}
+
+	text, _ := json.Marshal(content)
+	return []ResourceContent{
+		{
+			URI:      "mock://chaos",
 			MimeType: "application/json",
 			Text:     string(text),
 		},
