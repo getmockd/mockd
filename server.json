@@ -2,8 +2,9 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.mockd/mockd",
   "title": "mockd",
-  "description": "Multi-protocol API mock server with support for HTTP, GraphQL, gRPC, WebSocket, MQTT, SSE, and SOAP. Create, manage, and verify mock endpoints through 16 AI-optimized tools. Features chaos engineering, stateful CRUD resources, request verification, and import from OpenAPI, Postman, HAR, WireMock, and cURL.",
+  "description": "Mock HTTP, GraphQL, gRPC, WebSocket, MQTT, SSE, and SOAP APIs with 16 AI tools.",
   "version": "0.4.3",
+  "websiteUrl": "https://mockd.io",
   "repository": {
     "url": "https://github.com/getmockd/mockd",
     "source": "github"
@@ -11,74 +12,16 @@
   "packages": [
     {
       "registryType": "oci",
-      "registryUrl": "ghcr.io/getmockd/mockd",
-      "name": "ghcr.io/getmockd/mockd"
-    }
-  ],
-  "tools": [
-    {
-      "name": "manage_mock",
-      "description": "Create, retrieve, update, delete, list, or toggle mock endpoints."
-    },
-    {
-      "name": "manage_context",
-      "description": "View or switch the active admin server context."
-    },
-    {
-      "name": "manage_workspace",
-      "description": "List available workspaces or switch the active workspace."
-    },
-    {
-      "name": "import_mocks",
-      "description": "Import mocks from OpenAPI, Postman, HAR, WireMock, cURL, and mockd YAML/JSON formats."
-    },
-    {
-      "name": "export_mocks",
-      "description": "Export all current mocks as YAML or JSON configuration."
-    },
-    {
-      "name": "get_server_status",
-      "description": "Get server health, ports, and statistics."
-    },
-    {
-      "name": "get_request_logs",
-      "description": "Retrieve captured request/response logs with method, path, and protocol filters."
-    },
-    {
-      "name": "clear_request_logs",
-      "description": "Permanently remove all captured request/response logs."
-    },
-    {
-      "name": "get_chaos_config",
-      "description": "Retrieve the current chaos fault injection configuration."
-    },
-    {
-      "name": "set_chaos_config",
-      "description": "Configure chaos fault injection: latency, error rates, bandwidth throttling, and named profiles."
-    },
-    {
-      "name": "reset_chaos_stats",
-      "description": "Reset chaos injection statistics counters."
-    },
-    {
-      "name": "verify_mock",
-      "description": "Check whether a mock was called the expected number of times."
-    },
-    {
-      "name": "get_mock_invocations",
-      "description": "List all recorded invocations for a specific mock."
-    },
-    {
-      "name": "reset_verification",
-      "description": "Clear verification data for a specific mock or all mocks."
-    },
-    {
-      "name": "manage_state",
-      "description": "Manage stateful CRUD resources that persist data across requests."
-    },
-    {
-      "name": "manage_custom_operation",
-      "description": "Register and execute custom multi-step operations on stateful resources."
+      "identifier": "ghcr.io/getmockd/mockd",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "valueHint": "mcp"
+        }
+      ]
     }
   ]
 }
