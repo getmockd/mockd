@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`mockd mcp` auto-start** — MCP server now auto-starts a background daemon if no mockd server is running, so AI assistants work with zero setup. The daemon survives the MCP session and is shared across multiple sessions. Use `--data-dir` for project-scoped isolation with a separate daemon. Stop with `mockd stop`
+
 ## [0.4.4] - 2026-02-27
 
 ### Added
