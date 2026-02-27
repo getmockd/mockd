@@ -13,6 +13,29 @@ import (
 // Mock CRUD Handlers
 // =============================================================================
 
+// handleManageMock dispatches mock CRUD operations based on the action parameter.
+// This is the single entry point for all mock management — list, get, create,
+// update, delete, and toggle are all routed through this multiplexed handler.
+func handleManageMock(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+	action := getString(args, "action", "")
+	switch action {
+	case "list":
+		return handleListMocks(args, session, server)
+	case "get":
+		return handleGetMock(args, session, server)
+	case "create":
+		return handleCreateMock(args, session, server)
+	case "update":
+		return handleUpdateMock(args, session, server)
+	case "delete":
+		return handleDeleteMock(args, session, server)
+	case "toggle":
+		return handleToggleMock(args, session, server)
+	default:
+		return ToolResultError("invalid action: " + action + ". Use: list, get, create, update, delete, toggle"), nil
+	}
+}
+
 // handleListMocks lists all configured mocks across all protocols.
 func handleListMocks(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
@@ -276,7 +299,7 @@ func handleDeleteMock(args map[string]interface{}, session *MCPSession, server *
 	return ToolResultJSON(result)
 }
 
-// handleToggleMock enables or disables a mock.
+// handleToggleMock enables or disables a mock using PATCH for atomic state change.
 func handleToggleMock(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
@@ -290,19 +313,15 @@ func handleToggleMock(args map[string]interface{}, session *MCPSession, server *
 
 	enabled := getBool(args, "enabled", true)
 
-	mockCfg, err := client.GetMock(id)
+	// Use PATCH to atomically set the enabled state without a GET+PUT race.
+	_, err := client.PatchMock(id, map[string]interface{}{
+		"enabled": enabled,
+	})
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		if isConnectionError(err) {
 			return ToolResultError("failed to toggle mock: " + adminError(err, session.GetAdminURL())), nil
 		}
-		return ToolResultError("mock not found: " + id), nil
-	}
-
-	mockCfg.Enabled = &enabled
-
-	if _, err := client.UpdateMock(id, mockCfg); err != nil {
-		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to toggle mock: " + adminError(err, session.GetAdminURL())), nil
 	}
 

@@ -78,9 +78,9 @@ func TestSyncAdminStoreToEngine(t *testing.T) {
 		api.syncAdminStoreToEngine(server.client(), "test")
 
 		// Verify engine received the mocks (replace=true clears first, then adds).
-		assert.Len(t, server.mocks, 2, "engine should have exactly 2 mocks after sync")
-		assert.Contains(t, server.mocks, "sync-mock-1")
-		assert.Contains(t, server.mocks, "sync-mock-2")
+		assert.Equal(t, 2, server.mockCount(), "engine should have exactly 2 mocks after sync")
+		assert.True(t, server.hasMock("sync-mock-1"))
+		assert.True(t, server.hasMock("sync-mock-2"))
 	})
 
 	t.Run("skips sync when admin store is empty", func(t *testing.T) {
@@ -89,15 +89,15 @@ func TestSyncAdminStoreToEngine(t *testing.T) {
 
 		// Pre-populate engine with a mock that should NOT be cleared
 		// (sync with empty store skips entirely — no replace=true call).
-		server.mocks["pre-existing"] = &config.MockConfiguration{ID: "pre-existing"}
+		server.setMock("pre-existing", &config.MockConfiguration{ID: "pre-existing"})
 
 		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		api.syncAdminStoreToEngine(server.client(), "test-empty")
 
 		// Engine should still have its pre-existing mock (sync was skipped).
-		assert.Len(t, server.mocks, 1)
-		assert.Contains(t, server.mocks, "pre-existing")
+		assert.Equal(t, 1, server.mockCount())
+		assert.True(t, server.hasMock("pre-existing"))
 	})
 
 	t.Run("handles nil client gracefully", func(t *testing.T) {
@@ -187,10 +187,10 @@ func TestRegistrationTriggersSyncToEngine(t *testing.T) {
 
 		// Give the async sync goroutine time to complete.
 		assert.Eventually(t, func() bool {
-			return len(server.mocks) >= 1
+			return server.mockCount() >= 1
 		}, 5*time.Second, 50*time.Millisecond,
 			"engine should have received admin store mocks via sync")
-		assert.Contains(t, server.mocks, "pre-reg-mock")
+		assert.True(t, server.hasMock("pre-reg-mock"))
 	})
 
 	t.Run("re-registration also syncs (localEngine already set)", func(t *testing.T) {
@@ -225,10 +225,10 @@ func TestRegistrationTriggersSyncToEngine(t *testing.T) {
 		require.Equal(t, http.StatusCreated, rec.Code)
 
 		assert.Eventually(t, func() bool {
-			return len(server.mocks) >= 1
+			return server.mockCount() >= 1
 		}, 5*time.Second, 50*time.Millisecond,
 			"re-registration should sync admin store to engine")
-		assert.Contains(t, server.mocks, "re-reg-mock")
+		assert.True(t, server.hasMock("re-reg-mock"))
 	})
 }
 
@@ -281,10 +281,10 @@ func TestHeartbeatOfflineToOnlineTriggesSync(t *testing.T) {
 
 		// Give async sync time to complete.
 		assert.Eventually(t, func() bool {
-			return len(server.mocks) >= 1
+			return server.mockCount() >= 1
 		}, 5*time.Second, 50*time.Millisecond,
 			"offline→online heartbeat should sync admin store to engine")
-		assert.Contains(t, server.mocks, "while-offline-mock")
+		assert.True(t, server.hasMock("while-offline-mock"))
 	})
 
 	t.Run("online-to-online heartbeat does NOT trigger sync", func(t *testing.T) {
@@ -328,6 +328,6 @@ func TestHeartbeatOfflineToOnlineTriggesSync(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 
 		// Engine should have NO mocks (no sync triggered).
-		assert.Empty(t, server.mocks, "online→online heartbeat should not trigger sync")
+		assert.Equal(t, 0, server.mockCount(), "online→online heartbeat should not trigger sync")
 	})
 }

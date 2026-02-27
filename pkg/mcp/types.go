@@ -142,6 +142,7 @@ type ToolDefinition struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
 	InputSchema map[string]interface{} `json:"inputSchema"`
+	Annotations map[string]interface{} `json:"annotations,omitempty"`
 }
 
 // ToolsListResult is the response for tools/list.

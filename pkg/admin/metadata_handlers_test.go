@@ -78,7 +78,7 @@ func TestHandleGenerateFromTemplate_DualWriteWithEngine(t *testing.T) {
 	assert.NotEmpty(t, storeMocks, "template mocks must be in admin store")
 
 	// Verify mocks were pushed to engine.
-	assert.NotEmpty(t, server.mocks, "template mocks must be in engine")
+	assert.Greater(t, server.mockCount(), 0, "template mocks must be in engine")
 }
 
 func TestHandleGenerateFromTemplate_ImportFailureMapped503(t *testing.T) {

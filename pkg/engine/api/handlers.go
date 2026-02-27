@@ -521,6 +521,38 @@ func (s *Server) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusCreated, item)
 }
 
+// handleRegisterStatefulResource registers a new stateful resource definition.
+func (s *Server) handleRegisterStatefulResource(w http.ResponseWriter, r *http.Request) {
+	limitedBody(w, r)
+
+	var cfg config.StatefulResourceConfig
+	if err := decodeJSONBody(r, &cfg, false); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+
+	if cfg.Name == "" {
+		writeError(w, http.StatusBadRequest, "validation_error", "resource name is required")
+		return
+	}
+
+	if err := s.engine.RegisterStatefulResource(&cfg); err != nil {
+		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "already registered") {
+			writeError(w, http.StatusConflict, "conflict", err.Error())
+			return
+		}
+		writeError(w, http.StatusBadRequest, "registration_failed", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"name":     cfg.Name,
+		"basePath": cfg.BasePath,
+		"idField":  cfg.IDField,
+		"message":  "Stateful resource registered",
+	})
+}
+
 // Custom operation handlers
 
 func (s *Server) handleListCustomOperations(w http.ResponseWriter, r *http.Request) {

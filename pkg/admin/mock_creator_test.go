@@ -85,8 +85,7 @@ func TestMockCreatorFunc_DualWrite(t *testing.T) {
 	assert.Equal(t, "dual-write-test", storeMock.Name)
 
 	// Verify mock exists in the engine.
-	_, engineHas := server.mocks[created.ID]
-	assert.True(t, engineHas, "mock must be in engine after dual-write")
+	assert.True(t, server.hasMock(created.ID), "mock must be in engine after dual-write")
 }
 
 // TestMockCreatorFunc_StoreOnlyWhenNoEngine verifies that when no engine is
@@ -226,8 +225,7 @@ func TestConvertRecordings_DualWrite(t *testing.T) {
 	assert.Equal(t, mock.TypeHTTP, storeMock.Type)
 
 	// Verify mock is in the engine.
-	_, engineHas := server.mocks[mockID]
-	assert.True(t, engineHas, "converted mock must be in engine")
+	assert.True(t, server.hasMock(mockID), "converted mock must be in engine")
 }
 
 // TestConvertSingleRecording_DualWrite: POST /recordings/{id}/to-mock with
@@ -271,8 +269,7 @@ func TestConvertSingleRecording_DualWrite(t *testing.T) {
 	assert.Equal(t, mock.TypeHTTP, storeMock.Type)
 
 	// Verify mock is in the engine.
-	_, engineHas := server.mocks[mockID]
-	assert.True(t, engineHas, "single-convert mock must be in engine")
+	assert.True(t, server.hasMock(mockID), "single-convert mock must be in engine")
 }
 
 // TestConvertSingleRecording_NoAddToServer: when addToServer is false the
@@ -311,7 +308,7 @@ func TestConvertSingleRecording_NoAddToServer(t *testing.T) {
 		"preview mock should not be in store")
 
 	// Mock should NOT be in the engine.
-	assert.Empty(t, server.mocks, "preview mock should not be in engine")
+	assert.Equal(t, 0, server.mockCount(), "preview mock should not be in engine")
 }
 
 // TestConvertSession_DualWrite: POST /recordings/sessions/{id}/to-mocks with
@@ -358,7 +355,6 @@ func TestConvertSession_DualWrite(t *testing.T) {
 		_, err := api.dataStore.Mocks().Get(ctx, mockID)
 		assert.NoError(t, err, "session mock %s must be in admin store", mockID)
 
-		_, engineHas := server.mocks[mockID]
-		assert.True(t, engineHas, "session mock %s must be in engine", mockID)
+		assert.True(t, server.hasMock(mockID), "session mock %s must be in engine", mockID)
 	}
 }

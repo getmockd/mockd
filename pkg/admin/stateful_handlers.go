@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 // handleStateOverview returns information about all stateful resources.
@@ -94,6 +96,58 @@ func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, eng
 	}
 
 	writeJSON(w, http.StatusOK, resource)
+}
+
+// handleCreateStateResource registers a new stateful resource definition.
+// It persists the resource to the file store and forwards it to the engine.
+func (a *API) handleCreateStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+
+	var cfg config.StatefulResourceConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		writeJSONDecodeError(w, err, a.logger())
+		return
+	}
+
+	if cfg.Name == "" {
+		writeError(w, http.StatusBadRequest, "validation_error", "resource name is required")
+		return
+	}
+
+	// Default ID field to "id" if not specified.
+	if cfg.IDField == "" {
+		cfg.IDField = "id"
+	}
+
+	// Persist to the file store so it survives restarts.
+	if a.dataStore != nil {
+		resStore := a.dataStore.StatefulResources()
+		if err := resStore.Create(ctx, &cfg); err != nil {
+			if errors.Is(err, store.ErrAlreadyExists) {
+				writeError(w, http.StatusConflict, "conflict", "resource already exists: "+cfg.Name)
+				return
+			}
+			a.logger().Warn("failed to persist stateful resource", "name", cfg.Name, "error", err)
+		}
+	}
+
+	// Forward to the engine to register the runtime resource.
+	if err := engine.RegisterStatefulResource(ctx, &cfg); err != nil {
+		if errors.Is(err, engineclient.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "resource already exists: "+cfg.Name)
+			return
+		}
+		writeError(w, http.StatusBadRequest, "registration_failed",
+			sanitizeError(err, a.logger(), "register stateful resource"))
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"name":     cfg.Name,
+		"basePath": cfg.BasePath,
+		"idField":  cfg.IDField,
+		"message":  "Stateful resource created",
+	})
 }
 
 // handleClearStateResource clears all items from a specific resource (does not restore seed data).

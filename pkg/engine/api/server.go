@@ -186,6 +186,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// State management
 	mux.HandleFunc("GET /state", s.handleGetState)
 	mux.HandleFunc("POST /state/reset", s.handleResetState)
+	mux.HandleFunc("POST /state/resources", s.handleRegisterStatefulResource)
 	mux.HandleFunc("GET /state/resources/{name}", s.handleGetStateResource)
 	mux.HandleFunc("DELETE /state/resources/{name}", s.handleClearStateResource)
 	mux.HandleFunc("GET /state/resources/{name}/items", s.handleListStatefulItems)

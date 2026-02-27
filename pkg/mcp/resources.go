@@ -76,6 +76,24 @@ func (p *ResourceProvider) List() []ResourceDefinition {
 		}
 	}
 
+	// Add chaos resource
+	resources = append(resources, ResourceDefinition{
+		URI:         "mock://chaos",
+		Name:        "Chaos Configuration",
+		Description: "Active chaos injection rules and statistics",
+		MimeType:    "application/json",
+	})
+
+	// Add verification resource template
+	// Note: This is a resource template with {mockId} parameter.
+	// Clients can read mock://verification/<mockId> for any mock.
+	resources = append(resources, ResourceDefinition{
+		URI:         "mock://verification",
+		Name:        "Mock Verification",
+		Description: "Verification status and invocations for a mock. Read mock://verification/{mockId} for a specific mock.",
+		MimeType:    "application/json",
+	})
+
 	// Add system resources
 	resources = append(resources, ResourceDefinition{
 		URI:         "mock://logs",
@@ -111,6 +129,10 @@ func (p *ResourceProvider) Read(uri string) ([]ResourceContent, *JSONRPCError) {
 		return p.readMockResource(uri)
 	case "stateful":
 		return p.readStatefulResource(path)
+	case "chaos":
+		return p.readChaosResource()
+	case "verification":
+		return p.readVerificationResource(path)
 	case "logs":
 		return p.readLogsResource()
 	case "config":
@@ -134,6 +156,15 @@ func parseResourceURI(uri string) (resourceType, path, method string) {
 	// Check for special resource types
 	if strings.HasPrefix(rest, "stateful/") {
 		return "stateful", strings.TrimPrefix(rest, "stateful/"), ""
+	}
+	if rest == "chaos" {
+		return "chaos", "", ""
+	}
+	if strings.HasPrefix(rest, "verification/") {
+		return "verification", strings.TrimPrefix(rest, "verification/"), ""
+	}
+	if rest == "verification" {
+		return "verification", "", ""
 	}
 	if rest == "logs" {
 		return "logs", "", ""
@@ -242,6 +273,70 @@ func (p *ResourceProvider) readStatefulResource(name string) ([]ResourceContent,
 	}, nil
 }
 
+// readChaosResource reads the chaos configuration and statistics resource.
+func (p *ResourceProvider) readChaosResource() ([]ResourceContent, *JSONRPCError) {
+	if p.adminClient == nil {
+		return nil, InternalError(nil)
+	}
+
+	content := make(map[string]interface{})
+
+	chaosConfig, err := p.adminClient.GetChaosConfig()
+	if err != nil {
+		return nil, InternalError(err)
+	}
+	content["config"] = chaosConfig
+
+	chaosStats, err := p.adminClient.GetChaosStats()
+	if err == nil && chaosStats != nil {
+		content["stats"] = chaosStats
+	}
+
+	text, _ := json.Marshal(content)
+	return []ResourceContent{
+		{
+			URI:      "mock://chaos",
+			MimeType: "application/json",
+			Text:     string(text),
+		},
+	}, nil
+}
+
+// readVerificationResource reads verification status and invocations for a mock.
+func (p *ResourceProvider) readVerificationResource(mockID string) ([]ResourceContent, *JSONRPCError) {
+	if p.adminClient == nil {
+		return nil, InternalError(nil)
+	}
+
+	if mockID == "" {
+		return nil, ResourceNotFoundError("mock://verification — specify a mock ID: mock://verification/{mockId}")
+	}
+
+	content := map[string]interface{}{
+		"mockId": mockID,
+	}
+
+	verification, err := p.adminClient.GetMockVerification(mockID)
+	if err != nil {
+		return nil, ResourceNotFoundError("mock://verification/" + mockID)
+	}
+	content["verification"] = verification
+
+	invocations, err := p.adminClient.ListMockInvocations(mockID)
+	if err == nil && invocations != nil {
+		content["invocations"] = invocations
+	}
+
+	text, _ := json.Marshal(content)
+	return []ResourceContent{
+		{
+			URI:      "mock://verification/" + mockID,
+			MimeType: "application/json",
+			Text:     string(text),
+		},
+	}, nil
+}
+
 // readLogsResource reads the logs resource.
 func (p *ResourceProvider) readLogsResource() ([]ResourceContent, *JSONRPCError) {
 	if p.adminClient == nil {
@@ -301,7 +396,7 @@ func (p *ResourceProvider) readConfigResource() ([]ResourceContent, *JSONRPCErro
 		// Get stats if available
 		stats, err := p.adminClient.GetStats()
 		if err == nil && stats != nil {
-			content["totalRequests"] = stats.TotalRequests
+			content["totalRequests"] = stats.RequestCount
 			content["uptime"] = stats.Uptime
 		}
 	}

@@ -46,7 +46,7 @@ func handleGetServerStatus(args map[string]interface{}, session *MCPSession, ser
 	stats, err := client.GetStats()
 	if err == nil && stats != nil {
 		result["uptime"] = stats.Uptime
-		result["totalRequests"] = stats.TotalRequests
+		result["totalRequests"] = stats.RequestCount
 		result["mockCount"] = stats.MockCount
 	}
 
@@ -71,8 +71,10 @@ func handleGetRequestLogs(args map[string]interface{}, session *MCPSession, serv
 	method := getString(args, "method", "")
 	pathPrefix := getString(args, "pathPrefix", "")
 	mockID := getString(args, "mockId", "")
+	protocol := getString(args, "protocol", "")
 
 	filter := &cli.LogFilter{
+		Protocol:  protocol,
 		Limit:     limit,
 		Offset:    offset,
 		Method:    method,

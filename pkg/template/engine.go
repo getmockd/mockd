@@ -54,6 +54,8 @@ var (
 	payloadPattern = regexp.MustCompile(`^payload\.(.+)$`)
 	// faker.type
 	fakerPattern = regexp.MustCompile(`^faker\.(\w+)$`)
+	// faker.type(args) — parameterized faker functions
+	fakerParamPattern = regexp.MustCompile(`^faker\.(\w+)\((.+)\)$`)
 	// upper(value) or lower(value) or default(value, fallback)
 	funcCallPattern = regexp.MustCompile(`^(\w+)\((.+)\)$`)
 )
@@ -144,7 +146,12 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 		return e.resolvePayloadField(matches[1], ctx)
 	}
 
-	// Handle faker.* patterns
+	// Handle parameterized faker.type(args) patterns
+	if matches := fakerParamPattern.FindStringSubmatch(expr); matches != nil {
+		return resolveFakerParam(matches[1], matches[2])
+	}
+
+	// Handle faker.* patterns (no args)
 	if matches := fakerPattern.FindStringSubmatch(expr); matches != nil {
 		return resolveFaker(matches[1])
 	}
@@ -416,6 +423,8 @@ func formatValue(val any) string {
 }
 
 // resolveFaker resolves faker.* patterns with realistic-looking sample data.
+//
+//nolint:gocyclo // Flat switch over faker types is intentional; splitting would add indirection without benefit.
 func resolveFaker(fakerType string) string {
 	switch fakerType {
 	case "uuid":
@@ -462,6 +471,87 @@ func resolveFaker(fakerType string) string {
 			"System status nominal.",
 		}
 		return sentences[mathrand.IntN(len(sentences))]
+
+	// --- Internet ---
+	case "ipv4":
+		return fakerIPv4()
+	case "ipv6":
+		return fakerIPv6()
+	case "macAddress":
+		return fakerMACAddress()
+	case "userAgent":
+		return fakerUserAgents[mathrand.IntN(len(fakerUserAgents))]
+
+	// --- Finance ---
+	case "creditCard":
+		return fakerCreditCard()
+	case "creditCardExp":
+		return fakerCreditCardExp()
+	case "cvv":
+		return fakerCVV()
+	case "currencyCode":
+		return fakerCurrencyCodes[mathrand.IntN(len(fakerCurrencyCodes))]
+	case "currency":
+		return fakerCurrencyNames[mathrand.IntN(len(fakerCurrencyNames))]
+	case "iban":
+		return fakerIBAN()
+
+	// --- Commerce ---
+	case "price":
+		return fakerPrice()
+	case "productName":
+		return fakerProductAdjectives[mathrand.IntN(len(fakerProductAdjectives))] + " " +
+			fakerProductMaterials[mathrand.IntN(len(fakerProductMaterials))] + " " +
+			fakerProductNouns[mathrand.IntN(len(fakerProductNouns))]
+	case "color":
+		return fakerColors[mathrand.IntN(len(fakerColors))]
+	case "hexColor":
+		return fakerHexColor()
+
+	// --- Identity ---
+	case "ssn":
+		return fakerSSN()
+	case "passport":
+		return fakerPassport()
+	case "jobTitle":
+		return fakerJobLevels[mathrand.IntN(len(fakerJobLevels))] + " " +
+			fakerJobFields[mathrand.IntN(len(fakerJobFields))] + " " +
+			fakerJobRoles[mathrand.IntN(len(fakerJobRoles))]
+
+	// --- Geo ---
+	case "latitude":
+		return fakerLatitude()
+	case "longitude":
+		return fakerLongitude()
+
+	// --- Text ---
+	case "words":
+		return fakerWords(mathrand.IntN(3) + 3) // default 3-5 words
+	case "slug":
+		return fakerSlug()
+
+	// --- Data ---
+	case "mimeType":
+		return fakerMIMETypes[mathrand.IntN(len(fakerMIMETypes))]
+	case "fileExtension":
+		return fakerFileExtensions[mathrand.IntN(len(fakerFileExtensions))]
+
+	default:
+		return ""
+	}
+}
+
+// resolveFakerParam resolves parameterized faker.type(args) patterns.
+// Currently supports:
+//   - faker.words(n) — generate n random words, space-separated
+func resolveFakerParam(fakerType, argsStr string) string {
+	switch fakerType {
+	case "words":
+		n, err := strconv.Atoi(strings.TrimSpace(argsStr))
+		if err != nil || n <= 0 {
+			return fakerWords(3) // default fallback
+		}
+		return fakerWords(n)
 	default:
 		return ""
 	}

@@ -278,26 +278,8 @@ func runStatefulAdd(_ *cobra.Command, args []string) error {
 		return errors.New("resource name cannot be empty")
 	}
 
-	// Build the stateful resource config
-	resourceCfg := &config.StatefulResourceConfig{
-		Name:     name,
-		BasePath: statefulAddPath,
-	}
-	if statefulAddIDField != "" {
-		resourceCfg.IDField = statefulAddIDField
-	}
-
-	// Wrap in a MockCollection and import (same pattern as runAddStateful in add.go)
-	collection := &config.MockCollection{
-		Version: "1.0",
-		Mocks:   []*config.MockConfiguration{},
-		StatefulResources: []*config.StatefulResourceConfig{
-			resourceCfg,
-		},
-	}
-
 	client := NewAdminClientWithAuth(adminURL)
-	_, err := client.ImportConfig(collection, false)
+	err := client.CreateStatefulResource(name, statefulAddPath, statefulAddIDField)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}

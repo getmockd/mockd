@@ -153,6 +153,103 @@ var chaosStatusCmd = &cobra.Command{
 	},
 }
 
+var chaosProfilesCmd = &cobra.Command{
+	Use:   "profiles",
+	Short: "List available chaos profiles",
+	Long:  `List all built-in chaos profiles that can be applied by name.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client := NewAdminClientWithAuth(adminURL)
+		profiles, err := client.ListChaosProfiles()
+		if err != nil {
+			return fmt.Errorf("failed to list chaos profiles: %s", FormatConnectionError(err))
+		}
+
+		printList(profiles, func() {
+			fmt.Println("Available chaos profiles:")
+			fmt.Println()
+			for _, p := range profiles {
+				fmt.Printf("  %-15s %s\n", p.Name, p.Description)
+			}
+			fmt.Println()
+			fmt.Println("Apply a profile with: mockd chaos apply <profile-name>")
+		})
+		return nil
+	},
+}
+
+var chaosApplyCmd = &cobra.Command{
+	Use:   "apply <profile-name>",
+	Short: "Apply a named chaos profile",
+	Long: `Apply a built-in chaos profile by name. This sets the chaos configuration
+to the profile's preset values and enables chaos injection.
+
+Use "mockd chaos profiles" to see available profiles.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		profileName := args[0]
+
+		client := NewAdminClientWithAuth(adminURL)
+
+		// First get the profile details to show what's being applied
+		profile, err := client.GetChaosProfile(profileName)
+		if err != nil {
+			return fmt.Errorf("failed to get chaos profile: %s", FormatConnectionError(err))
+		}
+
+		if err := client.ApplyChaosProfile(profileName); err != nil {
+			return fmt.Errorf("failed to apply chaos profile: %s", FormatConnectionError(err))
+		}
+
+		printResult(map[string]any{
+			"profile": profileName,
+			"applied": true,
+			"config":  profile.Config,
+		}, func() {
+			fmt.Printf("Applied chaos profile: %s\n", profileName)
+			fmt.Printf("  %s\n", profile.Description)
+			fmt.Println()
+			printChaosProfileConfig(profile)
+			fmt.Println()
+			fmt.Println("Disable with: mockd chaos disable")
+		})
+		return nil
+	},
+}
+
+// printChaosProfileConfig displays the configuration details of a chaos profile.
+func printChaosProfileConfig(p *ChaosProfileInfo) {
+	cfg := p.Config
+	if latency, ok := cfg["latency"].(map[string]interface{}); ok {
+		min, _ := latency["min"].(string)
+		max, _ := latency["max"].(string)
+		fmt.Printf("  Latency: %s - %s\n", min, max)
+	}
+	if errorRate, ok := cfg["errorRate"].(map[string]interface{}); ok {
+		prob, _ := errorRate["probability"].(float64)
+		fmt.Printf("  Error rate: %.0f%%\n", prob*100)
+		if codes, ok := errorRate["statusCodes"].([]interface{}); ok && len(codes) > 0 {
+			fmt.Printf("  Error codes: ")
+			for i, c := range codes {
+				if i > 0 {
+					fmt.Print(", ")
+				}
+				if code, ok := c.(float64); ok {
+					fmt.Printf("%d", int(code))
+				}
+			}
+			fmt.Println()
+		}
+	}
+	if bandwidth, ok := cfg["bandwidth"].(map[string]interface{}); ok {
+		bps, _ := bandwidth["bytesPerSecond"].(float64)
+		if bps >= 1024 {
+			fmt.Printf("  Bandwidth: %.0f KB/s\n", bps/1024)
+		} else {
+			fmt.Printf("  Bandwidth: %.0f B/s\n", bps)
+		}
+	}
+}
+
 func init() {
 	rootCmd.AddCommand(chaosCmd)
 
@@ -164,6 +261,7 @@ func init() {
 	chaosEnableCmd.Flags().Float64Var(&chaosEnableProbability, "probability", 1.0, "Probability of applying chaos (0.0-1.0)")
 
 	chaosCmd.AddCommand(chaosDisableCmd)
-
 	chaosCmd.AddCommand(chaosStatusCmd)
+	chaosCmd.AddCommand(chaosProfilesCmd)
+	chaosCmd.AddCommand(chaosApplyCmd)
 }

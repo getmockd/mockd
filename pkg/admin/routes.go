@@ -96,6 +96,7 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /state", a.requireEngine(a.handleStateOverview))
 	mux.HandleFunc("POST /state/reset", a.requireEngine(a.handleStateReset))
 	mux.HandleFunc("GET /state/resources", a.requireEngine(a.handleListStateResources))
+	mux.HandleFunc("POST /state/resources", a.requireEngine(a.handleCreateStateResource))
 	mux.HandleFunc("GET /state/resources/{name}", a.requireEngine(a.handleGetStateResource))
 	mux.HandleFunc("POST /state/resources/{name}/reset", a.requireEngine(a.handleResetStateResource))
 	mux.HandleFunc("DELETE /state/resources/{name}", a.requireEngine(a.handleClearStateResource))
@@ -150,6 +151,11 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /chaos", a.requireEngine(a.handleSetChaos))
 	mux.HandleFunc("GET /chaos/stats", a.requireEngine(a.handleGetChaosStats))
 	mux.HandleFunc("POST /chaos/stats/reset", a.requireEngine(a.handleResetChaosStats))
+
+	// Chaos profiles (built-in presets)
+	mux.HandleFunc("GET /chaos/profiles", a.handleListChaosProfiles)
+	mux.HandleFunc("GET /chaos/profiles/{name}", a.handleGetChaosProfile)
+	mux.HandleFunc("POST /chaos/profiles/{name}/apply", a.requireEngine(a.handleApplyChaosProfile))
 
 	// gRPC server management (convenience — proxies to /mocks?type=grpc)
 	mux.HandleFunc("GET /grpc", func(w http.ResponseWriter, r *http.Request) {
