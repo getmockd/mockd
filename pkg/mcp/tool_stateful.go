@@ -10,6 +10,27 @@ import (
 // All stateful tools go through the admin API (HTTP) so they work in both
 // stdio mode (MCP → admin → engine) and embedded mode.
 
+// handleManageState dispatches stateful resource operations based on the action parameter.
+// This is the single entry point for all stateful resource management — overview,
+// list_items, get_item, create_item, and reset are all routed through this handler.
+func handleManageState(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+	action := getString(args, "action", "")
+	switch action {
+	case "overview":
+		return handleGetStateOverview(args, session, server)
+	case "list_items":
+		return handleListStatefulItems(args, session, server)
+	case "get_item":
+		return handleGetStatefulItem(args, session, server)
+	case "create_item":
+		return handleCreateStatefulItem(args, session, server)
+	case "reset":
+		return handleResetStatefulData(args, session, server)
+	default:
+		return ToolResultError("invalid action: " + action + ". Use: overview, list_items, get_item, create_item, reset"), nil
+	}
+}
+
 // handleListStatefulItems lists items in a stateful resource with pagination.
 func handleListStatefulItems(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
@@ -58,9 +79,14 @@ func handleGetStatefulItem(args map[string]interface{}, session *MCPSession, ser
 		return ToolResultError("resource is required"), nil
 	}
 
-	id := getString(args, "id", "")
+	// Accept both "item_id" (multiplexed manage_state) and "id" (legacy) for
+	// the item identifier.
+	id := getString(args, "item_id", "")
 	if id == "" {
-		return ToolResultError("id is required"), nil
+		id = getString(args, "id", "")
+	}
+	if id == "" {
+		return ToolResultError("item_id is required"), nil
 	}
 
 	item, err := client.GetStatefulItem(resourceName, id)

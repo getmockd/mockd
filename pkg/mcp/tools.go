@@ -22,8 +22,8 @@ type ToolRegistry struct {
 // NewToolRegistry creates a new tool registry and registers all built-in tools.
 func NewToolRegistry(server *Server) *ToolRegistry {
 	r := &ToolRegistry{
-		tools:  make([]*Tool, 0, 27),
-		byName: make(map[string]*Tool, 27),
+		tools:  make([]*Tool, 0, 16),
+		byName: make(map[string]*Tool, 16),
 		server: server,
 	}
 
@@ -31,23 +31,16 @@ func NewToolRegistry(server *Server) *ToolRegistry {
 	return r
 }
 
-// registerBuiltinTools registers all 19 tools from tool_defs.go with their handlers.
+// registerBuiltinTools registers all 16 tools from tool_defs.go with their handlers.
 func (r *ToolRegistry) registerBuiltinTools() {
 	// Tool name → handler mapping.
 	handlers := map[string]ToolHandler{
-		// Mock CRUD
-		"list_mocks":  handleListMocks,
-		"get_mock":    handleGetMock,
-		"create_mock": handleCreateMock,
-		"update_mock": handleUpdateMock,
-		"delete_mock": handleDeleteMock,
-		"toggle_mock": handleToggleMock,
+		// Mock CRUD (multiplexed)
+		"manage_mock": handleManageMock,
 
-		// Context / Workspace
-		"get_current_context": handleGetCurrentContext,
-		"switch_context":      handleSwitchContext,
-		"list_workspaces":     handleListWorkspaces,
-		"switch_workspace":    handleSwitchWorkspace,
+		// Context / Workspace (multiplexed)
+		"manage_context":   handleManageContext,
+		"manage_workspace": handleManageWorkspace,
 
 		// Import / Export
 		"import_mocks": handleImportMocks,
@@ -68,14 +61,10 @@ func (r *ToolRegistry) registerBuiltinTools() {
 		"get_mock_invocations": handleGetMockInvocations,
 		"reset_verification":   handleResetVerification,
 
-		// Stateful Resources
-		"get_state_overview":   handleGetStateOverview,
-		"list_stateful_items":  handleListStatefulItems,
-		"get_stateful_item":    handleGetStatefulItem,
-		"create_stateful_item": handleCreateStatefulItem,
-		"reset_stateful_data":  handleResetStatefulData,
+		// Stateful Resources (multiplexed)
+		"manage_state": handleManageState,
 
-		// Custom Operations
+		// Custom Operations (multiplexed)
 		"manage_custom_operation": handleManageCustomOperation,
 	}
 

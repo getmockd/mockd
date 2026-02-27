@@ -9,6 +9,36 @@ import (
 // Context / Workspace Handlers
 // =============================================================================
 
+// handleManageContext dispatches context operations based on the action parameter.
+// Use "get" to view the current context and all available contexts, or "switch"
+// to change which mockd server this session communicates with.
+func handleManageContext(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+	action := getString(args, "action", "")
+	switch action {
+	case "get":
+		return handleGetCurrentContext(args, session, server)
+	case "switch":
+		return handleSwitchContext(args, session, server)
+	default:
+		return ToolResultError("invalid action: " + action + ". Use: get, switch"), nil
+	}
+}
+
+// handleManageWorkspace dispatches workspace operations based on the action parameter.
+// Use "list" to see all workspaces, or "switch" to route subsequent operations
+// to a specific workspace.
+func handleManageWorkspace(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+	action := getString(args, "action", "")
+	switch action {
+	case "list":
+		return handleListWorkspaces(args, session, server)
+	case "switch":
+		return handleSwitchWorkspace(args, session, server)
+	default:
+		return ToolResultError("invalid action: " + action + ". Use: list, switch"), nil
+	}
+}
+
 // handleGetCurrentContext shows the active context and all available contexts.
 func handleGetCurrentContext(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
 	// Load all configured contexts (read-only)

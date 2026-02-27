@@ -13,6 +13,29 @@ import (
 // Mock CRUD Handlers
 // =============================================================================
 
+// handleManageMock dispatches mock CRUD operations based on the action parameter.
+// This is the single entry point for all mock management — list, get, create,
+// update, delete, and toggle are all routed through this multiplexed handler.
+func handleManageMock(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
+	action := getString(args, "action", "")
+	switch action {
+	case "list":
+		return handleListMocks(args, session, server)
+	case "get":
+		return handleGetMock(args, session, server)
+	case "create":
+		return handleCreateMock(args, session, server)
+	case "update":
+		return handleUpdateMock(args, session, server)
+	case "delete":
+		return handleDeleteMock(args, session, server)
+	case "toggle":
+		return handleToggleMock(args, session, server)
+	default:
+		return ToolResultError("invalid action: " + action + ". Use: list, get, create, update, delete, toggle"), nil
+	}
+}
+
 // handleListMocks lists all configured mocks across all protocols.
 func handleListMocks(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()

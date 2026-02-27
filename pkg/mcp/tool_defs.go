@@ -15,28 +15,21 @@ var (
 	}
 )
 
-// allToolDefinitions returns all 27 tool definitions in display order.
-// Tools are grouped by category: CRUD, Context, Import/Export, Observability,
-// Chaos, Verification, Stateful, Custom Operations.
+// allToolDefinitions returns all 16 tool definitions in display order.
+// Tools are grouped by category: Mock, Context, Workspace, Import/Export,
+// Observability, Chaos, Verification, Stateful, Custom Operations.
 func allToolDefinitions() []ToolDefinition {
 	return []ToolDefinition{
 		// =====================================================================
-		// Mock CRUD (6 tools)
+		// Mock CRUD (1 multiplexed tool)
 		// =====================================================================
-		defListMocks,
-		defGetMock,
-		defCreateMock,
-		defUpdateMock,
-		defDeleteMock,
-		defToggleMock,
+		defManageMock,
 
 		// =====================================================================
-		// Context / Workspace (4 tools)
+		// Context / Workspace (2 multiplexed tools)
 		// =====================================================================
-		defGetCurrentContext,
-		defSwitchContext,
-		defListWorkspaces,
-		defSwitchWorkspace,
+		defManageContext,
+		defManageWorkspace,
 
 		// =====================================================================
 		// Import / Export (2 tools)
@@ -66,13 +59,9 @@ func allToolDefinitions() []ToolDefinition {
 		defResetVerification,
 
 		// =====================================================================
-		// Stateful Resources (5 tools)
+		// Stateful Resources (1 multiplexed tool)
 		// =====================================================================
-		defGetStateOverview,
-		defListStatefulItems,
-		defGetStatefulItem,
-		defCreateStatefulItem,
-		defResetStatefulData,
+		defManageState,
 
 		// =====================================================================
 		// Custom Operations (1 multiplexed tool)
@@ -82,67 +71,44 @@ func allToolDefinitions() []ToolDefinition {
 }
 
 // =============================================================================
-// Mock CRUD Definitions
+// Mock CRUD Definition (multiplexed)
 // =============================================================================
 
-var defListMocks = ToolDefinition{
-	Name:        "list_mocks",
-	Description: "List all configured mocks across all protocols (HTTP, WebSocket, GraphQL, gRPC, SOAP, MQTT, OAuth). Returns ID, type, name, enabled status, and a summary for each mock. Use this FIRST to discover mock IDs before calling get_mock or other per-mock tools.",
+var defManageMock = ToolDefinition{
+	Name: "manage_mock",
+	Description: `Create, retrieve, update, delete, list, or toggle mock endpoints. Use 'action' to specify the operation. For list, optionally filter by type or enabled status. For get/update/delete/toggle, provide the mock ID. For create, provide type and protocol-specific configuration.
+
+Examples:
+  List:   {"action":"list","type":"http"}
+  Get:    {"action":"get","id":"http_060bff782a1de15f"}
+  Create: {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/hello"},"response":{"statusCode":200,"body":"{\"msg\":\"hello\"}"}}}
+  Update: {"action":"update","id":"http_060bff782a1de15f","http":{"response":{"statusCode":201}}}
+  Delete: {"action":"delete","id":"http_060bff782a1de15f"}
+  Toggle: {"action":"toggle","id":"http_060bff782a1de15f","enabled":false}`,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
+			"action": map[string]interface{}{
+				"type":        "string",
+				"description": "Operation to perform",
+				"enum":        []string{"list", "get", "create", "update", "delete", "toggle"},
+			},
+			"id": map[string]interface{}{
+				"type":        "string",
+				"description": "Mock ID (required for get/update/delete/toggle)",
+			},
 			"type": map[string]interface{}{
 				"type":        "string",
-				"description": "Filter by protocol type",
+				"description": "Protocol type for create or list filter",
 				"enum":        []string{"http", "websocket", "graphql", "grpc", "soap", "mqtt", "oauth"},
 			},
 			"enabled": map[string]interface{}{
 				"type":        "boolean",
-				"description": "Filter by enabled status",
-			},
-		},
-	},
-	Annotations: readOnlyAnnotations,
-}
-
-var defGetMock = ToolDefinition{
-	Name:        "get_mock",
-	Description: "Retrieve the full configuration for a specific mock by ID. Returns the complete mock object including all protocol-specific settings. Use this to inspect a mock's details after discovering its ID from list_mocks.",
-	InputSchema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"id": map[string]interface{}{
-				"type":        "string",
-				"description": "Mock ID (e.g., http_060bff782a1de15f)",
-			},
-		},
-		"required": []string{"id"},
-	},
-	Annotations: readOnlyAnnotations,
-}
-
-var defCreateMock = ToolDefinition{
-	Name: "create_mock",
-	Description: `Create a new mock for any supported protocol. Set 'type' and populate the matching protocol object. For gRPC and MQTT, mocks on the same port are automatically merged.
-
-HTTP: {"type":"http","http":{"matcher":{"method":"GET","path":"/api/hello"},"response":{"statusCode":200,"body":"{\"msg\":\"hello\"}"}}}
-WebSocket: {"type":"websocket","websocket":{"path":"/ws/chat","echoMode":true}}
-GraphQL: {"type":"graphql","graphql":{"path":"/graphql","schema":"type Query { user: String }","resolvers":{"Query.user":{"response":"Alice"}}}}
-gRPC: {"type":"grpc","grpc":{"port":50051,"protoFile":"./service.proto","reflection":true,"services":{"pkg.Svc":{"methods":{"Get":{"response":{}}}}}}}
-MQTT: {"type":"mqtt","mqtt":{"port":1883,"topics":[{"topic":"sensors/temp","messages":[{"payload":"{\"temp\":72}"}]}]}}
-SOAP: {"type":"soap","soap":{"path":"/soap","operations":{"GetWeather":{"response":"<Temp>72</Temp>"}}}}
-OAuth: {"type":"oauth","oauth":{"issuer":"http://localhost:9999/oauth","clients":[{"clientId":"app","clientSecret":"secret"}]}}`,
-	InputSchema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"type": map[string]interface{}{
-				"type":        "string",
-				"description": "Protocol type",
-				"enum":        []string{"http", "websocket", "graphql", "grpc", "soap", "mqtt", "oauth"},
+				"description": "For toggle: set specific state. For list: filter by enabled status.",
 			},
 			"name": map[string]interface{}{
 				"type":        "string",
-				"description": "Human-readable name for the mock",
+				"description": "Mock name (create/update)",
 			},
 			"http": map[string]interface{}{
 				"type":        "object",
@@ -200,153 +166,78 @@ OAuth: {"type":"oauth","oauth":{"issuer":"http://localhost:9999/oauth","clients"
 			},
 			"websocket": map[string]interface{}{
 				"type":        "object",
-				"description": "WebSocket mock spec (required when type=websocket)",
+				"description": "WebSocket config (create/update)",
 			},
 			"graphql": map[string]interface{}{
 				"type":        "object",
-				"description": "GraphQL mock spec (required when type=graphql). Resolvers are a map: {\"Query.user\": {\"response\": ...}}",
+				"description": "GraphQL config (create/update)",
 			},
 			"grpc": map[string]interface{}{
 				"type":        "object",
-				"description": "gRPC mock spec (required when type=grpc)",
+				"description": "gRPC config (create/update)",
 			},
 			"soap": map[string]interface{}{
 				"type":        "object",
-				"description": "SOAP mock spec (required when type=soap)",
+				"description": "SOAP config (create/update)",
 			},
 			"mqtt": map[string]interface{}{
 				"type":        "object",
-				"description": "MQTT mock spec (required when type=mqtt)",
+				"description": "MQTT config (create/update)",
 			},
 			"oauth": map[string]interface{}{
 				"type":        "object",
-				"description": "OAuth mock spec (required when type=oauth)",
+				"description": "OAuth config (create/update)",
 			},
 		},
-		"required": []string{"type"},
-	},
-}
-
-var defUpdateMock = ToolDefinition{
-	Name:        "update_mock",
-	Description: "Update an existing mock's configuration by ID. Fetches the current mock, merges provided fields, and saves. Works with any protocol type. Only the fields you provide are changed.",
-	Annotations: idempotentAnnotations,
-	InputSchema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"id": map[string]interface{}{
-				"type":        "string",
-				"description": "Mock ID to update",
-			},
-			"name": map[string]interface{}{
-				"type":        "string",
-				"description": "New name",
-			},
-			"enabled": map[string]interface{}{
-				"type":        "boolean",
-				"description": "Enable or disable",
-			},
-			"http":      map[string]interface{}{"type": "object", "description": "Updated HTTP spec (partial merge)"},
-			"websocket": map[string]interface{}{"type": "object", "description": "Updated WebSocket spec"},
-			"graphql":   map[string]interface{}{"type": "object", "description": "Updated GraphQL spec"},
-			"grpc":      map[string]interface{}{"type": "object", "description": "Updated gRPC spec"},
-			"soap":      map[string]interface{}{"type": "object", "description": "Updated SOAP spec"},
-			"mqtt":      map[string]interface{}{"type": "object", "description": "Updated MQTT spec"},
-			"oauth":     map[string]interface{}{"type": "object", "description": "Updated OAuth spec"},
-		},
-		"required": []string{"id"},
-	},
-}
-
-var defDeleteMock = ToolDefinition{
-	Name:        "delete_mock",
-	Description: "Permanently delete a mock by ID. The mock is removed and will no longer respond to requests. To disable a mock without deleting it, use toggle_mock instead.",
-	Annotations: destructiveAnnotations,
-	InputSchema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"id": map[string]interface{}{
-				"type":        "string",
-				"description": "Mock ID to delete",
-			},
-		},
-		"required": []string{"id"},
-	},
-}
-
-var defToggleMock = ToolDefinition{
-	Name:        "toggle_mock",
-	Description: "Enable or disable a mock without deleting it. Disabled mocks are preserved but do not respond to requests. To set a specific state, use the enabled parameter (true = enable, false = disable).",
-	Annotations: idempotentAnnotations,
-	InputSchema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"id": map[string]interface{}{
-				"type":        "string",
-				"description": "Mock ID",
-			},
-			"enabled": map[string]interface{}{
-				"type":        "boolean",
-				"description": "true = enable, false = disable",
-			},
-		},
-		"required": []string{"id", "enabled"},
+		"required": []string{"action"},
 	},
 }
 
 // =============================================================================
-// Context / Workspace Definitions
+// Context / Workspace Definitions (multiplexed)
 // =============================================================================
 
-var defGetCurrentContext = ToolDefinition{
-	Name:        "get_current_context",
-	Description: "Show the active context (admin server connection) and all available contexts. Use this FIRST to understand which mockd server you're connected to. Returns context name, admin URL, workspace, and a list of all configured contexts.",
-	InputSchema: map[string]interface{}{
-		"type":       "object",
-		"properties": map[string]interface{}{},
-	},
-	Annotations: readOnlyAnnotations,
-}
-
-var defSwitchContext = ToolDefinition{
-	Name:        "switch_context",
-	Description: "Switch to a different context (admin server). Changes which mockd server this session communicates with. The change is session-scoped and does NOT persist to disk. Available contexts are defined in ~/.config/mockd/contexts.yaml.",
-	Annotations: idempotentAnnotations,
+var defManageContext = ToolDefinition{
+	Name:        "manage_context",
+	Description: "View or switch the active admin server context. Use 'get' to see the current context and all available contexts. Use 'switch' to change which mockd server this session communicates with.",
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
+			"action": map[string]interface{}{
+				"type":        "string",
+				"description": "Operation to perform",
+				"enum":        []string{"get", "switch"},
+			},
 			"name": map[string]interface{}{
 				"type":        "string",
-				"description": "Context name to switch to (from get_current_context results)",
+				"description": "Context name (required for switch)",
 			},
 		},
-		"required": []string{"name"},
+		"required": []string{"action"},
 	},
 }
 
-var defListWorkspaces = ToolDefinition{
-	Name:        "list_workspaces",
-	Description: "List workspaces available on the current admin server. Returns workspace names, IDs, and which one is currently active. Workspaces isolate groups of mocks.",
-	InputSchema: map[string]interface{}{
-		"type":       "object",
-		"properties": map[string]interface{}{},
-	},
-	Annotations: readOnlyAnnotations,
-}
-
-var defSwitchWorkspace = ToolDefinition{
-	Name:        "switch_workspace",
-	Description: "Switch the active workspace. Routes subsequent mock operations to a specific workspace. The change is session-scoped and does NOT persist to disk.",
-	Annotations: idempotentAnnotations,
+var defManageWorkspace = ToolDefinition{
+	Name:        "manage_workspace",
+	Description: "List available workspaces or switch the active workspace. Workspaces isolate mock configurations. Use 'list' to see all workspaces, 'switch' to route subsequent operations to a specific workspace.",
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
+			"action": map[string]interface{}{
+				"type":        "string",
+				"description": "Operation to perform",
+				"enum":        []string{"list", "switch"},
+			},
 			"id": map[string]interface{}{
 				"type":        "string",
-				"description": "Workspace ID to switch to",
+				"description": "Workspace ID (required for switch)",
+			},
+			"name": map[string]interface{}{
+				"type":        "string",
+				"description": "Workspace name (for switch, alternative to ID)",
 			},
 		},
-		"required": []string{"id"},
+		"required": []string{"action"},
 	},
 }
 
@@ -465,98 +356,62 @@ var defClearRequestLogs = ToolDefinition{
 }
 
 // =============================================================================
-// Stateful Resource Definitions
+// Stateful Resource Definition (multiplexed)
 // =============================================================================
 
-var defListStatefulItems = ToolDefinition{
-	Name:        "list_stateful_items",
-	Description: "List items in a stateful mock resource with pagination. Use get_state_overview first to find resource names. Supports sort and order parameters.",
-	Annotations: readOnlyAnnotations,
+var defManageState = ToolDefinition{
+	Name: "manage_state",
+	Description: `Manage stateful mock resources — CRUD collections that persist data across requests. Use 'overview' to see all resources, 'list_items' to browse items in a resource, 'get_item' for a specific item, 'create_item' to add data, or 'reset' to restore seed data.
+
+Examples:
+  Overview:    {"action":"overview"}
+  List items:  {"action":"list_items","resource":"users","limit":10}
+  Get item:    {"action":"get_item","resource":"users","item_id":"abc123"}
+  Create item: {"action":"create_item","resource":"users","data":{"name":"Alice"}}
+  Reset:       {"action":"reset","resource":"users"}`,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
+			"action": map[string]interface{}{
+				"type":        "string",
+				"description": "Operation to perform",
+				"enum":        []string{"overview", "list_items", "get_item", "create_item", "reset"},
+			},
 			"resource": map[string]interface{}{
 				"type":        "string",
-				"description": "Stateful resource name (e.g., users, products)",
+				"description": "Resource name (required for list_items/get_item/create_item/reset)",
+			},
+			"item_id": map[string]interface{}{
+				"type":        "string",
+				"description": "Item ID (required for get_item)",
+			},
+			"data": map[string]interface{}{
+				"type":        "object",
+				"description": "Item data (required for create_item)",
 			},
 			"limit": map[string]interface{}{
 				"type":        "integer",
-				"description": "Maximum items to return",
-				"default":     100,
+				"description": "Max items for list_items",
+				"default":     50,
 			},
 			"offset": map[string]interface{}{
 				"type":        "integer",
-				"description": "Items to skip",
+				"description": "Pagination offset for list_items",
 				"default":     0,
 			},
 			"sort": map[string]interface{}{
 				"type":        "string",
-				"description": "Field to sort by",
+				"description": "Sort field for list_items",
 				"default":     "createdAt",
 			},
 			"order": map[string]interface{}{
 				"type":        "string",
-				"description": "Sort order",
+				"description": "Sort order: asc or desc",
 				"enum":        []string{"asc", "desc"},
 				"default":     "desc",
 			},
 		},
-		"required": []string{"resource"},
-	},
-}
-
-var defGetStatefulItem = ToolDefinition{
-	Name:        "get_stateful_item",
-	Description: "Retrieve a specific item from a stateful resource by its ID. Returns the full item object with all fields.",
-	Annotations: readOnlyAnnotations,
-	InputSchema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"resource": map[string]interface{}{
-				"type":        "string",
-				"description": "Stateful resource name",
-			},
-			"id": map[string]interface{}{
-				"type":        "string",
-				"description": "Item ID to retrieve",
-			},
-		},
-		"required": []string{"resource", "id"},
-	},
-}
-
-var defCreateStatefulItem = ToolDefinition{
-	Name:        "create_stateful_item",
-	Description: "Create a new item in a stateful resource. ID and timestamps are auto-generated if not provided.",
-	InputSchema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"resource": map[string]interface{}{
-				"type":        "string",
-				"description": "Stateful resource name",
-			},
-			"data": map[string]interface{}{
-				"type":        "object",
-				"description": "Item data",
-			},
-		},
-		"required": []string{"resource", "data"},
-	},
-}
-
-var defResetStatefulData = ToolDefinition{
-	Name:        "reset_stateful_data",
-	Description: "Reset a stateful resource to its initial seed data. Restores seed data and removes all runtime-created items. The resource parameter is required to prevent accidental full resets.",
-	Annotations: destructiveAnnotations,
-	InputSchema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"resource": map[string]interface{}{
-				"type":        "string",
-				"description": "Resource name to reset",
-			},
-		},
-		"required": []string{"resource"},
+		"required": []string{"action"},
 	},
 }
 
@@ -696,20 +551,6 @@ var defResetVerification = ToolDefinition{
 			},
 		},
 	},
-}
-
-// =============================================================================
-// Stateful Overview Definition
-// =============================================================================
-
-var defGetStateOverview = ToolDefinition{
-	Name:        "get_state_overview",
-	Description: "Get a summary of all stateful mock resources — names, item counts, and types. Use this to see what stateful data exists before querying specific resources with list_stateful_items.",
-	InputSchema: map[string]interface{}{
-		"type":       "object",
-		"properties": map[string]interface{}{},
-	},
-	Annotations: readOnlyAnnotations,
 }
 
 // =============================================================================

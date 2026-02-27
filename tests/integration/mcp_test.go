@@ -421,10 +421,10 @@ func TestMCP_GetMock(t *testing.T) {
 
 	sessionID := initializeSession(t, handler)
 
-	// Retrieve mock by ID using get_mock tool
+	// Retrieve mock by ID using manage_mock tool (action=get)
 	resp := sendJSONRPC(t, handler, "tools/call", mcp.ToolCallParams{
-		Name:      "get_mock",
-		Arguments: map[string]interface{}{"id": created.Mock.ID},
+		Name:      "manage_mock",
+		Arguments: map[string]interface{}{"action": "get", "id": created.Mock.ID},
 	}, sessionID)
 
 	if resp.Error != nil {
@@ -487,10 +487,10 @@ func TestMCP_ListMocks(t *testing.T) {
 
 	sessionID := initializeSession(t, handler)
 
-	// List all mocks using list_mocks tool
+	// List all mocks using manage_mock tool (action=list)
 	resp := sendJSONRPC(t, handler, "tools/call", mcp.ToolCallParams{
-		Name:      "list_mocks",
-		Arguments: map[string]interface{}{"type": "http"},
+		Name:      "manage_mock",
+		Arguments: map[string]interface{}{"action": "list", "type": "http"},
 	}, sessionID)
 
 	if resp.Error != nil {
@@ -523,8 +523,8 @@ func TestMCP_GetMock_NotFound(t *testing.T) {
 	sessionID := initializeSession(t, handler)
 
 	resp := sendJSONRPC(t, handler, "tools/call", mcp.ToolCallParams{
-		Name:      "get_mock",
-		Arguments: map[string]interface{}{"id": "nonexistent-id"},
+		Name:      "manage_mock",
+		Arguments: map[string]interface{}{"action": "get", "id": "nonexistent-id"},
 	}, sessionID)
 
 	if resp.Error != nil {
@@ -561,8 +561,8 @@ func TestMCP_ToolsList(t *testing.T) {
 		t.Fatal("expected tools to be listed")
 	}
 
-	// Verify key tools from the 19-tool MCP overhaul are present
-	expectedTools := []string{"list_mocks", "get_mock", "create_mock", "get_server_status"}
+	// Verify key tools from the multiplexed MCP consolidation are present
+	expectedTools := []string{"manage_mock", "manage_context", "manage_workspace", "get_server_status"}
 	for _, expectedName := range expectedTools {
 		found := false
 		for _, tool := range result.Tools {
