@@ -1624,6 +1624,7 @@ mockd import <source> [flags]
 | `postman` | Postman Collection v2.x |
 | `har` | HTTP Archive (browser recordings) |
 | `wiremock` | WireMock JSON mappings |
+| `mockoon` | Mockoon environment JSON |
 | `curl` | cURL command |
 | `wsdl` | WSDL 1.1 service definition (generates SOAP mocks) |
 
@@ -1635,6 +1636,9 @@ mockd import openapi.yaml
 
 # Import from Postman collection
 mockd import collection.json -f postman
+
+# Import from Mockoon environment
+mockd import environment.json -f mockoon
 
 # Import from HAR file including static assets
 mockd import recording.har --include-static

@@ -227,7 +227,7 @@ Templates work in headers too:
 
 ## Faker Functions
 
-Generate realistic sample data with 34 built-in faker types. Faker functions work in **all protocols** — HTTP, GraphQL, gRPC, SOAP, WebSocket, SSE, and MQTT response bodies.
+Generate realistic sample data with 35 built-in faker types. Faker type names are **case-insensitive** — `faker.Name`, `faker.name`, and `faker.NAME` all work. Faker functions work in **all protocols** — HTTP, GraphQL, gRPC, SOAP, WebSocket, SSE, and MQTT response bodies.
 
 ```json
 {
@@ -272,6 +272,7 @@ Generate realistic sample data with 34 built-in faker types. Faker functions wor
 | `faker.ipv6` | 2001:0db8:85a3:0000:0000:8a2e:0370:7334 |
 | `faker.macAddress` | 00:1A:2B:3C:4D:5E |
 | `faker.userAgent` | Mozilla/5.0 (Windows NT 10.0; ...) |
+| `faker.url` | https://example.com/api |
 
 ### Finance
 
@@ -308,6 +309,8 @@ Generate realistic sample data with 34 built-in faker types. Faker functions wor
 
 :::tip
 `faker.words(n)` is the only parameterized faker type. Use it to generate exactly *n* space-separated words: `{{faker.words(5)}}` → `alpha beta gamma delta epsilon`.
+
+Faker type names are case-insensitive: `{{faker.firstName}}`, `{{faker.firstname}}`, and `{{faker.FIRSTNAME}}` all produce the same result.
 :::
 
 ## Sequences
@@ -402,9 +405,9 @@ Response:
 | `{{timestamp.unix_ms}}` | Unix timestamp (milliseconds) |
 | `{{uuid}}` | Random UUID |
 | `{{uuid.short}}` | Short random ID (hex) |
-| `{{random.int(min, max)}}` | Random integer in range |
-| `{{random.float(min, max)}}` | Random float in range |
-| `{{random.string(length)}}` | Random alphanumeric string |
+| `{{random.int(min, max)}}` | Random integer in range (alias: `randomInt`) |
+| `{{random.float(min, max)}}` | Random float in range (alias: `randomFloat`) |
+| `{{random.string(length)}}` | Random alphanumeric string (alias: `randomString`) |
 | `{{sequence("name")}}` | Auto-incrementing counter |
 | `{{upper value}}` | Uppercase string |
 | `{{lower value}}` | Lowercase string |
@@ -414,7 +417,7 @@ Response:
 | `{{faker.creditCard}}` | Luhn-valid credit card number |
 | `{{faker.ipv4}}` | Random IPv4 address |
 | `{{faker.price}}` | Random price (e.g., 49.99) |
-| `{{faker.*}}` | [34 types total](#faker-functions) |
+| `{{faker.*}}` | [35 types total](#faker-functions) |
 
 ## Next Steps
 

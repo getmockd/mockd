@@ -1,9 +1,9 @@
 ---
 title: Import & Export
-description: Import mocks from OpenAPI, Postman, WireMock, HAR, and cURL. Export to share or migrate.
+description: Import mocks from OpenAPI, Postman, WireMock, Mockoon, HAR, and cURL. Export to share or migrate.
 ---
 
-mockd can import mock definitions from formats you probably already have — OpenAPI specs, Postman collections, WireMock stubs, HAR files from your browser, and even cURL commands.
+mockd can import mock definitions from formats you probably already have — OpenAPI specs, Postman collections, WireMock stubs, Mockoon environments, HAR files from your browser, and even cURL commands.
 
 ## Supported Import Formats
 
@@ -12,6 +12,7 @@ mockd can import mock definitions from formats you probably already have — Ope
 | OpenAPI | `.yaml`, `.json` | Yes | OpenAPI 3.x and Swagger 2.0 specs |
 | Postman | `.json` | Yes | Postman Collection v2.0 and v2.1 |
 | WireMock | directory | Yes | WireMock mapping JSON files |
+| Mockoon | `.json` | Yes | Mockoon environment exports |
 | HAR | `.har` | Yes | HTTP Archive files (from browser DevTools) |
 | cURL | — | No | cURL command strings |
 | mockd | `.yaml`, `.json` | Yes | mockd's own config format |
@@ -58,6 +59,16 @@ mockd import ./wiremock-mappings/
 ```
 
 mockd reads all `.json` files in the directory and converts WireMock's request matching and response definitions to mockd format.
+
+### From Mockoon Environments
+
+Import a Mockoon environment JSON export:
+
+```bash
+mockd import environment.json
+```
+
+mockd converts Mockoon routes (including CRUD resources), response templates, path parameters (`:id` → `{id}`), and Handlebars helpers (`{{faker 'person.firstName'}}` → `{{faker.firstName}}`). Disabled routes are skipped, and per-response + global latency is preserved.
 
 ### From HAR Files
 
@@ -143,6 +154,20 @@ mockd list
 mockd export --format yaml > mockd.yaml
 ```
 
+### Migrate from Mockoon
+
+```bash
+# Export your Mockoon environment (File → Export → Current Environment)
+# Then import into mockd
+mockd import mockoon-environment.json
+
+# Verify the import
+mockd list
+
+# Export as mockd config for future use
+mockd export --format yaml > mockd.yaml
+```
+
 ### Capture Real Traffic → Mock
 
 ```bash
@@ -200,6 +225,7 @@ mockd auto-detects the format of imported files based on content:
 - Files with `info.schema` matching Postman patterns → Postman Collection
 - Files with `log.entries` → HAR
 - Files with `request.url` + `response` at top level → WireMock
+- Files with `routes` array + `endpointPrefix` → Mockoon environment
 - Files with `mocks` array or `version: "1.0"` → mockd native format
 - Directories → scanned for WireMock JSON mappings
 

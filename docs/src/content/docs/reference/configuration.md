@@ -1016,22 +1016,22 @@ body: |
 | `{{timestamp.unix_ms}}` | Unix timestamp (milliseconds) |
 | `{{uuid}}` | Random UUID |
 | `{{uuid.short}}` | Short random ID (hex) |
-| `{{randomInt min max}}` | Random integer |
-| `{{randomFloat min max}}` | Random float |
-| `{{random.string(length)}}` | Random alphanumeric string |
+| `{{randomInt min max}}` | Random integer (alias for `random.int`) |
+| `{{randomFloat min max}}` | Random float (alias for `random.float`) |
+| `{{randomString length}}` | Random alphanumeric string (alias for `random.string`) |
 | `{{sequence("name")}}` | Auto-incrementing counter |
 | `{{upper value}}` | Uppercase string |
 | `{{lower value}}` | Lowercase string |
 | `{{default value fallback}}` | Default if empty |
 
-### Faker Functions (34 types)
+### Faker Functions (35 types)
 
 Generate realistic sample data in response bodies. See the [Response Templating guide](/guides/response-templating/#faker-functions) for full details and example output.
 
 | Category | Types |
 |----------|-------|
 | **Basic** | `name`, `firstName`, `lastName`, `email`, `phone`, `company`, `address`, `word`, `sentence`, `words`, `words(n)`, `boolean`, `uuid` |
-| **Internet** | `ipv4`, `ipv6`, `macAddress`, `userAgent` |
+| **Internet** | `ipv4`, `ipv6`, `macAddress`, `userAgent`, `url` |
 | **Finance** | `creditCard`, `creditCardExp`, `cvv`, `currencyCode`, `currency`, `iban`, `price` |
 | **Commerce** | `productName`, `color`, `hexColor` |
 | **Identity** | `ssn`, `passport`, `jobTitle` |
