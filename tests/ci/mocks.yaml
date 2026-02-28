@@ -38,7 +38,7 @@ mocks:
         path: /api/users/{id}
       response:
         statusCode: 200
-        body: '{"id":"{{request.PathParam.id}}","name":"{{faker.name}}"}'
+        body: '{"id":"{{request.pathParam.id}}","name":"{{faker.name}}"}'
         headers:
           Content-Type: application/json
 
@@ -63,6 +63,6 @@ mocks:
         path: /api/echo
       response:
         statusCode: 200
-        body: '{"method":"{{request.Method}}","path":"{{request.Path}}"}'
+        body: '{"method":"{{request.method}}","path":"{{request.path}}"}'
         headers:
           Content-Type: application/json
