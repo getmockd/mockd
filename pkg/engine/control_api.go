@@ -140,52 +140,8 @@ func (a *ControlAPIAdapter) GetChaosConfig() *api.ChaosConfig {
 		return nil
 	}
 
-	apiCfg := &api.ChaosConfig{
-		Enabled: cfg.Enabled,
-	}
-
-	// Convert global rules
-	if cfg.GlobalRules != nil {
-		if cfg.GlobalRules.Latency != nil {
-			apiCfg.Latency = &api.LatencyConfig{
-				Min:         cfg.GlobalRules.Latency.Min,
-				Max:         cfg.GlobalRules.Latency.Max,
-				Probability: cfg.GlobalRules.Latency.Probability,
-			}
-		}
-		if cfg.GlobalRules.ErrorRate != nil {
-			apiCfg.ErrorRate = &api.ErrorRateConfig{
-				Probability: cfg.GlobalRules.ErrorRate.Probability,
-				StatusCodes: cfg.GlobalRules.ErrorRate.StatusCodes,
-				DefaultCode: cfg.GlobalRules.ErrorRate.DefaultCode,
-			}
-		}
-		if cfg.GlobalRules.Bandwidth != nil {
-			apiCfg.Bandwidth = &api.BandwidthConfig{
-				BytesPerSecond: cfg.GlobalRules.Bandwidth.BytesPerSecond,
-				Probability:    cfg.GlobalRules.Bandwidth.Probability,
-			}
-		}
-	}
-
-	// Convert rules
-	for _, rule := range cfg.Rules {
-		apiRule := api.ChaosRuleConfig{
-			PathPattern: rule.PathPattern,
-			Methods:     rule.Methods,
-			Probability: rule.Probability,
-		}
-		for _, f := range rule.Faults {
-			apiRule.Faults = append(apiRule.Faults, api.ChaosFaultConfig{
-				Type:        string(f.Type),
-				Probability: f.Probability,
-				Config:      f.Config,
-			})
-		}
-		apiCfg.Rules = append(apiCfg.Rules, apiRule)
-	}
-
-	return apiCfg
+	apiCfg := types.ChaosConfigFromInternal(cfg)
+	return &apiCfg
 }
 
 // SetChaosConfig implements api.EngineController.
@@ -195,52 +151,8 @@ func (a *ControlAPIAdapter) SetChaosConfig(cfg *api.ChaosConfig) error {
 		return a.server.SetChaosInjector(nil)
 	}
 
-	// Build chaos config
-	chaosCfg := &chaos.ChaosConfig{
-		Enabled: cfg.Enabled,
-	}
-
-	// Convert global rules
-	if cfg.Latency != nil || cfg.ErrorRate != nil || cfg.Bandwidth != nil {
-		chaosCfg.GlobalRules = &chaos.GlobalChaosRules{}
-		if cfg.Latency != nil {
-			chaosCfg.GlobalRules.Latency = &chaos.LatencyFault{
-				Min:         cfg.Latency.Min,
-				Max:         cfg.Latency.Max,
-				Probability: cfg.Latency.Probability,
-			}
-		}
-		if cfg.ErrorRate != nil {
-			chaosCfg.GlobalRules.ErrorRate = &chaos.ErrorRateFault{
-				Probability: cfg.ErrorRate.Probability,
-				StatusCodes: cfg.ErrorRate.StatusCodes,
-				DefaultCode: cfg.ErrorRate.DefaultCode,
-			}
-		}
-		if cfg.Bandwidth != nil {
-			chaosCfg.GlobalRules.Bandwidth = &chaos.BandwidthFault{
-				BytesPerSecond: cfg.Bandwidth.BytesPerSecond,
-				Probability:    cfg.Bandwidth.Probability,
-			}
-		}
-	}
-
-	// Convert rules
-	for _, rule := range cfg.Rules {
-		cr := chaos.ChaosRule{
-			PathPattern: rule.PathPattern,
-			Methods:     rule.Methods,
-			Probability: rule.Probability,
-		}
-		for _, f := range rule.Faults {
-			cr.Faults = append(cr.Faults, chaos.FaultConfig{
-				Type:        chaos.FaultType(f.Type),
-				Probability: f.Probability,
-				Config:      f.Config,
-			})
-		}
-		chaosCfg.Rules = append(chaosCfg.Rules, cr)
-	}
+	// Convert API config to internal chaos config using canonical converter
+	chaosCfg := types.ChaosConfigToInternal(cfg)
 
 	// Clamp probability/rate values to [0.0, 1.0] before validating
 	chaosCfg.Clamp()

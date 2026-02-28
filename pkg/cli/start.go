@@ -269,6 +269,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 		baseDir := config.GetMockFileBaseDir(sf.ConfigFile)
 		server.Handler().SetBaseDir(baseDir)
 
+		// CLI flags take precedence over config file chaos settings.
+		// If chaos was already configured via --chaos-enabled flags,
+		// clear the config file's chaos so ImportConfigDirect doesn't overwrite it.
+		if serverCfg.Chaos != nil && collection.ServerConfig != nil {
+			collection.ServerConfig.Chaos = nil
+		}
+
 		if _, err := adminAPI.ImportConfigDirect(ctx, collection, false); err != nil {
 			_ = server.Stop()
 			_ = adminAPI.Stop()

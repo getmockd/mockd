@@ -16,6 +16,7 @@ import (
 	"github.com/getmockd/mockd/internal/runtime"
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	apitypes "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/audit"
 	"github.com/getmockd/mockd/pkg/chaos"
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
@@ -638,64 +639,30 @@ func initializePersistentStore(sctx *serveContext) error {
 func configureProtocolHandlers(sctx *serveContext) {
 	f := sctx.flags
 
-	// Build chaos config from --chaos-profile or individual flags
+	// Build chaos config: profile flag takes priority, then individual flags.
+	// Uses the same BuildChaosConfig shared by start/serve, then converts to
+	// the API-level type needed for engine HTTP communication.
+	var internalCfg *chaos.ChaosConfig
+
 	if f.chaosProfile != "" {
 		profile, _ := chaos.GetProfile(f.chaosProfile) // already validated in validateServeFlags
-		apiCfg := chaosProfileToAPIConfig(&profile.Config)
-		sctx.chaosConfig = &apiCfg
+		cfg := profile.Config                          // copy
+		cfg.Enabled = true
+		internalCfg = &cfg
 	} else if f.chaosEnabled {
-		cfg := &engineclient.ChaosConfig{Enabled: true}
-		if f.chaosLatency != "" {
-			min, max := ParseLatencyRange(f.chaosLatency)
-			cfg.Latency = &engineclient.LatencyConfig{
-				Min:         min,
-				Max:         max,
-				Probability: 1.0,
-			}
+		// Build from individual flags using shared builder
+		sf := ServerFlags{
+			ChaosEnabled:   f.chaosEnabled,
+			ChaosLatency:   f.chaosLatency,
+			ChaosErrorRate: f.chaosErrorRate,
 		}
-		if f.chaosErrorRate > 0 {
-			cfg.ErrorRate = &engineclient.ErrorRateConfig{
-				Probability: f.chaosErrorRate,
-				DefaultCode: 500,
-			}
-		}
-		sctx.chaosConfig = cfg
+		internalCfg = BuildChaosConfig(&sf)
 	}
-}
 
-// chaosProfileToAPIConfig converts a chaos.ChaosConfig to the API-level
-// engineclient.ChaosConfig for applying via the engine control API.
-// This mirrors admin/chaos_handlers.go chaosConfigToAPI.
-func chaosProfileToAPIConfig(src *chaos.ChaosConfig) engineclient.ChaosConfig {
-	cfg := engineclient.ChaosConfig{
-		Enabled: src.Enabled,
+	if internalCfg != nil {
+		apiCfg := apitypes.ChaosConfigFromInternal(internalCfg)
+		sctx.chaosConfig = &apiCfg
 	}
-	if src.GlobalRules != nil {
-		if src.GlobalRules.Latency != nil {
-			cfg.Latency = &engineclient.LatencyConfig{
-				Min:         src.GlobalRules.Latency.Min,
-				Max:         src.GlobalRules.Latency.Max,
-				Probability: src.GlobalRules.Latency.Probability,
-			}
-		}
-		if src.GlobalRules.ErrorRate != nil {
-			cfg.ErrorRate = &engineclient.ErrorRateConfig{
-				Probability: src.GlobalRules.ErrorRate.Probability,
-				DefaultCode: src.GlobalRules.ErrorRate.DefaultCode,
-			}
-			if len(src.GlobalRules.ErrorRate.StatusCodes) > 0 {
-				cfg.ErrorRate.StatusCodes = make([]int, len(src.GlobalRules.ErrorRate.StatusCodes))
-				copy(cfg.ErrorRate.StatusCodes, src.GlobalRules.ErrorRate.StatusCodes)
-			}
-		}
-		if src.GlobalRules.Bandwidth != nil {
-			cfg.Bandwidth = &engineclient.BandwidthConfig{
-				BytesPerSecond: src.GlobalRules.Bandwidth.BytesPerSecond,
-				Probability:    src.GlobalRules.Bandwidth.Probability,
-			}
-		}
-	}
-	return cfg
 }
 
 // handleOperatingMode handles runtime/pull/local modes and loads mocks.
@@ -798,6 +765,13 @@ func handleLocalMode(sctx *serveContext) error {
 	// relative to the config file location.
 	baseDir := config.GetMockFileBaseDir(sctx.flags.configFile)
 	sctx.server.Handler().SetBaseDir(baseDir)
+
+	// CLI flags take precedence over config file chaos settings.
+	// If chaos was already configured via --chaos-enabled/--chaos-profile flags,
+	// clear the config file's chaos so ImportConfigDirect doesn't overwrite it.
+	if sctx.chaosConfig != nil && collection.ServerConfig != nil {
+		collection.ServerConfig.Chaos = nil
+	}
 
 	// Import through admin — writes to persistent store + pushes to engine.
 	if _, err := sctx.adminAPI.ImportConfigDirect(sctx.ctx, collection, false); err != nil {
