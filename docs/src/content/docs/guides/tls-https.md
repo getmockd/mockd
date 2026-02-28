@@ -37,9 +37,10 @@ mockd start --config mocks.json \
 ```json
 {
   "server": {
-    "port": 8443,
+    "port": 4280,
     "tls": {
       "enabled": true,
+      "port": 8443,
       "certFile": "./certs/server.crt",
       "keyFile": "./certs/server.key"
     }
@@ -47,6 +48,8 @@ mockd start --config mocks.json \
   "mocks": [...]
 }
 ```
+
+This starts HTTP on port 4280 and HTTPS on port 8443. To run HTTPS only, omit `server.port` or set `httpsRedirect: true`.
 
 ## Certificate Generation
 

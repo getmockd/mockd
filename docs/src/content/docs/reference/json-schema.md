@@ -88,13 +88,17 @@ Add to `coc-settings.json`:
   "title": "mockd Configuration",
   "type": "object",
   "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
     "server": { "$ref": "#/definitions/server" },
     "mocks": {
       "type": "array",
       "items": { "$ref": "#/definitions/mock" }
     },
-    "stateful": { "$ref": "#/definitions/stateful" },
-    "proxy": { "$ref": "#/definitions/proxy" }
+    "statefulResources": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/statefulResource" }
+    }
   }
 }
 ```
@@ -395,8 +399,8 @@ Custom properties are ignored by mockd but preserved in the config.
 
 The complete schema is available at:
 
-- **URL**: `https://getmockd.github.io/mockd/schema/config.json`
-- **Repository**: `docs/schema/config.json`
+- **URL**: `https://raw.githubusercontent.com/getmockd/mockd/main/schema/mockd.schema.json`
+- **Repository**: `schema/mockd.schema.json`
 
 ## See Also
 

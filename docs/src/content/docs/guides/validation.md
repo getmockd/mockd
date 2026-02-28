@@ -320,7 +320,7 @@ Control how validation failures are handled with the `mode` property:
 |--------------|-------------------------------------------------------|
 | `strict`     | Reject invalid requests with 400 error (default)      |
 | `warn`       | Log warning but process the request normally          |
-| `permissive` | Silently ignore validation errors                     |
+| `permissive` | Only reject on critical errors (missing required fields); log and allow all other validation failures |
 
 ```yaml
 validation:

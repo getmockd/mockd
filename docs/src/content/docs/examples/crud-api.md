@@ -99,32 +99,43 @@ mockd start --config tasks-api.json
 curl http://localhost:4280/api/tasks
 ```
 
-Response:
+Response (paginated envelope):
 
 ```json
-[
-  {
-    "id": 1,
-    "title": "Setup project",
-    "status": "done",
-    "assigneeId": 1,
-    "createdAt": "2024-01-10T09:00:00Z"
-  },
-  {
-    "id": 2,
-    "title": "Write documentation",
-    "status": "in_progress",
-    "assigneeId": 2,
-    "createdAt": "2024-01-11T10:00:00Z"
-  },
-  {
-    "id": 3,
-    "title": "Add tests",
-    "status": "todo",
-    "assigneeId": null,
-    "createdAt": "2024-01-12T11:00:00Z"
+{
+  "data": [
+    {
+      "id": "1",
+      "title": "Setup project",
+      "description": "Initialize the project structure",
+      "status": "done",
+      "assigneeId": 1,
+      "createdAt": "2024-01-10T09:00:00Z"
+    },
+    {
+      "id": "2",
+      "title": "Write documentation",
+      "description": "Create user documentation",
+      "status": "in_progress",
+      "assigneeId": 2,
+      "createdAt": "2024-01-11T10:00:00Z"
+    },
+    {
+      "id": "3",
+      "title": "Add tests",
+      "description": "Write unit tests",
+      "status": "todo",
+      "assigneeId": null,
+      "createdAt": "2024-01-12T11:00:00Z"
+    }
+  ],
+  "meta": {
+    "total": 3,
+    "limit": 20,
+    "offset": 0,
+    "count": 3
   }
-]
+}
 ```
 
 ### Filter Tasks
@@ -147,7 +158,7 @@ Response:
 
 ```json
 {
-  "id": 2,
+  "id": "2",
   "title": "Write documentation",
   "description": "Create user documentation",
   "status": "in_progress",
@@ -173,7 +184,7 @@ Response:
 
 ```json
 {
-  "id": 4,
+  "id": "4",
   "title": "Review PR",
   "description": "Review pull request #42",
   "status": "todo",
@@ -338,11 +349,12 @@ describe('Tasks API', () => {
     const task = await createRes.json();
     expect(task.id).toBeDefined();
 
-    // List tasks
+    // List tasks — response is a paginated envelope with data + meta
     const listRes = await fetch(`${API}/tasks`);
-    const tasks = await listRes.json();
-    expect(tasks).toHaveLength(1);
-    expect(tasks[0].title).toBe('Test task');
+    const result = await listRes.json();
+    expect(result.data).toHaveLength(4); // 3 seed + 1 created
+    expect(result.meta.total).toBe(4);
+    expect(result.data.find(t => t.title === 'Test task')).toBeDefined();
   });
 
   test('update task status', async () => {
