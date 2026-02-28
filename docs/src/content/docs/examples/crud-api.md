@@ -131,7 +131,7 @@ Response (paginated envelope):
   ],
   "meta": {
     "total": 3,
-    "limit": 20,
+    "limit": 100,
     "offset": 0,
     "count": 3
   }
