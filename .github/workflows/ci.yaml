@@ -93,6 +93,214 @@ jobs:
       - name: Run E2E tests
         run: go test -v ./tests/e2e/...
 
+  smoke:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    needs: [test]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.7"
+          cache: true
+
+      - name: Build binary
+        run: go build -ldflags="-s -w" -o mockd ./cmd/mockd
+
+      - name: Verify binary runs
+        run: |
+          ./mockd version
+          ./mockd --help
+
+      - name: Start server
+        run: |
+          ./mockd serve --no-auth --port 4280 --admin-port 4290 --log-level warn &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4290/health > /dev/null 2>&1; then
+              echo "Server healthy after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:4290/health || (echo "Server failed to start" && exit 1)
+
+      - name: Smoke test — create and hit HTTP mock
+        run: |
+          ./mockd add http --path /api/hello --status 200 --body '{"message":"hello"}'
+          RESPONSE=$(curl -sf http://localhost:4280/api/hello)
+          echo "$RESPONSE" | grep -q "hello" || (echo "Expected 'hello' in response: $RESPONSE" && exit 1)
+          echo "✓ HTTP mock works"
+
+      - name: Smoke test — stateful CRUD
+        run: |
+          ./mockd stateful add smoke-users --path /api/smoke-users
+          # Create
+          CREATE=$(curl -sf -X POST http://localhost:4280/api/smoke-users \
+            -H "Content-Type: application/json" \
+            -d '{"name":"CI User","email":"ci@test.com"}')
+          USER_ID=$(echo "$CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          echo "Created user: $USER_ID"
+          # Read
+          curl -sf http://localhost:4280/api/smoke-users/$USER_ID | grep -q "CI User" || (echo "GET by ID failed" && exit 1)
+          # List
+          curl -sf http://localhost:4280/api/smoke-users | grep -q "CI User" || (echo "List failed" && exit 1)
+          # Update
+          curl -sf -X PUT http://localhost:4280/api/smoke-users/$USER_ID \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Updated User"}' | grep -q "Updated User" || (echo "Update failed" && exit 1)
+          # Delete
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" -X DELETE http://localhost:4280/api/smoke-users/$USER_ID)
+          [ "$STATUS" = "204" ] || (echo "Delete returned $STATUS, expected 204" && exit 1)
+          echo "✓ Stateful CRUD works"
+
+      - name: Smoke test — OpenAPI import
+        run: |
+          cat > /tmp/smoke-spec.yaml << 'SPEC'
+          openapi: "3.0.0"
+          info:
+            title: Smoke Test
+            version: "1.0.0"
+          paths:
+            /smoke/items:
+              get:
+                summary: List items
+                responses:
+                  "200":
+                    description: OK
+                    content:
+                      application/json:
+                        schema:
+                          type: array
+                          items:
+                            type: object
+          SPEC
+          ./mockd import /tmp/smoke-spec.yaml
+          curl -sf http://localhost:4280/smoke/items || (echo "Imported mock not reachable" && exit 1)
+          echo "✓ OpenAPI import works"
+
+      - name: Smoke test — export round-trip
+        run: |
+          ./mockd export -o /tmp/smoke-export.yaml
+          grep -q "version:" /tmp/smoke-export.yaml || (echo "Export missing version" && exit 1)
+          grep -q "mocks:" /tmp/smoke-export.yaml || (echo "Export missing mocks" && exit 1)
+          echo "✓ Export works"
+
+      - name: Smoke test — engine mode
+        run: |
+          cat > /tmp/engine-config.yaml << 'CONF'
+          version: "1.0"
+          mocks:
+            - type: http
+              name: engine-test
+              http:
+                matcher:
+                  path: /engine/health
+                  method: GET
+                response:
+                  statusCode: 200
+                  body: '{"engine":"ok"}'
+                  headers:
+                    Content-Type: application/json
+          CONF
+          ./mockd engine --config /tmp/engine-config.yaml --port 0 --print-url > /tmp/engine-url &
+          ENGINE_PID=$!
+          sleep 2
+          ENGINE_URL=$(cat /tmp/engine-url)
+          echo "Engine started at: $ENGINE_URL"
+          curl -sf "$ENGINE_URL/engine/health" | grep -q "ok" || (echo "Engine mock not reachable" && exit 1)
+          kill $ENGINE_PID 2>/dev/null || true
+          echo "✓ Engine mode works"
+
+      - name: Smoke test — chaos profile
+        run: |
+          ./mockd chaos apply flaky
+          ./mockd chaos status | grep -qi "enabled\|flaky\|active" || (echo "Chaos status check failed" && exit 1)
+          ./mockd chaos disable
+          echo "✓ Chaos profiles work"
+
+      - name: Smoke test — mock listing and deletion
+        run: |
+          MOCK_COUNT=$(./mockd list --json | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+          echo "Mock count: $MOCK_COUNT"
+          [ "$MOCK_COUNT" -gt 0 ] || (echo "Expected at least 1 mock" && exit 1)
+          # Delete all mocks
+          ./mockd list --json | python3 -c "import sys,json; [print(m['id']) for m in json.load(sys.stdin)]" | while read id; do
+            ./mockd delete "$id"
+          done
+          REMAINING=$(./mockd list --json | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+          [ "$REMAINING" -eq 0 ] || (echo "Expected 0 mocks after deletion, got $REMAINING" && exit 1)
+          echo "✓ List and delete work"
+
+  action-compat:
+    name: Setup Action Compat
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install mockd via setup-mockd action
+        uses: getmockd/setup-mockd@v1
+        id: mockd
+        with:
+          start: true
+          config: tests/ci/mocks.yaml
+
+      - name: Verify action outputs
+        run: |
+          echo "Version: ${{ steps.mockd.outputs.version }}"
+          echo "Mock URL: ${{ steps.mockd.outputs.mockd-url }}"
+          echo "Admin URL: ${{ steps.mockd.outputs.admin-url }}"
+          echo "Cache hit: ${{ steps.mockd.outputs.cache-hit }}"
+          test -n "${{ steps.mockd.outputs.version }}" || (echo "Missing version output" && exit 1)
+          test -n "${{ steps.mockd.outputs.mockd-url }}" || (echo "Missing mockd-url output" && exit 1)
+          test -n "${{ steps.mockd.outputs.admin-url }}" || (echo "Missing admin-url output" && exit 1)
+
+      - name: Verify config mocks loaded
+        run: |
+          # Health endpoint from config
+          HEALTH=$(curl -sf ${{ steps.mockd.outputs.mockd-url }}/api/health)
+          echo "$HEALTH" | grep -q "mockd-ci" || (echo "Config mock not loaded: $HEALTH" && exit 1)
+          echo "✓ Config mocks loaded"
+
+      - name: Verify mock responses
+        run: |
+          MOCKD="${{ steps.mockd.outputs.mockd-url }}"
+          # List users (with faker templates)
+          curl -sf "$MOCKD/api/users" | grep -q "email" || (echo "List users failed" && exit 1)
+          # Get user by ID (path param)
+          curl -sf "$MOCKD/api/users/abc123" | grep -q "abc123" || (echo "Path param not echoed" && exit 1)
+          # Create user
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "$MOCKD/api/users" \
+            -H "Content-Type: application/json" -d '{"name":"test"}')
+          [ "$STATUS" = "201" ] || (echo "Create user returned $STATUS" && exit 1)
+          # Request echo
+          curl -sf "$MOCKD/api/echo" | grep -q "GET" || (echo "Echo failed" && exit 1)
+          echo "✓ All mock responses verified"
+
+      - name: Verify admin API via CLI
+        run: |
+          ADMIN="${{ steps.mockd.outputs.admin-url }}"
+          # List mocks via CLI (action added mockd to PATH)
+          MOCK_COUNT=$(mockd list --json --admin-url "$ADMIN" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+          echo "Mocks loaded from config: $MOCK_COUNT"
+          [ "$MOCK_COUNT" -ge 5 ] || (echo "Expected >= 5 mocks from config, got $MOCK_COUNT" && exit 1)
+          echo "✓ Admin API and CLI work"
+
+      - name: Verify runtime mock creation
+        run: |
+          MOCKD="${{ steps.mockd.outputs.mockd-url }}"
+          ADMIN="${{ steps.mockd.outputs.admin-url }}"
+          # Create a mock at runtime (proves admin API works)
+          mockd add http --path /api/runtime-test --status 200 \
+            --body '{"source":"runtime"}' --admin-url "$ADMIN"
+          curl -sf "$MOCKD/api/runtime-test" | grep -q "runtime" || (echo "Runtime mock failed" && exit 1)
+          echo "✓ Runtime mock creation works"
+
   build:
     name: Build
     runs-on: ubuntu-latest
