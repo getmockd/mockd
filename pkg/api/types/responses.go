@@ -3,6 +3,7 @@
 package types
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
@@ -235,6 +236,70 @@ type ChaosFaultConfig struct {
 	Type        string         `json:"type"`
 	Probability float64        `json:"probability"`
 	Config      map[string]any `json:"config,omitempty"`
+}
+
+// knownFaultFields lists the JSON keys that map to struct fields on ChaosFaultConfig.
+// Everything else is treated as a fault-specific config parameter and gets merged
+// into the Config map so users don't have to nest them under "config".
+var knownFaultFields = map[string]bool{
+	"type":        true,
+	"probability": true,
+	"config":      true,
+}
+
+// UnmarshalJSON accepts both the canonical format (config params nested under "config")
+// and the flat format (config params alongside "type" and "probability").
+//
+// Canonical:  {"type":"circuit_breaker","probability":1.0,"config":{"tripAfter":3}}
+// Flat:       {"type":"circuit_breaker","probability":1.0,"tripAfter":3}
+//
+// When both forms are present for the same key, the explicit "config" value wins.
+func (f *ChaosFaultConfig) UnmarshalJSON(data []byte) error {
+	// Use an alias to avoid infinite recursion.
+	type Alias ChaosFaultConfig
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+
+	// Decode the full blob to catch any extra keys.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	// Collect unknown top-level keys as config params.
+	var extras map[string]any
+	for key, val := range raw {
+		if knownFaultFields[key] {
+			continue
+		}
+		if extras == nil {
+			extras = make(map[string]any)
+		}
+		var decoded any
+		if err := json.Unmarshal(val, &decoded); err != nil {
+			return err
+		}
+		extras[key] = decoded
+	}
+
+	// Merge: extras form the base, explicit "config" keys override.
+	if len(extras) > 0 {
+		if alias.Config == nil {
+			alias.Config = extras
+		} else {
+			// Explicit "config" wins — layer it on top of the extras.
+			for k, v := range extras {
+				if _, exists := alias.Config[k]; !exists {
+					alias.Config[k] = v
+				}
+			}
+		}
+	}
+
+	*f = ChaosFaultConfig(alias)
+	return nil
 }
 
 // ChaosStats represents chaos injection statistics.

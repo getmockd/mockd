@@ -38,12 +38,12 @@ var templateRegex = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 
 // Compiled patterns for function-call syntax (parenthesized arguments).
 var (
-	// random.int or random.int(min, max)
-	randomIntPattern = regexp.MustCompile(`^random\.int(?:\((\d+),\s*(\d+)\))?$`)
-	// random.float or random.float(min, max) or random.float(min, max, precision)
-	randomFloatPattern = regexp.MustCompile(`^random\.float(?:\(([0-9.]+),\s*([0-9.]+)(?:,\s*(\d+))?\))?$`)
-	// random.string or random.string(length)
-	randomStringPattern = regexp.MustCompile(`^random\.string(?:\((\d+)\))?$`)
+	// random.int / randomInt or random.int(min, max) / randomInt(min, max)
+	randomIntPattern = regexp.MustCompile(`^(?:random\.int|randomInt)(?:\((\d+),\s*(\d+)\))?$`)
+	// random.float / randomFloat or random.float(min, max) / randomFloat(min, max[, precision])
+	randomFloatPattern = regexp.MustCompile(`^(?:random\.float|randomFloat)(?:\(([0-9.]+),\s*([0-9.]+)(?:,\s*(\d+))?\))?$`)
+	// random.string / randomString or random.string(length) / randomString(length)
+	randomStringPattern = regexp.MustCompile(`^(?:random\.string|randomString)(?:\((\d+)\))?$`)
 	// sequence("name") or sequence("name", start)
 	sequencePattern = regexp.MustCompile(`^sequence\("([^"]+)"(?:,\s*(\d+))?\)$`)
 	// {1}, {2} for wildcard substitution
@@ -118,12 +118,12 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 			return ""
 		}
 		return hex.EncodeToString(b)
-	case "random.float":
+	case "random.float", "randomFloat":
 		return funcRandomFloat(rng)
-	case "random.int":
+	case "random.int", "randomInt":
 		// No-arg form: random int 0-100
 		return funcRandomInt(rng, 0, 100)
-	case "random.string":
+	case "random.string", "randomString":
 		// No-arg form: random alphanumeric string of length 10
 		return funcRandomString(rng, 10)
 	}
@@ -257,7 +257,7 @@ func (e *Engine) evaluateSpaceSeparated(expr string, ctx *Context, rng *mathrand
 	args := parts[1:]
 
 	switch funcName {
-	case "random.int":
+	case "random.int", "randomInt":
 		if len(args) != 2 {
 			return "", true
 		}
@@ -267,6 +267,27 @@ func (e *Engine) evaluateSpaceSeparated(expr string, ctx *Context, rng *mathrand
 			return "", true
 		}
 		return funcRandomInt(rng, min, max), true
+
+	case "random.float", "randomFloat":
+		// random.float min max  OR  random.float min max precision
+		if len(args) < 2 || len(args) > 3 {
+			return "", true
+		}
+		precision := ""
+		if len(args) == 3 {
+			precision = args[2]
+		}
+		return funcRandomFloatRange(rng, args[0], args[1], precision), true
+
+	case "random.string", "randomString":
+		if len(args) != 1 {
+			return "", true
+		}
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n <= 0 {
+			return "", true
+		}
+		return funcRandomString(rng, n), true
 
 	case "upper":
 		if len(args) != 1 {
@@ -441,6 +462,7 @@ func formatValue(val any) string {
 //
 //nolint:gocyclo // Flat switch over faker types is intentional; splitting would add indirection without benefit.
 func resolveFaker(rng *mathrand.Rand, fakerType string) string {
+	fakerType = strings.ToLower(fakerType)
 	switch fakerType {
 	case "uuid":
 		return rngUUID(rng)
@@ -452,10 +474,10 @@ func resolveFaker(rng *mathrand.Rand, fakerType string) string {
 	case "name":
 		names := []string{"John Smith", "Jane Doe", "Bob Johnson", "Alice Williams", "Charlie Brown"}
 		return names[rngIntN(rng, len(names))]
-	case "firstName":
+	case "firstname":
 		names := []string{"John", "Jane", "Bob", "Alice", "Charlie", "Diana", "Edward", "Fiona"}
 		return names[rngIntN(rng, len(names))]
-	case "lastName":
+	case "lastname":
 		names := []string{"Smith", "Doe", "Johnson", "Williams", "Brown", "Davis", "Miller", "Wilson"}
 		return names[rngIntN(rng, len(names))]
 	case "email":
@@ -492,19 +514,23 @@ func resolveFaker(rng *mathrand.Rand, fakerType string) string {
 		return fakerIPv4(rng)
 	case "ipv6":
 		return fakerIPv6(rng)
-	case "macAddress":
+	case "macaddress":
 		return fakerMACAddress(rng)
-	case "userAgent":
+	case "useragent":
 		return fakerUserAgents[rngIntN(rng, len(fakerUserAgents))]
+	case "url":
+		paths := []string{"api", "users", "posts", "products", "search", "dashboard", "settings"}
+		domains := []string{"example.com", "api.example.com", "test.dev", "mock.local"}
+		return "https://" + domains[rngIntN(rng, len(domains))] + "/" + paths[rngIntN(rng, len(paths))]
 
 	// --- Finance ---
-	case "creditCard":
+	case "creditcard":
 		return fakerCreditCard(rng)
-	case "creditCardExp":
+	case "creditcardexp":
 		return fakerCreditCardExp(rng)
 	case "cvv":
 		return fakerCVV(rng)
-	case "currencyCode":
+	case "currencycode":
 		return fakerCurrencyCodes[rngIntN(rng, len(fakerCurrencyCodes))]
 	case "currency":
 		return fakerCurrencyNames[rngIntN(rng, len(fakerCurrencyNames))]
@@ -514,13 +540,13 @@ func resolveFaker(rng *mathrand.Rand, fakerType string) string {
 	// --- Commerce ---
 	case "price":
 		return fakerPrice(rng)
-	case "productName":
+	case "productname":
 		return fakerProductAdjectives[rngIntN(rng, len(fakerProductAdjectives))] + " " +
 			fakerProductMaterials[rngIntN(rng, len(fakerProductMaterials))] + " " +
 			fakerProductNouns[rngIntN(rng, len(fakerProductNouns))]
 	case "color":
 		return fakerColors[rngIntN(rng, len(fakerColors))]
-	case "hexColor":
+	case "hexcolor":
 		return fakerHexColor(rng)
 
 	// --- Identity ---
@@ -528,7 +554,7 @@ func resolveFaker(rng *mathrand.Rand, fakerType string) string {
 		return fakerSSN(rng)
 	case "passport":
 		return fakerPassport(rng)
-	case "jobTitle":
+	case "jobtitle":
 		return fakerJobLevels[rngIntN(rng, len(fakerJobLevels))] + " " +
 			fakerJobFields[rngIntN(rng, len(fakerJobFields))] + " " +
 			fakerJobRoles[rngIntN(rng, len(fakerJobRoles))]
@@ -546,9 +572,9 @@ func resolveFaker(rng *mathrand.Rand, fakerType string) string {
 		return fakerSlug(rng)
 
 	// --- Data ---
-	case "mimeType":
+	case "mimetype":
 		return fakerMIMETypes[rngIntN(rng, len(fakerMIMETypes))]
-	case "fileExtension":
+	case "fileextension":
 		return fakerFileExtensions[rngIntN(rng, len(fakerFileExtensions))]
 
 	default:
@@ -561,6 +587,7 @@ func resolveFaker(rng *mathrand.Rand, fakerType string) string {
 // Currently supports:
 //   - faker.words(n) — generate n random words, space-separated
 func resolveFakerParam(rng *mathrand.Rand, fakerType, argsStr string) string {
+	fakerType = strings.ToLower(fakerType)
 	switch fakerType {
 	case "words":
 		n, err := strconv.Atoi(strings.TrimSpace(argsStr))

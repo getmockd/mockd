@@ -221,3 +221,234 @@ func TestPaginatedResponse(t *testing.T) {
 	assert.Equal(t, 100, result.Total)
 	assert.Equal(t, []string{"a", "b", "c"}, result.Items)
 }
+
+// --- ChaosFaultConfig UnmarshalJSON Tests ---
+
+func TestChaosFaultConfig_UnmarshalJSON_Canonical(t *testing.T) {
+	t.Parallel()
+
+	input := `{"type":"circuit_breaker","probability":1.0,"config":{"tripAfter":3,"openDuration":"10s"}}`
+
+	var f ChaosFaultConfig
+	err := json.Unmarshal([]byte(input), &f)
+	require.NoError(t, err)
+
+	assert.Equal(t, "circuit_breaker", f.Type)
+	assert.Equal(t, 1.0, f.Probability)
+	assert.Equal(t, float64(3), f.Config["tripAfter"])
+	assert.Equal(t, "10s", f.Config["openDuration"])
+}
+
+func TestChaosFaultConfig_UnmarshalJSON_Flat(t *testing.T) {
+	t.Parallel()
+
+	// User sends config params at top level — the common mistake / natural format.
+	input := `{"type":"circuit_breaker","probability":1.0,"tripAfter":3,"openDuration":"10s"}`
+
+	var f ChaosFaultConfig
+	err := json.Unmarshal([]byte(input), &f)
+	require.NoError(t, err)
+
+	assert.Equal(t, "circuit_breaker", f.Type)
+	assert.Equal(t, 1.0, f.Probability)
+	assert.Equal(t, float64(3), f.Config["tripAfter"])
+	assert.Equal(t, "10s", f.Config["openDuration"])
+}
+
+func TestChaosFaultConfig_UnmarshalJSON_BothFlatAndNested(t *testing.T) {
+	t.Parallel()
+
+	// Explicit "config" value wins when both are present for the same key.
+	input := `{
+		"type": "circuit_breaker",
+		"probability": 1.0,
+		"tripAfter": 5,
+		"openStatusCode": 502,
+		"config": {
+			"tripAfter": 3,
+			"openDuration": "10s"
+		}
+	}`
+
+	var f ChaosFaultConfig
+	err := json.Unmarshal([]byte(input), &f)
+	require.NoError(t, err)
+
+	assert.Equal(t, "circuit_breaker", f.Type)
+	assert.Equal(t, 1.0, f.Probability)
+	// Explicit config wins for tripAfter
+	assert.Equal(t, float64(3), f.Config["tripAfter"])
+	// openDuration comes from config
+	assert.Equal(t, "10s", f.Config["openDuration"])
+	// openStatusCode comes from flat (not in config)
+	assert.Equal(t, float64(502), f.Config["openStatusCode"])
+}
+
+func TestChaosFaultConfig_UnmarshalJSON_NoExtras(t *testing.T) {
+	t.Parallel()
+
+	// Basic fault with no config params at all — Config stays nil.
+	input := `{"type":"timeout","probability":0.5}`
+
+	var f ChaosFaultConfig
+	err := json.Unmarshal([]byte(input), &f)
+	require.NoError(t, err)
+
+	assert.Equal(t, "timeout", f.Type)
+	assert.Equal(t, 0.5, f.Probability)
+	assert.Nil(t, f.Config)
+}
+
+func TestChaosFaultConfig_UnmarshalJSON_EmptyConfig(t *testing.T) {
+	t.Parallel()
+
+	input := `{"type":"latency","probability":0.3,"config":{}}`
+
+	var f ChaosFaultConfig
+	err := json.Unmarshal([]byte(input), &f)
+	require.NoError(t, err)
+
+	assert.Equal(t, "latency", f.Type)
+	assert.Equal(t, 0.3, f.Probability)
+	// Empty config stays as empty map (not nil) since it was explicitly provided.
+	assert.NotNil(t, f.Config)
+	assert.Empty(t, f.Config)
+}
+
+func TestChaosFaultConfig_UnmarshalJSON_RetryAfterFlat(t *testing.T) {
+	t.Parallel()
+
+	input := `{"type":"retry_after","probability":1.0,"statusCode":429,"retryAfter":"30s","body":"rate limited"}`
+
+	var f ChaosFaultConfig
+	err := json.Unmarshal([]byte(input), &f)
+	require.NoError(t, err)
+
+	assert.Equal(t, "retry_after", f.Type)
+	assert.Equal(t, float64(429), f.Config["statusCode"])
+	assert.Equal(t, "30s", f.Config["retryAfter"])
+	assert.Equal(t, "rate limited", f.Config["body"])
+}
+
+func TestChaosFaultConfig_UnmarshalJSON_ProgressiveDegradationFlat(t *testing.T) {
+	t.Parallel()
+
+	input := `{
+		"type": "progressive_degradation",
+		"probability": 1.0,
+		"initialDelay": "20ms",
+		"delayIncrement": "5ms",
+		"maxDelay": "5s",
+		"errorAfter": 100
+	}`
+
+	var f ChaosFaultConfig
+	err := json.Unmarshal([]byte(input), &f)
+	require.NoError(t, err)
+
+	assert.Equal(t, "progressive_degradation", f.Type)
+	assert.Equal(t, "20ms", f.Config["initialDelay"])
+	assert.Equal(t, "5ms", f.Config["delayIncrement"])
+	assert.Equal(t, "5s", f.Config["maxDelay"])
+	assert.Equal(t, float64(100), f.Config["errorAfter"])
+}
+
+func TestChaosFaultConfig_UnmarshalJSON_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	input := `{"type":"circuit_breaker","probability":}`
+
+	var f ChaosFaultConfig
+	err := json.Unmarshal([]byte(input), &f)
+	assert.Error(t, err)
+}
+
+func TestChaosFaultConfig_UnmarshalJSON_NestedArray(t *testing.T) {
+	t.Parallel()
+
+	// ChaosRuleConfig.Faults is a slice of ChaosFaultConfig — ensure the
+	// custom UnmarshalJSON works correctly when deserialized as part of a parent struct.
+	input := `{
+		"pathPattern": "/api/.*",
+		"faults": [
+			{"type":"circuit_breaker","probability":1.0,"tripAfter":3},
+			{"type":"latency","probability":0.5,"config":{"min":"100ms","max":"500ms"}}
+		]
+	}`
+
+	var rule ChaosRuleConfig
+	err := json.Unmarshal([]byte(input), &rule)
+	require.NoError(t, err)
+
+	require.Len(t, rule.Faults, 2)
+
+	// First fault: flat format
+	assert.Equal(t, "circuit_breaker", rule.Faults[0].Type)
+	assert.Equal(t, float64(3), rule.Faults[0].Config["tripAfter"])
+
+	// Second fault: canonical format
+	assert.Equal(t, "latency", rule.Faults[1].Type)
+	assert.Equal(t, "100ms", rule.Faults[1].Config["min"])
+	assert.Equal(t, "500ms", rule.Faults[1].Config["max"])
+}
+
+func TestChaosFaultConfig_UnmarshalJSON_FullChaosConfig(t *testing.T) {
+	t.Parallel()
+
+	// End-to-end: full ChaosConfig with flat fault params, as a user would send it.
+	input := `{
+		"enabled": true,
+		"rules": [
+			{
+				"pathPattern": "/api/orders.*",
+				"faults": [
+					{
+						"type": "circuit_breaker",
+						"probability": 1.0,
+						"tripAfter": 3,
+						"openDuration": "10s",
+						"openStatusCode": 503
+					}
+				]
+			}
+		]
+	}`
+
+	var cfg ChaosConfig
+	err := json.Unmarshal([]byte(input), &cfg)
+	require.NoError(t, err)
+
+	require.True(t, cfg.Enabled)
+	require.Len(t, cfg.Rules, 1)
+	require.Len(t, cfg.Rules[0].Faults, 1)
+
+	fault := cfg.Rules[0].Faults[0]
+	assert.Equal(t, "circuit_breaker", fault.Type)
+	assert.Equal(t, 1.0, fault.Probability)
+	assert.Equal(t, float64(3), fault.Config["tripAfter"])
+	assert.Equal(t, "10s", fault.Config["openDuration"])
+	assert.Equal(t, float64(503), fault.Config["openStatusCode"])
+}
+
+func TestChaosFaultConfig_MarshalJSON_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	// Marshal always produces the canonical format with nested "config".
+	original := ChaosFaultConfig{
+		Type:        "circuit_breaker",
+		Probability: 1.0,
+		Config:      map[string]any{"tripAfter": float64(3), "openDuration": "10s"},
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var roundTripped ChaosFaultConfig
+	err = json.Unmarshal(data, &roundTripped)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.Type, roundTripped.Type)
+	assert.Equal(t, original.Probability, roundTripped.Probability)
+	assert.Equal(t, original.Config["tripAfter"], roundTripped.Config["tripAfter"])
+	assert.Equal(t, original.Config["openDuration"], roundTripped.Config["openDuration"])
+}

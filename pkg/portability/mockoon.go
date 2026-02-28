@@ -386,16 +386,16 @@ var mockoonHelperPatterns = []struct {
 	pattern     *regexp.Regexp
 	replacement string
 }{
-	// Request data helpers
-	{regexp.MustCompile(`\{\{urlParam\s+'(\w+)'\}\}`), `{{ request.pathParam "$1" }}`},
-	{regexp.MustCompile(`\{\{urlParam\s+"(\w+)"\}\}`), `{{ request.pathParam "$1" }}`},
-	{regexp.MustCompile(`\{\{queryParam\s+'(\w+)'\}\}`), `{{ request.queryParam "$1" }}`},
-	{regexp.MustCompile(`\{\{queryParam\s+"(\w+)"\}\}`), `{{ request.queryParam "$1" }}`},
-	{regexp.MustCompile(`\{\{header\s+'([^']+)'\}\}`), `{{ request.header "$1" }}`},
-	{regexp.MustCompile(`\{\{header\s+"([^"]+)"\}\}`), `{{ request.header "$1" }}`},
-	{regexp.MustCompile(`\{\{body\s+'([^']+)'\}\}`), `{{ request.body "$.$1" }}`},
-	{regexp.MustCompile(`\{\{body\s+"([^"]+)"\}\}`), `{{ request.body "$.$1" }}`},
-	{regexp.MustCompile(`\{\{bodyRaw\}\}`), `{{ request.rawBody }}`},
+	// Request data helpers — mockd uses dot-notation: {{request.pathParam.id}}, {{request.query.page}}, etc.
+	{regexp.MustCompile(`\{\{urlParam\s+'(\w+)'\}\}`), `{{request.pathParam.$1}}`},
+	{regexp.MustCompile(`\{\{urlParam\s+"(\w+)"\}\}`), `{{request.pathParam.$1}}`},
+	{regexp.MustCompile(`\{\{queryParam\s+'(\w+)'\}\}`), `{{request.query.$1}}`},
+	{regexp.MustCompile(`\{\{queryParam\s+"(\w+)"\}\}`), `{{request.query.$1}}`},
+	{regexp.MustCompile(`\{\{header\s+'([^']+)'\}\}`), `{{request.header.$1}}`},
+	{regexp.MustCompile(`\{\{header\s+"([^"]+)"\}\}`), `{{request.header.$1}}`},
+	{regexp.MustCompile(`\{\{body\s+'([^']+)'\}\}`), `{{request.body.$1}}`},
+	{regexp.MustCompile(`\{\{body\s+"([^"]+)"\}\}`), `{{request.body.$1}}`},
+	{regexp.MustCompile(`\{\{bodyRaw\}\}`), `{{request.rawBody}}`},
 
 	// Utility helpers
 	{regexp.MustCompile(`\{\{uuid\}\}`), `{{ uuid }}`},
@@ -412,7 +412,7 @@ var mockoonHelperPatterns = []struct {
 	{regexp.MustCompile(`\{\{faker\s+"person\.fullName"\}\}`), `{{ faker.name }}`},
 	{regexp.MustCompile(`\{\{faker\s+'internet\.email'\}\}`), `{{ faker.email }}`},
 	{regexp.MustCompile(`\{\{faker\s+"internet\.email"\}\}`), `{{ faker.email }}`},
-	{regexp.MustCompile(`\{\{faker\s+'internet\.url'\}\}`), `{{ faker.sentence }}`}, // no URL faker yet
+	{regexp.MustCompile(`\{\{faker\s+'internet\.url'\}\}`), `{{faker.url}}`},
 	{regexp.MustCompile(`\{\{faker\s+'internet\.ip'\}\}`), `{{ faker.ipv4 }}`},
 	{regexp.MustCompile(`\{\{faker\s+"internet\.ip"\}\}`), `{{ faker.ipv4 }}`},
 	{regexp.MustCompile(`\{\{faker\s+'internet\.ipv4'\}\}`), `{{ faker.ipv4 }}`},

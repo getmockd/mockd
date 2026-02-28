@@ -343,27 +343,27 @@ func TestConvertMockoonTemplates(t *testing.T) {
 		{
 			name:     "urlParam",
 			input:    `{{urlParam 'id'}}`,
-			expected: `{{ request.pathParam "id" }}`,
+			expected: `{{request.pathParam.id}}`,
 		},
 		{
 			name:     "queryParam",
 			input:    `{{queryParam 'page'}}`,
-			expected: `{{ request.queryParam "page" }}`,
+			expected: `{{request.query.page}}`,
 		},
 		{
 			name:     "header",
 			input:    `{{header 'Authorization'}}`,
-			expected: `{{ request.header "Authorization" }}`,
+			expected: `{{request.header.Authorization}}`,
 		},
 		{
 			name:     "body",
 			input:    `{{body 'user.name'}}`,
-			expected: `{{ request.body "$.user.name" }}`,
+			expected: `{{request.body.user.name}}`,
 		},
 		{
 			name:     "bodyRaw",
 			input:    `{{bodyRaw}}`,
-			expected: `{{ request.rawBody }}`,
+			expected: `{{request.rawBody}}`,
 		},
 		{
 			name:     "faker number int",

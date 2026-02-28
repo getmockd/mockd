@@ -7,7 +7,7 @@
 //   - list: Display all configured mocks
 //   - get: Show details of a specific mock
 //   - delete: Remove a mock by ID
-//   - import: Import mocks from various formats (OpenAPI, Postman, HAR, WireMock, cURL)
+//   - import: Import mocks from various formats (OpenAPI, Postman, HAR, WireMock, Mockoon, cURL)
 //   - export: Export mocks to native format or OpenAPI
 //   - new: Create new mock collections from templates (blank, crud, auth, pagination, errors)
 //   - generate: AI-powered mock generation from OpenAPI specs or descriptions
@@ -48,6 +48,7 @@
 //   - postman: Postman Collection v2.x
 //   - har: HTTP Archive (browser recordings)
 //   - wiremock: WireMock JSON mappings
+//   - mockoon: Mockoon environment JSON
 //   - curl: cURL commands
 //
 // Export formats:
