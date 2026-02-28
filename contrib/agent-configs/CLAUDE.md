@@ -5,7 +5,7 @@
 
 ## What is mockd?
 
-mockd is a multi-protocol API mock server. It mocks HTTP, GraphQL, gRPC, WebSocket, MQTT, SSE, and SOAP from a single binary. It has a built-in MCP server with 16 tools — you can create, manage, and debug mocks directly via MCP without CLI commands.
+mockd is a multi-protocol API mock server. It mocks HTTP, GraphQL, gRPC, WebSocket, MQTT, SSE, and SOAP from a single binary. It has a built-in MCP server with 18 tools — you can create, manage, and debug mocks directly via MCP without CLI commands.
 
 ## MCP Server
 
@@ -14,10 +14,12 @@ mockd has an MCP server. If it's configured in your MCP settings, use the MCP to
 - `manage_mock` — Create, list, get, update, delete, or toggle mocks (action parameter)
 - `verify_mock` — Assert a mock was called N times
 - `get_mock_invocations` — See what requests hit a mock
-- `set_chaos_config` — Inject latency, errors, or apply chaos profiles (slow-api, flaky, offline, etc.)
+- `set_chaos_config` — Inject latency, errors, apply chaos profiles, or configure advanced rules (circuit breaker, retry-after, progressive degradation)
+- `get_stateful_faults` — View circuit breaker, retry-after, and progressive degradation state
+- `manage_circuit_breaker` — Trip or reset circuit breakers manually
 - `get_request_logs` — See all captured traffic
 - `manage_state` — CRUD stateful resources
-- `import_mocks` — Import from OpenAPI, Postman, HAR, WireMock, cURL, or YAML
+- `import_mocks` — Import from OpenAPI, Postman, HAR, WireMock, cURL, WSDL, Mockoon, or YAML
 - `export_mocks` — Export all mocks as YAML/JSON
 
 ## Ports

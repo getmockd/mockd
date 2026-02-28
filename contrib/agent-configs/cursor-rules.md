@@ -8,7 +8,7 @@ mockd is a multi-protocol API mock server (HTTP, GraphQL, gRPC, WebSocket, MQTT,
 
 ## MCP Integration
 
-mockd has an MCP server with 16 tools. Configure in `.cursor/mcp.json`:
+mockd has an MCP server with 18 tools. Configure in `.cursor/mcp.json`:
 
 ```json
 {
