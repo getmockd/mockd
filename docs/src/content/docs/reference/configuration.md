@@ -156,6 +156,7 @@ pathPattern: "/api/users/[0-9]+"
 | `body` | string | `""` | Response body (supports templates) |
 | `bodyFile` | string | | Load body from file path |
 | `delayMs` | integer | `0` | Response delay in milliseconds |
+| `seed` | integer | `0` | Deterministic seed for faker/random output (0 = random) |
 
 ### mTLS Matching
 
@@ -735,6 +736,7 @@ mocks: [...]
 | `maxBodySize` | integer | `10485760` | Max request body size (bytes) |
 | `readTimeout` | integer | `30` | HTTP read timeout (seconds) |
 | `writeTimeout` | integer | `30` | HTTP write timeout (seconds) |
+| `maxConnections` | integer | `0` | Max concurrent HTTP connections (0 = unlimited) |
 
 The `managementPort` is used for internal communication between the Admin API and the mock engine. In standalone mode, you typically don't need to configure this.
 
@@ -848,6 +850,68 @@ serverConfig:
     requestsPerSecond: 100
     burstSize: 150
 ```
+
+### Chaos Configuration
+
+Configure chaos injection in the config file. Chaos settings can also be managed at runtime via the CLI (`mockd chaos enable`) or Admin API (`PUT /chaos`).
+
+```yaml
+serverConfig:
+  chaos:
+    enabled: true
+    latency:
+      min: "50ms"
+      max: "200ms"
+      probability: 1.0
+    errorRate:
+      probability: 0.1
+      statusCodes: [500, 502, 503]
+      defaultCode: 503
+```
+
+For advanced path-scoped rules with stateful fault types:
+
+```yaml
+serverConfig:
+  chaos:
+    enabled: true
+    rules:
+      - pathPattern: "/api/payments/.*"
+        faults:
+          - type: circuit_breaker
+            probability: 1.0
+            circuitBreaker:
+              failureThreshold: 5
+              recoveryTimeout: "30s"
+              halfOpenRequests: 2
+              tripStatusCode: 503
+      - pathPattern: "/api/.*"
+        faults:
+          - type: latency
+            probability: 0.5
+            latency:
+              min: "50ms"
+              max: "200ms"
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable chaos injection |
+| `latency` | object | | Global latency settings |
+| `latency.min` | string | | Minimum latency (Go duration) |
+| `latency.max` | string | | Maximum latency (Go duration) |
+| `latency.probability` | float | `1.0` | Probability of applying latency |
+| `errorRate` | object | | Global error injection settings |
+| `errorRate.probability` | float | `0` | Probability of error response |
+| `errorRate.statusCodes` | array | `[500]` | Status codes to randomly choose from |
+| `errorRate.defaultCode` | integer | `500` | Default error status code |
+| `rules` | array | | Path-scoped chaos rules |
+| `rules[].pathPattern` | string | | Regex pattern to match request paths |
+| `rules[].faults` | array | | Fault definitions for matched paths |
+
+**Fault types:** `latency`, `error`, `timeout`, `corrupt_body`, `empty_response`, `slow_body`, `connection_reset`, `partial_response`, `circuit_breaker`, `retry_after`, `progressive_degradation`, `chunked_dribble`
+
+See the [Chaos Engineering guide](/guides/chaos-engineering/) for detailed usage and examples.
 
 ---
 

@@ -24,7 +24,7 @@ mockd serve --admin-port 4290
 # Server uptime
 mockd_uptime_seconds 3600
 
-# Request counters (all protocols: HTTP, gRPC, WebSocket, MQTT)
+# Request counters (all protocols: HTTP, GraphQL, gRPC, WebSocket, MQTT, SSE, SOAP)
 mockd_requests_total{method="GET",path="/api/users",status="200"} 42
 mockd_requests_total{method="grpc",path="/helloworld.Greeter/SayHello",status="ok"} 10
 mockd_requests_total{method="mqtt",path="sensors/temperature",status="ok"} 5
