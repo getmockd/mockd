@@ -36,7 +36,7 @@ export default defineConfig({
           attrs: {
             name: "description",
             content:
-              "mockd - A fast, lightweight API mocking server for development and testing. Supports HTTP, WebSocket, GraphQL, gRPC, MQTT, and SOAP.",
+              "mockd - A fast, lightweight API mocking server for development and testing. Supports HTTP, WebSocket, GraphQL, gRPC, MQTT, SSE, and SOAP.",
           },
         },
       ],
@@ -77,9 +77,11 @@ export default defineConfig({
         starlightLlmsTxt({
           projectName: "mockd",
           description: `mockd is a fast, lightweight API mocking server written in Go.
-It supports HTTP, WebSocket, GraphQL, gRPC, MQTT, and SOAP protocols.
-Features include request matching, response templating, stateful CRUD simulation,
-proxy recording, and multi-protocol mock configuration.`,
+It supports HTTP, WebSocket, GraphQL, gRPC, MQTT, SSE, and SOAP protocols with built-in OAuth mock provider.
+Features include 18 MCP tools for AI agent integration, 35 faker types for response templating,
+chaos engineering with 12 fault types (including stateful circuit breakers), deterministic seeded responses,
+import from 8 formats (OpenAPI, Postman, HAR, WireMock, cURL, WSDL, Mockoon, mockd),
+stateful CRUD simulation, proxy recording, and multi-engine fan-out architecture.`,
         }),
       ],
     }),

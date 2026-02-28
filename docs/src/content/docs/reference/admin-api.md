@@ -1228,6 +1228,55 @@ Apply a named chaos profile. This overwrites the current chaos configuration wit
 
 **Available profiles:** `slow-api`, `degraded`, `flaky`, `offline`, `timeout`, `rate-limited`, `mobile-3g`, `satellite`, `dns-flaky`, `overloaded`
 
+#### GET /chaos/faults
+
+Get the current state of all stateful chaos fault instances (circuit breakers, retry-after trackers, progressive degradation counters).
+
+**Response:**
+
+```json
+{
+  "circuitBreakers": {
+    "0:0": {
+      "state": "closed",
+      "tripCount": 0,
+      "requestCount": 15,
+      "failureCount": 2
+    }
+  },
+  "retryAfterTrackers": {},
+  "progressiveDegradation": {
+    "1:0": {
+      "currentDelay": "150ms",
+      "requestCount": 10,
+      "errorCount": 0
+    }
+  }
+}
+```
+
+Keys follow the format `ruleIdx:faultIdx` (e.g., `"0:0"` = first fault in the first rule).
+
+#### POST /chaos/circuit-breaker/{key}/trip
+
+Manually trip a circuit breaker, forcing it into the open state.
+
+**Path Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `key` | Circuit breaker key in `ruleIdx:faultIdx` format (e.g., `0:0`) |
+
+#### POST /chaos/circuit-breaker/{key}/reset
+
+Reset a circuit breaker back to the closed state.
+
+**Path Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `key` | Circuit breaker key in `ruleIdx:faultIdx` format (e.g., `0:0`) |
+
 ---
 
 ## Error Responses

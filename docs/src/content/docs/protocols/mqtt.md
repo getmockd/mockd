@@ -216,7 +216,9 @@ messages:
     repeat: true
 ```
 
-Available templates:
+MQTT templates use the same engine as HTTP responses — all 35 faker types, random functions, timestamps, and string functions are available. See the full list in the [Response Templating guide](/guides/response-templating/).
+
+Common templates for MQTT payloads:
 
 | Template | Description |
 |----------|-------------|
@@ -224,6 +226,15 @@ Available templates:
 | `{{ uuid }}` | Random UUID |
 | `{{ timestamp }}` | Unix timestamp |
 | `{{ random.int(min, max) }}` | Random integer in range |
+| `{{ random.float(min, max) }}` | Random float in range |
+| `{{ faker.name }}` | Random person name |
+| `{{ faker.ipv4 }}` | Random IPv4 address |
+| `{{ faker.latitude }}` | Random latitude |
+| `{{ faker.longitude }}` | Random longitude |
+
+:::tip
+Faker type names are case-insensitive: `{{ faker.ipv4 }}`, `{{ faker.IPv4 }}`, and `{{ faker.IPV4 }}` all work. All 35 faker types from the [full faker reference](/guides/response-templating/#faker-functions) are supported in MQTT payloads.
+:::
 
 ### Retained Messages
 

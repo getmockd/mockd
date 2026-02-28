@@ -387,6 +387,61 @@ func TestCreateTask(t *testing.T) {
 }
 ```
 
+## Headless Engine for CI (`mockd engine`)
+
+For CI/CD pipelines where you don't need an admin API, use `mockd engine` — it's lighter, has no dependencies, and can auto-assign ports to avoid conflicts in parallel jobs.
+
+```bash
+# Auto-assign a port and capture it
+mockd engine --config test-mocks.yaml --port 0 --print-url &
+sleep 1
+MOCKD_URL=$(curl -s http://localhost:4280 2>/dev/null && echo "http://localhost:4280")
+
+# Run tests against the engine
+API_BASE_URL=$MOCKD_URL pytest tests/
+kill %1
+```
+
+**Why `mockd engine` over `mockd start`?**
+- No admin API → smaller attack surface, fewer ports
+- No PID files or disk persistence → clean ephemeral containers
+- `--port 0` auto-assigns → no port conflicts in parallel CI jobs
+- `--print-url` outputs the URL for easy programmatic capture
+
+## Seeded Responses for Deterministic Tests
+
+Use `?_mockd_seed=<number>` to make faker functions and random values deterministic:
+
+```javascript
+test('returns consistent user data across runs', async () => {
+  // Same seed = same faker output every time
+  const resp1 = await fetch(`${API}/api/random-user?_mockd_seed=42`);
+  const resp2 = await fetch(`${API}/api/random-user?_mockd_seed=42`);
+
+  const user1 = await resp1.json();
+  const user2 = await resp2.json();
+
+  // Identical — same seed produces same faker.name, faker.email, uuid, etc.
+  expect(user1).toEqual(user2);
+});
+```
+
+Or set `seed` in the config for always-deterministic responses:
+
+```yaml
+mocks:
+  - id: test-user
+    type: http
+    http:
+      matcher: { method: GET, path: /api/test-user }
+      response:
+        statusCode: 200
+        seed: 42
+        body: '{"name": "{{faker.name}}", "email": "{{faker.email}}"}'
+```
+
+This eliminates flaky tests caused by random data while still using realistic faker output.
+
 ## Docker Compose
 
 For CI/CD environments:
@@ -437,8 +492,13 @@ jobs:
 
       - name: Start mockd
         run: |
+          # Option A: Full server with admin API
           mockd start --config test-mocks.json &
           sleep 2
+
+          # Option B: Headless engine (lighter, no admin API)
+          # mockd engine --config test-mocks.json --port 0 --print-url > mockd-url.txt &
+          # sleep 1
 
       - name: Run tests
         run: npm test

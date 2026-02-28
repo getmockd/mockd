@@ -3,7 +3,7 @@ title: MCP Server
 description: Use mockd from AI-powered editors like Cursor, Windsurf, and Claude Code via the Model Context Protocol
 ---
 
-mockd includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server with 16 tools for creating, managing, and debugging mocks directly from AI-powered editors.
+mockd includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server with 18 tools for creating, managing, and debugging mocks directly from AI-powered editors.
 
 ## What is MCP?
 
@@ -115,9 +115,9 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 mockd must be installed and in your `PATH`. Verify with `mockd version`. If you installed via Docker, MCP stdio transport won't work — use the binary install (`brew install getmockd/tap/mockd` or `curl -sSL https://get.mockd.io | sh`).
 :::
 
-## Available Tools (16)
+## Available Tools (18)
 
-mockd's MCP server exposes 16 tools organized by function:
+mockd's MCP server exposes 18 tools organized by function:
 
 ### Mock Management
 
@@ -129,7 +129,7 @@ mockd's MCP server exposes 16 tools organized by function:
 
 | Tool | Description |
 |------|-------------|
-| `import_mocks` | Import from OpenAPI, Postman, HAR, WireMock, cURL, or mockd YAML/JSON |
+| `import_mocks` | Import from OpenAPI, Postman, HAR, WireMock, Mockoon, cURL, WSDL, or mockd YAML/JSON |
 | `export_mocks` | Export all mocks as YAML or JSON |
 
 ### Observability
@@ -145,8 +145,10 @@ mockd's MCP server exposes 16 tools organized by function:
 | Tool | Description |
 |------|-------------|
 | `get_chaos_config` | View current chaos fault injection settings |
-| `set_chaos_config` | Configure latency, error rates, bandwidth throttling, or apply named profiles |
+| `set_chaos_config` | Configure latency, error rates, bandwidth throttling, apply named profiles, or define rules with stateful faults |
 | `reset_chaos_stats` | Reset injection statistics counters |
+| `get_stateful_faults` | View status of all stateful chaos fault instances (circuit breakers, retry-after trackers, progressive degradation) |
+| `manage_circuit_breaker` | Manually trip or reset a chaos circuit breaker by its state key |
 
 ### Mock Verification
 
@@ -219,12 +221,21 @@ Here's what a full AI-assisted development session looks like:
 
 ## MCP Resources
 
-The MCP server also exposes two resources for AI context:
+The MCP server exposes 5 static resources for AI context, plus dynamic per-mock resources:
+
+### Static Resources
 
 | Resource URI | Description |
 |-------------|-------------|
-| `mock://chaos` | Current chaos configuration (read-only) |
-| `mock://verification/{mockId}` | Verification data for a specific mock |
+| `mock://chaos` | Current chaos configuration, including stateful fault state (circuit breaker states, retry-after counters) |
+| `mock://verification` | Mock verification summary (template — use `mock://verification/{mockId}` for specific mocks) |
+| `mock://logs` | Recent request logs |
+| `mock://config` | Current server configuration |
+| `mock://context` | Current context and workspace info |
+
+### Dynamic Resources (per-mock)
+
+The server also generates resources for each configured mock, using URI patterns like `mock:///api/users#GET` (HTTP), `mock://websocket/ws/chat` (WebSocket), `mock://graphql/graphql` (GraphQL), `mock://grpc/{id}` (gRPC), `mock://mqtt/{id}` (MQTT), `mock://soap/soap` (SOAP), and `mock://stateful/{name}` (stateful resources).
 
 ## Transports
 

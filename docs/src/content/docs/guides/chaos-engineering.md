@@ -283,9 +283,146 @@ mockd chaos status --json
 }
 ```
 
+## Stateful Fault Types
+
+In addition to the 8 basic fault types (latency, error, timeout, corrupt body, empty response, slow body, connection reset, partial response), mockd supports 4 **stateful** fault types that maintain state across requests — simulating real-world failure patterns that evolve over time.
+
+### Circuit Breaker
+
+Simulates a circuit breaker pattern with three states: **closed** (normal), **open** (failing), and **half-open** (testing recovery).
+
+```bash
+# Configure via Admin API with rules
+curl -X PUT http://localhost:4290/chaos -H 'Content-Type: application/json' -d '{
+  "enabled": true,
+  "rules": [{
+    "pathPattern": "/api/payments/.*",
+    "faults": [{
+      "type": "circuit_breaker",
+      "probability": 1.0,
+      "circuitBreaker": {
+        "failureThreshold": 5,
+        "recoveryTimeout": "30s",
+        "halfOpenRequests": 2,
+        "tripStatusCode": 503
+      }
+    }]
+  }]
+}'
+```
+
+After `failureThreshold` failures, the circuit opens and all requests get `503`. After `recoveryTimeout`, it enters half-open state and allows `halfOpenRequests` test requests through. If those succeed, it closes; if they fail, it re-opens.
+
+```bash
+# Monitor circuit breaker state
+mockd chaos faults
+
+# Manually trip or reset
+mockd chaos circuit-breaker trip 0:0
+mockd chaos circuit-breaker reset 0:0
+```
+
+### Retry-After
+
+Returns `429 Too Many Requests` or `503 Service Unavailable` with a `Retry-After` header. After the specified duration, requests pass through normally.
+
+```bash
+curl -X PUT http://localhost:4290/chaos -H 'Content-Type: application/json' -d '{
+  "enabled": true,
+  "rules": [{
+    "pathPattern": "/api/.*",
+    "faults": [{
+      "type": "retry_after",
+      "probability": 1.0,
+      "retryAfter": {
+        "statusCode": 429,
+        "retryAfterSeconds": 30
+      }
+    }]
+  }]
+}'
+```
+
+### Progressive Degradation
+
+Latency increases with each request, simulating a service that gets slower under load. Optionally starts returning errors after enough requests.
+
+```bash
+curl -X PUT http://localhost:4290/chaos -H 'Content-Type: application/json' -d '{
+  "enabled": true,
+  "rules": [{
+    "pathPattern": "/api/.*",
+    "faults": [{
+      "type": "progressive_degradation",
+      "probability": 1.0,
+      "progressiveDegradation": {
+        "initialDelay": "10ms",
+        "delayIncrement": "50ms",
+        "maxDelay": "5s",
+        "errorAfterRequests": 100,
+        "errorStatusCode": 503
+      }
+    }]
+  }]
+}'
+```
+
+### Chunked Dribble
+
+Delivers the response body in timed chunks instead of all at once, simulating slow or unstable network transfers.
+
+```bash
+curl -X PUT http://localhost:4290/chaos -H 'Content-Type: application/json' -d '{
+  "enabled": true,
+  "rules": [{
+    "pathPattern": "/api/.*",
+    "faults": [{
+      "type": "chunked_dribble",
+      "probability": 1.0,
+      "chunkedDribble": {
+        "chunkCount": 5,
+        "totalDuration": "2s"
+      }
+    }]
+  }]
+}'
+```
+
+### Monitoring Stateful Faults
+
+Use the CLI or MCP tools to inspect stateful fault state:
+
+```bash
+# View all stateful fault instances
+mockd chaos faults
+
+# Via MCP tool
+# get_stateful_faults — returns circuit breaker states, retry-after counters, degradation progress
+# manage_circuit_breaker — trip or reset circuit breakers by key
+```
+
+### Fault Type Reference
+
+| Fault Type | Category | Description |
+|-----------|----------|-------------|
+| `latency` | Basic | Adds random latency to responses |
+| `error` | Basic | Returns error status codes |
+| `timeout` | Basic | Simulates connection timeout |
+| `corrupt_body` | Basic | Corrupts response body data |
+| `empty_response` | Basic | Returns empty body |
+| `slow_body` | Basic | Drip-feeds response data slowly |
+| `connection_reset` | Basic | Simulates TCP connection reset |
+| `partial_response` | Basic | Truncates response at random point |
+| `circuit_breaker` | Stateful | Closed → open → half-open state machine |
+| `retry_after` | Stateful | 429/503 with Retry-After header, auto-recovers |
+| `progressive_degradation` | Stateful | Latency increases over time, optional errors |
+| `chunked_dribble` | Stateful | Delivers body in timed chunks |
+
 ## Notes
 
 - Chaos applies to **all protocols** that run over HTTP (HTTP mocks, GraphQL, SOAP, SSE). gRPC and MQTT have their own transports and are not affected by HTTP chaos.
 - Latency is added **on top of** any `delayMs` configured on individual mocks.
 - When both latency and error rate are enabled, the error check happens first — if a request is selected for an error, it returns immediately with the error code (no latency added).
 - Chaos settings are runtime-only — they reset when mockd restarts. They are not persisted in config files.
+- Stateful faults use a **rules-based** configuration with `pathPattern` matching, allowing different fault types on different routes.
+- Use `get_stateful_faults` (MCP) or `mockd chaos faults` (CLI) to monitor stateful fault state machines.

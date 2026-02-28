@@ -313,6 +313,58 @@ Generate realistic sample data with 35 built-in faker types. Faker type names ar
 Faker type names are case-insensitive: `{{faker.firstName}}`, `{{faker.firstname}}`, and `{{faker.FIRSTNAME}}` all produce the same result.
 :::
 
+## Seeded (Deterministic) Responses
+
+By default, faker functions and random values produce different output on every request. For deterministic testing, you can **seed** the random number generator so that the same request always produces the same response.
+
+### Query Parameter Seeding
+
+Add `?_mockd_seed=<number>` to any request:
+
+```bash
+# These two requests return identical faker output
+curl "http://localhost:4280/api/users?_mockd_seed=42"
+curl "http://localhost:4280/api/users?_mockd_seed=42"
+
+# Different seed = different (but deterministic) output
+curl "http://localhost:4280/api/users?_mockd_seed=99"
+```
+
+### Config-Level Seeding
+
+Set the `seed` field on a response to make it always deterministic without query parameters:
+
+```yaml
+mocks:
+  - id: deterministic-user
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/test-user
+      response:
+        statusCode: 200
+        seed: 42
+        body: |
+          {
+            "name": "{{faker.name}}",
+            "email": "{{faker.email}}",
+            "id": "{{uuid}}"
+          }
+```
+
+Every request to `/api/test-user` returns the same name, email, and UUID.
+
+### Use Cases
+
+- **Snapshot testing** — Compare responses against golden files
+- **Flaky test elimination** — Same seed = same output = no randomness-induced failures
+- **Reproducible bug reports** — Share the seed value to reproduce exact responses
+
+:::tip
+Config-level `seed` and query parameter `_mockd_seed` can be combined. The query parameter takes precedence if both are present.
+:::
+
 ## Sequences
 
 Generate auto-incrementing values (useful for IDs):

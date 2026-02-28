@@ -15,6 +15,7 @@ mockd can import mock definitions from formats you probably already have — Ope
 | Mockoon | `.json` | Yes | Mockoon environment exports |
 | HAR | `.har` | Yes | HTTP Archive files (from browser DevTools) |
 | cURL | — | No | cURL command strings |
+| WSDL | `.wsdl`, `.xml` | Yes | WSDL 1.1 service definitions (generates SOAP mocks) |
 | mockd | `.yaml`, `.json` | Yes | mockd's own config format |
 
 ## Importing
@@ -79,6 +80,21 @@ mockd import recorded-traffic.har
 ```
 
 This creates mocks for every request/response pair captured in the HAR file. Useful for quickly creating mocks that match real API behavior.
+
+### From WSDL Files
+
+Import WSDL service definitions to generate SOAP mocks:
+
+```bash
+mockd import service.wsdl
+```
+
+mockd parses the WSDL operations and generates SOAP mock endpoints. Use `--format wsdl` if auto-detection doesn't work, or use the dedicated `mockd soap import` command for more control (e.g., `--stateful` to auto-detect CRUD patterns):
+
+```bash
+# Dedicated SOAP import with stateful CRUD heuristics
+mockd soap import service.wsdl --stateful
+```
 
 ### From cURL Commands
 
@@ -226,6 +242,7 @@ mockd auto-detects the format of imported files based on content:
 - Files with `log.entries` → HAR
 - Files with `request.url` + `response` at top level → WireMock
 - Files with `routes` array + `endpointPrefix` → Mockoon environment
+- Files with `<definitions>` or `<wsdl:definitions>` root elements → WSDL
 - Files with `mocks` array or `version: "1.0"` → mockd native format
 - Directories → scanned for WireMock JSON mappings
 

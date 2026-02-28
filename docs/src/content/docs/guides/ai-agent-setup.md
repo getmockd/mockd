@@ -95,7 +95,7 @@ Each template includes:
 | **Config Format** | Valid YAML structure with `type` + protocol wrapper |
 | **Template Functions** | 35 faker types (case-insensitive), UUID, timestamps, request echo, random values |
 | **Matching Rules** | Path patterns, header globs, body matchers |
-| **MCP Tools** | All 16 tools with action parameters |
+| **MCP Tools** | All 18 tools with action parameters |
 
 ## Customizing
 

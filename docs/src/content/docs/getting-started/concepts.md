@@ -157,6 +157,7 @@ The response defines what mockd sends back:
 | `headers` | Response headers | `{}` |
 | `body` | Response body (string or JSON) | `""` |
 | `delayMs` | Simulated latency (milliseconds) | `0` |
+| `seed` | Deterministic seed for faker/random output | `0` (random) |
 
 ### Body Types
 

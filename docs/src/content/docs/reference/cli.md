@@ -452,6 +452,63 @@ See the [MCP Server guide](/guides/mcp-server/) for detailed editor setup (Claud
 
 ---
 
+### mockd engine
+
+Run a headless mock engine — no admin API, no data persistence, no PID files. Ideal for CI/CD pipelines, Docker containers, and environments where you need a lightweight, stateless mock server.
+
+```bash
+mockd engine [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--config` | `-c` | Path to mock config file (YAML or JSON) | Required |
+| `--port` | `-p` | HTTP server port (0 = OS auto-assign) | `4280` |
+| `--host` | | Bind address | `0.0.0.0` |
+| `--print-url` | | Print the server URL to stdout on startup | `false` |
+| `--log-level` | | Log level (debug, info, warn, error) | `warn` |
+| `--log-format` | | Log format (text, json) | `text` |
+| `--read-timeout` | | HTTP read timeout in seconds | `30` |
+| `--write-timeout` | | HTTP write timeout in seconds | `30` |
+
+Unlike `mockd serve` or `mockd start`, `mockd engine`:
+- Does **not** start an admin API
+- Does **not** persist data to disk
+- Does **not** create PID files or support daemon mode
+- Loads all mocks from a single config file
+- Runs in the foreground until SIGTERM/SIGINT
+
+**Examples:**
+
+```bash
+# Start with a config file
+mockd engine --config mocks.yaml
+
+# Auto-assign a port and print it (great for CI where ports may conflict)
+mockd engine --config mocks.yaml --port 0 --print-url
+
+# JSON logs for CI log parsing
+mockd engine --config mocks.yaml --log-format json
+
+# Custom timeouts for slow-response testing
+mockd engine --config mocks.yaml --read-timeout 60 --write-timeout 60
+```
+
+**CI/CD Usage:**
+
+```bash
+# In a GitHub Action or CI script
+mockd engine --config test-mocks.yaml --port 0 --print-url &
+MOCKD_URL=$(head -1 /dev/stdin)
+# Run tests against $MOCKD_URL
+pytest tests/ --base-url "$MOCKD_URL"
+kill %1
+```
+
+---
+
 ### mockd up
 
 Start local admins and engines defined in `mockd.yaml`. Validates the project configuration, starts servers, and bootstraps workspaces seamlessly.
