@@ -170,13 +170,14 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 		return resolveFaker(rng, matches[1])
 	}
 
-	// Handle request context fields
-	if strings.HasPrefix(expr, "request.") {
+	// Handle request context fields (case-insensitive prefix)
+	exprLower := strings.ToLower(expr)
+	if strings.HasPrefix(exprLower, "request.") {
 		return e.evaluateRequest(expr[8:], ctx)
 	}
 
-	// Handle mTLS context fields
-	if strings.HasPrefix(expr, "mtls.") {
+	// Handle mTLS context fields (case-insensitive prefix)
+	if strings.HasPrefix(exprLower, "mtls.") {
 		return e.evaluateMTLS(expr[5:], ctx)
 	}
 
@@ -660,7 +661,7 @@ func (e *Engine) evaluateRequest(expr string, ctx *Context) string {
 	}
 
 	parts := strings.SplitN(expr, ".", 2)
-	field := parts[0]
+	field := strings.ToLower(parts[0])
 
 	switch field {
 	case "method":
@@ -669,7 +670,7 @@ func (e *Engine) evaluateRequest(expr string, ctx *Context) string {
 		return ctx.Request.Path
 	case "url":
 		return ctx.Request.URL
-	case "rawBody":
+	case "rawbody":
 		return ctx.Request.RawBody
 	case "body":
 		if len(parts) == 2 && ctx.Request.Body != nil {
@@ -691,21 +692,21 @@ func (e *Engine) evaluateRequest(expr string, ctx *Context) string {
 			}
 		}
 		return ""
-	case "pathParam":
+	case "pathparam":
 		if len(parts) == 2 {
 			if value, ok := ctx.Request.PathParams[parts[1]]; ok {
 				return value
 			}
 		}
 		return ""
-	case "pathPattern":
+	case "pathpattern":
 		if len(parts) == 2 {
 			if value, ok := ctx.Request.PathPatternCaptures[parts[1]]; ok {
 				return value
 			}
 		}
 		return ""
-	case "jsonPath":
+	case "jsonpath":
 		if len(parts) == 2 {
 			if value, ok := ctx.Request.JSONPath[parts[1]]; ok {
 				return fmt.Sprintf("%v", value)

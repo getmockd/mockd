@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/chaos"
 )
 
@@ -208,56 +209,7 @@ func (a *API) handleResetCircuitBreaker(w http.ResponseWriter, r *http.Request, 
 
 // chaosConfigToAPI converts an internal chaos.ChaosConfig to the API-level
 // engineclient.ChaosConfig used for admin-engine communication.
+// Delegates to the canonical types.ChaosConfigFromInternal converter.
 func chaosConfigToAPI(src *chaos.ChaosConfig) engineclient.ChaosConfig {
-	cfg := engineclient.ChaosConfig{
-		Enabled: src.Enabled,
-	}
-
-	if src.GlobalRules != nil {
-		if src.GlobalRules.Latency != nil {
-			cfg.Latency = &engineclient.LatencyConfig{
-				Min:         src.GlobalRules.Latency.Min,
-				Max:         src.GlobalRules.Latency.Max,
-				Probability: src.GlobalRules.Latency.Probability,
-			}
-		}
-		if src.GlobalRules.ErrorRate != nil {
-			cfg.ErrorRate = &engineclient.ErrorRateConfig{
-				Probability: src.GlobalRules.ErrorRate.Probability,
-				DefaultCode: src.GlobalRules.ErrorRate.DefaultCode,
-			}
-			if len(src.GlobalRules.ErrorRate.StatusCodes) > 0 {
-				cfg.ErrorRate.StatusCodes = make([]int, len(src.GlobalRules.ErrorRate.StatusCodes))
-				copy(cfg.ErrorRate.StatusCodes, src.GlobalRules.ErrorRate.StatusCodes)
-			}
-		}
-		if src.GlobalRules.Bandwidth != nil {
-			cfg.Bandwidth = &engineclient.BandwidthConfig{
-				BytesPerSecond: src.GlobalRules.Bandwidth.BytesPerSecond,
-				Probability:    src.GlobalRules.Bandwidth.Probability,
-			}
-		}
-	}
-
-	// Convert path-specific rules
-	for _, rule := range src.Rules {
-		apiRule := engineclient.ChaosRuleConfig{
-			PathPattern: rule.PathPattern,
-			Probability: rule.Probability,
-		}
-		if len(rule.Methods) > 0 {
-			apiRule.Methods = make([]string, len(rule.Methods))
-			copy(apiRule.Methods, rule.Methods)
-		}
-		for _, f := range rule.Faults {
-			apiRule.Faults = append(apiRule.Faults, engineclient.ChaosFaultConfig{
-				Type:        string(f.Type),
-				Probability: f.Probability,
-				Config:      f.Config,
-			})
-		}
-		cfg.Rules = append(cfg.Rules, apiRule)
-	}
-
-	return cfg
+	return types.ChaosConfigFromInternal(src)
 }

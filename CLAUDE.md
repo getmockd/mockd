@@ -114,7 +114,10 @@ Use `{{...}}` in response bodies:
 - `{{now}}`, `{{timestamp}}` — Time
 - `{{random.Int 1 100}}`, `{{random.Float 0.0 1.0}}` — Random numbers
 - `{{random.Element "a" "b" "c"}}` — Random choice
-- `{{request.Method}}`, `{{request.Path}}`, `{{request.Header "X-Id"}}` — Echo request data
+- `{{request.Method}}`, `{{request.Path}}`, `{{request.header.X-Id}}` — Echo request data (case-insensitive)
+- `{{request.PathParam.id}}` — Path parameter from `{id}` in path
+- `{{request.query.page}}` — Query parameter value
+- `{{request.rawBody}}` — Raw request body
 - `{{sequence("counter", 1)}}` — Auto-incrementing counter
 
 ## Matching

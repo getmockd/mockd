@@ -1,0 +1,68 @@
+version: "1.0"
+# CI smoke test config — used by the setup-mockd action job in ci.yaml.
+# This is the same pattern recommended in the blog post and action docs.
+mocks:
+  - name: API Health
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/health
+      response:
+        statusCode: 200
+        body: '{"status":"ok","service":"mockd-ci"}'
+        headers:
+          Content-Type: application/json
+
+  - name: List Users
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/users
+      response:
+        statusCode: 200
+        body: |
+          [
+            {"id":"1","name":"{{faker.name}}","email":"{{faker.email}}"},
+            {"id":"2","name":"{{faker.name}}","email":"{{faker.email}}"}
+          ]
+        headers:
+          Content-Type: application/json
+
+  - name: Get User by ID
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/users/{id}
+      response:
+        statusCode: 200
+        body: '{"id":"{{request.pathParam.id}}","name":"{{faker.name}}"}'
+        headers:
+          Content-Type: application/json
+
+  - name: Create User
+    type: http
+    http:
+      matcher:
+        method: POST
+        path: /api/users
+      response:
+        statusCode: 201
+        body: '{"id":"{{uuid}}","created":true}'
+        headers:
+          Content-Type: application/json
+          Location: /api/users/new
+
+  - name: Echo Headers
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/echo
+      response:
+        statusCode: 200
+        body: '{"method":"{{request.method}}","path":"{{request.path}}"}'
+        headers:
+          Content-Type: application/json

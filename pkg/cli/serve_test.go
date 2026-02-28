@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"testing"
 
+	apitypes "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/chaos"
 )
 
@@ -397,7 +398,7 @@ func TestConfigureProtocolHandlers_ChaosProfile(t *testing.T) {
 	})
 }
 
-func TestChaosProfileToAPIConfig(t *testing.T) {
+func TestChaosConfigFromInternal(t *testing.T) {
 	t.Run("all 10 profiles convert without panic", func(t *testing.T) {
 		profiles := []string{
 			"slow-api", "degraded", "flaky", "offline", "timeout",
@@ -408,7 +409,9 @@ func TestChaosProfileToAPIConfig(t *testing.T) {
 			if !ok {
 				t.Fatalf("profile %q not found", name)
 			}
-			cfg := chaosProfileToAPIConfig(&p.Config)
+			internalCfg := p.Config
+			internalCfg.Enabled = true
+			cfg := apitypes.ChaosConfigFromInternal(&internalCfg)
 			if !cfg.Enabled {
 				t.Errorf("profile %q: expected enabled=true", name)
 			}
