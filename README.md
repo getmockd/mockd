@@ -19,9 +19,9 @@ Mock HTTP, gRPC, GraphQL, WebSocket, MQTT, SSE, and SOAP APIs from a single CLI 
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | **Single binary, no runtime** | :white_check_mark: | :x: JVM | :x: Node | :x: Node | :x: Node | :x: JVM |
 | **HTTP mocking** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| **gRPC mocking** | :white_check_mark: | :x: | :x: | :x: | :x: | :white_check_mark: |
-| **GraphQL mocking** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
-| **WebSocket mocking** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
+| **gRPC mocking** | :white_check_mark: | 🔌 Ext | :x: | :x: | :x: | :white_check_mark: |
+| **GraphQL mocking** | :white_check_mark: | 🔌 Ext | :x: | :x: | :x: | :x: |
+| **WebSocket mocking** | :white_check_mark: | 🔌 Ext | :x: | :x: | :x: | :x: |
 | **MQTT broker** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
 | **SOAP mocking** | :white_check_mark: | :x: | :x: | :x: | :x: | :white_check_mark: |
 | **SSE streaming** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
@@ -32,6 +32,8 @@ Mock HTTP, gRPC, GraphQL, WebSocket, MQTT, SSE, and SOAP APIs from a single CLI 
 | **Proxy recording & replay** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: | :white_check_mark: |
 | **Import OpenAPI/Postman/HAR** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
 | **MCP server (AI-native)** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
+
+> 🔌 **Ext** = available via separate extension JAR, not bundled with WireMock core. mockd includes all protocols natively in a single binary.
 
 ## Install
 
