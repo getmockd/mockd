@@ -188,15 +188,14 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 		// If input.BasePath is explicitly empty string, leave ws.BasePath as ""
 
-		// Validate basePath uniqueness across existing workspaces
-		if ws.BasePath != "" {
-			for _, ew := range existing {
-				if ew.BasePath == ws.BasePath {
-					writeError(w, http.StatusConflict, "basepath_conflict",
-						fmt.Sprintf("BasePath %q is already used by workspace %q", ws.BasePath, ew.Name))
-					return
-				}
-			}
+		// Validate basePath doesn't overlap with any peer workspace on the same engine.
+		if conflict := checkBasePathConflict(ws.BasePath, ws.ID, existing); conflict != nil {
+			writeJSON(w, http.StatusConflict, map[string]interface{}{
+				"error":    "basepath_conflict",
+				"message":  fmt.Sprintf("BasePath %q overlaps with workspace %q (basePath %q): %s", ws.BasePath, conflict.ExistingName, conflict.ExistingBasePath, conflict.Reason),
+				"conflict": conflict,
+			})
+			return
 		}
 	}
 
@@ -306,6 +305,21 @@ func (a *API) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		// Prevent non-default workspaces from claiming root (empty basePath)
 		if validated == "" && id != store.DefaultWorkspaceID {
 			writeError(w, http.StatusBadRequest, "validation_error", "basePath cannot be empty for non-default workspaces")
+			return
+		}
+		// Check overlap with peer workspaces before accepting
+		peers, listErr := wsStore.List(ctx)
+		if listErr != nil {
+			a.logger().Error("failed to list workspaces for overlap check", "error", listErr)
+			writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
+			return
+		}
+		if conflict := checkBasePathConflict(validated, id, peers); conflict != nil {
+			writeJSON(w, http.StatusConflict, map[string]interface{}{
+				"error":    "basepath_conflict",
+				"message":  fmt.Sprintf("BasePath %q overlaps with workspace %q (basePath %q): %s", validated, conflict.ExistingName, conflict.ExistingBasePath, conflict.Reason),
+				"conflict": conflict,
+			})
 			return
 		}
 		ws.BasePath = validated

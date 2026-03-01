@@ -519,6 +519,16 @@ func (a *API) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check for basePath overlap before assignment
+	if bpConflict := a.checkEngineBasePathConflict(r.Context(), id, req.WorkspaceID); bpConflict != nil {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error":    "basepath_conflict",
+			"message":  fmt.Sprintf("BasePath %q overlaps with workspace %q (basePath %q): %s", bpConflict.NewBasePath, bpConflict.ExistingName, bpConflict.ExistingBasePath, bpConflict.Reason),
+			"conflict": bpConflict,
+		})
+		return
+	}
+
 	if err := a.engineRegistry.AssignWorkspace(id, req.WorkspaceID); err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "Engine not found")
 		return
@@ -561,6 +571,16 @@ func (a *API) handleAddEngineWorkspace(w http.ResponseWriter, r *http.Request) {
 			"error":     "port_conflict",
 			"message":   "Workspace has mocks with ports that conflict with existing workspaces on this engine",
 			"conflicts": conflicts,
+		})
+		return
+	}
+
+	// Check for basePath overlap with workspaces already on this engine
+	if bpConflict := a.checkEngineBasePathConflict(r.Context(), id, req.WorkspaceID); bpConflict != nil {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error":    "basepath_conflict",
+			"message":  fmt.Sprintf("BasePath %q overlaps with workspace %q (basePath %q): %s", bpConflict.NewBasePath, bpConflict.ExistingName, bpConflict.ExistingBasePath, bpConflict.Reason),
+			"conflict": bpConflict,
 		})
 		return
 	}

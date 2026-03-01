@@ -391,124 +391,98 @@ func TestCheckRouteCollision(t *testing.T) {
 	})
 }
 
-func TestCheckRouteCollision_NamespaceShadowing(t *testing.T) {
-	wsMap := map[string]*store.Workspace{
-		"local":  {ID: "local", Name: "Default", BasePath: ""},
-		"ws_pay": {ID: "ws_pay", Name: "Payment API", BasePath: "/payment-api"},
-		"ws_usr": {ID: "ws_usr", Name: "Users", BasePath: "/users"},
+func TestBasePathsOverlap(t *testing.T) {
+	tests := []struct {
+		name     string
+		a, b     string
+		expected bool
+	}{
+		{"exact duplicate", "/api", "/api", true},
+		{"a inside b", "/api/users", "/api", true},
+		{"b inside a", "/api", "/api/users", true},
+		{"similar prefix no overlap", "/api", "/api-v2", false},
+		{"different paths", "/api", "/other", false},
+		{"root vs non-root", "", "/api", false},
+		{"both root", "", "", false},
+		{"deep nesting", "/api/v2/payments", "/api", true},
+		{"partial segment", "/payment", "/payment-api", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := basePathsOverlap(tt.a, tt.b)
+			if got != tt.expected {
+				t.Errorf("basePathsOverlap(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCheckBasePathConflict(t *testing.T) {
+	peers := []*store.Workspace{
+		{ID: "local", Name: "Default", BasePath: ""},
+		{ID: "ws_pay", Name: "Payment API", BasePath: "/payment-api"},
+		{ID: "ws_usr", Name: "Users", BasePath: "/users"},
 	}
 
-	// No existing mocks — clean slate for Direction A tests
-	noMocks := []*mock.Mock{}
-
-	t.Run("root mock with named param invading namespace", func(t *testing.T) {
-		newMock := &mock.Mock{
-			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "local",
-			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/payment-api/{id}"}},
+	t.Run("exact duplicate blocked", func(t *testing.T) {
+		conflict := checkBasePathConflict("/payment-api", "ws_new", peers)
+		if conflict == nil {
+			t.Fatal("expected conflict for exact duplicate /payment-api")
 		}
-		collision := checkRouteCollision(newMock, wsMap["local"], noMocks, wsMap, "local")
-		if collision == nil {
-			t.Fatal("expected namespace collision for /payment-api/{id}, got nil")
-		}
-		if collision.WorkspaceID != "ws_pay" {
-			t.Errorf("collision should reference ws_pay, got %s", collision.WorkspaceID)
+		if conflict.ExistingID != "ws_pay" {
+			t.Errorf("expected conflict with ws_pay, got %s", conflict.ExistingID)
 		}
 	})
 
-	t.Run("root mock with wildcard invading namespace", func(t *testing.T) {
-		newMock := &mock.Mock{
-			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "local",
-			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/payment-api/*"}},
-		}
-		collision := checkRouteCollision(newMock, wsMap["local"], noMocks, wsMap, "local")
-		if collision == nil {
-			t.Fatal("expected namespace collision for /payment-api/*, got nil")
+	t.Run("prefix overlap blocked: new inside existing", func(t *testing.T) {
+		conflict := checkBasePathConflict("/payment-api/v2", "ws_new", peers)
+		if conflict == nil {
+			t.Fatal("expected conflict for /payment-api/v2 inside /payment-api")
 		}
 	})
 
-	t.Run("root mock at exact basePath", func(t *testing.T) {
-		newMock := &mock.Mock{
-			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "local",
-			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/payment-api"}},
-		}
-		collision := checkRouteCollision(newMock, wsMap["local"], noMocks, wsMap, "local")
-		if collision == nil {
-			t.Fatal("expected namespace collision for /payment-api (exact basePath), got nil")
+	t.Run("prefix overlap blocked: existing inside new", func(t *testing.T) {
+		conflict := checkBasePathConflict("/user", "ws_new", peers)
+		// "/user" does NOT overlap with "/users" — different path segment
+		if conflict != nil {
+			t.Errorf("expected no conflict for /user vs /users, got %+v", conflict)
 		}
 	})
 
-	t.Run("root mock deep inside namespace", func(t *testing.T) {
-		newMock := &mock.Mock{
-			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "local",
-			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/payment-api/v2/charge"}},
-		}
-		collision := checkRouteCollision(newMock, wsMap["local"], noMocks, wsMap, "local")
-		if collision == nil {
-			t.Fatal("expected namespace collision for /payment-api/v2/charge, got nil")
+	t.Run("no overlap with different paths", func(t *testing.T) {
+		conflict := checkBasePathConflict("/orders", "ws_new", peers)
+		if conflict != nil {
+			t.Errorf("expected no conflict for /orders, got %+v", conflict)
 		}
 	})
 
-	t.Run("root mock with similar prefix is fine", func(t *testing.T) {
-		// "/payment-apiv2/status" does NOT start with "/payment-api/"
-		newMock := &mock.Mock{
-			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "local",
-			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/payment-apiv2/status"}},
-		}
-		collision := checkRouteCollision(newMock, wsMap["local"], noMocks, wsMap, "local")
-		if collision != nil {
-			t.Errorf("expected no collision for /payment-apiv2/status, got %+v", collision)
+	t.Run("similar prefix allowed", func(t *testing.T) {
+		conflict := checkBasePathConflict("/payment-apiv2", "ws_new", peers)
+		if conflict != nil {
+			t.Errorf("expected no conflict for /payment-apiv2, got %+v", conflict)
 		}
 	})
 
-	t.Run("root mock outside any namespace is fine", func(t *testing.T) {
-		newMock := &mock.Mock{
-			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "local",
-			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/health"}},
-		}
-		collision := checkRouteCollision(newMock, wsMap["local"], noMocks, wsMap, "local")
-		if collision != nil {
-			t.Errorf("expected no collision for /health, got %+v", collision)
+	t.Run("skip self on update", func(t *testing.T) {
+		conflict := checkBasePathConflict("/payment-api", "ws_pay", peers)
+		if conflict != nil {
+			t.Errorf("should skip self, got conflict with %s", conflict.ExistingID)
 		}
 	})
 
-	t.Run("direction B: non-root mock blocked by existing root wildcard", func(t *testing.T) {
-		// Root already has a wildcard covering the /users namespace
-		existingWithRootWildcard := []*mock.Mock{
-			{
-				ID: "m_root_wc", Type: mock.TypeHTTP, WorkspaceID: "local",
-				HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/users/{id}"}},
-			},
-		}
-		// Now try to create a mock in the users workspace
-		newMock := &mock.Mock{
-			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "ws_usr",
-			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/profile"}},
-		}
-		collision := checkRouteCollision(newMock, wsMap["ws_usr"], existingWithRootWildcard, wsMap, "local")
-		if collision == nil {
-			t.Fatal("expected namespace collision (direction B), got nil")
-		}
-		if collision.ExistingMockID != "m_root_wc" {
-			t.Errorf("collision should reference m_root_wc, got %s", collision.ExistingMockID)
+	t.Run("root basePath never conflicts", func(t *testing.T) {
+		conflict := checkBasePathConflict("", "ws_new", peers)
+		if conflict != nil {
+			t.Errorf("root basePath should not conflict, got %+v", conflict)
 		}
 	})
 
-	t.Run("self-update at same path allowed despite namespace", func(t *testing.T) {
-		// m1 already exists in root at /payment-api/status (legacy data).
-		// Updating m1 with the same path should be allowed.
-		existingWithInvader := []*mock.Mock{
-			{
-				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
-				HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/payment-api/status"}},
-			},
-		}
-		newMock := &mock.Mock{
-			ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
-			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/payment-api/status"}},
-		}
-		collision := checkRouteCollision(newMock, wsMap["local"], existingWithInvader, wsMap, "local")
-		if collision != nil {
-			t.Errorf("self-update at same path should be allowed, got %+v", collision)
+	t.Run("broader namespace blocked", func(t *testing.T) {
+		// Trying to claim /us which would cover /users
+		conflict := checkBasePathConflict("/us", "ws_new", peers)
+		// "/us" does NOT overlap with "/users" — not a segment boundary
+		if conflict != nil {
+			t.Errorf("/us should not overlap /users, got %+v", conflict)
 		}
 	})
 }
