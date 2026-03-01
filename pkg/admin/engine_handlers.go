@@ -10,6 +10,7 @@ import (
 	"github.com/getmockd/mockd/internal/id"
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/store"
 )
 
@@ -140,6 +141,9 @@ func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 		return nil
 	}
 
+	// Build workspace assignments for the local engine (serves all local workspaces).
+	workspaces := a.buildLocalWorkspaces(ctx)
+
 	// Query the local engine's status
 	status, err := client.Status(ctx)
 	if err != nil {
@@ -156,9 +160,12 @@ func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 			Status:       store.EngineStatusOffline,
 			RegisteredAt: registeredAt,
 			LastSeen:     time.Now(),
-			Workspaces:   []store.EngineWorkspace{},
+			Workspaces:   workspaces,
 		}
 	}
+
+	// Enrich workspace entries with port info from engine status
+	a.enrichWorkspacePorts(workspaces, status)
 
 	// Build the engine entry from status
 	entry := &store.Engine{
@@ -168,7 +175,7 @@ func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 		Status:       store.EngineStatusOnline,
 		RegisteredAt: status.StartedAt,
 		LastSeen:     time.Now(),
-		Workspaces:   []store.EngineWorkspace{},
+		Workspaces:   workspaces,
 	}
 
 	// Use ID from status if available, otherwise keep "local"
@@ -185,6 +192,77 @@ func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 	}
 
 	return entry
+}
+
+// buildLocalWorkspaces queries the workspace and mock stores to build
+// EngineWorkspace entries for all local workspaces. In co-located mode
+// the local engine serves every workspace.
+func (a *API) buildLocalWorkspaces(ctx context.Context) []store.EngineWorkspace {
+	if a.workspaceStore == nil {
+		return []store.EngineWorkspace{}
+	}
+
+	wsList, err := a.workspaceStore.List(ctx)
+	if err != nil {
+		a.logger().Warn("failed to list workspaces for local engine", "error", err)
+		return []store.EngineWorkspace{}
+	}
+
+	result := make([]store.EngineWorkspace, 0, len(wsList))
+	for _, ws := range wsList {
+		ew := store.EngineWorkspace{
+			WorkspaceID:   ws.ID,
+			WorkspaceName: ws.Name,
+			Status:        "running",
+			LastSynced:    time.Now(),
+		}
+
+		// Count mocks per protocol for this workspace.
+		if a.dataStore != nil {
+			mocks, err := a.dataStore.Mocks().List(ctx, &store.MockFilter{
+				WorkspaceID: ws.ID,
+			})
+			if err == nil {
+				ew.MockCount = len(mocks)
+				for _, m := range mocks {
+					switch m.Type {
+					case mock.TypeWebSocket:
+						ew.WSCount++
+					case mock.TypeGraphQL:
+						ew.GraphQLCount++
+					case mock.TypeGRPC:
+						ew.GRPCCount++
+					case mock.TypeSOAP:
+						ew.SOAPCount++
+					case mock.TypeMQTT:
+						ew.MQTTCount++
+					}
+				}
+			}
+		}
+
+		result = append(result, ew)
+	}
+
+	return result
+}
+
+// enrichWorkspacePorts fills in protocol ports from the engine status response.
+func (a *API) enrichWorkspacePorts(workspaces []store.EngineWorkspace, status *engineclient.StatusResponse) {
+	if status == nil || len(status.Protocols) == 0 {
+		return
+	}
+	for i := range workspaces {
+		if httpProto, ok := status.Protocols["http"]; ok {
+			workspaces[i].HTTPPort = httpProto.Port
+		}
+		if grpcProto, ok := status.Protocols["grpc"]; ok {
+			workspaces[i].GRPCPort = grpcProto.Port
+		}
+		if mqttProto, ok := status.Protocols["mqtt"]; ok {
+			workspaces[i].MQTTPort = mqttProto.Port
+		}
+	}
 }
 
 // handleRegisterEngine handles POST /engines/register.
