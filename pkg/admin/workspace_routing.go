@@ -199,6 +199,13 @@ type RouteCollision struct {
 
 // checkRouteCollision checks if a new mock (with its workspace) would collide
 // with any existing mock on the engine after base path prefixing.
+//
+// Two levels of protection:
+//  1. Exact collision — two mocks resolve to the same method+effective path.
+//  2. Namespace shadowing — a root workspace mock uses a path (including
+//     wildcards or named params) that falls inside another workspace's
+//     reserved basePath namespace, or vice-versa.
+//
 // Returns nil if no collision. Only checks HTTP mocks (path-based).
 func checkRouteCollision(
 	newMock *mock.Mock,
@@ -220,6 +227,7 @@ func checkRouteCollision(
 	// Compute the effective engine path for the new mock
 	newEffective := effectiveMockPath(newPath, newMock.WorkspaceID, newWorkspace, rootWorkspaceID)
 
+	// --- Pass 1: exact effective-path collision ---
 	for _, existing := range existingMocks {
 		if existing.ID == newMock.ID {
 			continue // Skip self (for updates)
@@ -252,7 +260,105 @@ func checkRouteCollision(
 		}
 	}
 
+	// --- Pass 2: namespace shadowing ---
+	//
+	// A root-workspace mock whose effective path falls inside (or covers) a
+	// non-root workspace's basePath namespace would silently shadow that
+	// workspace's routes. Detect and reject.
+	//
+	// Skip this check if the mock already exists at the same effective path
+	// (self-update with no path change). We find the existing effective path
+	// by scanning the mock list for a match on ID.
+	if newMock.ID != "" {
+		for _, existing := range existingMocks {
+			if existing.ID != newMock.ID {
+				continue
+			}
+			if existing.Type != mock.TypeHTTP || existing.HTTP == nil || existing.HTTP.Matcher == nil {
+				break
+			}
+			existWS := workspaceMap[existing.WorkspaceID]
+			existEffective := effectiveMockPath(
+				existing.HTTP.Matcher.Path, existing.WorkspaceID, existWS, rootWorkspaceID,
+			)
+			if existEffective == newEffective {
+				// Path unchanged — allow the update without namespace re-check.
+				return nil
+			}
+			break
+		}
+	}
+
+	// Direction A: new mock is in root → check if its path invades any workspace's basePath.
+	// Direction B: new mock is in a non-root workspace → check if any existing root
+	//              mock's path invades the new workspace's basePath namespace.
+	if newMock.WorkspaceID == rootWorkspaceID {
+		// Direction A: root mock encroaching on a reserved namespace.
+		for _, ws := range workspaceMap {
+			bp := WorkspaceBasePath(ws)
+			if bp == "" || ws.ID == rootWorkspaceID {
+				continue
+			}
+			if pathInvades(newEffective, bp) {
+				return &RouteCollision{
+					WorkspaceID:   ws.ID,
+					WorkspaceName: ws.Name,
+					EffectivePath: newEffective,
+					Method:        newMethod,
+				}
+			}
+		}
+	} else {
+		// Direction B: non-root mock — check existing root mocks don't
+		// already shadow our namespace.
+		myBasePath := WorkspaceBasePath(newWorkspace)
+		if myBasePath != "" {
+			for _, existing := range existingMocks {
+				if existing.ID == newMock.ID {
+					continue
+				}
+				if existing.WorkspaceID != rootWorkspaceID {
+					continue
+				}
+				if existing.Type != mock.TypeHTTP || existing.HTTP == nil || existing.HTTP.Matcher == nil {
+					continue
+				}
+				existPath := existing.HTTP.Matcher.Path
+				if existPath == "" {
+					continue
+				}
+				existEffective := effectiveMockPath(existPath, existing.WorkspaceID, workspaceMap[existing.WorkspaceID], rootWorkspaceID)
+				if pathInvades(existEffective, myBasePath) {
+					return &RouteCollision{
+						ExistingMockID:   existing.ID,
+						ExistingMockName: existing.Name,
+						WorkspaceID:      existing.WorkspaceID,
+						WorkspaceName:    "Default",
+						EffectivePath:    existEffective,
+						Method:           strings.ToUpper(existing.HTTP.Matcher.Method),
+					}
+				}
+			}
+		}
+	}
+
 	return nil
+}
+
+// pathInvades checks whether an effective engine path falls inside a
+// workspace's reserved basePath namespace. This catches:
+//   - Exact basePath match: "/payment-api" invades "/payment-api"
+//   - Literal sub-path:     "/payment-api/status" invades "/payment-api"
+//   - Named params:         "/payment-api/{id}" invades "/payment-api"
+//   - Wildcards:            "/payment-api/*" invades "/payment-api"
+//   - Deeper nesting:       "/payment-api/v2/charge" invades "/payment-api"
+//
+// It works on the raw path string before the engine's matcher runs, so it
+// correctly catches patterns like "{param}" and "*" that would match
+// arbitrary values at runtime.
+func pathInvades(effectivePath, basePath string) bool {
+	return effectivePath == basePath ||
+		strings.HasPrefix(effectivePath, basePath+"/")
 }
 
 // validateBasePath checks that a base path is valid:
