@@ -196,6 +196,7 @@ func NewAPI(port int, opts ...Option) *API {
 
 	mux := http.NewServeMux()
 	api.registerRoutes(mux)
+	api.registerDashboard(mux) // no-op unless built with -tags dashboard
 
 	api.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),

@@ -41,6 +41,7 @@ Thumbs.db
 
 # Build output
 dist/
+!pkg/admin/dashboard/dist/
 build/
 
 # Log files
@@ -109,3 +110,7 @@ tmp-data/
 
 # Generated shell completions (goreleaser before hook)
 completions/
+
+# Dashboard frontend dist (copied from mockd-desktop at release time)
+pkg/admin/dashboard/dist/assets/
+pkg/admin/dashboard/dist/index.html
