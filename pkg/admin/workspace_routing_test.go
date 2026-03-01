@@ -288,6 +288,86 @@ func TestPrefixMocksForEngine(t *testing.T) {
 	}
 }
 
+func TestCheckRouteCollision(t *testing.T) {
+	wsMap := map[string]*store.Workspace{
+		"local":  {ID: "local", Name: "Default", BasePath: ""},
+		"ws_pay": {ID: "ws_pay", Name: "Payment API", BasePath: "/payment-api"},
+	}
+
+	existing := []*mock.Mock{
+		{
+			ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/payment-api/status"}},
+		},
+		{
+			ID: "m2", Type: mock.TypeHTTP, WorkspaceID: "ws_pay",
+			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "POST", Path: "/charge"}},
+		},
+	}
+
+	t.Run("collision: default /payment-api/status vs payment-api /status", func(t *testing.T) {
+		newMock := &mock.Mock{
+			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "ws_pay",
+			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/status"}},
+		}
+		collision := checkRouteCollision(newMock, wsMap["ws_pay"], existing, wsMap, "local")
+		if collision == nil {
+			t.Fatal("expected collision, got nil")
+		}
+		if collision.ExistingMockID != "m1" {
+			t.Errorf("collision should be with m1, got %s", collision.ExistingMockID)
+		}
+		if collision.EffectivePath != "/payment-api/status" {
+			t.Errorf("effective path should be /payment-api/status, got %s", collision.EffectivePath)
+		}
+	})
+
+	t.Run("no collision: different methods", func(t *testing.T) {
+		newMock := &mock.Mock{
+			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "ws_pay",
+			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "POST", Path: "/status"}},
+		}
+		collision := checkRouteCollision(newMock, wsMap["ws_pay"], existing, wsMap, "local")
+		if collision != nil {
+			t.Errorf("expected no collision (different methods), got %+v", collision)
+		}
+	})
+
+	t.Run("no collision: different effective paths", func(t *testing.T) {
+		newMock := &mock.Mock{
+			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "ws_pay",
+			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/health"}},
+		}
+		collision := checkRouteCollision(newMock, wsMap["ws_pay"], existing, wsMap, "local")
+		if collision != nil {
+			t.Errorf("expected no collision, got %+v", collision)
+		}
+	})
+
+	t.Run("skip self on update", func(t *testing.T) {
+		// Simulating an update: same ID as existing mock
+		newMock := &mock.Mock{
+			ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/payment-api/status"}},
+		}
+		collision := checkRouteCollision(newMock, wsMap["local"], existing, wsMap, "local")
+		if collision != nil {
+			t.Errorf("should skip self, got collision with %s", collision.ExistingMockID)
+		}
+	})
+
+	t.Run("gRPC mock skipped", func(t *testing.T) {
+		newMock := &mock.Mock{
+			ID: "m_grpc", Type: mock.TypeGRPC, WorkspaceID: "ws_pay",
+			GRPC: &mock.GRPCSpec{Port: 50051},
+		}
+		collision := checkRouteCollision(newMock, wsMap["ws_pay"], existing, wsMap, "local")
+		if collision != nil {
+			t.Errorf("gRPC should never collide on path, got %+v", collision)
+		}
+	})
+}
+
 func TestValidateBasePath(t *testing.T) {
 	tests := []struct {
 		name     string

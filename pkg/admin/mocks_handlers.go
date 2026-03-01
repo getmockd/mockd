@@ -771,6 +771,19 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		m.WorkspaceID = store.DefaultWorkspaceID
 	}
 
+	// Check for route collisions across workspaces (after base path prefixing).
+	// Two mocks from different workspaces can have the same path in the admin
+	// store, but if their effective engine paths collide the second mock would
+	// be silently shadowed. Reject at creation time with a clear error.
+	if collision := a.checkMockRouteCollision(r.Context(), &m); collision != nil {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error":     "route_collision",
+			"message":   fmt.Sprintf("Route %s %s collides with existing mock %q (workspace %q) — both resolve to %s on the engine", collision.Method, m.HTTP.Matcher.Path, collision.ExistingMockName, collision.WorkspaceName, collision.EffectivePath),
+			"collision": collision,
+		})
+		return
+	}
+
 	// Check for port conflicts or merge opportunities
 	portResult := a.checkPortAvailability(r.Context(), &m, "")
 
@@ -981,6 +994,21 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check for route collisions across workspaces (after base path prefixing).
+	// The mock's ID is set, so checkRouteCollision will skip self.
+	if collision := a.checkMockRouteCollision(r.Context(), &m); collision != nil {
+		mockPath := ""
+		if m.HTTP != nil && m.HTTP.Matcher != nil {
+			mockPath = m.HTTP.Matcher.Path
+		}
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error":     "route_collision",
+			"message":   fmt.Sprintf("Route %s %s collides with existing mock %q (workspace %q) — both resolve to %s on the engine", collision.Method, mockPath, collision.ExistingMockName, collision.WorkspaceName, collision.EffectivePath),
+			"collision": collision,
+		})
+		return
+	}
+
 	// Persist to store (source of truth)
 	if err := mockStore.Update(r.Context(), &m); err != nil {
 		a.logger().Error("failed to update mock in store", "id", id, "error", err)
@@ -1056,6 +1084,21 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 
 	// Apply patch to existing mock
 	applyMockPatch(existing, patch)
+
+	// Check for route collisions across workspaces (after base path prefixing).
+	// The mock's ID is preserved, so checkRouteCollision will skip self.
+	if collision := a.checkMockRouteCollision(r.Context(), existing); collision != nil {
+		mockPath := ""
+		if existing.HTTP != nil && existing.HTTP.Matcher != nil {
+			mockPath = existing.HTTP.Matcher.Path
+		}
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error":     "route_collision",
+			"message":   fmt.Sprintf("Route %s %s collides with existing mock %q (workspace %q) — both resolve to %s on the engine", collision.Method, mockPath, collision.ExistingMockName, collision.WorkspaceName, collision.EffectivePath),
+			"collision": collision,
+		})
+		return
+	}
 
 	// Persist to store (source of truth)
 	if err := mockStore.Update(r.Context(), existing); err != nil {

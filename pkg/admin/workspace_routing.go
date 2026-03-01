@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"strings"
 	"unicode"
 
@@ -157,6 +158,101 @@ func buildWorkspaceMap(workspaces []*store.Workspace) map[string]*store.Workspac
 		m[ws.ID] = ws
 	}
 	return m
+}
+
+// checkMockRouteCollision is an API-level convenience that loads all workspaces
+// and mocks, then delegates to checkRouteCollision.
+func (a *API) checkMockRouteCollision(ctx context.Context, m *mock.Mock) *RouteCollision {
+	if a.workspaceStore == nil || a.dataStore == nil {
+		return nil
+	}
+	wsList, err := a.workspaceStore.List(ctx)
+	if err != nil {
+		return nil
+	}
+	wsMap := buildWorkspaceMap(wsList)
+
+	newWS := wsMap[m.WorkspaceID]
+	if newWS == nil {
+		// Unknown workspace — can't check, allow it through
+		return nil
+	}
+
+	allMocks, err := a.dataStore.Mocks().List(ctx, nil)
+	if err != nil {
+		return nil
+	}
+
+	return checkRouteCollision(m, newWS, allMocks, wsMap, store.DefaultWorkspaceID)
+}
+
+// RouteCollision describes a conflict between two mocks that would resolve
+// to the same method+path on the engine after workspace base path prefixing.
+type RouteCollision struct {
+	ExistingMockID   string `json:"existingMockId"`
+	ExistingMockName string `json:"existingMockName,omitempty"`
+	WorkspaceID      string `json:"workspaceId"`
+	WorkspaceName    string `json:"workspaceName,omitempty"`
+	EffectivePath    string `json:"effectivePath"`
+	Method           string `json:"method"`
+}
+
+// checkRouteCollision checks if a new mock (with its workspace) would collide
+// with any existing mock on the engine after base path prefixing.
+// Returns nil if no collision. Only checks HTTP mocks (path-based).
+func checkRouteCollision(
+	newMock *mock.Mock,
+	newWorkspace *store.Workspace,
+	existingMocks []*mock.Mock,
+	workspaceMap map[string]*store.Workspace,
+	rootWorkspaceID string,
+) *RouteCollision {
+	if newMock.Type != mock.TypeHTTP || newMock.HTTP == nil || newMock.HTTP.Matcher == nil {
+		return nil // Only HTTP has method+path collisions
+	}
+
+	newMethod := strings.ToUpper(newMock.HTTP.Matcher.Method)
+	newPath := newMock.HTTP.Matcher.Path
+	if newPath == "" {
+		return nil
+	}
+
+	// Compute the effective engine path for the new mock
+	newEffective := effectiveMockPath(newPath, newMock.WorkspaceID, newWorkspace, rootWorkspaceID)
+
+	for _, existing := range existingMocks {
+		if existing.ID == newMock.ID {
+			continue // Skip self (for updates)
+		}
+		if existing.Type != mock.TypeHTTP || existing.HTTP == nil || existing.HTTP.Matcher == nil {
+			continue
+		}
+		existMethod := strings.ToUpper(existing.HTTP.Matcher.Method)
+		existPath := existing.HTTP.Matcher.Path
+		if existPath == "" || existMethod != newMethod {
+			continue
+		}
+
+		existWS := workspaceMap[existing.WorkspaceID]
+		existEffective := effectiveMockPath(existPath, existing.WorkspaceID, existWS, rootWorkspaceID)
+
+		if existEffective == newEffective {
+			wsName := ""
+			if existWS != nil {
+				wsName = existWS.Name
+			}
+			return &RouteCollision{
+				ExistingMockID:   existing.ID,
+				ExistingMockName: existing.Name,
+				WorkspaceID:      existing.WorkspaceID,
+				WorkspaceName:    wsName,
+				EffectivePath:    existEffective,
+				Method:           existMethod,
+			}
+		}
+	}
+
+	return nil
 }
 
 // validateBasePath checks that a base path is valid:
