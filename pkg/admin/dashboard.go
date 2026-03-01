@@ -33,19 +33,20 @@ func (a *API) registerDashboard(mux *http.ServeMux) {
 	// API paths like "GET /mocks" with higher priority than "GET /"
 	// because they are more specific, so API routes are not shadowed.
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		// Skip API-like paths that somehow weren't matched — safety net.
-		// All API routes are registered with explicit method+path patterns
-		// before this catch-all, so this should rarely trigger.
 		path := r.URL.Path
 
-		// Try to serve the exact file first.
 		// For SPA routing, if the file doesn't exist (no extension or
 		// not a known static asset), serve index.html instead.
 		if path != "/" && !strings.Contains(path, ".") {
-			// No file extension — this is a client-side route.
-			// Serve index.html and let the SPA router handle it.
 			r.URL.Path = "/"
 		}
+
+		// Relax CSP for the dashboard — the Svelte frontend uses inline
+		// styles (scoped component CSS) and fetches from the engine on a
+		// different port. The strict "default-src 'self'" set by
+		// SecurityHeadersMiddleware blocks both.
+		w.Header().Set("Content-Security-Policy",
+			"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:*")
 
 		fileServer.ServeHTTP(w, r)
 	})

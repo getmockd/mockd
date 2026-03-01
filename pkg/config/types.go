@@ -2,6 +2,7 @@
 package config
 
 import (
+	"strings"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/audit"
@@ -407,6 +408,13 @@ func (c *CORSConfig) GetAllowOriginValue(requestOrigin string) string {
 		if allowed == requestOrigin {
 			return requestOrigin
 		}
+	}
+
+	// Always allow localhost/127.0.0.1 origins — mockd is a development tool
+	// and cross-port requests from the embedded dashboard are expected.
+	if strings.HasPrefix(requestOrigin, "http://localhost:") ||
+		strings.HasPrefix(requestOrigin, "http://127.0.0.1:") {
+		return requestOrigin
 	}
 
 	return ""

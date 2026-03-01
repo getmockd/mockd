@@ -765,20 +765,21 @@ func TestPortConflict_ExternalPortConflict_CreateRollback(t *testing.T) {
 	}
 }
 
-func TestPortConflict_PATCH_DoesNotChangePort(t *testing.T) {
+func TestPortConflict_PATCH_UpdatesProtocolSpec(t *testing.T) {
 	bundle := setupPortConflictServer(t)
 
 	// Create an MQTT mock
 	mqttPort := getUniquePort()
+	newPort := getUniquePort()
 	status1, data1 := createMQTTMock(t, bundle.AdminPort, "Original Broker", mqttPort, "local")
 	assert.Equal(t, http.StatusCreated, status1)
 	mockID := data1["id"].(string)
 
-	// Try to PATCH with a different port - should be ignored (PATCH only does metadata)
+	// PATCH with name and a different port — both should be applied
 	patchData := map[string]interface{}{
 		"name": "Renamed Broker",
 		"mqtt": map[string]interface{}{
-			"port": 9999, // Different port - should be ignored
+			"port": newPort,
 		},
 	}
 	body, _ := json.Marshal(patchData)
@@ -805,7 +806,7 @@ func TestPortConflict_PATCH_DoesNotChangePort(t *testing.T) {
 	// Name should be updated
 	assert.Equal(t, "Renamed Broker", mockData["name"])
 
-	// Port should NOT be changed (PATCH doesn't support protocol-specific fields)
+	// Port should be changed to the new port
 	mqtt := mockData["mqtt"].(map[string]interface{})
-	assert.Equal(t, float64(mqttPort), mqtt["port"], "PATCH should not change the port")
+	assert.Equal(t, float64(newPort), mqtt["port"], "PATCH should update the MQTT port")
 }

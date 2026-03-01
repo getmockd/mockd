@@ -261,40 +261,72 @@ func TestApplyMockPatch(t *testing.T) {
 		assert.Equal(t, "Original", m.Name) // unchanged
 	})
 
-	// Document: PATCH does NOT support changing protocol-specific fields like ports.
-	// Users should use PUT for full mock replacement including port changes.
-	t.Run("does not patch mqtt config - use PUT for port changes", func(t *testing.T) {
+	// Protocol-specific specs are now patchable so the UI can update
+	// matcher/response inline. Port changes are validated by the handler
+	// (checkPortAvailability) before being pushed to engines.
+	t.Run("patches http response body", func(t *testing.T) {
+		m := &mock.Mock{
+			ID:   "http-1",
+			Type: mock.TypeHTTP,
+			HTTP: &mock.HTTPSpec{
+				Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/api/test"},
+				Response: &mock.HTTPResponse{StatusCode: 200, Body: `{"v":1}`},
+			},
+		}
+		patch := map[string]interface{}{
+			"http": map[string]interface{}{
+				"matcher":  map[string]interface{}{"method": "GET", "path": "/api/test"},
+				"response": map[string]interface{}{"statusCode": float64(200), "body": `{"v":2}`},
+			},
+		}
+		applyMockPatch(m, patch)
+		assert.Equal(t, `{"v":2}`, m.HTTP.Response.Body, "PATCH should update HTTP response body")
+	})
+
+	t.Run("patches mqtt config including port", func(t *testing.T) {
 		m := &mock.Mock{
 			ID:   "mqtt-1",
 			Type: mock.TypeMQTT,
 			MQTT: &mock.MQTTSpec{Port: 1883},
 		}
-		// Try to patch mqtt config - should be ignored
 		patch := map[string]interface{}{
 			"mqtt": map[string]interface{}{
-				"port": 9999,
+				"port": float64(9999),
 			},
 		}
 		applyMockPatch(m, patch)
-		// Port should remain unchanged
-		assert.Equal(t, 1883, m.MQTT.Port, "PATCH should not change MQTT port - use PUT instead")
+		assert.Equal(t, 9999, m.MQTT.Port, "PATCH should update MQTT port")
 	})
 
-	t.Run("does not patch grpc config - use PUT for port changes", func(t *testing.T) {
+	t.Run("patches grpc config including port", func(t *testing.T) {
 		m := &mock.Mock{
 			ID:   "grpc-1",
 			Type: mock.TypeGRPC,
 			GRPC: &mock.GRPCSpec{Port: 50051},
 		}
-		// Try to patch grpc config - should be ignored
 		patch := map[string]interface{}{
 			"grpc": map[string]interface{}{
-				"port": 9999,
+				"port": float64(9999),
 			},
 		}
 		applyMockPatch(m, patch)
-		// Port should remain unchanged
-		assert.Equal(t, 50051, m.GRPC.Port, "PATCH should not change gRPC port - use PUT instead")
+		assert.Equal(t, 9999, m.GRPC.Port, "PATCH should update gRPC port")
+	})
+
+	t.Run("nil protocol spec in patch is ignored", func(t *testing.T) {
+		m := &mock.Mock{
+			ID:   "http-1",
+			Type: mock.TypeHTTP,
+			HTTP: &mock.HTTPSpec{
+				Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/original"},
+				Response: &mock.HTTPResponse{StatusCode: 200},
+			},
+		}
+		// Patch only name, no http key at all
+		patch := map[string]interface{}{"name": "Updated Name"}
+		applyMockPatch(m, patch)
+		assert.Equal(t, "/original", m.HTTP.Matcher.Path, "HTTP spec should be unchanged when not in patch")
+		assert.Equal(t, "Updated Name", m.Name)
 	})
 }
 

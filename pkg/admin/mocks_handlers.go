@@ -549,7 +549,65 @@ func applyMockPatch(m *mock.Mock, patch map[string]interface{}) {
 	if metaSortKey, ok := patch["metaSortKey"].(float64); ok {
 		m.MetaSortKey = metaSortKey
 	}
+
+	// Apply protocol-specific spec patches. When the client sends a full
+	// protocol block (e.g. "http": {...}), re-marshal it from the patch map
+	// and unmarshal into the typed spec, replacing the existing one entirely.
+	applyProtocolPatch(patch, "http", func(data []byte) {
+		var s mock.HTTPSpec
+		if json.Unmarshal(data, &s) == nil {
+			m.HTTP = &s
+		}
+	})
+	applyProtocolPatch(patch, "websocket", func(data []byte) {
+		var s mock.WebSocketSpec
+		if json.Unmarshal(data, &s) == nil {
+			m.WebSocket = &s
+		}
+	})
+	applyProtocolPatch(patch, "graphql", func(data []byte) {
+		var s mock.GraphQLSpec
+		if json.Unmarshal(data, &s) == nil {
+			m.GraphQL = &s
+		}
+	})
+	applyProtocolPatch(patch, "grpc", func(data []byte) {
+		var s mock.GRPCSpec
+		if json.Unmarshal(data, &s) == nil {
+			m.GRPC = &s
+		}
+	})
+	applyProtocolPatch(patch, "soap", func(data []byte) {
+		var s mock.SOAPSpec
+		if json.Unmarshal(data, &s) == nil {
+			m.SOAP = &s
+		}
+	})
+	applyProtocolPatch(patch, "mqtt", func(data []byte) {
+		var s mock.MQTTSpec
+		if json.Unmarshal(data, &s) == nil {
+			m.MQTT = &s
+		}
+	})
+	applyProtocolPatch(patch, "oauth", func(data []byte) {
+		var s mock.OAuthSpec
+		if json.Unmarshal(data, &s) == nil {
+			m.OAuth = &s
+		}
+	})
+
 	m.UpdatedAt = time.Now()
+}
+
+// applyProtocolPatch re-marshals a protocol section from the patch map and
+// calls apply if the key is present. This avoids hand-writing deep-merge logic
+// for each protocol — the client sends the full spec and we replace it.
+func applyProtocolPatch(patch map[string]interface{}, key string, apply func([]byte)) {
+	if specMap, ok := patch[key]; ok && specMap != nil {
+		if data, err := json.Marshal(specMap); err == nil {
+			apply(data)
+		}
+	}
 }
 
 // handleListUnifiedMocks returns all mocks with optional filtering.
