@@ -23,6 +23,7 @@ type WorkspaceDTO struct {
 	Name         string `json:"name"`
 	Type         string `json:"type"`
 	Description  string `json:"description,omitempty"`
+	BasePath     string `json:"basePath"`
 	Path         string `json:"path,omitempty"`
 	URL          string `json:"url,omitempty"`
 	Branch       string `json:"branch,omitempty"`
@@ -96,6 +97,7 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		Name        string  `json:"name"`
 		Type        *string `json:"type,omitempty"`
 		Description string  `json:"description,omitempty"`
+		BasePath    *string `json:"basePath,omitempty"`
 		Path        string  `json:"path,omitempty"`
 		URL         string  `json:"url,omitempty"`
 		Branch      string  `json:"branch,omitempty"`
@@ -176,6 +178,28 @@ func (a *API) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:   now.Unix(),
 	}
 
+	// Set BasePath for non-default workspaces
+	if ws.ID != store.DefaultWorkspaceID {
+		if input.BasePath != nil && *input.BasePath != "" {
+			ws.BasePath = validateBasePath(*input.BasePath)
+		} else if input.BasePath == nil {
+			// Auto-generate from name
+			ws.BasePath = "/" + SlugifyWorkspaceName(input.Name)
+		}
+		// If input.BasePath is explicitly empty string, leave ws.BasePath as ""
+
+		// Validate basePath uniqueness across existing workspaces
+		if ws.BasePath != "" {
+			for _, ew := range existing {
+				if ew.BasePath == ws.BasePath {
+					writeError(w, http.StatusConflict, "basepath_conflict",
+						fmt.Sprintf("BasePath %q is already used by workspace %q", ws.BasePath, ew.Name))
+					return
+				}
+			}
+		}
+	}
+
 	// For local workspaces, set default path if not provided
 	if wsType == store.WorkspaceTypeLocal && ws.Path == "" {
 		dataDir := a.dataDir
@@ -243,6 +267,7 @@ func (a *API) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		Name        *string `json:"name,omitempty"`
 		Type        *string `json:"type,omitempty"`
 		Description *string `json:"description,omitempty"`
+		BasePath    *string `json:"basePath,omitempty"`
 		Path        *string `json:"path,omitempty"`
 		URL         *string `json:"url,omitempty"`
 		Branch      *string `json:"branch,omitempty"`
@@ -275,6 +300,15 @@ func (a *API) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Description != nil {
 		ws.Description = *input.Description
+	}
+	if input.BasePath != nil {
+		validated := validateBasePath(*input.BasePath)
+		// Prevent non-default workspaces from claiming root (empty basePath)
+		if validated == "" && id != store.DefaultWorkspaceID {
+			writeError(w, http.StatusBadRequest, "validation_error", "basePath cannot be empty for non-default workspaces")
+			return
+		}
+		ws.BasePath = validated
 	}
 	if input.Path != nil {
 		ws.Path = *input.Path
@@ -362,6 +396,7 @@ func storeWorkspaceToDTO(ws *store.Workspace) *WorkspaceDTO {
 		Name:        ws.Name,
 		Type:        string(ws.Type),
 		Description: ws.Description,
+		BasePath:    ws.BasePath,
 		Path:        ws.Path,
 		URL:         ws.URL,
 		Branch:      ws.Branch,

@@ -79,9 +79,12 @@ func (a *API) pushCreateToEngines(ctx context.Context, m *mock.Mock) (*mock.Mock
 		return m, nil
 	}
 
+	// Apply workspace base path prefix for the engine (admin store keeps original paths).
+	prefixedMock := a.prefixMockIfNeeded(ctx, m, store.DefaultWorkspaceID)
+
 	// If only localEngine, use the fast path (no goroutines)
 	if len(targets) == 1 && targets[0].label == "local" {
-		return targets[0].client.CreateMock(ctx, m)
+		return targets[0].client.CreateMock(ctx, prefixedMock)
 	}
 
 	// Fan-out to all targets in parallel
@@ -94,7 +97,7 @@ func (a *API) pushCreateToEngines(ctx context.Context, m *mock.Mock) (*mock.Mock
 
 	for _, t := range targets {
 		go func(t engineTarget) {
-			created, err := t.client.CreateMock(ctx, m)
+			created, err := t.client.CreateMock(ctx, prefixedMock)
 			results <- createResult{label: t.label, mock: created, err: err}
 		}(t)
 	}
@@ -138,8 +141,11 @@ func (a *API) pushUpdateToEngines(ctx context.Context, id string, m *mock.Mock) 
 		return m, nil
 	}
 
+	// Apply workspace base path prefix for the engine (admin store keeps original paths).
+	prefixedMock := a.prefixMockIfNeeded(ctx, m, store.DefaultWorkspaceID)
+
 	if len(targets) == 1 && targets[0].label == "local" {
-		return targets[0].client.UpdateMock(ctx, id, m)
+		return targets[0].client.UpdateMock(ctx, id, prefixedMock)
 	}
 
 	type updateResult struct {
@@ -151,7 +157,7 @@ func (a *API) pushUpdateToEngines(ctx context.Context, id string, m *mock.Mock) 
 
 	for _, t := range targets {
 		go func(t engineTarget) {
-			updated, err := t.client.UpdateMock(ctx, id, m)
+			updated, err := t.client.UpdateMock(ctx, id, prefixedMock)
 			results <- updateResult{label: t.label, mock: updated, err: err}
 		}(t)
 	}
@@ -278,8 +284,26 @@ func (a *API) pushImportToEngines(ctx context.Context, collection *config.MockCo
 		return &engineclient.ImportResult{Imported: 0, Total: len(collection.Mocks)}, nil
 	}
 
+	// Apply workspace base path prefixes to all mocks in the collection for the engine.
+	// We build a new collection so the caller's original is not modified.
+	engineCollection := collection
+	if a.workspaceStore != nil && len(collection.Mocks) > 0 {
+		workspaces, wsErr := a.workspaceStore.List(ctx)
+		if wsErr == nil {
+			wsMap := buildWorkspaceMap(workspaces)
+			prefixedMocks := prefixMocksForEngine(collection.Mocks, wsMap, store.DefaultWorkspaceID)
+			engineCollection = &config.MockCollection{
+				Version:           collection.Version,
+				Kind:              collection.Kind,
+				Name:              collection.Name,
+				Mocks:             prefixedMocks,
+				StatefulResources: collection.StatefulResources,
+			}
+		}
+	}
+
 	if len(targets) == 1 && targets[0].label == "local" {
-		return targets[0].client.ImportConfig(ctx, collection, replace)
+		return targets[0].client.ImportConfig(ctx, engineCollection, replace)
 	}
 
 	type importResult struct {
@@ -291,7 +315,7 @@ func (a *API) pushImportToEngines(ctx context.Context, collection *config.MockCo
 
 	for _, t := range targets {
 		go func(t engineTarget) {
-			res, err := t.client.ImportConfig(ctx, collection, replace)
+			res, err := t.client.ImportConfig(ctx, engineCollection, replace)
 			results <- importResult{label: t.label, result: res, err: err}
 		}(t)
 	}
@@ -368,4 +392,18 @@ func (p *perEngineSyncMu) get(engineURL string) *sync.Mutex {
 	m := &sync.Mutex{}
 	p.engines[engineURL] = m
 	return m
+}
+
+// prefixMockIfNeeded looks up the workspace for a mock and returns a prefixed
+// copy if the mock's workspace is not the root workspace on the target engine.
+// rootWorkspaceID is the engine's RootWorkspaceID (typically "local" for the local engine).
+func (a *API) prefixMockIfNeeded(ctx context.Context, m *mock.Mock, rootWorkspaceID string) *mock.Mock {
+	if a.workspaceStore == nil || m.WorkspaceID == rootWorkspaceID {
+		return m
+	}
+	ws, err := a.workspaceStore.Get(ctx, m.WorkspaceID)
+	if err != nil || ws == nil {
+		return m // workspace not found, don't prefix
+	}
+	return prefixMockForEngine(m, ws, rootWorkspaceID)
 }

@@ -42,6 +42,15 @@ type Workspace struct {
 	Type        WorkspaceType `json:"type"`
 	Description string        `json:"description,omitempty"`
 
+	// Routing
+	// BasePath is the URL prefix for this workspace's mocks on the engine.
+	// Empty string means this workspace is the "root" workspace on any engine
+	// that designates it as root (via Engine.RootWorkspaceID). Non-root
+	// workspaces must have a non-empty BasePath (e.g., "/payment-api").
+	// The default workspace starts with BasePath="" (root). New workspaces
+	// auto-generate a BasePath from a slugified version of their name.
+	BasePath string `json:"basePath"`
+
 	// Backend configuration
 	Path     string `json:"path,omitempty"`     // Local path or git subdir
 	URL      string `json:"url,omitempty"`      // Git URL or cloud API URL
@@ -84,11 +93,11 @@ type EntityMeta = config.EntityMeta
 
 // MockFilter provides filtering criteria for mock list operations.
 type MockFilter struct {
-	WorkspaceID string        // Filter by workspace ("" = no filter)
+	WorkspaceID string    // Filter by workspace ("" = no filter)
 	Type        mock.Type // Filter by mock type ("" = all types)
-	ParentID    *string       // Filter by parent folder (nil = no filter, "" = root level)
-	Enabled     *bool         // Filter by enabled state (nil = no filter)
-	Search      string        // Search in name/path
+	ParentID    *string   // Filter by parent folder (nil = no filter, "" = root level)
+	Enabled     *bool     // Filter by enabled state (nil = no filter)
+	Search      string    // Search in name/path
 }
 
 // MockStore handles persistence for all mock types in a unified manner.

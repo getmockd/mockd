@@ -115,6 +115,11 @@ type Engine struct {
 	Fingerprint    string            `json:"fingerprint,omitempty"` // Machine fingerprint for identity verification
 	Token          string            `json:"-"`                     // Engine-specific token, not exposed in JSON
 	Tunnel         *TunnelConfig     `json:"tunnel,omitempty"`      // Tunnel configuration
+
+	// RootWorkspaceID is the workspace whose mocks are served at "/" (no prefix)
+	// on this engine. All other workspaces have their mocks prefixed with
+	// their BasePath. Defaults to "local" for the local engine.
+	RootWorkspaceID string `json:"rootWorkspaceId,omitempty"`
 }
 
 // EngineRegistry manages registered engines in memory.

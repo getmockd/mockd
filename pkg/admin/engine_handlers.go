@@ -65,6 +65,7 @@ type AddEngineWorkspaceRequest struct {
 	GRPCPort      int    `json:"grpcPort,omitempty"`
 	MQTTPort      int    `json:"mqttPort,omitempty"`
 	AutoStart     bool   `json:"autoStart,omitempty"` // If true, start the workspace server immediately
+	RootAlias     bool   `json:"rootAlias,omitempty"` // If true, this workspace becomes the root on this engine
 }
 
 // UpdateEngineWorkspaceRequest represents a request to update workspace ports.
@@ -154,13 +155,14 @@ func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 			registeredAt = time.Now()
 		}
 		return &store.Engine{
-			ID:           LocalEngineID,
-			Name:         "Local Engine",
-			Host:         "localhost",
-			Status:       store.EngineStatusOffline,
-			RegisteredAt: registeredAt,
-			LastSeen:     time.Now(),
-			Workspaces:   workspaces,
+			ID:              LocalEngineID,
+			Name:            "Local Engine",
+			Host:            "localhost",
+			Status:          store.EngineStatusOffline,
+			RegisteredAt:    registeredAt,
+			LastSeen:        time.Now(),
+			Workspaces:      workspaces,
+			RootWorkspaceID: store.DefaultWorkspaceID,
 		}
 	}
 
@@ -169,13 +171,14 @@ func (a *API) buildLocalEngineEntry(ctx context.Context) *store.Engine {
 
 	// Build the engine entry from status
 	entry := &store.Engine{
-		ID:           LocalEngineID,
-		Name:         status.Name,
-		Host:         "localhost",
-		Status:       store.EngineStatusOnline,
-		RegisteredAt: status.StartedAt,
-		LastSeen:     time.Now(),
-		Workspaces:   workspaces,
+		ID:              LocalEngineID,
+		Name:            status.Name,
+		Host:            "localhost",
+		Status:          store.EngineStatusOnline,
+		RegisteredAt:    status.StartedAt,
+		LastSeen:        time.Now(),
+		Workspaces:      workspaces,
+		RootWorkspaceID: store.DefaultWorkspaceID,
 	}
 
 	// Use ID from status if available, otherwise keep "local"
@@ -316,16 +319,17 @@ func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	engine := &store.Engine{
-		ID:           engineID,
-		Name:         req.Name,
-		Host:         req.Host,
-		Port:         req.Port,
-		Version:      req.Version,
-		Fingerprint:  req.Fingerprint,
-		Status:       store.EngineStatusOnline,
-		RegisteredAt: time.Now(),
-		LastSeen:     time.Now(),
-		Token:        engineToken,
+		ID:              engineID,
+		Name:            req.Name,
+		Host:            req.Host,
+		Port:            req.Port,
+		Version:         req.Version,
+		Fingerprint:     req.Fingerprint,
+		Status:          store.EngineStatusOnline,
+		RegisteredAt:    time.Now(),
+		LastSeen:        time.Now(),
+		Token:           engineToken,
+		RootWorkspaceID: store.DefaultWorkspaceID,
 	}
 
 	if err := a.engineRegistry.Register(engine); err != nil {
@@ -755,6 +759,15 @@ func (a *API) syncAdminStoreToEngine(client *engineclient.Client, reason string)
 			a.logger().Warn("sync: failed to list stateful resources", "error", err, "reason", reason)
 			// Continue without resources — mocks are more important.
 			resources = nil
+		}
+	}
+
+	// Apply workspace base path prefixes so the engine sees the correct paths.
+	if a.workspaceStore != nil && len(mocks) > 0 {
+		workspaces, wsErr := a.workspaceStore.List(ctx)
+		if wsErr == nil {
+			wsMap := buildWorkspaceMap(workspaces)
+			mocks = prefixMocksForEngine(mocks, wsMap, store.DefaultWorkspaceID)
 		}
 	}
 
