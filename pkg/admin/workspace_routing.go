@@ -126,6 +126,10 @@ func prefixMockForEngine(m *mock.Mock, ws *store.Workspace, rootWorkspaceID stri
 			soap.Path = effectiveMockPath(soap.Path, m.WorkspaceID, ws, rootWorkspaceID)
 			cloned.SOAP = &soap
 		}
+
+	case mock.TypeGRPC, mock.TypeMQTT, mock.TypeOAuth:
+		// These types were already filtered by the early return above (line 79-82),
+		// but the exhaustive linter requires all cases to be listed.
 	}
 
 	return cloned
@@ -247,7 +251,7 @@ func checkRouteCollision(
 	newWorkspace *store.Workspace,
 	existingMocks []*mock.Mock,
 	workspaceMap map[string]*store.Workspace,
-	rootWorkspaceID string,
+	rootWorkspaceID string, //nolint:unparam // kept as parameter for testability
 ) *RouteCollision {
 	if newMock.Type != mock.TypeHTTP || newMock.HTTP == nil || newMock.HTTP.Matcher == nil {
 		return nil // Only HTTP has method+path collisions
@@ -262,12 +266,19 @@ func checkRouteCollision(
 	// Compute the effective engine path for the new mock
 	newEffective := effectiveMockPath(newPath, newMock.WorkspaceID, newWorkspace, rootWorkspaceID)
 
-	// --- Pass 1: exact effective-path collision ---
+	// --- Pass 1: exact effective-path collision (cross-workspace only) ---
+	// Same-workspace duplicate paths are intentional — the matching engine uses
+	// priority to pick the winner. We only flag collisions across workspaces where
+	// base-path prefixing causes two mocks to resolve to the same engine route.
 	for _, existing := range existingMocks {
 		if existing.ID == newMock.ID {
 			continue // Skip self (for updates)
 		}
 		if existing.Type != mock.TypeHTTP || existing.HTTP == nil || existing.HTTP.Matcher == nil {
+			continue
+		}
+		// Same workspace → priority matching handles it, not a collision
+		if existing.WorkspaceID == newMock.WorkspaceID {
 			continue
 		}
 		existMethod := strings.ToUpper(existing.HTTP.Matcher.Method)

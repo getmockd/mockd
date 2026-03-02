@@ -229,6 +229,8 @@ func (a *API) buildLocalWorkspaces(ctx context.Context) []store.EngineWorkspace 
 				ew.MockCount = len(mocks)
 				for _, m := range mocks {
 					switch m.Type {
+					case mock.TypeHTTP:
+						// HTTP mocks are the default — counted via MockCount above
 					case mock.TypeWebSocket:
 						ew.WSCount++
 					case mock.TypeGraphQL:
@@ -239,6 +241,8 @@ func (a *API) buildLocalWorkspaces(ctx context.Context) []store.EngineWorkspace 
 						ew.SOAPCount++
 					case mock.TypeMQTT:
 						ew.MQTTCount++
+					case mock.TypeOAuth:
+						// OAuth mocks don't have a separate counter yet
 					}
 				}
 			}

@@ -378,6 +378,50 @@ func TestCheckRouteCollision(t *testing.T) {
 		}
 	})
 
+	t.Run("no collision: same workspace same path (priority matching)", func(t *testing.T) {
+		// Two mocks in the same workspace with the same method+path should NOT collide.
+		// The matching engine uses priority to pick the winner.
+		existing := []*mock.Mock{
+			{
+				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+				HTTP: &mock.HTTPSpec{
+					Priority: 10,
+					Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/api/users"},
+				},
+			},
+		}
+		newMock := &mock.Mock{
+			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "local",
+			HTTP: &mock.HTTPSpec{
+				Priority: 100,
+				Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/api/users"},
+			},
+		}
+		collision := checkRouteCollision(newMock, wsMap["local"], existing, wsMap, "local")
+		if collision != nil {
+			t.Errorf("same-workspace duplicate paths should not collide (priority matching), got %+v", collision)
+		}
+	})
+
+	t.Run("collision: cross-workspace same effective path", func(t *testing.T) {
+		// Root workspace has /payment-api/charge, ws_pay has /charge → both resolve to /payment-api/charge.
+		// This IS a collision because they're in different workspaces.
+		existing := []*mock.Mock{
+			{
+				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+				HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "POST", Path: "/payment-api/charge"}},
+			},
+		}
+		newMock := &mock.Mock{
+			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "ws_pay",
+			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "POST", Path: "/charge"}},
+		}
+		collision := checkRouteCollision(newMock, wsMap["ws_pay"], existing, wsMap, "local")
+		if collision == nil {
+			t.Error("expected cross-workspace collision when effective paths match")
+		}
+	})
+
 	t.Run("gRPC mock skipped", func(t *testing.T) {
 		existing := []*mock.Mock{}
 		newMock := &mock.Mock{
