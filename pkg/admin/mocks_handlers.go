@@ -757,7 +757,15 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		m.ID = generateMockID(m.Type)
 	}
 
-	// Resolve inline proto content to a file
+	// Import proto from file path (reads file, inlines as protoContent)
+	if m.Type == mock.TypeGRPC && m.GRPC != nil {
+		if err := inlineProtoFromFile(&m); err != nil {
+			writeError(w, http.StatusBadRequest, "proto_read_error", err.Error())
+			return
+		}
+	}
+
+	// Resolve inline proto content to a managed file
 	if m.Type == mock.TypeGRPC && m.GRPC != nil && m.GRPC.ProtoContent != "" {
 		if err := a.resolveInlineProtoContent(&m); err != nil {
 			writeError(w, http.StatusInternalServerError, "proto_write_error", err.Error())
@@ -1018,6 +1026,22 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Import proto from file path (reads file, inlines as protoContent)
+	if m.Type == mock.TypeGRPC && m.GRPC != nil {
+		if err := inlineProtoFromFile(&m); err != nil {
+			writeError(w, http.StatusBadRequest, "proto_read_error", err.Error())
+			return
+		}
+	}
+
+	// Resolve inline proto content to a managed file
+	if m.Type == mock.TypeGRPC && m.GRPC != nil && m.GRPC.ProtoContent != "" {
+		if err := a.resolveInlineProtoContent(&m); err != nil {
+			writeError(w, http.StatusInternalServerError, "proto_write_error", err.Error())
+			return
+		}
+	}
+
 	// Check for route collisions across workspaces (after base path prefixing).
 	// The mock's ID is set, so checkRouteCollision will skip self.
 	if collision := a.checkMockRouteCollision(r.Context(), &m); collision != nil {
@@ -1109,7 +1133,15 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	// Apply patch to existing mock
 	applyMockPatch(existing, patch)
 
-	// Resolve inline proto content to a file
+	// Import proto from file path (reads file, inlines as protoContent)
+	if existing.Type == mock.TypeGRPC && existing.GRPC != nil {
+		if err := inlineProtoFromFile(existing); err != nil {
+			writeError(w, http.StatusBadRequest, "proto_read_error", err.Error())
+			return
+		}
+	}
+
+	// Resolve inline proto content to a managed file
 	if existing.Type == mock.TypeGRPC && existing.GRPC != nil && existing.GRPC.ProtoContent != "" {
 		if err := a.resolveInlineProtoContent(existing); err != nil {
 			writeError(w, http.StatusInternalServerError, "proto_write_error", err.Error())
@@ -1593,6 +1625,28 @@ func mapMockLookupError(err error, log *slog.Logger, operation string) (int, str
 		return http.StatusNotFound, "not_found", "mock not found"
 	}
 	return http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, log, operation)
+}
+
+// inlineProtoFromFile reads a user-provided protoFile path and imports the
+// content as protoContent, making the mock self-contained. This is "import from
+// file" semantics — the content is snapshot'd at create/update time. Changes to
+// the original file are NOT picked up; the user must re-import.
+// Only applies to single protoFile; protoFiles (plural) is left as-is for now.
+func inlineProtoFromFile(m *mock.Mock) error {
+	if m.GRPC == nil || m.GRPC.ProtoContent != "" || m.GRPC.ProtoFile == "" {
+		// Already has inline content, or no file to import — nothing to do
+		return nil
+	}
+
+	content, err := os.ReadFile(m.GRPC.ProtoFile)
+	if err != nil {
+		return fmt.Errorf("failed to read proto file %q: %w", m.GRPC.ProtoFile, err)
+	}
+
+	m.GRPC.ProtoContent = string(content)
+	// protoFile will be overwritten by resolveInlineProtoContent to point
+	// at the managed copy in {data-dir}/protos/
+	return nil
 }
 
 // resolveInlineProtoContent writes inline proto content to the data dir for
