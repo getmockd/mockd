@@ -1837,7 +1837,7 @@ func TestMock_Validate_GRPC(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "one of protoFile or protoFiles is required",
+			errSubstr: "one of protoFile, protoFiles, or protoContent is required",
 		},
 		{
 			name: "both protoFile and protoFiles",

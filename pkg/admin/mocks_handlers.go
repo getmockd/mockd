@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -712,6 +714,20 @@ func (a *API) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Enrich gRPC mocks with proto content if the file is in our managed protos dir
+	if m.Type == mock.TypeGRPC && m.GRPC != nil && m.GRPC.ProtoFile != "" {
+		dataDir := a.dataDir
+		if dataDir == "" {
+			dataDir = store.DefaultDataDir()
+		}
+		protosDir := filepath.Join(dataDir, "protos")
+		if strings.HasPrefix(m.GRPC.ProtoFile, protosDir) {
+			if content, err := os.ReadFile(m.GRPC.ProtoFile); err == nil {
+				m.GRPC.ProtoContent = string(content)
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, m)
 }
 
@@ -739,6 +755,14 @@ func (a *API) handleCreateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	// Generate ID if not provided (needed before Validate since ID is required)
 	if m.ID == "" {
 		m.ID = generateMockID(m.Type)
+	}
+
+	// Resolve inline proto content to a file
+	if m.Type == mock.TypeGRPC && m.GRPC != nil && m.GRPC.ProtoContent != "" {
+		if err := a.resolveInlineProtoContent(&m); err != nil {
+			writeError(w, http.StatusInternalServerError, "proto_write_error", err.Error())
+			return
+		}
 	}
 
 	// Validate the full mock configuration
@@ -1085,6 +1109,14 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	// Apply patch to existing mock
 	applyMockPatch(existing, patch)
 
+	// Resolve inline proto content to a file
+	if existing.Type == mock.TypeGRPC && existing.GRPC != nil && existing.GRPC.ProtoContent != "" {
+		if err := a.resolveInlineProtoContent(existing); err != nil {
+			writeError(w, http.StatusInternalServerError, "proto_write_error", err.Error())
+			return
+		}
+	}
+
 	// Check for route collisions across workspaces (after base path prefixing).
 	// The mock's ID is preserved, so checkRouteCollision will skip self.
 	if collision := a.checkMockRouteCollision(r.Context(), existing); collision != nil {
@@ -1181,6 +1213,18 @@ func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "engine_error",
 			sanitizeEngineError(err, a.logger(), "delete mock from engine"))
 		return
+	}
+
+	// Clean up managed proto file for gRPC mocks
+	if existing.Type == mock.TypeGRPC && existing.GRPC != nil && existing.GRPC.ProtoFile != "" {
+		dataDir := a.dataDir
+		if dataDir == "" {
+			dataDir = store.DefaultDataDir()
+		}
+		protosDir := filepath.Join(dataDir, "protos")
+		if strings.HasPrefix(existing.GRPC.ProtoFile, protosDir) {
+			_ = os.Remove(existing.GRPC.ProtoFile) // Best-effort cleanup
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -1549,4 +1593,36 @@ func mapMockLookupError(err error, log *slog.Logger, operation string) (int, str
 		return http.StatusNotFound, "not_found", "mock not found"
 	}
 	return http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, log, operation)
+}
+
+// resolveInlineProtoContent writes inline proto content to the data dir for
+// persistence and also sets protoFile for backwards compatibility with file-based
+// workflows. ProtoContent is KEPT in the stored mock so it travels to remote
+// engines (the engine prefers protoContent over protoFile when available).
+func (a *API) resolveInlineProtoContent(m *mock.Mock) error {
+	if m.GRPC == nil || m.GRPC.ProtoContent == "" {
+		return nil
+	}
+
+	dataDir := a.dataDir
+	if dataDir == "" {
+		dataDir = store.DefaultDataDir()
+	}
+
+	protosDir := filepath.Join(dataDir, "protos")
+	if err := os.MkdirAll(protosDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create protos directory: %w", err)
+	}
+
+	filename := m.ID + ".proto"
+	protoPath := filepath.Join(protosDir, filename)
+
+	if err := os.WriteFile(protoPath, []byte(m.GRPC.ProtoContent), 0o644); err != nil {
+		return fmt.Errorf("failed to write proto file: %w", err)
+	}
+
+	// Set protoFile for local filesystem access (backwards compat).
+	// ProtoContent stays — engine uses it directly for remote parsing.
+	m.GRPC.ProtoFile = protoPath
+	return nil
 }

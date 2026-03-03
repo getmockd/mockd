@@ -62,6 +62,37 @@ func ParseProtoFile(path string, importPaths []string) (*ProtoSchema, error) {
 	return ParseProtoFiles([]string{path}, importPaths)
 }
 
+// ParseProtoContent parses inline proto content from a string and returns a ProtoSchema.
+// The content is provided as a virtual file to the compiler via SourceAccessorFromMap.
+// This allows gRPC mock creation without requiring a .proto file on disk — essential
+// when the engine is remote from the admin server.
+func ParseProtoContent(content string) (*ProtoSchema, error) {
+	if content == "" {
+		return nil, ErrNoProtoFiles
+	}
+
+	// Virtual filename for the inline content
+	const virtualFile = "inline.proto"
+
+	// Provide the content via an in-memory map — no filesystem access needed
+	sources := map[string]string{virtualFile: content}
+
+	compiler := protocompile.Compiler{
+		Resolver: protocompile.WithStandardImports(
+			&protocompile.SourceResolver{
+				Accessor: protocompile.SourceAccessorFromMap(sources),
+			},
+		),
+	}
+
+	compiled, err := compiler.Compile(context.Background(), virtualFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return buildSchema(compiled)
+}
+
 // ParseProtoFiles parses multiple .proto files and returns a unified ProtoSchema.
 // importPaths specifies directories to search for imported files.
 func ParseProtoFiles(paths []string, importPaths []string) (*ProtoSchema, error) {
@@ -96,12 +127,17 @@ func ParseProtoFiles(paths []string, importPaths []string) (*ProtoSchema, error)
 		return nil, err
 	}
 
+	return buildSchema(compiled)
+}
+
+// buildSchema converts compiled linker.Files into a ProtoSchema by extracting
+// all service and method descriptors. Shared by ParseProtoFiles and ParseProtoContent.
+func buildSchema(compiled linker.Files) (*ProtoSchema, error) {
 	schema := &ProtoSchema{
 		files:    make([]protoreflect.FileDescriptor, 0, len(compiled)),
 		services: make(map[string]*ServiceDescriptor),
 	}
 
-	// Convert linker.Files to []protoreflect.FileDescriptor and extract services
 	for _, file := range compiled {
 		schema.files = append(schema.files, file)
 

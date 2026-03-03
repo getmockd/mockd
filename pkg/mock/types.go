@@ -667,12 +667,13 @@ type SubscriptionTimingConfig struct {
 
 // GRPCSpec contains gRPC-specific mock configuration.
 type GRPCSpec struct {
-	Port        int                      `json:"port" yaml:"port"`
-	ProtoFile   string                   `json:"protoFile,omitempty" yaml:"protoFile,omitempty"`
-	ProtoFiles  []string                 `json:"protoFiles,omitempty" yaml:"protoFiles,omitempty"`
-	ImportPaths []string                 `json:"importPaths,omitempty" yaml:"importPaths,omitempty"`
-	Services    map[string]ServiceConfig `json:"services,omitempty" yaml:"services,omitempty"`
-	Reflection  bool                     `json:"reflection" yaml:"reflection"`
+	Port         int                      `json:"port" yaml:"port"`
+	ProtoFile    string                   `json:"protoFile,omitempty" yaml:"protoFile,omitempty"`
+	ProtoFiles   []string                 `json:"protoFiles,omitempty" yaml:"protoFiles,omitempty"`
+	ProtoContent string                   `json:"protoContent,omitempty" yaml:"protoContent,omitempty"`
+	ImportPaths  []string                 `json:"importPaths,omitempty" yaml:"importPaths,omitempty"`
+	Services     map[string]ServiceConfig `json:"services,omitempty" yaml:"services,omitempty"`
+	Reflection   bool                     `json:"reflection" yaml:"reflection"`
 }
 
 // ServiceConfig configures mock responses for a gRPC service.

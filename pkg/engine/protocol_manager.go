@@ -310,11 +310,20 @@ func (pm *ProtocolManager) startGRPC(ctx context.Context, cfg *ProtocolConfig) e
 			continue
 		}
 
-		// Parse proto files
-		protoFiles := grpcCfg.GetProtoFiles()
-		schema, err := grpc.ParseProtoFiles(protoFiles, grpcCfg.ImportPaths)
-		if err != nil {
-			return fmt.Errorf("failed to parse proto files for gRPC server on port %d: %w", grpcCfg.Port, err)
+		// Parse proto — prefer inline content (works when engine is remote),
+		// fall back to file paths on the local filesystem.
+		var (
+			schema   *grpc.ProtoSchema
+			parseErr error
+		)
+		if grpcCfg.ProtoContent != "" {
+			schema, parseErr = grpc.ParseProtoContent(grpcCfg.ProtoContent)
+		} else {
+			protoFiles := grpcCfg.GetProtoFiles()
+			schema, parseErr = grpc.ParseProtoFiles(protoFiles, grpcCfg.ImportPaths)
+		}
+		if parseErr != nil {
+			return fmt.Errorf("failed to parse proto for gRPC server on port %d: %w", grpcCfg.Port, parseErr)
 		}
 
 		// Create gRPC server
@@ -435,15 +444,23 @@ func (pm *ProtocolManager) StartGRPCServer(cfg *grpc.GRPCConfig) (*grpc.Server, 
 		}
 	}
 
-	// Parse proto files
-	protoFiles := cfg.GetProtoFiles()
-	if len(protoFiles) == 0 {
-		return nil, errors.New("no proto files specified")
+	// Parse proto — prefer inline content (works when engine is remote),
+	// fall back to file paths on the local filesystem.
+	var (
+		schema   *grpc.ProtoSchema
+		parseErr error
+	)
+	if cfg.ProtoContent != "" {
+		schema, parseErr = grpc.ParseProtoContent(cfg.ProtoContent)
+	} else {
+		protoFiles := cfg.GetProtoFiles()
+		if len(protoFiles) == 0 {
+			return nil, errors.New("no proto files or inline content specified")
+		}
+		schema, parseErr = grpc.ParseProtoFiles(protoFiles, cfg.ImportPaths)
 	}
-
-	schema, err := grpc.ParseProtoFiles(protoFiles, cfg.ImportPaths)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse proto files: %w", err)
+	if parseErr != nil {
+		return nil, fmt.Errorf("failed to parse proto: %w", parseErr)
 	}
 
 	// Create gRPC server

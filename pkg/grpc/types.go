@@ -34,6 +34,11 @@ type GRPCConfig struct {
 	// Use this when services span multiple files.
 	ProtoFiles []string `json:"protoFiles,omitempty" yaml:"protoFiles,omitempty"`
 
+	// ProtoContent is inline proto definition content. When set, the engine
+	// parses the proto from memory without requiring a file on disk. This is
+	// essential when the engine is remote from the admin server.
+	ProtoContent string `json:"protoContent,omitempty" yaml:"protoContent,omitempty"`
+
 	// ImportPaths specifies directories to search for imported .proto files.
 	// Similar to the -I flag in protoc.
 	ImportPaths []string `json:"importPaths,omitempty" yaml:"importPaths,omitempty"`
@@ -158,7 +163,7 @@ func (c *GRPCConfig) Validate() error {
 	if c.Port <= 0 || c.Port > 65535 {
 		return ErrInvalidPort
 	}
-	if c.ProtoFile == "" && len(c.ProtoFiles) == 0 {
+	if c.ProtoFile == "" && len(c.ProtoFiles) == 0 && c.ProtoContent == "" {
 		return ErrMissingProtoFile
 	}
 	return nil

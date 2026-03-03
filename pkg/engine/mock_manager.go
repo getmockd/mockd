@@ -629,23 +629,24 @@ func (mm *MockManager) registerGRPCMock(m *mock.Mock) error {
 
 	grpcSpec := m.GRPC
 
-	// gRPC requires proto files to parse the schema
-	if grpcSpec.ProtoFile == "" && len(grpcSpec.ProtoFiles) == 0 {
-		mm.log.Warn("gRPC mock has no proto file, cannot start server",
+	// gRPC requires proto source — either inline content or file paths
+	if grpcSpec.ProtoFile == "" && len(grpcSpec.ProtoFiles) == 0 && grpcSpec.ProtoContent == "" {
+		mm.log.Warn("gRPC mock has no proto source (protoFile, protoFiles, or protoContent), cannot start server",
 			"name", m.Name, "port", grpcSpec.Port)
 		return nil
 	}
 
 	// Convert mock.GRPCSpec to grpc.GRPCConfig
 	cfg := &grpc.GRPCConfig{
-		ID:          m.ID,
-		Name:        m.Name,
-		Port:        grpcSpec.Port,
-		ProtoFile:   grpcSpec.ProtoFile,
-		ProtoFiles:  grpcSpec.ProtoFiles,
-		ImportPaths: grpcSpec.ImportPaths,
-		Reflection:  grpcSpec.Reflection,
-		Enabled:     m.Enabled == nil || *m.Enabled,
+		ID:           m.ID,
+		Name:         m.Name,
+		Port:         grpcSpec.Port,
+		ProtoFile:    grpcSpec.ProtoFile,
+		ProtoFiles:   grpcSpec.ProtoFiles,
+		ProtoContent: grpcSpec.ProtoContent,
+		ImportPaths:  grpcSpec.ImportPaths,
+		Reflection:   grpcSpec.Reflection,
+		Enabled:      m.Enabled == nil || *m.Enabled,
 	}
 
 	// Convert Services

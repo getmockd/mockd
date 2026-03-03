@@ -525,12 +525,19 @@ func (m *Mock) validateGRPC() error {
 		return &ValidationError{Field: "grpc.port", Message: "port must be between 1 and 65535"}
 	}
 
-	// At least one proto file must be specified
+	// At least one proto source must be specified
 	hasProtoFile := m.GRPC.ProtoFile != ""
 	hasProtoFiles := len(m.GRPC.ProtoFiles) > 0
+	hasProtoContent := m.GRPC.ProtoContent != ""
 
-	if !hasProtoFile && !hasProtoFiles {
-		return &ValidationError{Field: "grpc", Message: "one of protoFile or protoFiles is required"}
+	if !hasProtoFile && !hasProtoFiles && !hasProtoContent {
+		return &ValidationError{Field: "grpc", Message: "one of protoFile, protoFiles, or protoContent is required"}
+	}
+
+	// protoContent + protoFile is allowed (admin writes the file and keeps the content
+	// for transport to remote engines). But protoContent + protoFiles is confusing.
+	if hasProtoContent && hasProtoFiles {
+		return &ValidationError{Field: "grpc", Message: "cannot specify protoContent together with protoFiles"}
 	}
 
 	if hasProtoFile && hasProtoFiles {
