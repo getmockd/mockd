@@ -50,17 +50,21 @@ jobs:
       # the binary via go:embed with -tags dashboard. The DASHBOARD_PAT secret
       # needs `repo` scope on getmockd/mockd-desktop.
       - name: Fetch dashboard dist
-        if: env.DASHBOARD_PAT != ''
         env:
-          DASHBOARD_PAT: ${{ secrets.DASHBOARD_PAT }}
+          GH_TOKEN: ${{ secrets.DASHBOARD_PAT }}
         run: |
+          TAG="${GITHUB_REF_NAME}"
           mkdir -p pkg/admin/dashboard/dist
-          gh release download --repo getmockd/mockd-desktop \
+          # Try matching mockd tag first, then fall back to latest stable release.
+          gh release download "$TAG" --repo getmockd/mockd-desktop \
             --pattern 'dashboard-dist.tar.gz' \
-            --dir /tmp/dashboard \
-            || { echo "::warning::Dashboard dist not found — building without embedded UI"; exit 0; }
+            --dir /tmp/dashboard 2>/dev/null \
+          || gh release download --repo getmockd/mockd-desktop \
+            --pattern 'dashboard-dist.tar.gz' \
+            --dir /tmp/dashboard 2>/dev/null \
+          || { echo "::warning::Dashboard dist not found — building without embedded UI"; exit 0; }
           tar -xzf /tmp/dashboard/dashboard-dist.tar.gz -C pkg/admin/dashboard/dist/
-          echo "Dashboard dist installed:"
+          echo "Dashboard dist installed from mockd-desktop:"
           ls -la pkg/admin/dashboard/dist/
 
       - name: Run goreleaser
