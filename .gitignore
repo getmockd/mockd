@@ -41,7 +41,6 @@ Thumbs.db
 
 # Build output
 dist/
-!pkg/admin/dashboard/dist/
 build/
 
 # Log files

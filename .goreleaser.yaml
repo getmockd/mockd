@@ -27,6 +27,8 @@ builds:
       - arm64
     flags:
       - -trimpath
+    tags:
+      - dashboard
     ldflags:
       - -s -w
       - -X main.Version={{.Version}}

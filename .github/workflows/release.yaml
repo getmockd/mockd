@@ -45,6 +45,24 @@ jobs:
       - name: Install Syft (SBOM)
         uses: anchore/sbom-action/download-syft@v0
 
+      # Fetch pre-built dashboard UI from the private mockd-desktop repo.
+      # The dist is a compiled artifact (not source) — it gets embedded into
+      # the binary via go:embed with -tags dashboard. The DASHBOARD_PAT secret
+      # needs `repo` scope on getmockd/mockd-desktop.
+      - name: Fetch dashboard dist
+        if: env.DASHBOARD_PAT != ''
+        env:
+          DASHBOARD_PAT: ${{ secrets.DASHBOARD_PAT }}
+        run: |
+          mkdir -p pkg/admin/dashboard/dist
+          gh release download --repo getmockd/mockd-desktop \
+            --pattern 'dashboard-dist.tar.gz' \
+            --dir /tmp/dashboard \
+            || { echo "::warning::Dashboard dist not found — building without embedded UI"; exit 0; }
+          tar -xzf /tmp/dashboard/dashboard-dist.tar.gz -C pkg/admin/dashboard/dist/
+          echo "Dashboard dist installed:"
+          ls -la pkg/admin/dashboard/dist/
+
       - name: Run goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
