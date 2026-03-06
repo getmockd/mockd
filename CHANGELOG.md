@@ -7,14 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-05
+
 ### Added
 
-- **Stateful chaos faults** — Four new advanced fault types for chaos engineering: `circuit_breaker` (CLOSED/OPEN/HALF_OPEN state machine with deterministic or probabilistic tripping, configurable recovery), `retry_after` (429/503 rate limiting with Retry-After header and automatic recovery), `progressive_degradation` (increasing latency per request with error threshold and counter reset), and `chunked_dribble` (timed chunk delivery simulating slow streaming responses)
-- **Chaos fault introspection API** — `GET /chaos/faults` returns live state of all active stateful fault instances including circuit breaker state, trip/rejection counts, retry-after limiter stats, and progressive degradation delay/error counters
-- **Manual circuit breaker control** — `POST /chaos/circuit-breakers/{key}/trip` and `POST /chaos/circuit-breakers/{key}/reset` for manual state override during testing
-- **MCP tools for stateful faults** — `get_stateful_faults` tool for introspection, `manage_circuit_breaker` tool for trip/reset operations, and `set_chaos_config` now accepts raw `rules` parameter for advanced fault configuration
-- **Chaos config from YAML** — `serverConfig.chaos` section in YAML config files is now applied at startup via `mockd serve --config`, supporting all fault types including the new stateful faults
-- **`mock://chaos` MCP resource enhanced** — Now includes stateful fault status alongside existing chaos config and stats
+- **Embedded web dashboard** — Built-in Svelte UI served from the admin port (`http://localhost:4290`) in release builds. Manage mocks for all 7 protocols visually with a VS Code-style tabbed editor, command palette (Ctrl+K), mock tree with folders/search/sort, request log viewer with near-miss debugging, recording sessions, stateful resources, custom operations, workspace management, and import/export dialogs. No extra flags needed — included in Docker images and all release packages
+- **Workspace base path routing** — Workspaces can define a `basePath` that prefixes all mock routes in that workspace, enabling namespace isolation across teams. Routes are automatically rewritten at the engine level with per-engine root alias support
+- **Route collision detection** — Namespace-level detection prevents conflicting routes across workspaces. Same-workspace duplicate paths are allowed for priority-based matching
+- **gRPC inline proto support** — `mockd add grpc --proto-content '...'` accepts inline protobuf definitions, and `protoFile` field now supports import-from-file semantics for config files
+- **Stateful chaos faults** — Four new advanced fault types: `circuit_breaker` (CLOSED/OPEN/HALF_OPEN state machine), `retry_after` (429/503 with Retry-After header), `progressive_degradation` (increasing latency per request), `chunked_dribble` (timed chunk delivery)
+- **Chaos fault introspection API** — `GET /chaos/faults` returns live state of all active stateful fault instances
+- **Manual circuit breaker control** — `POST /chaos/circuit-breakers/{key}/trip` and `POST /chaos/circuit-breakers/{key}/reset` for manual state override
+- **MCP tools for stateful faults** — `get_stateful_faults`, `manage_circuit_breaker`, enhanced `set_chaos_config` with raw `rules` parameter
+- **Chaos config from YAML** — `serverConfig.chaos` section in YAML config files applied at startup
+- **`mock://chaos` MCP resource enhanced** — Now includes stateful fault status
+
+### Fixed
+
+- **Dashboard PATCH, CSP, and CORS** — Enabled PATCH method for mock updates, relaxed Content-Security-Policy for embedded UI, and configured CORS for local development
+- **Workspace assignments for local engine** — `GET /engines` now properly populates workspace assignments
+- **Docker prerelease tags** — Skip `latest`/major/minor Docker tags on prerelease builds to avoid polluting stable tags
+- **Dashboard dist download** — Release workflow uses matching tag for cross-repo artifact download with latest-release fallback
+
+## [0.4.7] - 2026-02-28
+
+### Added
+
+- **Schema-driven response generation** — OpenAPI imports now auto-generate realistic responses using faker functions. Maps JSON Schema formats to faker types (16 format mappings), respects constraints (min/max, enum, minLength, minItems), handles `$ref` with cycle detection, `allOf` merging, `oneOf`/`anyOf`. 60+ tests
+- **Multi-engine fan-out (CP/DP Phase 1)** — Mock writes now fan out to all registered engines in parallel with per-engine error handling. Dedup prevents double-push to local engine
+- **Template engine unification** — MQTT templates now use the same engine as all other protocols. All 34 faker types work in MQTT context. Removed 200+ lines of duplicate code
+- **`mockd engine` command** — Headless engine mode for CI: `mockd engine --config mocks.yaml`. No admin API, auto-port assignment with `--port 0 --print-url`, health endpoint
+- **Mockoon import** — `mockd import mockoon environment.json`. Converts routes, Handlebars templates, Faker.js helpers, and CRUD routes to mockd format
+- **Seeded reproducible responses** — `?_mockd_seed=42` or `X-Mockd-Seed: 42` header for deterministic faker/random/uuid output. Per-mock `seed` config field. Same seed = identical response every time
+- **Stateful chaos faults** — Circuit breaker, retry-after, progressive degradation, chunked dribble fault types with full admin API + MCP integration
+
+### Fixed
+
+- **Template engine and chaos bugs** — Case-insensitive faker, chaos config JSON shape, Mockoon import edge cases
+- **Chaos config DRY/KISS** — Canonical converter in `chaos_convert.go`, eliminated 3-way duplication
+- **Request template case sensitivity** — `{{request.header.X-Id}}` now case-insensitive
+
+## [0.4.6] - 2026-02-28
+
+### Added
+
+- **CI smoke tests** — setup-mockd action compatibility job, smoke tests against released binary
+- **Agent configs** — Windsurf, JetBrains, Copilot MCP configuration files deployed to standard locations
+
+### Fixed
+
+- **Documentation audit** — 23 doc pages updated across two audit phases: fixed stale protocol lists, incorrect examples, missing chaos config reference, inaccurate CRUD pagination defaults, TLS/validation/JSON schema errors
+- **WireMock comparison table** — Corrected protocol support claims
 
 ## [0.4.5] - 2026-02-27
 
@@ -359,7 +402,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial public release (pre-1.0)
 - Licensed under Apache 2.0
 
-[Unreleased]: https://github.com/getmockd/mockd/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/getmockd/mockd/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/getmockd/mockd/compare/v0.4.7...v0.5.0
+[0.4.7]: https://github.com/getmockd/mockd/compare/v0.4.6...v0.4.7
+[0.4.6]: https://github.com/getmockd/mockd/compare/v0.4.5...v0.4.6
+[0.4.5]: https://github.com/getmockd/mockd/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/getmockd/mockd/compare/v0.4.0...v0.4.4
 [0.4.0]: https://github.com/getmockd/mockd/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/getmockd/mockd/compare/v0.3.2...v0.3.3

@@ -5,6 +5,10 @@ description: Complete reference for the mockd Admin API, providing runtime manag
 
 The Admin API provides runtime management of the mockd server.
 
+:::note[Web Dashboard]
+When built with the `dashboard` build tag (the default for release binaries), the admin port also serves the **web dashboard** at its root path (`GET /`). API routes take priority over the dashboard catch-all, so all endpoints documented below work exactly the same. Open [http://localhost:4290](http://localhost:4290) in your browser to access the dashboard. See the [Dashboard Guide](/guides/dashboard/) for details.
+:::
+
 ## Overview
 
 mockd uses a **three-port architecture** separating the control plane from the data plane:

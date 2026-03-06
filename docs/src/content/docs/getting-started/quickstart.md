@@ -305,6 +305,10 @@ curl -X POST http://localhost:4280/graphql \
   -d '{"query": "{ hello }"}'
 ```
 
+:::tip[Web Dashboard]
+If you're using a release build, open [http://localhost:4290](http://localhost:4290) in your browser to manage mocks visually. See the [Dashboard Guide](/guides/dashboard/) for details.
+:::
+
 ## What's Next?
 
 - **[Core Concepts](/getting-started/concepts/)** - Understand mocks, matching, and responses

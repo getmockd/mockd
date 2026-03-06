@@ -281,6 +281,15 @@ Recorded requests become mocks automatically.
 
 See [Proxy Recording Guide](/guides/proxy-recording/).
 
+## Ways to Interact with mockd
+
+mockd provides several interfaces for managing mocks:
+
+- **CLI** — The `mockd` command-line tool for creating, listing, and managing mocks from your terminal. See the [CLI Reference](/reference/cli/).
+- **Admin API** — A RESTful HTTP API on port 4290 for runtime mock management, state control, and proxy operations. See the [Admin API Reference](/reference/admin-api/).
+- **MCP Server** — A Model Context Protocol server that lets AI-powered editors (Claude Code, Cursor, Windsurf) create and manage mocks directly. See the [MCP Server Guide](/guides/mcp-server/).
+- **Web Dashboard** — A built-in UI served from the admin port (http://localhost:4290) for visual mock management. Available in release builds. See the [Dashboard Guide](/guides/dashboard/).
+
 ## Next Steps
 
 - **[Request Matching](/guides/request-matching/)** - Advanced matching techniques

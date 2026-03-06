@@ -31,6 +31,7 @@ Mock HTTP, gRPC, GraphQL, WebSocket, MQTT, SSE, and SOAP APIs from a single CLI 
 | **Cloud tunnel sharing** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: |
 | **Proxy recording & replay** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: | :white_check_mark: |
 | **Import OpenAPI/Postman/HAR** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
+| **Built-in web dashboard** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: |
 | **MCP server (AI-native)** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
 
 > 🔌 **Ext** = available via separate extension JAR, not bundled with WireMock core. mockd includes all protocols natively in a single binary.
@@ -200,9 +201,20 @@ curl -X POST http://localhost:4290/import \
   --data-binary @openapi.yaml
 ```
 
+### Web Dashboard
+
+Release builds include a built-in web UI served from the admin port:
+
+```bash
+mockd start
+# Open http://localhost:4290 in your browser
+```
+
+Manage mocks for all 7 protocols visually with a VS Code-style tabbed editor, command palette (Ctrl+K), mock tree with search/sort/folders, request log viewer with near-miss debugging, and more. Docker images and all release packages include the dashboard automatically.
+
 ### AI Mock Generation (MCP)
 
-mockd includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server with **16 tools** for full mock lifecycle management from AI-powered editors (Cursor, Windsurf, Claude Code):
+mockd includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server with **18 tools** for full mock lifecycle management from AI-powered editors (Cursor, Windsurf, Claude Code):
 
 ```bash
 mockd mcp  # Start the MCP server (stdio transport)
