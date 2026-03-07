@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-03-07
+
+### Security
+
+- **Go 1.25.7 → 1.26.1** — Fixes 5 stdlib vulnerabilities: GO-2026-4599 and GO-2026-4600 (crypto/x509), GO-2026-4601 (net/url), GO-2026-4602 (os), GO-2026-4603 (html/template)
+- **mTLS CN/OU filtering uses `VerifyConnection`** — Replaced `VerifyPeerCertificate` callback with `VerifyConnection`, which is invoked on every connection including resumed TLS sessions, preventing potential bypass via session ticket resumption
+
+### Fixed
+
+- **All gosec/staticcheck findings resolved** — 30 findings across 18 files addressed with golangci-lint v2.11.2: targeted `//nolint` annotations for false positives (taint analysis on config-sourced data), `fmt.Fprintf` refactors to avoid unnecessary allocations, and file-level G120 exclusion for mock OAuth handler
+
 ## [0.5.0] - 2026-03-05
 
 ### Added
