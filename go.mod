@@ -1,6 +1,6 @@
 module github.com/getmockd/mockd
 
-go 1.25.8
+go 1.26.1
 
 require (
 	github.com/beevik/etree v1.6.0
