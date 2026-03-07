@@ -1074,7 +1074,7 @@ func printWelcomeMessage(mockPort, adminPort int) {
 // daemonize re-executes the current process as a background daemon.
 func daemonize(_ []string, pidFilePath string, httpPort, adminPort int) error {
 	// Build the command with same arguments
-	cmd := exec.Command(os.Args[0], os.Args[1:]...)
+	cmd := exec.Command(os.Args[0], os.Args[1:]...) //nolint:gosec // G702 — self-exec daemonization; re-running current binary with same args
 	cmd.Env = append(os.Environ(), "MOCKD_CHILD=1")
 
 	// Detach from terminal

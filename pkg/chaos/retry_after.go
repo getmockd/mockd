@@ -113,7 +113,7 @@ func (t *RetryAfterTracker) writeRateLimitResponse(w http.ResponseWriter, now ti
 		body = fmt.Sprintf(`{"error":"%s","retry_after":%d}`,
 			http.StatusText(t.statusCode), retryAfterSecs)
 	}
-	_, _ = w.Write([]byte(body))
+	_, _ = w.Write([]byte(body)) //nolint:gosec // G705 — body is config-sourced or generated from http.StatusText constants
 }
 
 // Reset resets the tracker to its initial state.

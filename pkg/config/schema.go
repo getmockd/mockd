@@ -532,7 +532,7 @@ func LoadProjectConfigFromBytes(data []byte) (*ProjectConfig, error) {
 func DiscoverProjectConfig() (string, error) {
 	// Check MOCKD_CONFIG env var first
 	if envPath := os.Getenv("MOCKD_CONFIG"); envPath != "" {
-		if _, err := os.Stat(envPath); err == nil {
+		if _, err := os.Stat(envPath); err == nil { //nolint:gosec // G703 — MOCKD_CONFIG is operator-set, same trust level as CLI flags
 			return envPath, nil
 		}
 		return "", fmt.Errorf("MOCKD_CONFIG points to non-existent file: %s", envPath)

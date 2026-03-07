@@ -146,14 +146,16 @@ func (tm *TLSManager) configureMTLS(tlsConfig *tls.Config) error {
 			allowedOUs[ou] = struct{}{}
 		}
 
-		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			// If no verified chains yet, let standard TLS verification handle it
-			if len(verifiedChains) == 0 || len(verifiedChains[0]) == 0 {
+		// Use VerifyConnection instead of VerifyPeerCertificate — it is called on
+		// every connection including resumed TLS sessions, preventing bypass via
+		// session ticket resumption (gosec G123).
+		tlsConfig.VerifyConnection = func(cs tls.ConnectionState) error {
+			// If no peer certificates, let standard TLS ClientAuth handling decide
+			if len(cs.PeerCertificates) == 0 {
 				return nil
 			}
 
-			// Get the client certificate (first cert in first verified chain)
-			clientCert := verifiedChains[0][0]
+			clientCert := cs.PeerCertificates[0]
 
 			// Check Common Name if AllowedCNs is configured
 			if len(allowedCNs) > 0 {

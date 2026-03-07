@@ -129,7 +129,7 @@ func (pd *ProgressiveDegradation) Handle(ctx context.Context, w http.ResponseWri
 		w.WriteHeader(errorCode)
 		body := fmt.Sprintf(`{"error":"%s","degradation":{"request_count":%d,"delay_ms":%d}}`,
 			http.StatusText(errorCode), count, delay.Milliseconds())
-		_, _ = w.Write([]byte(body))
+		_, _ = w.Write([]byte(body)) //nolint:gosec // G705 — body generated from http.StatusText and internal counters, no user input
 		return true
 	}
 

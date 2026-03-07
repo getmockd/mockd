@@ -259,7 +259,7 @@ func (cb *CircuitBreaker) writeOpenResponse(w http.ResponseWriter) {
 		body = fmt.Sprintf(`{"error":"circuit breaker open","state":"%s","retry_after":%d}`,
 			cb.state.String(), retryAfterSecs)
 	}
-	_, _ = w.Write([]byte(body))
+	_, _ = w.Write([]byte(body)) //nolint:gosec // G705 — body is config-sourced or generated from enum/integer values
 }
 
 // Trip forces the circuit breaker to the OPEN state (for admin API).

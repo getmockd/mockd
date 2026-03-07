@@ -131,7 +131,7 @@ func (c *Counter) WithLabels(values ...string) (*CounterVec, error) {
 	if !ok {
 		labels := make(map[string]string, len(c.labelNames))
 		for i, name := range c.labelNames {
-			labels[name] = values[i]
+			labels[name] = values[i] //nolint:gosec // G602 — len(values)==len(c.labelNames) verified above
 		}
 
 		c.mu.Lock()
@@ -255,7 +255,7 @@ func (g *Gauge) WithLabels(values ...string) (*GaugeVec, error) {
 	if !ok {
 		labels := make(map[string]string, len(g.labelNames))
 		for i, name := range g.labelNames {
-			labels[name] = values[i]
+			labels[name] = values[i] //nolint:gosec // G602 — len(values)==len(g.labelNames) verified above
 		}
 
 		g.mu.Lock()
@@ -416,7 +416,7 @@ func (h *Histogram) WithLabels(values ...string) (*HistogramVec, error) {
 	if !ok {
 		labels := make(map[string]string, len(h.labelNames))
 		for i, name := range h.labelNames {
-			labels[name] = values[i]
+			labels[name] = values[i] //nolint:gosec // G602 — len(values)==len(h.labelNames) verified above
 		}
 
 		h.mu.Lock()

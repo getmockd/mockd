@@ -448,7 +448,7 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 		if !filepath.IsAbs(cleanPath) && h.baseDir != "" {
 			cleanPath = filepath.Join(h.baseDir, cleanPath)
 		}
-		data, err := os.ReadFile(cleanPath)
+		data, err := os.ReadFile(cleanPath) //nolint:gosec // G703 — cleanPath is config-sourced and sanitized by SafeFilePathAllowAbsolute above
 		if err != nil {
 			h.log.Error("failed to read body file", "file", cleanPath, "error", err)
 			w.Header().Set("Content-Type", "application/json")
