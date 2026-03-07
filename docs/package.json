@@ -28,7 +28,8 @@
   "packageManager": "pnpm@10.14.0",
   "pnpm": {
     "overrides": {
-      "minimatch": ">=10.2.3"
+      "minimatch": ">=10.2.3",
+      "svgo": ">=4.0.1"
     }
   }
 }
