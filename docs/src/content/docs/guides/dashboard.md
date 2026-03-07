@@ -69,13 +69,9 @@ Inspect incoming traffic in real time:
 
 ## Architecture
 
-The dashboard is a single Svelte frontend codebase with two delivery mechanisms:
+The dashboard is a Svelte single-page application embedded directly into the mockd binary. It's served as static assets from the admin API — no separate backend or additional process.
 
-1. **Embedded web dashboard** (production) — The compiled frontend is embedded into the Go binary at build time and served from the admin API. The dashboard communicates with mockd over the same port it's served from.
-
-2. **Wails desktop app** (development) — The same frontend runs as a native desktop application via Wails during development.
-
-In production, the dashboard makes API calls to `http://localhost:4290/...` — the same admin API used by the CLI and MCP server. There is no separate backend; the dashboard is a static frontend talking to the existing admin API.
+The dashboard makes API calls to `http://localhost:4290/...` — the same admin API used by the CLI and MCP server. Everything the dashboard can do, the CLI and API can do too. The dashboard is a convenience layer, not a separate system.
 
 ## Running with Docker
 
@@ -90,12 +86,13 @@ docker run -p 4280:4280 -p 4290:4290 ghcr.io/getmockd/mockd:latest
 
 ## Building from Source
 
-To build mockd with the dashboard included, use the `dashboard` build tag:
+If you build mockd from source with `go build ./cmd/mockd`, the binary works fully — CLI, admin API, MCP server, and all protocols — but does not include the dashboard UI. When you visit the admin port in a browser, you'll see a plain-text fallback explaining that the dashboard is available in release builds.
 
-```bash
-go build -tags dashboard ./cmd/mockd
-```
+To get the dashboard, use one of the pre-built options:
 
-This requires the pre-built frontend distribution in `pkg/admin/dashboard/dist/`. You don't need to build the frontend yourself — the release CI automatically downloads the compiled frontend assets from the `mockd-desktop` releases.
+- **Homebrew:** `brew install getmockd/tap/mockd`
+- **Docker:** `docker run ghcr.io/getmockd/mockd:latest`
+- **Release binary:** Download from [GitHub Releases](https://github.com/getmockd/mockd/releases)
+- **Install script:** `curl -fsSL https://get.mockd.io | sh`
 
-Without the `-tags dashboard` flag, the binary builds normally but serves a plain-text fallback instead of the dashboard UI when you visit the admin port in a browser.
+The dashboard is free but not open source. Release binaries include the compiled dashboard assets embedded at build time.
