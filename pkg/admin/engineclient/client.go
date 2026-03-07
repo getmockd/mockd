@@ -1031,7 +1031,7 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
-	return c.httpClient.Do(req)
+	return c.httpClient.Do(req) //nolint:gosec // G704 — admin→engine internal client; base URL is config-sourced
 }
 
 func (c *Client) parseError(resp *http.Response) error {

@@ -25,50 +25,50 @@ Rules:
 func buildPrompt(req *GenerateRequest) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("Generate a realistic value for a field named '%s' of type '%s'.\n", req.FieldName, req.FieldType))
+	fmt.Fprintf(&b, "Generate a realistic value for a field named '%s' of type '%s'.\n", req.FieldName, req.FieldType)
 
 	if req.Format != "" {
-		b.WriteString(fmt.Sprintf("Format: %s\n", req.Format))
+		fmt.Fprintf(&b, "Format: %s\n", req.Format)
 	}
 
 	if req.Description != "" {
-		b.WriteString(fmt.Sprintf("Description: %s\n", req.Description))
+		fmt.Fprintf(&b, "Description: %s\n", req.Description)
 	}
 
 	if req.Context != "" {
-		b.WriteString(fmt.Sprintf("Context: %s\n", req.Context))
+		fmt.Fprintf(&b, "Context: %s\n", req.Context)
 	}
 
 	if len(req.Examples) > 0 {
-		b.WriteString(fmt.Sprintf("Examples: %s\n", strings.Join(req.Examples, ", ")))
+		fmt.Fprintf(&b, "Examples: %s\n", strings.Join(req.Examples, ", "))
 	}
 
 	if req.Constraints != nil {
 		if req.Constraints.MinLength != nil {
-			b.WriteString(fmt.Sprintf("Minimum length: %d\n", *req.Constraints.MinLength))
+			fmt.Fprintf(&b, "Minimum length: %d\n", *req.Constraints.MinLength)
 		}
 		if req.Constraints.MaxLength != nil {
-			b.WriteString(fmt.Sprintf("Maximum length: %d\n", *req.Constraints.MaxLength))
+			fmt.Fprintf(&b, "Maximum length: %d\n", *req.Constraints.MaxLength)
 		}
 		if req.Constraints.Minimum != nil {
-			b.WriteString(fmt.Sprintf("Minimum value: %g\n", *req.Constraints.Minimum))
+			fmt.Fprintf(&b, "Minimum value: %g\n", *req.Constraints.Minimum)
 		}
 		if req.Constraints.Maximum != nil {
-			b.WriteString(fmt.Sprintf("Maximum value: %g\n", *req.Constraints.Maximum))
+			fmt.Fprintf(&b, "Maximum value: %g\n", *req.Constraints.Maximum)
 		}
 		if len(req.Constraints.Enum) > 0 {
 			enumStrs := make([]string, len(req.Constraints.Enum))
 			for i, e := range req.Constraints.Enum {
 				enumStrs[i] = fmt.Sprintf("%v", e)
 			}
-			b.WriteString(fmt.Sprintf("Allowed values: %s\n", strings.Join(enumStrs, ", ")))
+			fmt.Fprintf(&b, "Allowed values: %s\n", strings.Join(enumStrs, ", "))
 		}
 	}
 
 	if req.Schema != nil {
 		schemaJSON, err := json.Marshal(req.Schema)
 		if err == nil {
-			b.WriteString(fmt.Sprintf("Schema: %s\n", string(schemaJSON)))
+			fmt.Fprintf(&b, "Schema: %s\n", string(schemaJSON))
 		}
 	}
 
@@ -84,7 +84,7 @@ func buildBatchPrompt(reqs []*GenerateRequest) string {
 	b.WriteString("Generate realistic values for the following fields. Return a JSON object with field names as keys.\n\n")
 
 	for i, req := range reqs {
-		b.WriteString(fmt.Sprintf("%d. Field: %s (type: %s)", i+1, req.FieldName, req.FieldType))
+		fmt.Fprintf(&b, "%d. Field: %s (type: %s)", i+1, req.FieldName, req.FieldType)
 		if req.Format != "" {
 			b.WriteString(", format: " + req.Format)
 		}

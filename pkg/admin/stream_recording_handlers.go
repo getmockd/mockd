@@ -407,7 +407,7 @@ func (m *StreamRecordingManager) handleExportStreamRecording(w http.ResponseWrit
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.json", id))
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	_, _ = w.Write(data) //nolint:gosec // G705 — exported recording data is server-generated JSON
 }
 
 // handleConvertStreamRecording handles POST /stream-recordings/{id}/convert.

@@ -57,7 +57,7 @@ func ListTopics() string {
 	var sb strings.Builder
 	for _, topic := range AvailableTopics {
 		desc := TopicDescriptions[topic]
-		sb.WriteString(fmt.Sprintf("  %-15s %s\n", topic, desc))
+		fmt.Fprintf(&sb, "  %-15s %s\n", topic, desc)
 	}
 	return sb.String()
 }

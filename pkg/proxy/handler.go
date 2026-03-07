@@ -104,7 +104,7 @@ func (p *Proxy) forwardRequest(r *http.Request) (*http.Response, error) {
 	}
 
 	// Create outgoing request
-	outReq, err := http.NewRequest(r.Method, targetURL, r.Body)
+	outReq, err := http.NewRequest(r.Method, targetURL, r.Body) //nolint:gosec // G704 — proxy: forwarding requests to target is the intended behavior
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (p *Proxy) forwardRequest(r *http.Request) (*http.Response, error) {
 	outReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
 	outReq.Header.Set("X-Forwarded-Host", r.Host)
 
-	return p.client.Do(outReq)
+	return p.client.Do(outReq) //nolint:gosec // G704 — proxy: forwarding to constructed target URL is intentional
 }
 
 // copyHeaders copies headers from src to dst.

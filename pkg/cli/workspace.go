@@ -489,7 +489,7 @@ func (c *WorkspaceClient) doRequest(req *http.Request) (*http.Response, error) {
 	if c.authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+c.authToken)
 	}
-	return c.httpClient.Do(req)
+	return c.httpClient.Do(req) //nolint:gosec // G704 — admin API client; base URL is from CLI config/flags
 }
 
 // ListWorkspaces returns all workspaces.

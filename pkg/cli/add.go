@@ -670,14 +670,14 @@ func generateMinimalGraphQLSchema(operation, opType, _ string) string {
 
 	if opType == "query" {
 		sb.WriteString("type Query {\n")
-		sb.WriteString(fmt.Sprintf("  %s: JSON\n", operation))
+		fmt.Fprintf(&sb, "  %s: JSON\n", operation)
 		sb.WriteString("}\n")
 	} else {
 		sb.WriteString("type Query {\n")
 		sb.WriteString("  _empty: String\n") // GraphQL requires at least one Query field
 		sb.WriteString("}\n\n")
 		sb.WriteString("type Mutation {\n")
-		sb.WriteString(fmt.Sprintf("  %s: JSON\n", operation))
+		fmt.Fprintf(&sb, "  %s: JSON\n", operation)
 		sb.WriteString("}\n")
 	}
 

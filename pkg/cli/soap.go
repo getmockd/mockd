@@ -468,7 +468,7 @@ func runSOAPImport(cmd *cobra.Command, args []string) error {
 
 	// Write output
 	if soapImportOutput != "" {
-		if err := os.WriteFile(soapImportOutput, output, 0o644); err != nil {
+		if err := os.WriteFile(soapImportOutput, output, 0o644); err != nil { //nolint:gosec // G703 — CLI flag value, operator-controlled
 			return fmt.Errorf("failed to write output file: %w", err)
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Imported %d mock(s) from %s → %s\n",

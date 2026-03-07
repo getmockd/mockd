@@ -722,7 +722,7 @@ func (a *API) handleGetUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		}
 		protosDir := filepath.Join(dataDir, "protos")
 		if strings.HasPrefix(m.GRPC.ProtoFile, protosDir) {
-			if content, err := os.ReadFile(m.GRPC.ProtoFile); err == nil {
+			if content, err := os.ReadFile(m.GRPC.ProtoFile); err == nil { //nolint:gosec // G703 — path is validated to be within managed protos dir
 				m.GRPC.ProtoContent = string(content)
 			}
 		}
@@ -1255,7 +1255,7 @@ func (a *API) handleDeleteUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		}
 		protosDir := filepath.Join(dataDir, "protos")
 		if strings.HasPrefix(existing.GRPC.ProtoFile, protosDir) {
-			_ = os.Remove(existing.GRPC.ProtoFile) // Best-effort cleanup
+			_ = os.Remove(existing.GRPC.ProtoFile) //nolint:gosec // G703 — path is validated to be within managed protos dir
 		}
 	}
 
@@ -1638,7 +1638,7 @@ func inlineProtoFromFile(m *mock.Mock) error {
 		return nil
 	}
 
-	content, err := os.ReadFile(m.GRPC.ProtoFile)
+	content, err := os.ReadFile(m.GRPC.ProtoFile) //nolint:gosec // G703 — proto file path from mock config, validated before use
 	if err != nil {
 		return fmt.Errorf("failed to read proto file %q: %w", m.GRPC.ProtoFile, err)
 	}
@@ -1671,7 +1671,7 @@ func (a *API) resolveInlineProtoContent(m *mock.Mock) error {
 	filename := m.ID + ".proto"
 	protoPath := filepath.Join(protosDir, filename)
 
-	if err := os.WriteFile(protoPath, []byte(m.GRPC.ProtoContent), 0o644); err != nil {
+	if err := os.WriteFile(protoPath, []byte(m.GRPC.ProtoContent), 0o644); err != nil { //nolint:gosec // G703 — protoPath is constructed from managed data dir + mock ID
 		return fmt.Errorf("failed to write proto file: %w", err)
 	}
 

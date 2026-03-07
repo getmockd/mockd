@@ -168,7 +168,7 @@ func resolveLatest(baseDir string) (string, error) {
 	if err == nil {
 		name := strings.TrimSpace(string(data))
 		candidate := filepath.Join(baseDir, name)
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() { //nolint:gosec // G703 — candidate is constructed from managed recording dir + validated name
 			return candidate, nil
 		}
 	}
@@ -277,7 +277,7 @@ func ClearSession(sessionDir string) (int, error) {
 			return nil //nolint:nilerr // intentionally skip inaccessible entries
 		}
 		if strings.HasPrefix(d.Name(), "rec_") && strings.HasSuffix(d.Name(), ".json") {
-			if removeErr := os.Remove(path); removeErr == nil {
+			if removeErr := os.Remove(path); removeErr == nil { //nolint:gosec // G122 — WalkDir callback within managed session dir; symlink TOCTOU not a concern
 				count++
 			}
 		}

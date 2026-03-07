@@ -103,7 +103,7 @@ func FormatList() string {
 	}
 
 	for _, t := range AvailableTemplates {
-		sb.WriteString(fmt.Sprintf("  %-*s  %s\n", maxLen, t.ID, t.Description))
+		fmt.Fprintf(&sb, "  %-*s  %s\n", maxLen, t.ID, t.Description)
 	}
 
 	sb.WriteString("\nUsage:\n")

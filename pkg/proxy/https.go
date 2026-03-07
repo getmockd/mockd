@@ -221,7 +221,7 @@ func (p *Proxy) handleHTTPSRequest(clientConn net.Conn, r *http.Request, fullHos
 // tunnelConnect creates a direct TCP tunnel for HTTPS without MITM.
 func (p *Proxy) tunnelConnect(w http.ResponseWriter, _ *http.Request, host string) {
 	// Connect to target
-	targetConn, err := net.DialTimeout("tcp", host, 30*time.Second)
+	targetConn, err := net.DialTimeout("tcp", host, 30*time.Second) //nolint:gosec // G704 — proxy: tunneling CONNECT to target host is the intended behavior
 	if err != nil {
 		p.log("Error connecting to target %s: %v", host, err)
 		http.Error(w, "Error connecting to target", http.StatusBadGateway)

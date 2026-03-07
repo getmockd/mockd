@@ -268,7 +268,7 @@ func outputMocks(collection *config.MockCollection, outputFile string, dryRun bo
 
 	// Output
 	if outputFile != "" {
-		if err := os.WriteFile(outputFile, data, 0644); err != nil {
+		if err := os.WriteFile(outputFile, data, 0644); err != nil { //nolint:gosec // G703 — CLI flag value, operator-controlled
 			return fmt.Errorf("failed to write file: %w", err)
 		}
 		fmt.Printf("Wrote %d mocks to %s\n", len(collection.Mocks), outputFile)

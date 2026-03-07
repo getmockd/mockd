@@ -283,7 +283,7 @@ func (h *Handler) HandleToken(w http.ResponseWriter, r *http.Request) {
 	// Get client credentials (from Authorization header or form body)
 	clientID, clientSecret, ok := r.BasicAuth()
 	if !ok {
-		clientID = r.FormValue("client_id")
+		clientID = r.FormValue("client_id")        
 		clientSecret = r.FormValue("client_secret")
 	}
 
@@ -302,8 +302,8 @@ func (h *Handler) HandleToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleAuthorizationCodeGrant(w http.ResponseWriter, r *http.Request, clientID, clientSecret string) {
-	code := r.FormValue("code")
-	redirectURI := r.FormValue("redirect_uri")
+	code := r.FormValue("code")                 
+	redirectURI := r.FormValue("redirect_uri")  
 	codeVerifier := r.FormValue("code_verifier")
 
 	if code == "" {
@@ -462,7 +462,7 @@ func (h *Handler) handleClientCredentialsGrant(w http.ResponseWriter, r *http.Re
 
 func (h *Handler) handleRefreshTokenGrant(w http.ResponseWriter, r *http.Request, clientID, clientSecret string) {
 	refreshToken := r.FormValue("refresh_token")
-	scope := r.FormValue("scope")
+	scope := r.FormValue("scope")               
 
 	// Validate scopes against allowed scopes
 	if msg := h.validateScopes(scope); msg != "" {
@@ -742,7 +742,7 @@ func (h *Handler) HandleIntrospect(w http.ResponseWriter, r *http.Request) {
 	// Get client credentials (required for introspection per RFC 7662)
 	clientID, clientSecret, ok := r.BasicAuth()
 	if !ok {
-		clientID = r.FormValue("client_id")
+		clientID = r.FormValue("client_id")        
 		clientSecret = r.FormValue("client_secret")
 	}
 
@@ -840,7 +840,7 @@ func (h *Handler) HandleRevoke(w http.ResponseWriter, r *http.Request) {
 	// Get client credentials
 	clientID, clientSecret, ok := r.BasicAuth()
 	if !ok {
-		clientID = r.FormValue("client_id")
+		clientID = r.FormValue("client_id")        
 		clientSecret = r.FormValue("client_secret")
 	}
 

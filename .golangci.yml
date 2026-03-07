@@ -100,6 +100,12 @@ linters:
           - perfsprint
           - exhaustive
       # Benchmarks
+      # Mock OAuth server — every FormValue/ParseForm triggers G120 (22 occurrences)
+      # but this is a mock server, not a production auth boundary
+      - path: "^pkg/oauth/"
+        linters:
+          - gosec
+        text: "G120"
       - path: "^benchmarks/"
         linters:
           - errcheck

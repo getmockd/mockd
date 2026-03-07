@@ -2,7 +2,8 @@
 # https://github.com/jdx/mise
 
 [tools]
-go = "1.25.7"
+go = "1.26.1"
+"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = "latest"
 node = "22"
 
 [env]

@@ -491,7 +491,7 @@ func (h *Handler) writeResponse(w http.ResponseWriter, r *http.Request, bodyByte
 	// Write status code and body
 	w.WriteHeader(resp.StatusCode)
 	if body != "" {
-		_, _ = w.Write([]byte(body))
+		_, _ = w.Write([]byte(body)) //nolint:gosec // G705 — body is the mock response, config-sourced by design
 	}
 	return resp.StatusCode
 }
