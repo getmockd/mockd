@@ -33,14 +33,6 @@ export default defineConfig({
         },
         {
           tag: "meta",
-          attrs: {
-            name: "description",
-            content:
-              "mockd - A fast, lightweight API mocking server for development and testing. Supports HTTP, WebSocket, GraphQL, gRPC, MQTT, SSE, and SOAP.",
-          },
-        },
-        {
-          tag: "meta",
           attrs: { name: "twitter:card", content: "summary_large_image" },
         },
         {
