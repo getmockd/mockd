@@ -347,3 +347,54 @@ func TestRandomIntNonNumericArgs(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// Bug Fix: Content-Type with charset should still parse JSON body
+// =============================================================================
+
+func TestNewContextContentTypeWithCharset(t *testing.T) {
+	engine := New()
+	jsonBody := []byte(`{"name":"Alice","age":30}`)
+
+	tests := []struct {
+		name        string
+		contentType string
+		wantParsed  bool
+	}{
+		{"exact application/json", "application/json", true},
+		{"with charset utf-8", "application/json; charset=utf-8", true},
+		{"with charset UTF-8 no space", "application/json;charset=UTF-8", true},
+		{"json:api content type", "application/vnd.api+json", true},
+		{"json:api with charset", "application/vnd.api+json; charset=utf-8", true},
+		{"text/plain not parsed", "text/plain", false},
+		{"empty content type", "", false},
+		{"xml not parsed", "application/xml", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest("POST", "/test", nil)
+			r.Header.Set("Content-Type", tt.contentType)
+			ctx := NewContext(r, jsonBody)
+
+			if tt.wantParsed {
+				if ctx.Request.Body == nil {
+					t.Errorf("expected body to be parsed for Content-Type %q", tt.contentType)
+					return
+				}
+				// Verify we can access a field through templates
+				result, err := engine.Process("{{request.body.name}}", ctx)
+				if err != nil {
+					t.Fatalf("Process() error = %v", err)
+				}
+				if result != "Alice" {
+					t.Errorf("request.body.name = %q, want %q", result, "Alice")
+				}
+			} else {
+				if ctx.Request.Body != nil {
+					t.Errorf("expected body NOT to be parsed for Content-Type %q", tt.contentType)
+				}
+			}
+		})
+	}
+}

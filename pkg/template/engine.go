@@ -46,6 +46,8 @@ var (
 	randomFloatPattern = regexp.MustCompile(`(?i)^(?:random\.float|randomFloat)(?:\(([0-9.]+),\s*([0-9.]+)(?:,\s*(\d+))?\))?$`)
 	// random.string / randomString or random.string(length) / randomString(length)
 	randomStringPattern = regexp.MustCompile(`(?i)^(?:random\.string|randomString)(?:\((\d+)\))?$`)
+	// random.element / randomElement with parenthesized args: random.element("a", "b", "c")
+	randomElementPattern = regexp.MustCompile(`(?i)^(?:random\.element|randomElement)\((.+)\)$`)
 	// sequence("name") or sequence("name", start) — name stays case-sensitive
 	sequencePattern = regexp.MustCompile(`(?i)^sequence\("([^"]+)"(?:,\s*(\d+))?\)$`)
 	// {1}, {2} for wildcard substitution
@@ -223,6 +225,19 @@ func (e *Engine) evaluateParenthesized(expr string, ctx *Context, rng *mathrand.
 		return funcRandomString(rng, length), true
 	}
 
+	// random.element("a", "b", "c") or randomElement("a", "b", "c")
+	if matches := randomElementPattern.FindStringSubmatch(expr); matches != nil {
+		args := splitFuncArgs(matches[1])
+		if len(args) == 0 {
+			return "", true
+		}
+		elements := make([]string, len(args))
+		for i, a := range args {
+			elements[i] = parseStringArg(a)
+		}
+		return elements[rngIntN(rng, len(elements))], true
+	}
+
 	// sequence("name") or sequence("name", start)
 	if matches := sequencePattern.FindStringSubmatch(expr); matches != nil {
 		return e.resolveSequence(matches), true
@@ -265,6 +280,16 @@ func (e *Engine) evaluateSpaceSeparated(expr string, ctx *Context, rng *mathrand
 	args := parts[1:]
 
 	switch funcName {
+	case "random.element", "randomelement":
+		if len(args) == 0 {
+			return "", true
+		}
+		elements := make([]string, len(args))
+		for i, a := range args {
+			elements[i] = parseStringArg(a)
+		}
+		return elements[rngIntN(rng, len(elements))], true
+
 	case "random.int", "randomint":
 		if len(args) != 2 {
 			return "", true
@@ -338,13 +363,16 @@ func (e *Engine) resolveValue(ref string, ctx *Context) string {
 	}
 
 	// Known context prefixes and built-in names are evaluated as expressions
+	refLower := strings.ToLower(ref)
 	if strings.HasPrefix(ref, "request.") ||
 		strings.HasPrefix(ref, "mtls.") ||
 		strings.HasPrefix(ref, "payload.") ||
 		strings.EqualFold(ref, "topic") || strings.EqualFold(ref, "clientId") || strings.EqualFold(ref, "device_id") ||
 		ref == "uuid" || ref == "uuid.short" ||
 		ref == "now" || ref == "timestamp" ||
-		strings.HasPrefix(ref, "timestamp.") {
+		strings.HasPrefix(ref, "timestamp.") ||
+		strings.HasPrefix(refLower, "faker.") ||
+		strings.HasPrefix(refLower, "random.") || strings.EqualFold(ref, "random") {
 		return e.evaluate(ref, ctx)
 	}
 
@@ -516,6 +544,24 @@ func resolveFaker(rng *mathrand.Rand, fakerType string) string {
 			"System status nominal.",
 		}
 		return sentences[rngIntN(rng, len(sentences))]
+	case "username":
+		fnames := []string{"john", "jane", "bob", "alice", "charlie", "diana", "edward", "fiona"}
+		lnames := []string{"smith", "doe", "johnson", "williams", "brown", "davis", "miller", "wilson"}
+		return fnames[rngIntN(rng, len(fnames))] + "_" + lnames[rngIntN(rng, len(lnames))] + strconv.Itoa(rngIntN(rng, 1000))
+	case "paragraph":
+		sentences := []string{
+			"The quick brown fox jumps over the lazy dog.",
+			"Lorem ipsum dolor sit amet.",
+			"Hello world from the IoT device.",
+			"Sensor data transmitted successfully.",
+			"System status nominal.",
+		}
+		count := rngIntN(rng, 2) + 2 // 2-3 sentences
+		parts := make([]string, count)
+		for i := range parts {
+			parts[i] = sentences[rngIntN(rng, len(sentences))]
+		}
+		return strings.Join(parts, " ")
 
 	// --- Internet ---
 	case "ipv4":
@@ -572,6 +618,32 @@ func resolveFaker(rng *mathrand.Rand, fakerType string) string {
 		return fakerLatitude(rng)
 	case "longitude":
 		return fakerLongitude(rng)
+
+	// --- Location ---
+	case "city":
+		cities := []string{
+			"New York", "Los Angeles", "Chicago", "Houston", "Phoenix",
+			"Seattle", "Denver", "Boston", "San Francisco", "Miami",
+			"Dallas", "Atlanta", "Portland", "Austin", "Nashville",
+			"Minneapolis",
+		}
+		return cities[rngIntN(rng, len(cities))]
+	case "state":
+		states := []string{
+			"California", "New York", "Texas", "Florida", "Illinois",
+			"Pennsylvania", "Ohio", "Georgia", "Michigan", "Washington",
+			"Colorado", "Massachusetts", "Arizona", "Virginia", "Oregon",
+		}
+		return states[rngIntN(rng, len(states))]
+	case "zipcode":
+		return fmt.Sprintf("%05d", rngIntN(rng, 100000))
+	case "country":
+		countries := []string{
+			"United States", "United Kingdom", "Canada", "Australia", "Germany",
+			"France", "Japan", "Brazil", "India", "Mexico",
+			"Spain", "Italy", "Netherlands", "Sweden", "South Korea",
+		}
+		return countries[rngIntN(rng, len(countries))]
 
 	// --- Text ---
 	case "words":
@@ -770,7 +842,11 @@ func (e *Engine) evaluateBodyField(path string, body interface{}) string {
 				return ""
 			}
 		case []interface{}:
-			return ""
+			idx, err := strconv.Atoi(part)
+			if err != nil || idx < 0 || idx >= len(v) {
+				return ""
+			}
+			current = v[idx]
 		default:
 			return ""
 		}

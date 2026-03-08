@@ -38,6 +38,8 @@ func TestSeeded_Deterministic(t *testing.T) {
 		{"random.float range", "{{random.float(1.0, 100.0, 2)}}"},
 		{"random.string", "{{random.string}}"},
 		{"random.string len", "{{random.string(20)}}"},
+		{"random.element", `{{random.Element "a" "b" "c"}}`},
+		{"random.element parens", `{{random.element("x", "y", "z")}}`},
 		{"faker.name", "{{faker.name}}"},
 		{"faker.email", "{{faker.email}}"},
 		{"faker.uuid", "{{faker.uuid}}"},
@@ -73,6 +75,12 @@ func TestSeeded_Deterministic(t *testing.T) {
 		{"faker.slug", "{{faker.slug}}"},
 		{"faker.mimeType", "{{faker.mimeType}}"},
 		{"faker.fileExtension", "{{faker.fileExtension}}"},
+		{"faker.city", "{{faker.city}}"},
+		{"faker.state", "{{faker.state}}"},
+		{"faker.zipCode", "{{faker.zipCode}}"},
+		{"faker.country", "{{faker.country}}"},
+		{"faker.username", "{{faker.username}}"},
+		{"faker.paragraph", "{{faker.paragraph}}"},
 	}
 
 	for _, tt := range templates {
@@ -566,6 +574,66 @@ func TestSeeded_ZeroSeed(t *testing.T) {
 	r2, _ := engine.Process("{{uuid}}", ctx2)
 	if r1 != r2 {
 		t.Errorf("seed=0 should be deterministic: %q vs %q", r1, r2)
+	}
+}
+
+func TestSeeded_RandomElement_Deterministic(t *testing.T) {
+	engine := New()
+	const seed uint64 = 42
+
+	templates := []struct {
+		name string
+		tmpl string
+	}{
+		{"space-separated", `{{random.Element "active" "inactive" "pending"}}`},
+		{"parenthesized", `{{random.element("active", "inactive", "pending")}}`},
+		{"unquoted", `{{random.Element active inactive pending}}`},
+	}
+
+	for _, tt := range templates {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx1 := newSeededCtx(seed)
+			result1, err := engine.Process(tt.tmpl, ctx1)
+			if err != nil {
+				t.Fatalf("Process() error = %v", err)
+			}
+
+			ctx2 := newSeededCtx(seed)
+			result2, err := engine.Process(tt.tmpl, ctx2)
+			if err != nil {
+				t.Fatalf("Process() error = %v", err)
+			}
+
+			if result1 != result2 {
+				t.Errorf("same seed should produce same result:\n  first:  %q\n  second: %q", result1, result2)
+			}
+
+			if result1 == "" {
+				t.Errorf("seeded random.Element should produce non-empty output")
+			}
+
+			// Verify the result is one of the expected elements
+			valid := result1 == "active" || result1 == "inactive" || result1 == "pending"
+			if !valid {
+				t.Errorf("result %q not in expected set", result1)
+			}
+		})
+	}
+}
+
+func TestSeeded_RandomElement_DifferentSeeds(t *testing.T) {
+	engine := New()
+
+	// Run multiple different seeds and verify we get variation
+	seen := make(map[string]bool)
+	for seed := uint64(0); seed < 50; seed++ {
+		ctx := newSeededCtx(seed)
+		result, _ := engine.Process(`{{random.Element "a" "b" "c"}}`, ctx)
+		seen[result] = true
+	}
+
+	if len(seen) < 2 {
+		t.Errorf("different seeds should produce variation, got %d unique values", len(seen))
 	}
 }
 

@@ -218,6 +218,87 @@ func TestRandomStringParenthesized(t *testing.T) {
 }
 
 // =============================================================================
+// Random Element Tests
+// =============================================================================
+
+func TestRandomElement(t *testing.T) {
+	engine := New()
+
+	tests := []struct {
+		name     string
+		template string
+		checkFn  func(string) bool
+	}{
+		{"random.Element picks from list", `{{random.Element "active" "inactive" "pending"}}`,
+			func(r string) bool { return r == "active" || r == "inactive" || r == "pending" }},
+		{"random.element case insensitive", `{{random.element "a" "b" "c"}}`,
+			func(r string) bool { return r == "a" || r == "b" || r == "c" }},
+		{"random.Element single item", `{{random.Element "only"}}`,
+			func(r string) bool { return r == "only" }},
+		{"random.Element unquoted", `{{random.Element active inactive pending}}`,
+			func(r string) bool { return r == "active" || r == "inactive" || r == "pending" }},
+		{"RANDOM.ELEMENT allcaps", `{{RANDOM.ELEMENT "x" "y" "z"}}`,
+			func(r string) bool { return r == "x" || r == "y" || r == "z" }},
+		{"randomElement camelCase", `{{randomElement "foo" "bar"}}`,
+			func(r string) bool { return r == "foo" || r == "bar" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := engine.Process(tt.template, nil)
+			if err != nil {
+				t.Fatalf("Process() error = %v", err)
+			}
+			if !tt.checkFn(result) {
+				t.Errorf("Process(%q) = %q, not in expected set", tt.template, result)
+			}
+		})
+	}
+
+	t.Run("produces variation", func(t *testing.T) {
+		seen := make(map[string]bool)
+		for i := 0; i < 50; i++ {
+			result, _ := engine.Process(`{{random.Element "a" "b" "c"}}`, nil)
+			seen[result] = true
+		}
+		if len(seen) < 2 {
+			t.Errorf("random.Element should produce variation across 50 calls, got %d unique values", len(seen))
+		}
+	})
+}
+
+func TestRandomElementParenthesized(t *testing.T) {
+	engine := New()
+
+	tests := []struct {
+		name     string
+		template string
+		checkFn  func(string) bool
+	}{
+		{"parenthesized quoted", `{{random.element("active", "inactive", "pending")}}`,
+			func(r string) bool { return r == "active" || r == "inactive" || r == "pending" }},
+		{"parenthesized single", `{{random.Element("only")}}`,
+			func(r string) bool { return r == "only" }},
+		{"parenthesized unquoted", `{{randomElement(foo, bar, baz)}}`,
+			func(r string) bool { return r == "foo" || r == "bar" || r == "baz" }},
+		{"parenthesized mixed case", `{{Random.Element("x", "y")}}`,
+			func(r string) bool { return r == "x" || r == "y" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := engine.Process(tt.template, nil)
+			if err != nil {
+				t.Fatalf("Process() error = %v", err)
+			}
+			if !tt.checkFn(result) {
+				t.Errorf("Process(%q) = %q, not in expected set", tt.template, result)
+			}
+		})
+	}
+}
+
+// =============================================================================
 // Default Function Extended Tests
 // =============================================================================
 
@@ -464,6 +545,12 @@ func TestFakerVariables(t *testing.T) {
 		{"company", `.+`},
 		{"word", `^\w+$`},
 		{"sentence", `.+\.$`},
+		{"city", `.+`},
+		{"state", `.+`},
+		{"zipCode", `^\d{5}$`},
+		{"country", `.+`},
+		{"username", `^[a-z]+_[a-z]+\d+$`},
+		{"paragraph", `.+\..+\.`},
 	}
 
 	for _, ft := range fakerTypes {
@@ -1178,6 +1265,148 @@ func TestCaseInsensitiveTemplates(t *testing.T) {
 				t.Fatalf("Process(%q) error = %v", tt.template, err)
 			}
 			tt.validate(t, result)
+		})
+	}
+}
+
+// =============================================================================
+// Bug Fix: upper/lower with faker and random in resolveValue
+// =============================================================================
+
+func TestUpperLowerWithFaker(t *testing.T) {
+	engine := New()
+
+	t.Run("upper(faker.name) resolves faker", func(t *testing.T) {
+		result, err := engine.Process(`{{upper(faker.name)}}`, nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result == "" {
+			t.Fatal("expected non-empty result")
+		}
+		if result != strings.ToUpper(result) {
+			t.Errorf("expected all uppercase, got %q", result)
+		}
+		// Should NOT be literal "FAKER.NAME"
+		if result == "FAKER.NAME" {
+			t.Errorf("got literal %q, expected resolved faker name", result)
+		}
+	})
+
+	t.Run("lower(faker.email) resolves faker", func(t *testing.T) {
+		result, err := engine.Process(`{{lower(faker.email)}}`, nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result == "" {
+			t.Fatal("expected non-empty result")
+		}
+		if result != strings.ToLower(result) {
+			t.Errorf("expected all lowercase, got %q", result)
+		}
+		if !strings.Contains(result, "@") {
+			t.Errorf("expected email with @, got %q", result)
+		}
+	})
+
+	t.Run("upper(random.int) resolves random", func(t *testing.T) {
+		result, err := engine.Process(`{{upper(random.int)}}`, nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result == "" {
+			t.Fatal("expected non-empty result")
+		}
+		// Should be a number, not "RANDOM.INT"
+		if result == "RANDOM.INT" {
+			t.Errorf("got literal %q, expected resolved random int", result)
+		}
+		_, err = strconv.Atoi(result)
+		if err != nil {
+			t.Errorf("expected numeric result, got %q", result)
+		}
+	})
+
+	t.Run("upper faker.name space-separated resolves faker", func(t *testing.T) {
+		result, err := engine.Process(`{{upper faker.name}}`, nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		if result == "" {
+			t.Fatal("expected non-empty result")
+		}
+		if result != strings.ToUpper(result) {
+			t.Errorf("expected all uppercase, got %q", result)
+		}
+		if result == "FAKER.NAME" {
+			t.Errorf("got literal %q, expected resolved faker name", result)
+		}
+	})
+
+	t.Run("default with faker uses faker value", func(t *testing.T) {
+		result, err := engine.Process(`{{default(faker.name, "fallback")}}`, nil)
+		if err != nil {
+			t.Fatalf("Process() error = %v", err)
+		}
+		// faker.name always returns a non-empty string, so fallback should not be used
+		if result == "fallback" {
+			t.Errorf("expected faker name, got fallback")
+		}
+		if result == "" {
+			t.Error("expected non-empty result")
+		}
+	})
+}
+
+// =============================================================================
+// Bug Fix: Array indexing in evaluateBodyField
+// =============================================================================
+
+func TestBodyFieldArrayIndexing(t *testing.T) {
+	engine := New()
+
+	body := map[string]interface{}{
+		"items": []interface{}{
+			map[string]interface{}{"name": "Alice", "id": "1"},
+			map[string]interface{}{"name": "Bob", "id": "2"},
+			map[string]interface{}{"name": "Charlie", "id": "3"},
+		},
+		"nested": map[string]interface{}{
+			"list": []interface{}{"a", "b", "c"},
+		},
+	}
+
+	ctx := &Context{
+		Request: RequestContext{
+			Body: body,
+		},
+	}
+
+	tests := []struct {
+		name     string
+		template string
+		expected string
+	}{
+		{"first element name", "{{request.body.items.0.name}}", "Alice"},
+		{"second element name", "{{request.body.items.1.name}}", "Bob"},
+		{"third element id", "{{request.body.items.2.id}}", "3"},
+		{"out of bounds", "{{request.body.items.99.name}}", ""},
+		{"negative index", "{{request.body.items.-1.name}}", ""},
+		{"non-numeric index", "{{request.body.items.abc.name}}", ""},
+		{"nested array element", "{{request.body.nested.list.0}}", "a"},
+		{"nested array element 2", "{{request.body.nested.list.2}}", "c"},
+		{"nested array out of bounds", "{{request.body.nested.list.5}}", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := engine.Process(tt.template, ctx)
+			if err != nil {
+				t.Fatalf("Process() error = %v", err)
+			}
+			if result != tt.expected {
+				t.Errorf("Process(%q) = %q, want %q", tt.template, result, tt.expected)
+			}
 		})
 	}
 }

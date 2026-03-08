@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	mathrand "math/rand/v2"
 	"net/http"
+	"strings"
 
 	"github.com/getmockd/mockd/pkg/mtls"
 )
@@ -110,7 +111,8 @@ func NewContext(r *http.Request, bodyBytes []byte) *Context {
 
 	// Parse JSON body if Content-Type is application/json
 	contentType := r.Header.Get("Content-Type")
-	if contentType == "application/json" && len(bodyBytes) > 0 {
+	if len(bodyBytes) > 0 && (strings.HasPrefix(contentType, "application/json") ||
+		strings.HasPrefix(contentType, "application/vnd.api+json")) {
 		var body interface{}
 		if err := json.Unmarshal(bodyBytes, &body); err == nil {
 			ctx.Request.Body = body
