@@ -1012,3 +1012,172 @@ func TestParseStringArg(t *testing.T) {
 		})
 	}
 }
+
+// TestCaseInsensitiveTemplates verifies that template expressions are
+// case-insensitive for function names — {{random.Int}}, {{Random.INT}},
+// {{FAKER.Name}}, {{UUID}}, {{NOW}} should all work.
+func TestCaseInsensitiveTemplates(t *testing.T) {
+	engine := New()
+
+	tests := []struct {
+		name     string
+		template string
+		validate func(t *testing.T, result string)
+	}{
+		// random.int — all case variants
+		{"random.int lowercase", "{{random.int 1 50}}", func(t *testing.T, r string) {
+			n, err := strconv.Atoi(r)
+			if err != nil || n < 1 || n > 50 {
+				t.Errorf("got %q, want int in [1,50]", r)
+			}
+		}},
+		{"random.Int mixed", "{{random.Int 1 50}}", func(t *testing.T, r string) {
+			n, err := strconv.Atoi(r)
+			if err != nil || n < 1 || n > 50 {
+				t.Errorf("got %q, want int in [1,50]", r)
+			}
+		}},
+		{"Random.INT upper", "{{Random.INT 1 50}}", func(t *testing.T, r string) {
+			n, err := strconv.Atoi(r)
+			if err != nil || n < 1 || n > 50 {
+				t.Errorf("got %q, want int in [1,50]", r)
+			}
+		}},
+		{"randomInt camelCase", "{{randomInt 1 50}}", func(t *testing.T, r string) {
+			n, err := strconv.Atoi(r)
+			if err != nil || n < 1 || n > 50 {
+				t.Errorf("got %q, want int in [1,50]", r)
+			}
+		}},
+		{"RANDOMINT allcaps", "{{RANDOMINT 1 50}}", func(t *testing.T, r string) {
+			n, err := strconv.Atoi(r)
+			if err != nil || n < 1 || n > 50 {
+				t.Errorf("got %q, want int in [1,50]", r)
+			}
+		}},
+
+		// random.int parenthesized — case variants
+		{"random.int(1,50) lower", "{{random.int(1, 50)}}", func(t *testing.T, r string) {
+			n, err := strconv.Atoi(r)
+			if err != nil || n < 1 || n > 50 {
+				t.Errorf("got %q, want int in [1,50]", r)
+			}
+		}},
+		{"Random.Int(1,50) mixed", "{{Random.Int(1, 50)}}", func(t *testing.T, r string) {
+			n, err := strconv.Atoi(r)
+			if err != nil || n < 1 || n > 50 {
+				t.Errorf("got %q, want int in [1,50]", r)
+			}
+		}},
+
+		// random.float — case variants
+		{"random.float lower", "{{random.float}}", func(t *testing.T, r string) {
+			f, err := strconv.ParseFloat(r, 64)
+			if err != nil || f < 0 || f > 1 {
+				t.Errorf("got %q, want float in [0,1]", r)
+			}
+		}},
+		{"random.Float mixed", "{{random.Float}}", func(t *testing.T, r string) {
+			f, err := strconv.ParseFloat(r, 64)
+			if err != nil || f < 0 || f > 1 {
+				t.Errorf("got %q, want float in [0,1]", r)
+			}
+		}},
+		{"RANDOM.FLOAT upper", "{{RANDOM.FLOAT}}", func(t *testing.T, r string) {
+			f, err := strconv.ParseFloat(r, 64)
+			if err != nil || f < 0 || f > 1 {
+				t.Errorf("got %q, want float in [0,1]", r)
+			}
+		}},
+		{"randomFloat(1.0, 5.0) mixed", "{{RandomFloat(1.0, 5.0)}}", func(t *testing.T, r string) {
+			f, err := strconv.ParseFloat(r, 64)
+			if err != nil || f < 1.0 || f > 5.0 {
+				t.Errorf("got %q, want float in [1,5]", r)
+			}
+		}},
+
+		// random.string — case variants
+		{"random.string lower", "{{random.string 8}}", func(t *testing.T, r string) {
+			if len(r) != 8 {
+				t.Errorf("got %q (len %d), want len 8", r, len(r))
+			}
+		}},
+		{"random.String mixed", "{{random.String 8}}", func(t *testing.T, r string) {
+			if len(r) != 8 {
+				t.Errorf("got %q (len %d), want len 8", r, len(r))
+			}
+		}},
+		{"RANDOM.STRING upper", "{{RANDOM.STRING 8}}", func(t *testing.T, r string) {
+			if len(r) != 8 {
+				t.Errorf("got %q (len %d), want len 8", r, len(r))
+			}
+		}},
+		{"Random.String(12) parens", "{{Random.String(12)}}", func(t *testing.T, r string) {
+			if len(r) != 12 {
+				t.Errorf("got %q (len %d), want len 12", r, len(r))
+			}
+		}},
+
+		// Built-in variables — case variants
+		{"UUID upper", "{{UUID}}", func(t *testing.T, r string) {
+			if len(r) != 36 || r[8] != '-' {
+				t.Errorf("got %q, want UUID format", r)
+			}
+		}},
+		{"Now mixed", "{{Now}}", func(t *testing.T, r string) {
+			if len(r) < 10 {
+				t.Errorf("got %q, want RFC3339 timestamp", r)
+			}
+		}},
+		{"TIMESTAMP upper", "{{TIMESTAMP}}", func(t *testing.T, r string) {
+			_, err := strconv.ParseInt(r, 10, 64)
+			if err != nil {
+				t.Errorf("got %q, want unix timestamp: %v", r, err)
+			}
+		}},
+
+		// faker — case variants (faker.Name already works, test Faker. prefix)
+		{"faker.name lower", "{{faker.name}}", func(t *testing.T, r string) {
+			if r == "" {
+				t.Error("got empty, want a name")
+			}
+		}},
+		{"faker.Name camel", "{{faker.Name}}", func(t *testing.T, r string) {
+			if r == "" {
+				t.Error("got empty, want a name")
+			}
+		}},
+		{"Faker.name prefix cap", "{{Faker.name}}", func(t *testing.T, r string) {
+			if r == "" {
+				t.Error("got empty, want a name")
+			}
+		}},
+		{"FAKER.EMAIL allcaps", "{{FAKER.EMAIL}}", func(t *testing.T, r string) {
+			if r == "" || !strings.Contains(r, "@") {
+				t.Errorf("got %q, want email with @", r)
+			}
+		}},
+
+		// upper/lower/default functions — case variants
+		{"Upper(uuid) cap", "{{Upper(uuid)}}", func(t *testing.T, r string) {
+			if r != strings.ToUpper(r) {
+				t.Errorf("got %q, want uppercase", r)
+			}
+		}},
+		{"DEFAULT cap", "{{Default(\"\", \"fallback\")}}", func(t *testing.T, r string) {
+			if r != "fallback" {
+				t.Errorf("got %q, want %q", r, "fallback")
+			}
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := engine.Process(tt.template, nil)
+			if err != nil {
+				t.Fatalf("Process(%q) error = %v", tt.template, err)
+			}
+			tt.validate(t, result)
+		})
+	}
+}

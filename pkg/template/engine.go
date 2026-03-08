@@ -37,25 +37,27 @@ func NewWithSequences(store *SequenceStore) *Engine {
 var templateRegex = regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
 
 // Compiled patterns for function-call syntax (parenthesized arguments).
+// All patterns use (?i) for case-insensitive matching so that
+// {{random.Int}}, {{Random.INT}}, {{randomInt}}, etc. all work.
 var (
 	// random.int / randomInt or random.int(min, max) / randomInt(min, max)
-	randomIntPattern = regexp.MustCompile(`^(?:random\.int|randomInt)(?:\((\d+),\s*(\d+)\))?$`)
+	randomIntPattern = regexp.MustCompile(`(?i)^(?:random\.int|randomInt)(?:\((\d+),\s*(\d+)\))?$`)
 	// random.float / randomFloat or random.float(min, max) / randomFloat(min, max[, precision])
-	randomFloatPattern = regexp.MustCompile(`^(?:random\.float|randomFloat)(?:\(([0-9.]+),\s*([0-9.]+)(?:,\s*(\d+))?\))?$`)
+	randomFloatPattern = regexp.MustCompile(`(?i)^(?:random\.float|randomFloat)(?:\(([0-9.]+),\s*([0-9.]+)(?:,\s*(\d+))?\))?$`)
 	// random.string / randomString or random.string(length) / randomString(length)
-	randomStringPattern = regexp.MustCompile(`^(?:random\.string|randomString)(?:\((\d+)\))?$`)
-	// sequence("name") or sequence("name", start)
-	sequencePattern = regexp.MustCompile(`^sequence\("([^"]+)"(?:,\s*(\d+))?\)$`)
+	randomStringPattern = regexp.MustCompile(`(?i)^(?:random\.string|randomString)(?:\((\d+)\))?$`)
+	// sequence("name") or sequence("name", start) — name stays case-sensitive
+	sequencePattern = regexp.MustCompile(`(?i)^sequence\("([^"]+)"(?:,\s*(\d+))?\)$`)
 	// {1}, {2} for wildcard substitution
 	wildcardPattern = regexp.MustCompile(`^\{(\d+)\}$`)
-	// payload.field.nested
-	payloadPattern = regexp.MustCompile(`^payload\.(.+)$`)
-	// faker.type
-	fakerPattern = regexp.MustCompile(`^faker\.(\w+)$`)
+	// payload.field.nested — field names stay case-sensitive
+	payloadPattern = regexp.MustCompile(`(?i)^payload\.(.+)$`)
+	// faker.type — case-insensitive prefix, type lowered in resolveFaker
+	fakerPattern = regexp.MustCompile(`(?i)^faker\.(\w+)$`)
 	// faker.type(args) — parameterized faker functions
-	fakerParamPattern = regexp.MustCompile(`^faker\.(\w+)\((.+)\)$`)
+	fakerParamPattern = regexp.MustCompile(`(?i)^faker\.(\w+)\((.+)\)$`)
 	// upper(value) or lower(value) or default(value, fallback)
-	funcCallPattern = regexp.MustCompile(`^(\w+)\((.+)\)$`)
+	funcCallPattern = regexp.MustCompile(`(?i)^(\w+)\((.+)\)$`)
 )
 
 // Process evaluates a template string with the given context.
@@ -83,8 +85,14 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 	// Extract the seeded RNG from context (nil = use global source).
 	rng := ctxRNG(ctx)
 
+	// Normalize to lowercase for function-name matching.
+	// This makes {{NOW}}, {{UUID}}, {{Random.Int}}, {{randomInt}} all work.
+	// The original expr is preserved for case-sensitive operations
+	// (sequence names, body field paths, path params, etc.).
+	exprLower := strings.ToLower(expr)
+
 	// Handle simple built-in variables (no arguments)
-	switch expr {
+	switch exprLower {
 	case "now":
 		return time.Now().Format(time.RFC3339)
 	case "uuid":
@@ -118,22 +126,22 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 			return ""
 		}
 		return hex.EncodeToString(b)
-	case "random.float", "randomFloat":
+	case "random.float", "randomfloat":
 		return funcRandomFloat(rng)
-	case "random.int", "randomInt":
+	case "random.int", "randomint":
 		// No-arg form: random int 0-100
 		return funcRandomInt(rng, 0, 100)
-	case "random.string", "randomString":
+	case "random.string", "randomstring":
 		// No-arg form: random alphanumeric string of length 10
 		return funcRandomString(rng, 10)
 	}
 
-	// Handle MQTT context variables
+	// Handle MQTT context variables (case-insensitive)
 	if ctx != nil {
-		switch expr {
+		switch exprLower {
 		case "topic":
 			return ctx.MQTT.Topic
-		case "clientId":
+		case "clientid":
 			return ctx.MQTT.ClientID
 		case "device_id":
 			return ctx.MQTT.DeviceID
@@ -171,7 +179,6 @@ func (e *Engine) evaluate(expr string, ctx *Context) string {
 	}
 
 	// Handle request context fields (case-insensitive prefix)
-	exprLower := strings.ToLower(expr)
 	if strings.HasPrefix(exprLower, "request.") {
 		return e.evaluateRequest(expr[8:], ctx)
 	}
@@ -223,7 +230,7 @@ func (e *Engine) evaluateParenthesized(expr string, ctx *Context, rng *mathrand.
 
 	// upper(value), lower(value), default(value, fallback)
 	if matches := funcCallPattern.FindStringSubmatch(expr); matches != nil {
-		funcName := matches[1]
+		funcName := strings.ToLower(matches[1])
 		argsStr := matches[2]
 
 		switch funcName {
@@ -254,11 +261,11 @@ func (e *Engine) evaluateSpaceSeparated(expr string, ctx *Context, rng *mathrand
 		return "", false
 	}
 
-	funcName := parts[0]
+	funcName := strings.ToLower(parts[0])
 	args := parts[1:]
 
 	switch funcName {
-	case "random.int", "randomInt":
+	case "random.int", "randomint":
 		if len(args) != 2 {
 			return "", true
 		}
@@ -269,7 +276,7 @@ func (e *Engine) evaluateSpaceSeparated(expr string, ctx *Context, rng *mathrand
 		}
 		return funcRandomInt(rng, min, max), true
 
-	case "random.float", "randomFloat":
+	case "random.float", "randomfloat":
 		// random.float min max  OR  random.float min max precision
 		if len(args) < 2 || len(args) > 3 {
 			return "", true
@@ -280,7 +287,7 @@ func (e *Engine) evaluateSpaceSeparated(expr string, ctx *Context, rng *mathrand
 		}
 		return funcRandomFloatRange(rng, args[0], args[1], precision), true
 
-	case "random.string", "randomString":
+	case "random.string", "randomstring":
 		if len(args) != 1 {
 			return "", true
 		}
@@ -334,7 +341,7 @@ func (e *Engine) resolveValue(ref string, ctx *Context) string {
 	if strings.HasPrefix(ref, "request.") ||
 		strings.HasPrefix(ref, "mtls.") ||
 		strings.HasPrefix(ref, "payload.") ||
-		ref == "topic" || ref == "clientId" || ref == "device_id" ||
+		strings.EqualFold(ref, "topic") || strings.EqualFold(ref, "clientId") || strings.EqualFold(ref, "device_id") ||
 		ref == "uuid" || ref == "uuid.short" ||
 		ref == "now" || ref == "timestamp" ||
 		strings.HasPrefix(ref, "timestamp.") {
