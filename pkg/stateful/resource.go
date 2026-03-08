@@ -324,8 +324,17 @@ func (r *StatefulResource) List(filter *QueryFilter) *PaginatedResponse {
 	// Sort using exported function
 	SortItems(filtered, filter.Sort, filter.Order)
 
-	// Apply pagination using exported function
-	page, total := Paginate(filtered, filter.Offset, filter.Limit)
+	// Apply pagination — cursor-based if cursor fields set, offset-based otherwise
+	var page []*ResourceItem
+	var total int
+	var hasMore bool
+
+	if filter.StartingAfter != "" || filter.EndingBefore != "" {
+		page, total, hasMore = CursorPaginate(filtered, filter.StartingAfter, filter.EndingBefore, filter.Limit)
+	} else {
+		page, total = Paginate(filtered, filter.Offset, filter.Limit)
+		hasMore = filter.Offset+len(page) < total
+	}
 
 	// Convert to JSON format
 	data := make([]map[string]interface{}, len(page))
@@ -336,10 +345,11 @@ func (r *StatefulResource) List(filter *QueryFilter) *PaginatedResponse {
 	return &PaginatedResponse{
 		Data: data,
 		Meta: PaginationMeta{
-			Total:  total,
-			Limit:  filter.Limit,
-			Offset: filter.Offset,
-			Count:  len(data),
+			Total:   total,
+			Limit:   filter.Limit,
+			Offset:  filter.Offset,
+			Count:   len(data),
+			HasMore: hasMore,
 		},
 	}
 }

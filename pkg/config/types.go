@@ -299,6 +299,9 @@ type ResponseTransform struct {
 	Create *VerbOverride `json:"create,omitempty" yaml:"create,omitempty"`
 	// Delete overrides the default HTTP status code and body for delete operations (default: 204, no body).
 	Delete *VerbOverride `json:"delete,omitempty" yaml:"delete,omitempty"`
+	// Errors customizes the shape of error responses for this resource.
+	// If nil, the default mockd error format is used.
+	Errors *ErrorTransform `json:"errors,omitempty" yaml:"errors,omitempty"`
 }
 
 // TimestampTransform controls how timestamps appear in responses.
@@ -348,6 +351,28 @@ type VerbOverride struct {
 	// Body overrides the response body. Supports {{item.fieldName}} template substitution
 	// from the affected item's fields.
 	Body map[string]interface{} `json:"body,omitempty" yaml:"body,omitempty"`
+}
+
+// ErrorTransform customizes the shape of error responses for a stateful resource.
+// Different APIs have different error formats (Stripe, GitHub, Twilio, etc.).
+// This config lets users match their target API's error convention.
+type ErrorTransform struct {
+	// Wrap is the key to nest the error object under (e.g., "error" for Stripe's {"error":{...}}).
+	// If empty, error fields are at the root level (default mockd behavior).
+	Wrap string `json:"wrap,omitempty" yaml:"wrap,omitempty"`
+	// Fields maps mockd error fields to custom field names.
+	// Available source fields: "message", "code", "type", "resource", "id", "field", "hint".
+	// Example: {"message": "message", "code": "code", "type": "type"}
+	Fields map[string]string `json:"fields,omitempty" yaml:"fields,omitempty"`
+	// Inject adds static fields to every error response (e.g., {"doc_url": "https://..."}).
+	Inject map[string]interface{} `json:"inject,omitempty" yaml:"inject,omitempty"`
+	// TypeMap maps ErrorCode values to custom type strings.
+	// Keys: "NOT_FOUND", "CONFLICT", "VALIDATION_ERROR", "CAPACITY_EXCEEDED", "INTERNAL_ERROR".
+	// Example: {"NOT_FOUND": "invalid_request_error", "VALIDATION_ERROR": "invalid_request_error"}
+	TypeMap map[string]string `json:"typeMap,omitempty" yaml:"typeMap,omitempty"`
+	// CodeMap maps ErrorCode values to custom code strings for the "code" field.
+	// Example: {"NOT_FOUND": "resource_missing", "CONFLICT": "resource_already_exists"}
+	CodeMap map[string]string `json:"codeMap,omitempty" yaml:"codeMap,omitempty"`
 }
 
 // CustomOperationConfig defines a multi-step custom operation in YAML/JSON config.

@@ -5,8 +5,11 @@ package engine
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/getmockd/mockd/pkg/stateful"
 	"github.com/getmockd/mockd/pkg/validation"
@@ -65,7 +68,7 @@ func (h *Handler) handleStateful(w http.ResponseWriter, r *http.Request, resourc
 func (h *Handler) handleStatefulGet(w http.ResponseWriter, resource *stateful.StatefulResource, itemID string) int {
 	item := resource.Get(itemID)
 	if item == nil {
-		return h.writeStatefulError(w, http.StatusNotFound, "resource not found", resource.Name(), itemID)
+		return h.writeResourceError(w, http.StatusNotFound, "resource not found", resource, itemID)
 	}
 
 	data := stateful.TransformItem(item.ToJSON(), resource.ResponseConfig())
@@ -95,9 +98,9 @@ func (h *Handler) handleStatefulCreate(w http.ResponseWriter, r *http.Request, r
 		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", resource.Name(), "", "Reduce request body size to under 1MB")
 	}
 
-	var data map[string]any
-	if err := json.Unmarshal(bodyBytes, &data); err != nil {
-		return h.writeStatefulError(w, http.StatusBadRequest, "invalid request body: "+err.Error(), resource.Name(), "")
+	data, err := parseStatefulBody(bodyBytes, r.Header.Get("Content-Type"))
+	if err != nil {
+		return h.writeResourceError(w, http.StatusBadRequest, err.Error(), resource, "")
 	}
 
 	// Run validation if configured
@@ -114,12 +117,12 @@ func (h *Handler) handleStatefulCreate(w http.ResponseWriter, r *http.Request, r
 		var conflictErr *stateful.ConflictError
 		var capErr *stateful.CapacityError
 		if errors.As(err, &conflictErr) {
-			return h.writeStatefulError(w, http.StatusConflict, "resource already exists", resource.Name(), conflictErr.ID)
+			return h.writeResourceError(w, http.StatusConflict, "resource already exists", resource, conflictErr.ID)
 		}
 		if errors.As(err, &capErr) {
 			return h.writeStatefulErrorWithHint(w, http.StatusInsufficientStorage, capErr.Error(), resource.Name(), "", capErr.Hint())
 		}
-		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), "")
+		return h.writeResourceError(w, http.StatusInternalServerError, err.Error(), resource, "")
 	}
 
 	cfg := resource.ResponseConfig()
@@ -148,9 +151,9 @@ func (h *Handler) handleStatefulMutate(w http.ResponseWriter, r *http.Request, r
 		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", resource.Name(), itemID, "Reduce request body size to under 1MB")
 	}
 
-	var data map[string]any
-	if err := json.Unmarshal(bodyBytes, &data); err != nil {
-		return h.writeStatefulError(w, http.StatusBadRequest, "invalid request body: "+err.Error(), resource.Name(), itemID)
+	data, err := parseStatefulBody(bodyBytes, r.Header.Get("Content-Type"))
+	if err != nil {
+		return h.writeResourceError(w, http.StatusBadRequest, err.Error(), resource, itemID)
 	}
 
 	// Run validation if configured
@@ -166,9 +169,9 @@ func (h *Handler) handleStatefulMutate(w http.ResponseWriter, r *http.Request, r
 	if err != nil {
 		var notFoundErr *stateful.NotFoundError
 		if errors.As(err, &notFoundErr) {
-			return h.writeStatefulError(w, http.StatusNotFound, "resource not found", resource.Name(), itemID)
+			return h.writeResourceError(w, http.StatusNotFound, "resource not found", resource, itemID)
 		}
-		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), itemID)
+		return h.writeResourceError(w, http.StatusInternalServerError, err.Error(), resource, itemID)
 	}
 
 	mutateData := stateful.TransformItem(item.ToJSON(), resource.ResponseConfig())
@@ -185,9 +188,9 @@ func (h *Handler) handleStatefulDelete(w http.ResponseWriter, resource *stateful
 	if err != nil {
 		var notFoundErr *stateful.NotFoundError
 		if errors.As(err, &notFoundErr) {
-			return h.writeStatefulError(w, http.StatusNotFound, "resource not found", resource.Name(), itemID)
+			return h.writeResourceError(w, http.StatusNotFound, "resource not found", resource, itemID)
 		}
-		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), itemID)
+		return h.writeResourceError(w, http.StatusInternalServerError, err.Error(), resource, itemID)
 	}
 
 	cfg := resource.ResponseConfig()
@@ -285,6 +288,40 @@ func (h *Handler) writeStatefulErrorWithHint(w http.ResponseWriter, statusCode i
 	return statusCode
 }
 
+// writeResourceError writes an error response, applying error transforms if the resource has them configured.
+func (h *Handler) writeResourceError(w http.ResponseWriter, statusCode int, errorMsg string, resource *stateful.StatefulResource, id string) int {
+	cfg := resource.ResponseConfig()
+	if cfg != nil && cfg.Errors != nil {
+		code := httpStatusToErrorCode(statusCode)
+		if transformed := stateful.TransformError(code, errorMsg, resource.Name(), id, "", cfg); transformed != nil {
+			w.WriteHeader(statusCode)
+			if err := json.NewEncoder(w).Encode(transformed); err != nil {
+				h.log.Error("failed to encode error response", "error", err)
+			}
+			return statusCode
+		}
+	}
+	return h.writeStatefulError(w, statusCode, errorMsg, resource.Name(), id)
+}
+
+// httpStatusToErrorCode maps common HTTP status codes to stateful ErrorCode values.
+func httpStatusToErrorCode(status int) stateful.ErrorCode {
+	switch status {
+	case http.StatusNotFound:
+		return stateful.ErrCodeNotFound
+	case http.StatusConflict:
+		return stateful.ErrCodeConflict
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return stateful.ErrCodeValidation
+	case http.StatusRequestEntityTooLarge:
+		return stateful.ErrCodePayloadTooLarge
+	case http.StatusInsufficientStorage:
+		return stateful.ErrCodeCapacityExceeded
+	default:
+		return stateful.ErrCodeInternal
+	}
+}
+
 // writeValidationError writes a validation error response.
 func (h *Handler) writeValidationError(w http.ResponseWriter, result *validation.Result, mode string) int {
 	// In warn mode, log but don't fail
@@ -318,6 +355,108 @@ func (h *Handler) writeValidationError(w http.ResponseWriter, result *validation
 	return http.StatusBadRequest
 }
 
+// parseStatefulBody parses the request body based on Content-Type.
+// Supports JSON (default) and application/x-www-form-urlencoded (for APIs like Stripe).
+// Form-encoded nested keys use bracket syntax: metadata[key]=value → {"metadata":{"key":"value"}}
+func parseStatefulBody(bodyBytes []byte, contentType string) (map[string]any, error) {
+	// Default to JSON if no Content-Type or explicit JSON
+	if contentType == "" || strings.HasPrefix(contentType, "application/json") {
+		var data map[string]any
+		if err := json.Unmarshal(bodyBytes, &data); err != nil {
+			return nil, fmt.Errorf("invalid JSON body: %s", err.Error())
+		}
+		return data, nil
+	}
+
+	// Form-encoded (application/x-www-form-urlencoded)
+	if strings.HasPrefix(contentType, "application/x-www-form-urlencoded") {
+		values, err := url.ParseQuery(string(bodyBytes))
+		if err != nil {
+			return nil, fmt.Errorf("invalid form body: %s", err.Error())
+		}
+		return formToMap(values), nil
+	}
+
+	// Unknown Content-Type — try JSON as fallback
+	var data map[string]any
+	if err := json.Unmarshal(bodyBytes, &data); err != nil {
+		return nil, fmt.Errorf("unsupported Content-Type %q and body is not valid JSON", contentType)
+	}
+	return data, nil
+}
+
+// formToMap converts url.Values to a map, handling bracket-nested keys.
+// "name=Alice" → {"name":"Alice"}
+// "metadata[tier]=premium" → {"metadata":{"tier":"premium"}}
+// "items[0][price]=price_123" → {"items":{"0":{"price":"price_123"}}}
+func formToMap(values url.Values) map[string]any {
+	result := make(map[string]any)
+
+	for key, vals := range values {
+		if len(vals) == 0 {
+			continue
+		}
+		val := vals[0] // Use first value (Stripe convention)
+
+		// Check for bracket notation: key[sub] or key[sub][sub2]
+		if idx := strings.IndexByte(key, '['); idx > 0 {
+			base := key[:idx]
+			rest := key[idx:]
+			setNested(result, base, rest, val)
+		} else {
+			result[key] = val
+		}
+	}
+
+	return result
+}
+
+// setNested sets a value in a nested map using bracket notation path.
+// base="metadata", path="[tier]", val="premium" → result["metadata"]["tier"] = "premium"
+func setNested(result map[string]any, base, path, val string) {
+	// Ensure base map exists
+	var current map[string]any
+	if existing, ok := result[base]; ok {
+		if m, ok := existing.(map[string]any); ok {
+			current = m
+		} else {
+			return // Conflict — base exists but isn't a map
+		}
+	} else {
+		current = make(map[string]any)
+		result[base] = current
+	}
+
+	// Parse remaining bracket segments: [key1][key2]...
+	for strings.HasPrefix(path, "[") {
+		end := strings.IndexByte(path, ']')
+		if end < 0 {
+			break
+		}
+		segment := path[1:end]
+		path = path[end+1:]
+
+		if path == "" || !strings.HasPrefix(path, "[") {
+			// Last segment — set the value
+			current[segment] = val
+			return
+		}
+
+		// More segments — descend into nested map
+		if existing, ok := current[segment]; ok {
+			if m, ok := existing.(map[string]any); ok {
+				current = m
+			} else {
+				return // Conflict
+			}
+		} else {
+			next := make(map[string]any)
+			current[segment] = next
+			current = next
+		}
+	}
+}
+
 // parseQueryFilter extracts filter parameters from query string.
 func (h *Handler) parseQueryFilter(r *http.Request, resource *stateful.StatefulResource, pathParams map[string]string) *stateful.QueryFilter {
 	filter := stateful.DefaultQueryFilter()
@@ -345,6 +484,14 @@ func (h *Handler) parseQueryFilter(r *http.Request, resource *stateful.StatefulR
 		filter.Order = order
 	}
 
+	// Cursor-based pagination params (Stripe-style)
+	if startingAfter := query.Get("starting_after"); startingAfter != "" {
+		filter.StartingAfter = startingAfter
+	}
+	if endingBefore := query.Get("ending_before"); endingBefore != "" {
+		filter.EndingBefore = endingBefore
+	}
+
 	if parentField := resource.ParentField(); parentField != "" {
 		if parentID, ok := pathParams[parentField]; ok {
 			filter.ParentField = parentField
@@ -352,7 +499,7 @@ func (h *Handler) parseQueryFilter(r *http.Request, resource *stateful.StatefulR
 		}
 	}
 
-	reserved := map[string]bool{"limit": true, "offset": true, "sort": true, "order": true}
+	reserved := map[string]bool{"limit": true, "offset": true, "sort": true, "order": true, "starting_after": true, "ending_before": true}
 	for key, values := range query {
 		if !reserved[key] && len(values) > 0 {
 			filter.Filters[key] = values[0]

@@ -34,6 +34,12 @@ type QueryFilter struct {
 	ParentID string
 	// ParentField is the field name for parent FK
 	ParentField string
+	// StartingAfter is a cursor for forward pagination — return items after this ID.
+	// Used by cursor-based APIs like Stripe. Mutually exclusive with Offset.
+	StartingAfter string
+	// EndingBefore is a cursor for backward pagination — return items before this ID.
+	// Used by cursor-based APIs like Stripe. Mutually exclusive with Offset.
+	EndingBefore string
 }
 
 // PaginationMeta contains pagination metadata for collection responses.
@@ -46,6 +52,9 @@ type PaginationMeta struct {
 	Offset int `json:"offset"`
 	// Count is the number of items in current page
 	Count int `json:"count"`
+	// HasMore indicates whether more items exist beyond this page.
+	// Computed automatically from pagination state.
+	HasMore bool `json:"has_more"`
 }
 
 // PaginatedResponse is the response envelope for collection queries.

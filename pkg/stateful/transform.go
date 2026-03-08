@@ -96,6 +96,11 @@ func TransformList(items []map[string]interface{}, meta PaginationMeta, cfg *con
 
 	// Extra fields at envelope level (e.g., object: "list", url: "/v1/customers")
 	for key, val := range listCfg.ExtraFields {
+		if key == "has_more" || key == "hasMore" {
+			// Replace static has_more with computed value from pagination
+			result[key] = meta.HasMore
+			continue
+		}
 		result[key] = val
 	}
 
@@ -244,6 +249,78 @@ func buildMetaMap(meta PaginationMeta, renames map[string]string) map[string]int
 	result[countKey] = meta.Count
 
 	return result
+}
+
+// TransformError shapes an error response according to the resource's error transform config.
+// If cfg is nil or has no error transform, returns nil (caller uses default error format).
+// This is protocol-agnostic — HTTP, SOAP, and GraphQL adapters can all use it.
+func TransformError(code ErrorCode, message, resource, id, field string, cfg *config.ResponseTransform) map[string]interface{} {
+	if cfg == nil || cfg.Errors == nil {
+		return nil
+	}
+
+	et := cfg.Errors
+	codeStr := code.String()
+
+	// Build the error object with mapped field names
+	errObj := make(map[string]interface{})
+
+	// Map mockd fields to custom field names
+	fieldMappings := map[string]string{
+		"message":  message,
+		"resource": resource,
+		"id":       id,
+		"field":    field,
+	}
+
+	// Apply "type" from TypeMap
+	if len(et.TypeMap) > 0 {
+		if t, ok := et.TypeMap[codeStr]; ok {
+			fieldMappings["type"] = t
+		}
+	}
+
+	// Apply "code" from CodeMap
+	if len(et.CodeMap) > 0 {
+		if c, ok := et.CodeMap[codeStr]; ok {
+			fieldMappings["code"] = c
+		}
+	}
+
+	// Write fields using configured names (or skip if not mapped)
+	if len(et.Fields) > 0 {
+		for srcField, outputName := range et.Fields {
+			if val, ok := fieldMappings[srcField]; ok && val != "" {
+				errObj[outputName] = val
+			}
+		}
+	} else {
+		// No field mapping — use defaults for non-empty values
+		if message != "" {
+			errObj["message"] = message
+		}
+		if resource != "" {
+			errObj["resource"] = resource
+		}
+		if id != "" {
+			errObj["id"] = id
+		}
+		if field != "" {
+			errObj["field"] = field
+		}
+	}
+
+	// Inject static fields
+	for key, val := range et.Inject {
+		errObj[key] = val
+	}
+
+	// Wrap under a key if configured (e.g., "error" → {"error": {...}})
+	if et.Wrap != "" {
+		return map[string]interface{}{et.Wrap: errObj}
+	}
+
+	return errObj
 }
 
 // resolveTemplateValue replaces {{item.fieldName}} patterns in a value.

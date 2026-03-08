@@ -140,3 +140,55 @@ func Paginate(items []*ResourceItem, offset, limit int) ([]*ResourceItem, int) {
 
 	return items[start:end], total
 }
+
+// CursorPaginate applies cursor-based pagination to a sorted slice of items.
+// If startingAfter is set, returns items after the item with that ID.
+// If endingBefore is set, returns items before the item with that ID.
+// Returns the paginated slice, total count, and whether more items exist.
+func CursorPaginate(items []*ResourceItem, startingAfter, endingBefore string, limit int) ([]*ResourceItem, int, bool) {
+	total := len(items)
+	if limit <= 0 {
+		limit = 100
+	}
+
+	start := 0
+
+	if startingAfter != "" {
+		// Find the cursor item and start after it
+		for i, item := range items {
+			if item.ID == startingAfter {
+				start = i + 1
+				break
+			}
+		}
+	} else if endingBefore != "" {
+		// Find the cursor item and take items before it
+		end := total
+		for i, item := range items {
+			if item.ID == endingBefore {
+				end = i
+				break
+			}
+		}
+		// Work backwards from the cursor
+		start = end - limit
+		if start < 0 {
+			start = 0
+		}
+		page := items[start:end]
+		hasMore := start > 0
+		return page, total, hasMore
+	}
+
+	if start > total {
+		start = total
+	}
+
+	end := start + limit
+	if end > total {
+		end = total
+	}
+
+	hasMore := end < total
+	return items[start:end], total, hasMore
+}
