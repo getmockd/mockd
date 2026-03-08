@@ -400,17 +400,20 @@ func (r *StatefulResource) Patch(id string, data map[string]interface{}) (*Resou
 	return item, nil
 }
 
-// Delete removes an item by ID.
-func (r *StatefulResource) Delete(id string) error {
+// Delete removes an item by ID and returns the deleted item.
+// Returns the item that was deleted (for use in delete response templates)
+// and an error if the item was not found.
+func (r *StatefulResource) Delete(id string) (*ResourceItem, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, ok := r.items[id]; !ok {
-		return &NotFoundError{Resource: r.name, ID: id}
+	item, ok := r.items[id]
+	if !ok {
+		return nil, &NotFoundError{Resource: r.name, ID: id}
 	}
 
 	delete(r.items, id)
-	return nil
+	return item, nil
 }
 
 // Reset restores the resource to its seed data state.

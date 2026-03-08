@@ -10,6 +10,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/tracing"
+	"github.com/getmockd/mockd/pkg/validation"
 )
 
 // Action represents the type of operation to perform on a stateful resource.
@@ -79,7 +80,7 @@ type OperationResult struct {
 	// Status is the outcome of the operation.
 	Status ResultStatus
 	// Item is the result for single-item operations (get, create, update, patch).
-	// Nil for list and delete operations.
+	// Nil for list operations. For delete, contains the deleted item (for response templates).
 	Item *ResourceItem
 	// List is the result for list operations.
 	// Nil for single-item operations.
@@ -222,11 +223,11 @@ func (b *Bridge) Execute(ctx context.Context, req *OperationRequest) *OperationR
 	case ActionList:
 		return b.executeList(resource, req)
 	case ActionCreate:
-		return b.executeCreate(resource, req)
+		return b.executeCreate(ctx, resource, req)
 	case ActionUpdate:
-		return b.executeUpdate(resource, req)
+		return b.executeUpdate(ctx, resource, req)
 	case ActionPatch:
-		return b.executePatch(resource, req)
+		return b.executePatch(ctx, resource, req)
 	case ActionDelete:
 		return b.executeDelete(resource, req)
 	default:
@@ -281,11 +282,21 @@ func (b *Bridge) executeList(resource *StatefulResource, req *OperationRequest) 
 	return &OperationResult{Status: StatusSuccess, List: result}
 }
 
-func (b *Bridge) executeCreate(resource *StatefulResource, req *OperationRequest) *OperationResult {
+func (b *Bridge) executeCreate(ctx context.Context, resource *StatefulResource, req *OperationRequest) *OperationResult {
 	start := time.Now()
 
 	if req.Data == nil {
 		req.Data = make(map[string]interface{})
+	}
+
+	// Run input validation if configured (all protocols get this for free)
+	if resource.HasValidation() {
+		result := resource.ValidateCreate(ctx, req.Data, req.Params)
+		if !result.Valid && shouldRejectValidation(result, resource.GetValidationMode()) {
+			err := &ValidationError{Message: "validation failed"}
+			b.observer.OnError(resource.Name(), "create", err)
+			return &OperationResult{Status: StatusValidationError, Error: err}
+		}
 	}
 
 	item, err := resource.Create(req.Data, req.Params)
@@ -298,35 +309,22 @@ func (b *Bridge) executeCreate(resource *StatefulResource, req *OperationRequest
 	return &OperationResult{Status: StatusCreated, Item: item}
 }
 
-func (b *Bridge) executeUpdate(resource *StatefulResource, req *OperationRequest) *OperationResult {
-	start := time.Now()
-
-	if req.ResourceID == "" {
-		err := &ValidationError{Message: "resource ID is required for update operations"}
-		b.observer.OnError(resource.Name(), "update", err)
-		return &OperationResult{Status: StatusValidationError, Error: err}
-	}
-
-	if req.Data == nil {
-		req.Data = make(map[string]interface{})
-	}
-
-	item, err := resource.Update(req.ResourceID, req.Data)
-	if err != nil {
-		b.observer.OnError(resource.Name(), "update", err)
-		return errorToResult(err)
-	}
-
-	b.observer.OnUpdate(resource.Name(), item.ID, time.Since(start))
-	return &OperationResult{Status: StatusSuccess, Item: item}
+func (b *Bridge) executeUpdate(ctx context.Context, resource *StatefulResource, req *OperationRequest) *OperationResult {
+	return b.executeMutate(ctx, resource, req, "update", resource.Update)
 }
 
-func (b *Bridge) executePatch(resource *StatefulResource, req *OperationRequest) *OperationResult {
+func (b *Bridge) executePatch(ctx context.Context, resource *StatefulResource, req *OperationRequest) *OperationResult {
+	return b.executeMutate(ctx, resource, req, "patch", resource.Patch)
+}
+
+// executeMutate is the shared implementation for update and patch operations.
+// Both require an ID, validate input, call a mutate function, and fire OnUpdate.
+func (b *Bridge) executeMutate(ctx context.Context, resource *StatefulResource, req *OperationRequest, action string, mutate func(string, map[string]interface{}) (*ResourceItem, error)) *OperationResult {
 	start := time.Now()
 
 	if req.ResourceID == "" {
-		err := &ValidationError{Message: "resource ID is required for patch operations"}
-		b.observer.OnError(resource.Name(), "patch", err)
+		err := &ValidationError{Message: "resource ID is required for " + action + " operations"}
+		b.observer.OnError(resource.Name(), action, err)
 		return &OperationResult{Status: StatusValidationError, Error: err}
 	}
 
@@ -334,9 +332,19 @@ func (b *Bridge) executePatch(resource *StatefulResource, req *OperationRequest)
 		req.Data = make(map[string]interface{})
 	}
 
-	item, err := resource.Patch(req.ResourceID, req.Data)
+	// Run input validation if configured (all protocols get this for free)
+	if resource.HasValidation() {
+		result := resource.ValidateUpdate(ctx, req.Data, req.Params)
+		if !result.Valid && shouldRejectValidation(result, resource.GetValidationMode()) {
+			err := &ValidationError{Message: "validation failed"}
+			b.observer.OnError(resource.Name(), action, err)
+			return &OperationResult{Status: StatusValidationError, Error: err}
+		}
+	}
+
+	item, err := mutate(req.ResourceID, req.Data)
 	if err != nil {
-		b.observer.OnError(resource.Name(), "patch", err)
+		b.observer.OnError(resource.Name(), action, err)
 		return errorToResult(err)
 	}
 
@@ -353,14 +361,14 @@ func (b *Bridge) executeDelete(resource *StatefulResource, req *OperationRequest
 		return &OperationResult{Status: StatusValidationError, Error: err}
 	}
 
-	err := resource.Delete(req.ResourceID)
+	item, err := resource.Delete(req.ResourceID)
 	if err != nil {
 		b.observer.OnError(resource.Name(), "delete", err)
 		return errorToResult(err)
 	}
 
 	b.observer.OnDelete(resource.Name(), req.ResourceID, time.Since(start))
-	return &OperationResult{Status: StatusSuccess}
+	return &OperationResult{Status: StatusSuccess, Item: item}
 }
 
 func (b *Bridge) executeCustom(ctx context.Context, req *OperationRequest) *OperationResult {
@@ -438,6 +446,28 @@ func errorToResult(err error) *OperationResult {
 		return &OperationResult{Status: StatusCapacityExceeded, Error: err}
 	}
 	return &OperationResult{Status: StatusError, Error: err}
+}
+
+// shouldRejectValidation determines whether validation errors should reject the request
+// based on the validation mode. Mirrors the HTTP handler's validation logic so all
+// protocols get identical validation behavior.
+//   - strict (default): reject on any validation error
+//   - warn: never reject (log only — handled by caller)
+//   - permissive: reject only on required-field errors
+func shouldRejectValidation(result *validation.Result, mode string) bool {
+	if mode == validation.ModeWarn {
+		return false
+	}
+	if mode == validation.ModePermissive {
+		for _, err := range result.Errors {
+			if err.Code == validation.ErrCodeRequired {
+				return true
+			}
+		}
+		return false
+	}
+	// strict (default)
+	return true
 }
 
 // Store returns the underlying StateStore.

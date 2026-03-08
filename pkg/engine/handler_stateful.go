@@ -181,14 +181,7 @@ func (h *Handler) handleStatefulMutate(w http.ResponseWriter, r *http.Request, r
 
 // handleStatefulDelete removes an item.
 func (h *Handler) handleStatefulDelete(w http.ResponseWriter, resource *stateful.StatefulResource, itemID string) int {
-	// Read the item before deleting (needed for {{item.*}} template substitution in delete body)
-	cfg := resource.ResponseConfig()
-	var deletedItem *stateful.ResourceItem
-	if cfg != nil && cfg.Delete != nil && cfg.Delete.Body != nil {
-		deletedItem = resource.Get(itemID)
-	}
-
-	err := resource.Delete(itemID)
+	deletedItem, err := resource.Delete(itemID)
 	if err != nil {
 		var notFoundErr *stateful.NotFoundError
 		if errors.As(err, &notFoundErr) {
@@ -197,6 +190,7 @@ func (h *Handler) handleStatefulDelete(w http.ResponseWriter, resource *stateful
 		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), itemID)
 	}
 
+	cfg := resource.ResponseConfig()
 	deleteStatus, deleteBody := stateful.TransformDeleteResponse(deletedItem, cfg)
 	w.WriteHeader(deleteStatus)
 	if deleteBody != nil {

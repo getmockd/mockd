@@ -448,7 +448,7 @@ func TestStatefulResource_CRUD(t *testing.T) {
 	}
 
 	// Delete
-	err = resource.Delete(item.ID)
+	_, err = resource.Delete(item.ID)
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
@@ -457,7 +457,7 @@ func TestStatefulResource_CRUD(t *testing.T) {
 	}
 
 	// Delete non-existent
-	err = resource.Delete("nonexistent")
+	_, err = resource.Delete("nonexistent")
 	if err == nil {
 		t.Error("Delete should fail for non-existent item")
 	}
@@ -1265,7 +1265,7 @@ func TestResource_EdgeCase_EmptyResource(t *testing.T) {
 	}
 
 	// Delete non-existent should return error
-	err = resource.Delete("nonexistent")
+	_, err = resource.Delete("nonexistent")
 	if err == nil {
 		t.Error("Delete on empty resource should return error")
 	}
@@ -1381,7 +1381,7 @@ func TestResource_EdgeCase_SpecialCharactersInID(t *testing.T) {
 		}
 
 		// Verify we can delete it
-		err = resource.Delete(id)
+		_, err = resource.Delete(id)
 		if err != nil {
 			t.Errorf("failed to delete item with ID %q: %v", id, err)
 		}

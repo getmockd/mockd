@@ -413,7 +413,8 @@ func (e *OperationExecutor) stepDelete(step Step, exprCtx map[string]interface{}
 		tx.RecordBefore(resource, itemID)
 	}
 
-	return resource.Delete(itemID)
+	_, err = resource.Delete(itemID)
+	return err
 }
 
 // stepCreate creates a new resource item with expression-evaluated field values.
