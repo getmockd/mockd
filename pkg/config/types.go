@@ -263,6 +263,11 @@ type StatefulResourceConfig struct {
 	BasePath string `json:"basePath" yaml:"basePath"`
 	// IDField is the field name for ID (default: "id")
 	IDField string `json:"idField,omitempty" yaml:"idField,omitempty"`
+	// IDStrategy controls how IDs are generated for new items.
+	// Values: "uuid" (default), "prefix", "ulid", "sequence", "short"
+	IDStrategy string `json:"idStrategy,omitempty" yaml:"idStrategy,omitempty"`
+	// IDPrefix is prepended to generated IDs when IDStrategy is "prefix" (e.g., "cus_").
+	IDPrefix string `json:"idPrefix,omitempty" yaml:"idPrefix,omitempty"`
 	// ParentField is the field name for parent FK in nested resources
 	ParentField string `json:"parentField,omitempty" yaml:"parentField,omitempty"`
 	// MaxItems limits the number of items this resource can hold (0 = unlimited).
@@ -272,6 +277,77 @@ type StatefulResourceConfig struct {
 	SeedData []map[string]interface{} `json:"seedData,omitempty" yaml:"seedData,omitempty"`
 	// Validation defines validation rules for CRUD operations
 	Validation *validation.StatefulValidation `json:"validation,omitempty" yaml:"validation,omitempty"`
+	// Response defines how stateful CRUD responses are transformed before serialization.
+	// This is the API gateway layer — same transforms apply across HTTP, SOAP, and GraphQL.
+	// Nil means no transforms (current behavior, fully backward compatible).
+	Response *ResponseTransform `json:"response,omitempty" yaml:"response,omitempty"`
+}
+
+// ResponseTransform defines how stateful resource responses are shaped.
+// This is the single, protocol-agnostic transform layer applied to all CRUD responses.
+// Item-level transforms (timestamps, fields) apply to every protocol.
+// List/verb overrides are HTTP-specific (SOAP/GraphQL have their own envelope conventions).
+type ResponseTransform struct {
+	// Timestamps controls timestamp format and field naming in responses.
+	Timestamps *TimestampTransform `json:"timestamps,omitempty" yaml:"timestamps,omitempty"`
+	// Fields controls field injection, hiding, and renaming in item responses.
+	Fields *FieldTransform `json:"fields,omitempty" yaml:"fields,omitempty"`
+	// List controls the HTTP JSON list envelope shape (dataField, extraFields, meta renaming).
+	// This is HTTP-specific — SOAP/GraphQL use their own list envelope conventions.
+	List *ListTransform `json:"list,omitempty" yaml:"list,omitempty"`
+	// Create overrides the default HTTP status code for create operations (default: 201).
+	Create *VerbOverride `json:"create,omitempty" yaml:"create,omitempty"`
+	// Delete overrides the default HTTP status code and body for delete operations (default: 204, no body).
+	Delete *VerbOverride `json:"delete,omitempty" yaml:"delete,omitempty"`
+}
+
+// TimestampTransform controls how timestamps appear in responses.
+type TimestampTransform struct {
+	// Format is the timestamp output format: "unix" (epoch seconds), "iso8601" (ISO 8601),
+	// "rfc3339" (default, RFC3339Nano), or "none" (omit timestamps entirely).
+	Format string `json:"format,omitempty" yaml:"format,omitempty"`
+	// Fields renames timestamp keys in responses.
+	// Example: {"createdAt": "created", "updatedAt": "updated"}
+	Fields map[string]string `json:"fields,omitempty" yaml:"fields,omitempty"`
+}
+
+// FieldTransform controls field-level modifications applied to every item response.
+type FieldTransform struct {
+	// Inject adds fields to every item response. Values are literals.
+	// Example: {"object": "customer", "livemode": false}
+	Inject map[string]interface{} `json:"inject,omitempty" yaml:"inject,omitempty"`
+	// Hide removes fields from responses (data is still stored, just not returned).
+	// Example: ["internalNotes", "_metadata"]
+	Hide []string `json:"hide,omitempty" yaml:"hide,omitempty"`
+	// Rename changes field keys in responses (stored data unchanged).
+	// Key is original field name, value is output field name.
+	// Example: {"firstName": "first_name"}
+	Rename map[string]string `json:"rename,omitempty" yaml:"rename,omitempty"`
+}
+
+// ListTransform controls the HTTP JSON list response envelope.
+// SOAP and GraphQL use their own envelope conventions — this is HTTP-only.
+type ListTransform struct {
+	// DataField is the key for the items array (default: "data").
+	DataField string `json:"dataField,omitempty" yaml:"dataField,omitempty"`
+	// ExtraFields are injected into the list wrapper (not into individual items).
+	// Example: {"object": "list", "url": "/v1/customers"}
+	ExtraFields map[string]interface{} `json:"extraFields,omitempty" yaml:"extraFields,omitempty"`
+	// MetaFields renames pagination meta keys.
+	// Available keys: "total", "limit", "offset", "count".
+	// Example: {"total": "total_count"}
+	MetaFields map[string]string `json:"metaFields,omitempty" yaml:"metaFields,omitempty"`
+	// HideMeta omits pagination metadata from the response entirely.
+	HideMeta bool `json:"hideMeta,omitempty" yaml:"hideMeta,omitempty"`
+}
+
+// VerbOverride customizes the HTTP status code and/or response body for a specific CRUD verb.
+type VerbOverride struct {
+	// Status overrides the default HTTP status code (e.g., 200 instead of 201 for create).
+	Status int `json:"status,omitempty" yaml:"status,omitempty"`
+	// Body overrides the response body. Supports {{item.fieldName}} template substitution
+	// from the affected item's fields.
+	Body map[string]interface{} `json:"body,omitempty" yaml:"body,omitempty"`
 }
 
 // CustomOperationConfig defines a multi-step custom operation in YAML/JSON config.
@@ -317,13 +393,13 @@ type CustomOperationConfig struct {
 
 // CustomStepConfig defines a single step in a custom operation pipeline.
 type CustomStepConfig struct {
-	// Type is the step kind: "read", "update", "delete", "create", "set"
+	// Type is the step kind: "read", "update", "delete", "create", "set", "list", "validate"
 	Type string `json:"type" yaml:"type"`
-	// Resource is the stateful resource name (for read/update/delete/create)
+	// Resource is the stateful resource name (for read/update/delete/create/list)
 	Resource string `json:"resource,omitempty" yaml:"resource,omitempty"`
 	// ID is an expression that resolves to the item ID (for read/update/delete)
 	ID string `json:"id,omitempty" yaml:"id,omitempty"`
-	// As is the variable name to store the result (for read/create)
+	// As is the variable name to store the result (for read/create/list)
 	As string `json:"as,omitempty" yaml:"as,omitempty"`
 	// Set is a map of field → expression for update/create steps
 	Set map[string]string `json:"set,omitempty" yaml:"set,omitempty"`
@@ -331,6 +407,14 @@ type CustomStepConfig struct {
 	Var string `json:"var,omitempty" yaml:"var,omitempty"`
 	// Value is an expression (for set steps)
 	Value string `json:"value,omitempty" yaml:"value,omitempty"`
+	// Filter contains field → expression mappings for list steps
+	Filter map[string]string `json:"filter,omitempty" yaml:"filter,omitempty"`
+	// Condition is a boolean expression for validate steps (halts on false)
+	Condition string `json:"condition,omitempty" yaml:"condition,omitempty"`
+	// ErrorMessage is returned when a validate step fails
+	ErrorMessage string `json:"errorMessage,omitempty" yaml:"errorMessage,omitempty"`
+	// ErrorStatus is the HTTP status code for validate failures (default: 400)
+	ErrorStatus int `json:"errorStatus,omitempty" yaml:"errorStatus,omitempty"`
 }
 
 // DefaultServerConfiguration returns a ServerConfiguration with sensible defaults.

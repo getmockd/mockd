@@ -1,0 +1,609 @@
+package stateful
+
+import (
+	"testing"
+	"time"
+
+	"github.com/getmockd/mockd/pkg/config"
+)
+
+func TestTransformItem_NilConfig(t *testing.T) {
+	data := map[string]interface{}{"id": "123", "name": "Alice"}
+	result := TransformItem(data, nil)
+	if result["id"] != "123" || result["name"] != "Alice" {
+		t.Errorf("expected unchanged data, got %v", result)
+	}
+}
+
+func TestTransformItem_NilData(t *testing.T) {
+	cfg := &config.ResponseTransform{}
+	result := TransformItem(nil, cfg)
+	if result != nil {
+		t.Errorf("expected nil, got %v", result)
+	}
+}
+
+func TestTransformItem_Rename(t *testing.T) {
+	data := map[string]interface{}{"firstName": "Alice", "lastName": "Johnson"}
+	cfg := &config.ResponseTransform{
+		Fields: &config.FieldTransform{
+			Rename: map[string]string{"firstName": "first_name", "lastName": "last_name"},
+		},
+	}
+	result := TransformItem(data, cfg)
+	if result["first_name"] != "Alice" {
+		t.Errorf("expected first_name=Alice, got %v", result["first_name"])
+	}
+	if result["last_name"] != "Johnson" {
+		t.Errorf("expected last_name=Johnson, got %v", result["last_name"])
+	}
+	if _, ok := result["firstName"]; ok {
+		t.Error("expected firstName to be removed after rename")
+	}
+}
+
+func TestTransformItem_Hide(t *testing.T) {
+	data := map[string]interface{}{"id": "1", "name": "Alice", "secret": "shhh", "internal": "meta"}
+	cfg := &config.ResponseTransform{
+		Fields: &config.FieldTransform{
+			Hide: []string{"secret", "internal"},
+		},
+	}
+	result := TransformItem(data, cfg)
+	if _, ok := result["secret"]; ok {
+		t.Error("expected secret to be hidden")
+	}
+	if _, ok := result["internal"]; ok {
+		t.Error("expected internal to be hidden")
+	}
+	if result["name"] != "Alice" {
+		t.Error("expected name to remain")
+	}
+}
+
+func TestTransformItem_Inject(t *testing.T) {
+	data := map[string]interface{}{"id": "1", "name": "Alice"}
+	cfg := &config.ResponseTransform{
+		Fields: &config.FieldTransform{
+			Inject: map[string]interface{}{
+				"object":   "customer",
+				"livemode": false,
+			},
+		},
+	}
+	result := TransformItem(data, cfg)
+	if result["object"] != "customer" {
+		t.Errorf("expected object=customer, got %v", result["object"])
+	}
+	if result["livemode"] != false {
+		t.Errorf("expected livemode=false, got %v", result["livemode"])
+	}
+}
+
+func TestTransformItem_TimestampsUnix(t *testing.T) {
+	ts := time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)
+	data := map[string]interface{}{
+		"id":        "1",
+		"createdAt": ts.Format(time.RFC3339Nano),
+		"updatedAt": ts.Format(time.RFC3339Nano),
+	}
+	cfg := &config.ResponseTransform{
+		Timestamps: &config.TimestampTransform{
+			Format: "unix",
+		},
+	}
+	result := TransformItem(data, cfg)
+	if result["createdAt"] != int64(1772971200) {
+		t.Errorf("expected unix timestamp 1772971200, got %v (type %T)", result["createdAt"], result["createdAt"])
+	}
+}
+
+func TestTransformItem_TimestampsRename(t *testing.T) {
+	ts := time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)
+	data := map[string]interface{}{
+		"id":        "1",
+		"createdAt": ts.Format(time.RFC3339Nano),
+		"updatedAt": ts.Format(time.RFC3339Nano),
+	}
+	cfg := &config.ResponseTransform{
+		Timestamps: &config.TimestampTransform{
+			Format: "unix",
+			Fields: map[string]string{
+				"createdAt": "created",
+				"updatedAt": "updated",
+			},
+		},
+	}
+	result := TransformItem(data, cfg)
+	if _, ok := result["createdAt"]; ok {
+		t.Error("expected createdAt to be renamed")
+	}
+	if _, ok := result["updatedAt"]; ok {
+		t.Error("expected updatedAt to be renamed")
+	}
+	if result["created"] != int64(1772971200) {
+		t.Errorf("expected created=1772971200, got %v", result["created"])
+	}
+	if result["updated"] != int64(1772971200) {
+		t.Errorf("expected updated=1772971200, got %v", result["updated"])
+	}
+}
+
+func TestTransformItem_TimestampsNone(t *testing.T) {
+	ts := time.Now().Format(time.RFC3339Nano)
+	data := map[string]interface{}{
+		"id": "1", "name": "Alice",
+		"createdAt": ts, "updatedAt": ts,
+	}
+	cfg := &config.ResponseTransform{
+		Timestamps: &config.TimestampTransform{Format: "none"},
+	}
+	result := TransformItem(data, cfg)
+	if _, ok := result["createdAt"]; ok {
+		t.Error("expected createdAt to be removed with format=none")
+	}
+	if _, ok := result["updatedAt"]; ok {
+		t.Error("expected updatedAt to be removed with format=none")
+	}
+	if result["name"] != "Alice" {
+		t.Error("expected other fields to remain")
+	}
+}
+
+func TestTransformItem_TimestampsISO8601(t *testing.T) {
+	ts := time.Date(2026, 3, 8, 12, 30, 45, 123456789, time.UTC)
+	data := map[string]interface{}{
+		"id":        "1",
+		"createdAt": ts.Format(time.RFC3339Nano),
+	}
+	cfg := &config.ResponseTransform{
+		Timestamps: &config.TimestampTransform{Format: "iso8601"},
+	}
+	result := TransformItem(data, cfg)
+	expected := "2026-03-08T12:30:45Z"
+	if result["createdAt"] != expected {
+		t.Errorf("expected %q, got %v", expected, result["createdAt"])
+	}
+}
+
+func TestTransformItem_FullStripeStyle(t *testing.T) {
+	ts := time.Date(2026, 1, 15, 10, 0, 0, 0, time.UTC)
+	data := map[string]interface{}{
+		"id":            "cus_abc123",
+		"name":          "Alice Johnson",
+		"email":         "alice@example.com",
+		"internalNotes": "VIP customer",
+		"createdAt":     ts.Format(time.RFC3339Nano),
+		"updatedAt":     ts.Format(time.RFC3339Nano),
+	}
+	cfg := &config.ResponseTransform{
+		Timestamps: &config.TimestampTransform{
+			Format: "unix",
+			Fields: map[string]string{
+				"createdAt": "created",
+				"updatedAt": "updated",
+			},
+		},
+		Fields: &config.FieldTransform{
+			Inject: map[string]interface{}{
+				"object":   "customer",
+				"livemode": false,
+			},
+			Hide:   []string{"internalNotes"},
+			Rename: map[string]string{},
+		},
+	}
+	result := TransformItem(data, cfg)
+
+	// Check injected fields
+	if result["object"] != "customer" {
+		t.Errorf("expected object=customer, got %v", result["object"])
+	}
+	if result["livemode"] != false {
+		t.Errorf("expected livemode=false, got %v", result["livemode"])
+	}
+	// Check hidden fields
+	if _, ok := result["internalNotes"]; ok {
+		t.Error("expected internalNotes to be hidden")
+	}
+	// Check timestamp conversion + rename
+	if result["created"] != int64(1768471200) {
+		t.Errorf("expected created=1768471200, got %v", result["created"])
+	}
+	// Check original data preserved
+	if result["name"] != "Alice Johnson" {
+		t.Errorf("expected name=Alice Johnson, got %v", result["name"])
+	}
+}
+
+func TestTransformItem_TransformOrder(t *testing.T) {
+	// Verify: rename happens before hide, inject happens last
+	data := map[string]interface{}{
+		"id": "1", "oldName": "Alice",
+		"createdAt": time.Now().Format(time.RFC3339Nano),
+		"updatedAt": time.Now().Format(time.RFC3339Nano),
+	}
+	cfg := &config.ResponseTransform{
+		Fields: &config.FieldTransform{
+			Rename: map[string]string{"oldName": "name"},
+			Hide:   []string{"oldName"}, // should be a no-op since oldName was renamed
+			Inject: map[string]interface{}{"type": "user"},
+		},
+	}
+	result := TransformItem(data, cfg)
+	if result["name"] != "Alice" {
+		t.Errorf("expected name=Alice (renamed from oldName), got %v", result["name"])
+	}
+	if result["type"] != "user" {
+		t.Errorf("expected type=user (injected), got %v", result["type"])
+	}
+}
+
+// --- List transform tests ---
+
+func TestTransformList_NilConfig(t *testing.T) {
+	items := []map[string]interface{}{
+		{"id": "1", "name": "Alice"},
+		{"id": "2", "name": "Bob"},
+	}
+	meta := PaginationMeta{Total: 2, Limit: 100, Offset: 0, Count: 2}
+	result := TransformList(items, meta, nil)
+
+	resp, ok := result.(*PaginatedResponse)
+	if !ok {
+		t.Fatalf("expected *PaginatedResponse, got %T", result)
+	}
+	if len(resp.Data) != 2 {
+		t.Errorf("expected 2 items, got %d", len(resp.Data))
+	}
+	if resp.Meta.Total != 2 {
+		t.Errorf("expected total=2, got %d", resp.Meta.Total)
+	}
+}
+
+func TestTransformList_CustomEnvelope(t *testing.T) {
+	items := []map[string]interface{}{
+		{"id": "1", "name": "Alice"},
+	}
+	meta := PaginationMeta{Total: 1, Limit: 10, Offset: 0, Count: 1}
+	cfg := &config.ResponseTransform{
+		List: &config.ListTransform{
+			DataField: "results",
+			ExtraFields: map[string]interface{}{
+				"object": "list",
+				"url":    "/v1/customers",
+			},
+			MetaFields: map[string]string{
+				"total": "total_count",
+			},
+		},
+	}
+	result := TransformList(items, meta, cfg)
+
+	envelope, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+	if envelope["object"] != "list" {
+		t.Errorf("expected object=list, got %v", envelope["object"])
+	}
+	if envelope["url"] != "/v1/customers" {
+		t.Errorf("expected url=/v1/customers, got %v", envelope["url"])
+	}
+	if envelope["total_count"] != 1 {
+		t.Errorf("expected total_count=1, got %v", envelope["total_count"])
+	}
+	itemsArr, ok := envelope["results"].([]map[string]interface{})
+	if !ok {
+		t.Fatalf("expected results as []map, got %T", envelope["results"])
+	}
+	if len(itemsArr) != 1 {
+		t.Errorf("expected 1 item, got %d", len(itemsArr))
+	}
+}
+
+func TestTransformList_HideMeta(t *testing.T) {
+	items := []map[string]interface{}{{"id": "1"}}
+	meta := PaginationMeta{Total: 1, Limit: 100, Offset: 0, Count: 1}
+	cfg := &config.ResponseTransform{
+		List: &config.ListTransform{
+			HideMeta: true,
+		},
+	}
+	result := TransformList(items, meta, cfg)
+	envelope, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+	// Should have data but no meta fields
+	if _, ok := envelope["total"]; ok {
+		t.Error("expected meta to be hidden")
+	}
+	if _, ok := envelope["data"]; !ok {
+		t.Error("expected data field to be present")
+	}
+}
+
+func TestTransformList_ItemTransformsApplied(t *testing.T) {
+	ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	items := []map[string]interface{}{
+		{"id": "1", "name": "Alice", "createdAt": ts, "updatedAt": ts},
+	}
+	meta := PaginationMeta{Total: 1, Limit: 100, Offset: 0, Count: 1}
+	cfg := &config.ResponseTransform{
+		Timestamps: &config.TimestampTransform{Format: "unix"},
+		Fields:     &config.FieldTransform{Inject: map[string]interface{}{"object": "user"}},
+	}
+	result := TransformList(items, meta, cfg)
+	resp, ok := result.(*PaginatedResponse)
+	if !ok {
+		t.Fatalf("expected *PaginatedResponse, got %T", result)
+	}
+	item := resp.Data[0]
+	if item["object"] != "user" {
+		t.Errorf("expected inject to apply to list items, got %v", item["object"])
+	}
+	if _, isInt := item["createdAt"].(int64); !isInt {
+		t.Errorf("expected unix timestamp on list items, got %T", item["createdAt"])
+	}
+}
+
+// --- Delete transform tests ---
+
+func TestTransformDeleteResponse_NilConfig(t *testing.T) {
+	status, body := TransformDeleteResponse(nil, nil)
+	if status != 204 {
+		t.Errorf("expected 204, got %d", status)
+	}
+	if body != nil {
+		t.Errorf("expected nil body, got %v", body)
+	}
+}
+
+func TestTransformDeleteResponse_CustomStatus(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Delete: &config.VerbOverride{Status: 200},
+	}
+	status, body := TransformDeleteResponse(nil, cfg)
+	if status != 200 {
+		t.Errorf("expected 200, got %d", status)
+	}
+	if body != nil {
+		t.Errorf("expected nil body, got %v", body)
+	}
+}
+
+func TestTransformDeleteResponse_CustomBody(t *testing.T) {
+	item := &ResourceItem{
+		ID:   "cus_abc123",
+		Data: map[string]interface{}{"name": "Alice"},
+	}
+	cfg := &config.ResponseTransform{
+		Delete: &config.VerbOverride{
+			Status: 200,
+			Body: map[string]interface{}{
+				"id":      "{{item.id}}",
+				"object":  "customer",
+				"deleted": true,
+			},
+		},
+	}
+	status, body := TransformDeleteResponse(item, cfg)
+	if status != 200 {
+		t.Errorf("expected 200, got %d", status)
+	}
+	bodyMap, ok := body.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map body, got %T", body)
+	}
+	if bodyMap["id"] != "cus_abc123" {
+		t.Errorf("expected id=cus_abc123 from template, got %v", bodyMap["id"])
+	}
+	if bodyMap["object"] != "customer" {
+		t.Errorf("expected object=customer, got %v", bodyMap["object"])
+	}
+	if bodyMap["deleted"] != true {
+		t.Errorf("expected deleted=true, got %v", bodyMap["deleted"])
+	}
+}
+
+// --- Create status tests ---
+
+func TestTransformCreateStatus_NilConfig(t *testing.T) {
+	if s := TransformCreateStatus(nil); s != 201 {
+		t.Errorf("expected 201, got %d", s)
+	}
+}
+
+func TestTransformCreateStatus_Override(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Create: &config.VerbOverride{Status: 200},
+	}
+	if s := TransformCreateStatus(cfg); s != 200 {
+		t.Errorf("expected 200, got %d", s)
+	}
+}
+
+// --- ID strategy tests ---
+
+func TestGenerateID_UUID(t *testing.T) {
+	r := &StatefulResource{idStrategy: "uuid"}
+	id := r.generateID()
+	if len(id) != 36 { // UUID format: 8-4-4-4-12
+		t.Errorf("expected UUID (36 chars), got %q (%d chars)", id, len(id))
+	}
+}
+
+func TestGenerateID_Prefix(t *testing.T) {
+	r := &StatefulResource{idStrategy: "prefix", idPrefix: "cus_"}
+	id := r.generateID()
+	if len(id) < 5 || id[:4] != "cus_" {
+		t.Errorf("expected cus_ prefix, got %q", id)
+	}
+}
+
+func TestGenerateID_ULID(t *testing.T) {
+	r := &StatefulResource{idStrategy: "ulid"}
+	id := r.generateID()
+	if len(id) != 26 {
+		t.Errorf("expected ULID (26 chars), got %q (%d chars)", id, len(id))
+	}
+}
+
+func TestGenerateID_Sequence(t *testing.T) {
+	r := &StatefulResource{idStrategy: "sequence"}
+	id1 := r.generateID()
+	id2 := r.generateID()
+	id3 := r.generateID()
+	if id1 != "1" || id2 != "2" || id3 != "3" {
+		t.Errorf("expected 1, 2, 3, got %q, %q, %q", id1, id2, id3)
+	}
+}
+
+func TestGenerateID_Short(t *testing.T) {
+	r := &StatefulResource{idStrategy: "short"}
+	id := r.generateID()
+	if len(id) != 16 { // Short() returns 16 hex chars
+		t.Errorf("expected short ID (16 chars), got %q (%d chars)", id, len(id))
+	}
+}
+
+func TestGenerateID_Default(t *testing.T) {
+	r := &StatefulResource{} // empty strategy = uuid
+	id := r.generateID()
+	if len(id) != 36 {
+		t.Errorf("expected UUID (36 chars), got %q (%d chars)", id, len(id))
+	}
+}
+
+// --- Resource integration tests ---
+
+func TestResourceCreate_WithPrefixIDStrategy(t *testing.T) {
+	cfg := &ResourceConfig{
+		Name:       "customers",
+		BasePath:   "/v1/customers",
+		IDStrategy: "prefix",
+		IDPrefix:   "cus_",
+	}
+	r := NewStatefulResource(cfg)
+	item, err := r.Create(map[string]interface{}{"name": "Alice"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(item.ID) < 5 || item.ID[:4] != "cus_" {
+		t.Errorf("expected cus_ prefix, got %q", item.ID)
+	}
+}
+
+func TestResourceCreate_WithSequenceIDStrategy(t *testing.T) {
+	cfg := &ResourceConfig{
+		Name:       "orders",
+		BasePath:   "/v1/orders",
+		IDStrategy: "sequence",
+	}
+	r := NewStatefulResource(cfg)
+	item1, _ := r.Create(map[string]interface{}{"total": 100}, nil)
+	item2, _ := r.Create(map[string]interface{}{"total": 200}, nil)
+	if item1.ID != "1" || item2.ID != "2" {
+		t.Errorf("expected 1, 2, got %q, %q", item1.ID, item2.ID)
+	}
+}
+
+func TestResourceSeed_SequenceCounterContinues(t *testing.T) {
+	cfg := &ResourceConfig{
+		Name:       "items",
+		BasePath:   "/v1/items",
+		IDStrategy: "sequence",
+		SeedData: []map[string]interface{}{
+			{"id": "1", "name": "Seed1"},
+			{"id": "5", "name": "Seed5"},
+		},
+	}
+	r := NewStatefulResource(cfg)
+	if err := r.loadSeed(); err != nil {
+		t.Fatal(err)
+	}
+	// Sequence counter should be 5 (highest seed ID)
+	item, err := r.Create(map[string]interface{}{"name": "New"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.ID != "6" {
+		t.Errorf("expected new item ID=6 (after seed max 5), got %q", item.ID)
+	}
+}
+
+func TestResourceResponseConfig(t *testing.T) {
+	cfg := &ResourceConfig{
+		Name:     "test",
+		BasePath: "/test",
+		Response: &config.ResponseTransform{
+			Fields: &config.FieldTransform{
+				Inject: map[string]interface{}{"object": "test"},
+			},
+		},
+	}
+	r := NewStatefulResource(cfg)
+	if r.ResponseConfig() == nil {
+		t.Error("expected non-nil response config")
+	}
+	if r.ResponseConfig().Fields.Inject["object"] != "test" {
+		t.Error("expected inject object=test")
+	}
+}
+
+func TestResourceConfig_ExportsNewFields(t *testing.T) {
+	transform := &config.ResponseTransform{
+		Timestamps: &config.TimestampTransform{Format: "unix"},
+	}
+	cfg := &ResourceConfig{
+		Name:       "test",
+		BasePath:   "/test",
+		IDStrategy: "prefix",
+		IDPrefix:   "tst_",
+		Response:   transform,
+	}
+	r := NewStatefulResource(cfg)
+	exported := r.Config()
+	if exported.IDStrategy != "prefix" {
+		t.Errorf("expected IDStrategy=prefix, got %q", exported.IDStrategy)
+	}
+	if exported.IDPrefix != "tst_" {
+		t.Errorf("expected IDPrefix=tst_, got %q", exported.IDPrefix)
+	}
+	if exported.Response == nil {
+		t.Error("expected Response to be exported")
+	}
+}
+
+// --- Template variable resolution tests ---
+
+func TestResolveTemplateValue_StringWithTemplate(t *testing.T) {
+	itemData := map[string]interface{}{"id": "abc123", "name": "Alice"}
+	result := resolveTemplateValue("{{item.id}}", itemData)
+	if result != "abc123" {
+		t.Errorf("expected abc123, got %v", result)
+	}
+}
+
+func TestResolveTemplateValue_NoTemplate(t *testing.T) {
+	result := resolveTemplateValue("static value", nil)
+	if result != "static value" {
+		t.Errorf("expected static value, got %v", result)
+	}
+}
+
+func TestResolveTemplateValue_NonString(t *testing.T) {
+	result := resolveTemplateValue(42, nil)
+	if result != 42 {
+		t.Errorf("expected 42, got %v", result)
+	}
+}
+
+func TestResolveTemplateValue_MissingField(t *testing.T) {
+	itemData := map[string]interface{}{"id": "123"}
+	result := resolveTemplateValue("{{item.missing}}", itemData)
+	if result != "{{item.missing}}" {
+		t.Errorf("expected unresolved template, got %v", result)
+	}
+}

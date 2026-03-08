@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/getmockd/mockd/internal/id"
+	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/validation"
 )
 
@@ -18,6 +20,9 @@ type StatefulResource struct {
 	name             string
 	basePath         string
 	idField          string
+	idStrategy       string // uuid (default), prefix, ulid, sequence, short
+	idPrefix         string // for "prefix" strategy (e.g., "cus_")
+	sequenceCounter  int    // for "sequence" strategy
 	parentField      string
 	maxItems         int
 	items            map[string]*ResourceItem
@@ -26,6 +31,7 @@ type StatefulResource struct {
 	pathParams       []string
 	validator        *validation.StatefulValidator
 	validationConfig *validation.StatefulValidation
+	responseCfg      *config.ResponseTransform
 }
 
 // NewStatefulResource creates a new StatefulResource from config.
@@ -44,11 +50,14 @@ func NewStatefulResourceWithLogger(config *ResourceConfig, logger *slog.Logger) 
 		name:             config.Name,
 		basePath:         config.BasePath,
 		idField:          idField,
+		idStrategy:       config.IDStrategy,
+		idPrefix:         config.IDPrefix,
 		parentField:      config.ParentField,
 		maxItems:         config.MaxItems,
 		items:            make(map[string]*ResourceItem),
 		seedData:         config.SeedData,
 		validationConfig: config.Validation,
+		responseCfg:      config.Response,
 	}
 
 	// Build path regex for HTTP matching (skip if no basePath — bridge-only resource)
@@ -133,6 +142,29 @@ func mergeStatefulValidation(base, override *validation.StatefulValidation) *val
 	return result
 }
 
+// generateID creates a new ID based on the resource's ID strategy.
+// Must be called while holding the resource mutex (or from a locked context).
+func (r *StatefulResource) generateID() string {
+	switch r.idStrategy {
+	case "prefix":
+		return r.idPrefix + id.Short()
+	case "ulid":
+		return id.ULID()
+	case "sequence":
+		r.sequenceCounter++
+		return strconv.Itoa(r.sequenceCounter)
+	case "short":
+		return id.Short()
+	default: // "uuid" or empty
+		return id.UUID()
+	}
+}
+
+// ResponseConfig returns the response transform configuration, if any.
+func (r *StatefulResource) ResponseConfig() *config.ResponseTransform {
+	return r.responseCfg
+}
+
 // buildPathMatcher creates a regex for matching incoming request paths.
 func (r *StatefulResource) buildPathMatcher() {
 	// Convert path params like :userId to regex groups
@@ -197,12 +229,17 @@ func (r *StatefulResource) loadSeed() error {
 		// Generate ID if not provided, and persist it back into seedData
 		// so that Reset() reuses the same IDs (deterministic across resets).
 		if item.ID == "" {
-			item.ID = id.UUID()
+			item.ID = r.generateID()
 			idField := r.idField
 			if idField == "" {
 				idField = "id"
 			}
 			r.seedData[i][idField] = item.ID
+		} else if r.idStrategy == "sequence" {
+			// Track highest numeric ID in seed data so sequence continues after it
+			if n, err := strconv.Atoi(item.ID); err == nil && n > r.sequenceCounter {
+				r.sequenceCounter = n
+			}
 		}
 
 		// Check for duplicate ID
@@ -235,7 +272,7 @@ func (r *StatefulResource) Create(data map[string]interface{}, pathParams map[st
 
 	// Generate ID if not provided
 	if item.ID == "" {
-		item.ID = id.UUID()
+		item.ID = r.generateID()
 	}
 
 	// Check for duplicate ID
@@ -383,11 +420,20 @@ func (r *StatefulResource) Reset() {
 
 	r.items = make(map[string]*ResourceItem)
 
+	// Reset sequence counter for deterministic seed IDs
+	if r.idStrategy == "sequence" {
+		r.sequenceCounter = 0
+	}
+
 	for _, data := range r.seedData {
 		item := FromJSON(data, r.idField)
 
 		if item.ID == "" {
-			item.ID = id.UUID()
+			item.ID = r.generateID()
+		} else if r.idStrategy == "sequence" {
+			if n, err := strconv.Atoi(item.ID); err == nil && n > r.sequenceCounter {
+				r.sequenceCounter = n
+			}
 		}
 
 		now := time.Now()
@@ -501,6 +547,12 @@ func (r *StatefulResource) Config() *ResourceConfig {
 	if r.idField != "id" {
 		cfg.IDField = r.idField
 	}
+	if r.idStrategy != "" && r.idStrategy != "uuid" {
+		cfg.IDStrategy = r.idStrategy
+	}
+	if r.idPrefix != "" {
+		cfg.IDPrefix = r.idPrefix
+	}
 	if r.parentField != "" {
 		cfg.ParentField = r.parentField
 	}
@@ -509,6 +561,9 @@ func (r *StatefulResource) Config() *ResourceConfig {
 	}
 	if r.validationConfig != nil {
 		cfg.Validation = r.validationConfig
+	}
+	if r.responseCfg != nil {
+		cfg.Response = r.responseCfg
 	}
 	return cfg
 }

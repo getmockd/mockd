@@ -118,6 +118,12 @@ func NewBridge(store *StateStore) *Bridge {
 	}
 }
 
+// GetResource returns a resource by name from the underlying store.
+// Used by protocol adapters to access resource configuration (e.g., ResponseTransform).
+func (b *Bridge) GetResource(name string) *StatefulResource {
+	return b.store.Get(name)
+}
+
 // SetTracer configures an optional tracer for custom operation spans.
 func (b *Bridge) SetTracer(t *tracing.Tracer) {
 	b.tracer = t

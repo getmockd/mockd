@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 
+	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/soap"
 	"github.com/getmockd/mockd/pkg/stateful"
 )
@@ -64,14 +65,26 @@ func (a *soapStatefulAdapter) ExecuteStateful(ctx context.Context, req *soap.Sta
 		return soapResult
 	}
 
-	// Single item result
-	if result.Item != nil {
-		soapResult.Item = result.Item.ToJSON()
+	// Get response transform config from the resource (if available)
+	var responseCfg *config.ResponseTransform
+	if req.Resource != "" {
+		if resource := a.bridge.GetResource(req.Resource); resource != nil {
+			responseCfg = resource.ResponseConfig()
+		}
 	}
 
-	// List result
+	// Single item result — apply protocol-agnostic transforms
+	if result.Item != nil {
+		soapResult.Item = stateful.TransformItem(result.Item.ToJSON(), responseCfg)
+	}
+
+	// List result — transform each item (SOAP has its own XML list envelope)
 	if result.List != nil {
-		soapResult.Items = append(soapResult.Items, result.List.Data...)
+		transformedItems := make([]map[string]interface{}, len(result.List.Data))
+		for i, item := range result.List.Data {
+			transformedItems[i] = stateful.TransformItem(item, responseCfg)
+		}
+		soapResult.Items = append(soapResult.Items, transformedItems...)
 		soapResult.Meta = &soap.StatefulListMeta{
 			Total:  result.List.Meta.Total,
 			Count:  result.List.Meta.Count,

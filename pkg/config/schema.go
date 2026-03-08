@@ -799,6 +799,12 @@ func mergeStatefulResource(base, overlay StatefulResourceConfig) StatefulResourc
 	if overlay.IDField != "" {
 		base.IDField = overlay.IDField
 	}
+	if overlay.IDStrategy != "" {
+		base.IDStrategy = overlay.IDStrategy
+	}
+	if overlay.IDPrefix != "" {
+		base.IDPrefix = overlay.IDPrefix
+	}
 	if overlay.ParentField != "" {
 		base.ParentField = overlay.ParentField
 	}
@@ -810,6 +816,9 @@ func mergeStatefulResource(base, overlay StatefulResourceConfig) StatefulResourc
 	}
 	if overlay.Validation != nil {
 		base.Validation = overlay.Validation
+	}
+	if overlay.Response != nil {
+		base.Response = overlay.Response
 	}
 	return base
 }

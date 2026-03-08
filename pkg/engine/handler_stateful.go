@@ -68,8 +68,9 @@ func (h *Handler) handleStatefulGet(w http.ResponseWriter, resource *stateful.St
 		return h.writeStatefulError(w, http.StatusNotFound, "resource not found", resource.Name(), itemID)
 	}
 
+	data := stateful.TransformItem(item.ToJSON(), resource.ResponseConfig())
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(item.ToJSON()); err != nil {
+	if err := json.NewEncoder(w).Encode(data); err != nil {
 		h.log.Error("failed to encode stateful get response", "error", err)
 	}
 	return http.StatusOK
@@ -80,8 +81,9 @@ func (h *Handler) handleStatefulList(w http.ResponseWriter, r *http.Request, res
 	filter := h.parseQueryFilter(r, resource, pathParams)
 	result := resource.List(filter)
 
+	response := stateful.TransformList(result.Data, result.Meta, resource.ResponseConfig())
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(result); err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		h.log.Error("failed to encode stateful list response", "error", err)
 	}
 	return http.StatusOK
@@ -120,11 +122,14 @@ func (h *Handler) handleStatefulCreate(w http.ResponseWriter, r *http.Request, r
 		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), "")
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(item.ToJSON()); err != nil {
+	cfg := resource.ResponseConfig()
+	responseData := stateful.TransformItem(item.ToJSON(), cfg)
+	createStatus := stateful.TransformCreateStatus(cfg)
+	w.WriteHeader(createStatus)
+	if err := json.NewEncoder(w).Encode(responseData); err != nil {
 		h.log.Error("failed to encode stateful create response", "error", err)
 	}
-	return http.StatusCreated
+	return createStatus
 }
 
 // handleStatefulUpdate updates an existing item (full replace).
@@ -166,8 +171,9 @@ func (h *Handler) handleStatefulMutate(w http.ResponseWriter, r *http.Request, r
 		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), itemID)
 	}
 
+	mutateData := stateful.TransformItem(item.ToJSON(), resource.ResponseConfig())
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(item.ToJSON()); err != nil {
+	if err := json.NewEncoder(w).Encode(mutateData); err != nil {
 		h.log.Error("failed to encode stateful response", "error", err)
 	}
 	return http.StatusOK
@@ -175,6 +181,13 @@ func (h *Handler) handleStatefulMutate(w http.ResponseWriter, r *http.Request, r
 
 // handleStatefulDelete removes an item.
 func (h *Handler) handleStatefulDelete(w http.ResponseWriter, resource *stateful.StatefulResource, itemID string) int {
+	// Read the item before deleting (needed for {{item.*}} template substitution in delete body)
+	cfg := resource.ResponseConfig()
+	var deletedItem *stateful.ResourceItem
+	if cfg != nil && cfg.Delete != nil && cfg.Delete.Body != nil {
+		deletedItem = resource.Get(itemID)
+	}
+
 	err := resource.Delete(itemID)
 	if err != nil {
 		var notFoundErr *stateful.NotFoundError
@@ -184,8 +197,14 @@ func (h *Handler) handleStatefulDelete(w http.ResponseWriter, resource *stateful
 		return h.writeStatefulError(w, http.StatusInternalServerError, err.Error(), resource.Name(), itemID)
 	}
 
-	w.WriteHeader(http.StatusNoContent)
-	return http.StatusNoContent
+	deleteStatus, deleteBody := stateful.TransformDeleteResponse(deletedItem, cfg)
+	w.WriteHeader(deleteStatus)
+	if deleteBody != nil {
+		if err := json.NewEncoder(w).Encode(deleteBody); err != nil {
+			h.log.Error("failed to encode stateful delete response", "error", err)
+		}
+	}
+	return deleteStatus
 }
 
 // handleCustomOperation executes a registered custom operation via the Bridge.

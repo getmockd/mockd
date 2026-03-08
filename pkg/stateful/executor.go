@@ -63,6 +63,11 @@ const (
 	StepCreate StepType = "create"
 	// StepSet sets a context variable to the result of an expression.
 	StepSet StepType = "set"
+	// StepList queries a resource with filters and stores the result array in a named variable.
+	// Enables aggregation via expr builtins: sum(), filter(), count(), map(), reduce().
+	StepList StepType = "list"
+	// StepValidate evaluates a boolean condition and halts the operation with an error if false.
+	StepValidate StepType = "validate"
 )
 
 // Step is a single step in a custom operation pipeline.
@@ -91,6 +96,22 @@ type Step struct {
 	// Value is an expr expression (for set steps).
 	// Example: "source.balance - input.amount"
 	Value string `json:"value,omitempty" yaml:"value,omitempty"`
+
+	// Filter contains field name → value filters for list steps.
+	// Values can be literal strings or expr expressions (evaluated against context).
+	// Example: {"accountId": "params.id", "status": "'pending'"}
+	Filter map[string]string `json:"filter,omitempty" yaml:"filter,omitempty"`
+
+	// Condition is a boolean expr expression for validate steps.
+	// If it evaluates to false, the operation halts with ErrorMessage.
+	// Example: "source.balance >= input.amount"
+	Condition string `json:"condition,omitempty" yaml:"condition,omitempty"`
+
+	// ErrorMessage is the error message returned when a validate step's Condition is false.
+	ErrorMessage string `json:"errorMessage,omitempty" yaml:"errorMessage,omitempty"`
+
+	// ErrorStatus is the HTTP status code returned when a validate step fails (default: 400).
+	ErrorStatus int `json:"errorStatus,omitempty" yaml:"errorStatus,omitempty"`
 }
 
 // OperationExecutor executes custom multi-step operations against stateful resources.
@@ -260,6 +281,10 @@ func (e *OperationExecutor) executeStep(ctx context.Context, stepIndex int, step
 		err = e.stepCreate(step, exprCtx, tx)
 	case StepSet:
 		err = e.stepSet(step, exprCtx)
+	case StepList:
+		err = e.stepList(step, exprCtx)
+	case StepValidate:
+		err = e.stepValidate(step, exprCtx)
 	default:
 		err = fmt.Errorf("unknown step type: %s", step.Type)
 	}
@@ -445,6 +470,89 @@ func (e *OperationExecutor) stepSet(step Step, exprCtx map[string]interface{}) e
 	}
 
 	exprCtx[step.Var] = val
+	return nil
+}
+
+// stepList queries a resource with filters and stores the result array in a context variable.
+// This enables aggregation via expr builtins: sum(items, .amount), filter(items, .status == "pending"), etc.
+func (e *OperationExecutor) stepList(step Step, exprCtx map[string]interface{}) error {
+	if step.Resource == "" {
+		return errors.New("list step requires resource")
+	}
+	if step.As == "" {
+		return errors.New("list step requires 'as' variable name")
+	}
+
+	resource := e.store.Get(step.Resource)
+	if resource == nil {
+		return &NotFoundError{Resource: step.Resource}
+	}
+
+	// Build query filter from step.Filter
+	filter := DefaultQueryFilter()
+	filter.Limit = 0 // no limit for aggregation — get all matching items
+
+	if len(step.Filter) > 0 {
+		filter.Filters = make(map[string]string)
+		for field, valueExpr := range step.Filter {
+			val, err := e.evalExpr(valueExpr, exprCtx)
+			if err != nil {
+				return fmt.Errorf("filter field %q expression failed: %w", field, err)
+			}
+			filter.Filters[field] = fmt.Sprintf("%v", val)
+		}
+	}
+
+	// Execute list query
+	result := resource.List(filter)
+
+	// Store results as array in context
+	exprCtx[step.As] = result.Data
+	return nil
+}
+
+// stepValidate evaluates a boolean condition and halts the operation if false.
+// This enables business logic validation like "source.balance >= input.amount".
+func (e *OperationExecutor) stepValidate(step Step, exprCtx map[string]interface{}) error {
+	if step.Condition == "" {
+		return errors.New("validate step requires condition expression")
+	}
+
+	val, err := e.evalExpr(step.Condition, exprCtx)
+	if err != nil {
+		return fmt.Errorf("condition expression failed: %w", err)
+	}
+
+	// Check if the result is truthy
+	passed := false
+	switch v := val.(type) {
+	case bool:
+		passed = v
+	case int:
+		passed = v != 0
+	case int64:
+		passed = v != 0
+	case float64:
+		passed = v != 0
+	case string:
+		passed = v != ""
+	case nil:
+		passed = false
+	default:
+		passed = true // non-nil = truthy
+	}
+
+	if !passed {
+		msg := step.ErrorMessage
+		if msg == "" {
+			msg = "validation failed: " + step.Condition
+		}
+		return &ValidationError{
+			Field:   "condition",
+			Message: msg,
+		}
+	}
+
 	return nil
 }
 

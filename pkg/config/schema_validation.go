@@ -340,6 +340,46 @@ func validateStatefulResource(resource *StatefulResourceConfig, path string, nam
 	if resource.Workspace != "" && len(workspaceNames) > 0 && !workspaceNames[resource.Workspace] {
 		result.AddError(path+".workspace", fmt.Sprintf("references unknown workspace %q", resource.Workspace))
 	}
+
+	// Validate idStrategy enum
+	if resource.IDStrategy != "" {
+		validStrategies := map[string]bool{"uuid": true, "prefix": true, "ulid": true, "sequence": true, "short": true}
+		if !validStrategies[resource.IDStrategy] {
+			result.AddError(path+".idStrategy", fmt.Sprintf("invalid value %q (valid: uuid, prefix, ulid, sequence, short)", resource.IDStrategy))
+		}
+	}
+
+	// Validate idPrefix requires prefix strategy
+	if resource.IDPrefix != "" && resource.IDStrategy != "" && resource.IDStrategy != "prefix" {
+		result.AddError(path+".idPrefix", "idPrefix is only used when idStrategy is \"prefix\"")
+	}
+
+	// Validate response transform
+	if resource.Response != nil {
+		validateResponseTransform(resource.Response, path+".response", result)
+	}
+}
+
+// validateResponseTransform checks response transform configuration for obvious errors.
+func validateResponseTransform(rt *ResponseTransform, path string, result *SchemaValidationResult) {
+	if rt.Timestamps != nil && rt.Timestamps.Format != "" {
+		validFormats := map[string]bool{"unix": true, "iso8601": true, "rfc3339": true, "none": true}
+		if !validFormats[rt.Timestamps.Format] {
+			result.AddError(path+".timestamps.format", fmt.Sprintf("invalid value %q (valid: unix, iso8601, rfc3339, none)", rt.Timestamps.Format))
+		}
+	}
+
+	if rt.Create != nil && rt.Create.Status != 0 {
+		if rt.Create.Status < 100 || rt.Create.Status > 599 {
+			result.AddError(path+".create.status", fmt.Sprintf("invalid HTTP status code %d", rt.Create.Status))
+		}
+	}
+
+	if rt.Delete != nil && rt.Delete.Status != 0 {
+		if rt.Delete.Status < 100 || rt.Delete.Status > 599 {
+			result.AddError(path+".delete.status", fmt.Sprintf("invalid HTTP status code %d", rt.Delete.Status))
+		}
+	}
 }
 
 // ValidatePortConflicts checks for port conflicts between services.
