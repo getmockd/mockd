@@ -65,12 +65,10 @@ func (a *soapStatefulAdapter) ExecuteStateful(ctx context.Context, req *soap.Sta
 		return soapResult
 	}
 
-	// Get response transform config from the resource (if available)
+	// Get response transform config (if available)
 	var responseCfg *config.ResponseTransform
 	if req.Resource != "" {
-		if resource := a.bridge.GetResource(req.Resource); resource != nil {
-			responseCfg = resource.ResponseConfig()
-		}
+		responseCfg = a.bridge.GetResponseConfig(req.Resource)
 	}
 
 	// Single item result — apply protocol-agnostic transforms
@@ -80,11 +78,10 @@ func (a *soapStatefulAdapter) ExecuteStateful(ctx context.Context, req *soap.Sta
 
 	// List result — transform each item (SOAP has its own XML list envelope)
 	if result.List != nil {
-		transformedItems := make([]map[string]interface{}, len(result.List.Data))
+		soapResult.Items = make([]map[string]interface{}, len(result.List.Data))
 		for i, item := range result.List.Data {
-			transformedItems[i] = stateful.TransformItem(item, responseCfg)
+			soapResult.Items[i] = stateful.TransformItem(item, responseCfg)
 		}
-		soapResult.Items = append(soapResult.Items, transformedItems...)
 		soapResult.Meta = &soap.StatefulListMeta{
 			Total:  result.List.Meta.Total,
 			Count:  result.List.Meta.Count,

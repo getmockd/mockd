@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/config"
 )
 
 // =============================================================================
@@ -1643,4 +1645,159 @@ func TestStateStore_ResetDoesNotHoldStoreLock(t *testing.T) {
 	}
 
 	<-done
+}
+
+// =============================================================================
+// ID Strategy Tests
+// =============================================================================
+
+func TestGenerateID_UUID(t *testing.T) {
+	r := &StatefulResource{idStrategy: IDStrategyUUID}
+	id := r.generateID()
+	if len(id) != 36 {
+		t.Errorf("expected UUID (36 chars), got %q (%d chars)", id, len(id))
+	}
+}
+
+func TestGenerateID_Prefix(t *testing.T) {
+	r := &StatefulResource{idStrategy: IDStrategyPrefix, idPrefix: "cus_"}
+	id := r.generateID()
+	if len(id) < 5 || id[:4] != "cus_" {
+		t.Errorf("expected cus_ prefix, got %q", id)
+	}
+}
+
+func TestGenerateID_ULID(t *testing.T) {
+	r := &StatefulResource{idStrategy: IDStrategyULID}
+	id := r.generateID()
+	if len(id) != 26 {
+		t.Errorf("expected ULID (26 chars), got %q (%d chars)", id, len(id))
+	}
+}
+
+func TestGenerateID_Sequence(t *testing.T) {
+	r := &StatefulResource{idStrategy: IDStrategySequence}
+	id1 := r.generateID()
+	id2 := r.generateID()
+	id3 := r.generateID()
+	if id1 != "1" || id2 != "2" || id3 != "3" {
+		t.Errorf("expected 1, 2, 3, got %q, %q, %q", id1, id2, id3)
+	}
+}
+
+func TestGenerateID_Short(t *testing.T) {
+	r := &StatefulResource{idStrategy: IDStrategyShort}
+	id := r.generateID()
+	if len(id) != 16 {
+		t.Errorf("expected short ID (16 chars), got %q (%d chars)", id, len(id))
+	}
+}
+
+func TestGenerateID_Default(t *testing.T) {
+	r := &StatefulResource{}
+	id := r.generateID()
+	if len(id) != 36 {
+		t.Errorf("expected UUID (36 chars), got %q (%d chars)", id, len(id))
+	}
+}
+
+// =============================================================================
+// Resource Integration Tests (ID strategy + response config)
+// =============================================================================
+
+func TestResourceCreate_WithPrefixIDStrategy(t *testing.T) {
+	cfg := &ResourceConfig{
+		Name:       "customers",
+		BasePath:   "/v1/customers",
+		IDStrategy: IDStrategyPrefix,
+		IDPrefix:   "cus_",
+	}
+	r := NewStatefulResource(cfg)
+	item, err := r.Create(map[string]interface{}{"name": "Alice"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(item.ID) < 5 || item.ID[:4] != "cus_" {
+		t.Errorf("expected cus_ prefix, got %q", item.ID)
+	}
+}
+
+func TestResourceCreate_WithSequenceIDStrategy(t *testing.T) {
+	cfg := &ResourceConfig{
+		Name:       "orders",
+		BasePath:   "/v1/orders",
+		IDStrategy: IDStrategySequence,
+	}
+	r := NewStatefulResource(cfg)
+	item1, _ := r.Create(map[string]interface{}{"total": 100}, nil)
+	item2, _ := r.Create(map[string]interface{}{"total": 200}, nil)
+	if item1.ID != "1" || item2.ID != "2" {
+		t.Errorf("expected 1, 2, got %q, %q", item1.ID, item2.ID)
+	}
+}
+
+func TestResourceSeed_SequenceCounterContinues(t *testing.T) {
+	cfg := &ResourceConfig{
+		Name:       "items",
+		BasePath:   "/v1/items",
+		IDStrategy: IDStrategySequence,
+		SeedData: []map[string]interface{}{
+			{"id": "1", "name": "Seed1"},
+			{"id": "5", "name": "Seed5"},
+		},
+	}
+	r := NewStatefulResource(cfg)
+	if err := r.loadSeed(); err != nil {
+		t.Fatal(err)
+	}
+	item, err := r.Create(map[string]interface{}{"name": "New"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.ID != "6" {
+		t.Errorf("expected new item ID=6 (after seed max 5), got %q", item.ID)
+	}
+}
+
+func TestResourceResponseConfig(t *testing.T) {
+	cfg := &ResourceConfig{
+		Name:     "test",
+		BasePath: "/test",
+		Response: &config.ResponseTransform{
+			Fields: &config.FieldTransform{
+				Inject: map[string]interface{}{"object": "test"},
+			},
+		},
+	}
+	r := NewStatefulResource(cfg)
+	if r.ResponseConfig() == nil {
+		t.Error("expected non-nil response config")
+	}
+	if r.ResponseConfig().Fields.Inject["object"] != "test" {
+		t.Error("expected inject object=test")
+	}
+}
+
+func TestResourceConfig_ExportsNewFields(t *testing.T) {
+	transform := &config.ResponseTransform{
+		Timestamps: &config.TimestampTransform{Format: TimestampFormatUnix},
+	}
+	cfg := &ResourceConfig{
+		Name:       "test",
+		BasePath:   "/test",
+		IDStrategy: IDStrategyPrefix,
+		IDPrefix:   "tst_",
+		Response:   transform,
+	}
+	r := NewStatefulResource(cfg)
+	exported := r.Config()
+	if exported.IDStrategy != IDStrategyPrefix {
+		t.Errorf("expected IDStrategy=prefix, got %q", exported.IDStrategy)
+	}
+	if exported.IDPrefix != "tst_" {
+		t.Errorf("expected IDPrefix=tst_, got %q", exported.IDPrefix)
+	}
+	if exported.Response == nil {
+		t.Error("expected Response to be exported")
+	}
 }

@@ -6,10 +6,26 @@ package stateful
 import (
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
+)
+
+// Timestamp format constants for ResponseTransform.Timestamps.Format.
+const (
+	TimestampFormatUnix    = "unix"
+	TimestampFormatISO8601 = "iso8601"
+	TimestampFormatRFC3339 = "rfc3339"
+	TimestampFormatNone    = "none"
+)
+
+// Default field names and status codes.
+const (
+	DefaultDataField    = "data"
+	DefaultDeleteStatus = 204
+	DefaultCreateStatus = 201
+	FieldCreatedAt      = "createdAt"
+	FieldUpdatedAt      = "updatedAt"
 )
 
 // templateVarPattern matches {{item.fieldName}} placeholders in delete body templates.
@@ -83,10 +99,9 @@ func TransformList(items []map[string]interface{}, meta PaginationMeta, cfg *con
 		result[key] = val
 	}
 
-	// Data field (default "data")
 	dataField := listCfg.DataField
 	if dataField == "" {
-		dataField = "data"
+		dataField = DefaultDataField
 	}
 	result[dataField] = items
 
@@ -108,12 +123,12 @@ func TransformList(items []map[string]interface{}, meta PaginationMeta, cfg *con
 // {{item.fieldName}} template substitution in the delete body.
 func TransformDeleteResponse(item *ResourceItem, cfg *config.ResponseTransform) (int, interface{}) {
 	if cfg == nil || cfg.Delete == nil {
-		return 204, nil
+		return DefaultDeleteStatus, nil
 	}
 
 	status := cfg.Delete.Status
 	if status == 0 {
-		status = 204
+		status = DefaultDeleteStatus
 	}
 
 	if cfg.Delete.Body == nil {
@@ -138,7 +153,7 @@ func TransformDeleteResponse(item *ResourceItem, cfg *config.ResponseTransform) 
 // If cfg is nil or has no create override, returns 201 — current behavior.
 func TransformCreateStatus(cfg *config.ResponseTransform) int {
 	if cfg == nil || cfg.Create == nil || cfg.Create.Status == 0 {
-		return 201
+		return DefaultCreateStatus
 	}
 	return cfg.Create.Status
 }
@@ -146,7 +161,7 @@ func TransformCreateStatus(cfg *config.ResponseTransform) int {
 // transformTimestamps handles timestamp format conversion and key renaming.
 func transformTimestamps(data map[string]interface{}, cfg *config.TimestampTransform) {
 	// Process both standard timestamp fields
-	for _, tsField := range []string{"createdAt", "updatedAt"} {
+	for _, tsField := range []string{FieldCreatedAt, FieldUpdatedAt} {
 		val, ok := data[tsField]
 		if !ok {
 			continue
@@ -160,21 +175,14 @@ func transformTimestamps(data map[string]interface{}, cfg *config.TimestampTrans
 
 		// Format conversion
 		switch cfg.Format {
-		case "none":
-			// Remove timestamp entirely
+		case TimestampFormatNone:
 			delete(data, tsField)
 			continue
-		case "unix":
-			data[outputKey] = timestampToUnix(val)
-		case "iso8601":
-			data[outputKey] = timestampToISO8601(val)
-		case "rfc3339", "":
-			// Default format — keep as-is but apply rename
-			if outputKey != tsField {
-				data[outputKey] = val
-			}
-		default:
-			// Unknown format — keep as-is but apply rename
+		case TimestampFormatUnix:
+			data[outputKey] = convertTimestamp(val, func(t time.Time) interface{} { return t.Unix() })
+		case TimestampFormatISO8601:
+			data[outputKey] = convertTimestamp(val, func(t time.Time) interface{} { return t.Format(time.RFC3339) })
+		default: // rfc3339, empty, or unknown — keep as-is, apply rename
 			if outputKey != tsField {
 				data[outputKey] = val
 			}
@@ -187,33 +195,18 @@ func transformTimestamps(data map[string]interface{}, cfg *config.TimestampTrans
 	}
 }
 
-// timestampToUnix converts a timestamp value to Unix epoch seconds (int64).
-func timestampToUnix(val interface{}) interface{} {
-	switch v := val.(type) {
-	case string:
-		t, err := time.Parse(time.RFC3339Nano, v)
-		if err != nil {
-			return val // Can't parse, return as-is
-		}
-		return t.Unix()
-	case time.Time:
-		return v.Unix()
-	default:
-		return val
-	}
-}
-
-// timestampToISO8601 converts a timestamp to ISO 8601 format (without nanoseconds).
-func timestampToISO8601(val interface{}) interface{} {
+// convertTimestamp parses a timestamp value and applies a format function.
+// Handles string (RFC3339Nano) and time.Time inputs; returns val unchanged on parse error.
+func convertTimestamp(val interface{}, formatFn func(time.Time) interface{}) interface{} {
 	switch v := val.(type) {
 	case string:
 		t, err := time.Parse(time.RFC3339Nano, v)
 		if err != nil {
 			return val
 		}
-		return t.Format("2006-01-02T15:04:05Z07:00")
+		return formatFn(t)
 	case time.Time:
-		return v.Format("2006-01-02T15:04:05Z07:00")
+		return formatFn(v)
 	default:
 		return val
 	}
@@ -258,10 +251,6 @@ func buildMetaMap(meta PaginationMeta, renames map[string]string) map[string]int
 func resolveTemplateValue(val interface{}, itemData map[string]interface{}) interface{} {
 	str, ok := val.(string)
 	if !ok {
-		return val
-	}
-
-	if !strings.Contains(str, "{{item.") {
 		return val
 	}
 

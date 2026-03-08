@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/tracing"
 )
 
@@ -118,10 +119,15 @@ func NewBridge(store *StateStore) *Bridge {
 	}
 }
 
-// GetResource returns a resource by name from the underlying store.
-// Used by protocol adapters to access resource configuration (e.g., ResponseTransform).
-func (b *Bridge) GetResource(name string) *StatefulResource {
-	return b.store.Get(name)
+// GetResponseConfig returns the response transform config for a named resource.
+// Used by protocol adapters (SOAP, GraphQL) to apply item transforms.
+// Returns nil if the resource doesn't exist or has no transforms configured.
+func (b *Bridge) GetResponseConfig(name string) *config.ResponseTransform {
+	r := b.store.Get(name)
+	if r == nil {
+		return nil
+	}
+	return r.ResponseConfig()
 }
 
 // SetTracer configures an optional tracer for custom operation spans.

@@ -14,6 +14,18 @@ import (
 	"github.com/getmockd/mockd/pkg/validation"
 )
 
+// ID strategy constants for StatefulResourceConfig.IDStrategy.
+const (
+	IDStrategyUUID     = "uuid"
+	IDStrategyPrefix   = "prefix"
+	IDStrategyULID     = "ulid"
+	IDStrategySequence = "sequence"
+	IDStrategyShort    = "short"
+)
+
+// DefaultIDField is the default field name used for item IDs.
+const DefaultIDField = "id"
+
 // StatefulResource represents a named collection that maintains state.
 type StatefulResource struct {
 	mu               sync.RWMutex
@@ -43,7 +55,7 @@ func NewStatefulResource(config *ResourceConfig) *StatefulResource {
 func NewStatefulResourceWithLogger(config *ResourceConfig, logger *slog.Logger) *StatefulResource {
 	idField := config.IDField
 	if idField == "" {
-		idField = "id"
+		idField = DefaultIDField
 	}
 
 	r := &StatefulResource{
@@ -146,16 +158,16 @@ func mergeStatefulValidation(base, override *validation.StatefulValidation) *val
 // Must be called while holding the resource mutex (or from a locked context).
 func (r *StatefulResource) generateID() string {
 	switch r.idStrategy {
-	case "prefix":
+	case IDStrategyPrefix:
 		return r.idPrefix + id.Short()
-	case "ulid":
+	case IDStrategyULID:
 		return id.ULID()
-	case "sequence":
+	case IDStrategySequence:
 		r.sequenceCounter++
 		return strconv.Itoa(r.sequenceCounter)
-	case "short":
+	case IDStrategyShort:
 		return id.Short()
-	default: // "uuid" or empty
+	default:
 		return id.UUID()
 	}
 }
@@ -216,7 +228,9 @@ func (r *StatefulResource) MatchPath(path string) (string, map[string]string, bo
 	return itemID, params, true
 }
 
-// loadSeed populates the resource with seed data.
+// loadSeed populates the resource with seed data on first initialization.
+// Unlike Reset, this also persists generated IDs back into seedData for deterministic resets,
+// and returns an error on duplicate IDs.
 func (r *StatefulResource) loadSeed() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -226,33 +240,19 @@ func (r *StatefulResource) loadSeed() error {
 	for i, data := range r.seedData {
 		item := FromJSON(data, r.idField)
 
-		// Generate ID if not provided, and persist it back into seedData
-		// so that Reset() reuses the same IDs (deterministic across resets).
 		if item.ID == "" {
 			item.ID = r.generateID()
-			idField := r.idField
-			if idField == "" {
-				idField = "id"
-			}
-			r.seedData[i][idField] = item.ID
-		} else if r.idStrategy == "sequence" {
-			// Track highest numeric ID in seed data so sequence continues after it
-			if n, err := strconv.Atoi(item.ID); err == nil && n > r.sequenceCounter {
-				r.sequenceCounter = n
-			}
+			// Persist generated ID so Reset() reuses it (deterministic across resets)
+			r.seedData[i][r.idField] = item.ID
+		} else {
+			r.trackSequenceID(item.ID)
 		}
 
-		// Check for duplicate ID
 		if _, exists := r.items[item.ID]; exists {
 			return fmt.Errorf("duplicate ID %q in seed data at index %d", item.ID, i)
 		}
 
-		// Set timestamps
-		now := time.Now()
-		item.CreatedAt = now
-		item.UpdatedAt = now
-
-		r.items[item.ID] = item
+		r.stampAndStore(item)
 	}
 
 	return nil
@@ -419,29 +419,37 @@ func (r *StatefulResource) Reset() {
 	defer r.mu.Unlock()
 
 	r.items = make(map[string]*ResourceItem)
-
-	// Reset sequence counter for deterministic seed IDs
-	if r.idStrategy == "sequence" {
+	if r.idStrategy == IDStrategySequence {
 		r.sequenceCounter = 0
 	}
 
 	for _, data := range r.seedData {
 		item := FromJSON(data, r.idField)
-
 		if item.ID == "" {
 			item.ID = r.generateID()
-		} else if r.idStrategy == "sequence" {
-			if n, err := strconv.Atoi(item.ID); err == nil && n > r.sequenceCounter {
-				r.sequenceCounter = n
-			}
+		} else {
+			r.trackSequenceID(item.ID)
 		}
-
-		now := time.Now()
-		item.CreatedAt = now
-		item.UpdatedAt = now
-
-		r.items[item.ID] = item
+		r.stampAndStore(item)
 	}
+}
+
+// trackSequenceID updates the sequence counter if this ID is a higher numeric value.
+// No-op for non-sequence strategies.
+func (r *StatefulResource) trackSequenceID(itemID string) {
+	if r.idStrategy == IDStrategySequence {
+		if n, err := strconv.Atoi(itemID); err == nil && n > r.sequenceCounter {
+			r.sequenceCounter = n
+		}
+	}
+}
+
+// stampAndStore sets timestamps and stores the item. Must be called under lock.
+func (r *StatefulResource) stampAndStore(item *ResourceItem) {
+	now := time.Now()
+	item.CreatedAt = now
+	item.UpdatedAt = now
+	r.items[item.ID] = item
 }
 
 // Clear removes all items but keeps the resource registered (does not restore seed data).
@@ -543,11 +551,10 @@ func (r *StatefulResource) Config() *ResourceConfig {
 		BasePath: r.basePath,
 		MaxItems: r.maxItems,
 	}
-	// Only include non-default idField
-	if r.idField != "id" {
+	if r.idField != DefaultIDField {
 		cfg.IDField = r.idField
 	}
-	if r.idStrategy != "" && r.idStrategy != "uuid" {
+	if r.idStrategy != "" && r.idStrategy != IDStrategyUUID {
 		cfg.IDStrategy = r.idStrategy
 	}
 	if r.idPrefix != "" {

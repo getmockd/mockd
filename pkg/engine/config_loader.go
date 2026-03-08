@@ -431,13 +431,17 @@ func convertCustomOperation(cfg *config.CustomOperationConfig) (*stateful.Custom
 	steps := make([]stateful.Step, 0, len(cfg.Steps))
 	for _, s := range cfg.Steps {
 		steps = append(steps, stateful.Step{
-			Type:     stateful.StepType(s.Type),
-			Resource: s.Resource,
-			ID:       s.ID,
-			As:       s.As,
-			Set:      s.Set,
-			Var:      s.Var,
-			Value:    s.Value,
+			Type:         stateful.StepType(s.Type),
+			Resource:     s.Resource,
+			ID:           s.ID,
+			As:           s.As,
+			Set:          s.Set,
+			Var:          s.Var,
+			Value:        s.Value,
+			Filter:       s.Filter,
+			Condition:    s.Condition,
+			ErrorMessage: s.ErrorMessage,
+			ErrorStatus:  s.ErrorStatus,
 		})
 	}
 	op := &stateful.CustomOperation{

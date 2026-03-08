@@ -66,6 +66,7 @@ func (e *ConflictError) Hint() string {
 type ValidationError struct {
 	Message string
 	Field   string
+	Status  int // Optional override; 0 means use default (400 Bad Request)
 }
 
 func (e *ValidationError) Error() string {
@@ -77,6 +78,9 @@ func (e *ValidationError) Error() string {
 
 // StatusCode returns the HTTP status code for this error.
 func (e *ValidationError) StatusCode() int {
+	if e.Status > 0 {
+		return e.Status
+	}
 	return http.StatusBadRequest
 }
 

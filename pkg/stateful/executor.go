@@ -550,6 +550,7 @@ func (e *OperationExecutor) stepValidate(step Step, exprCtx map[string]interface
 		return &ValidationError{
 			Field:   "condition",
 			Message: msg,
+			Status:  step.ErrorStatus,
 		}
 	}
 
