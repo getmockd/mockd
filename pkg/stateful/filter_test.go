@@ -395,6 +395,108 @@ func TestCursorPaginate_EmptyItems(t *testing.T) {
 	}
 }
 
+// ── resolveNestedField ───────────────────────────────────────────────────────
+
+func TestResolveNestedField(t *testing.T) {
+	data := map[string]interface{}{
+		"status": "active",
+		"metadata": map[string]interface{}{
+			"tier": "gold",
+			"nested": map[string]interface{}{
+				"deep": "value",
+			},
+		},
+		"flat_number": 42,
+		"tags":        []interface{}{"alpha", "beta", "gamma"},
+	}
+
+	tests := []struct {
+		name   string
+		key    string
+		want   interface{}
+		wantOK bool
+	}{
+		{"plain key", "status", "active", true},
+		{"single bracket", "metadata[tier]", "gold", true},
+		{"double bracket", "metadata[nested][deep]", "value", true},
+		{"missing base key", "nonexistent[foo]", nil, false},
+		{"missing nested key", "metadata[missing]", nil, false},
+		{"non-map intermediate", "flat_number[sub]", nil, false},
+		{"plain key fast path", "flat_number", 42, true},
+		{"missing plain key", "nope", nil, false},
+		{"slice index 0", "tags[0]", "alpha", true},
+		{"slice index 1", "tags[1]", "beta", true},
+		{"slice out of bounds", "tags[5]", nil, false},
+		{"slice negative index", "tags[-1]", nil, false},
+		{"slice non-numeric index", "tags[foo]", nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := resolveNestedField(data, tt.key)
+			if ok != tt.wantOK {
+				t.Errorf("resolveNestedField(%q) ok = %v, want %v", tt.key, ok, tt.wantOK)
+			}
+			if got != tt.want {
+				t.Errorf("resolveNestedField(%q) = %v, want %v", tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+// ── ApplyFilters with nested fields ─────────────────────────────────────────
+
+func TestApplyFilters_NestedFields(t *testing.T) {
+	items := []*ResourceItem{
+		{ID: "1", Data: map[string]interface{}{
+			"name":     "Alice",
+			"metadata": map[string]interface{}{"tier": "gold", "region": "us"},
+		}},
+		{ID: "2", Data: map[string]interface{}{
+			"name":     "Bob",
+			"metadata": map[string]interface{}{"tier": "silver", "region": "eu"},
+		}},
+		{ID: "3", Data: map[string]interface{}{
+			"name":     "Charlie",
+			"metadata": map[string]interface{}{"tier": "gold", "region": "eu"},
+		}},
+	}
+
+	t.Run("filter by nested field", func(t *testing.T) {
+		filter := DefaultQueryFilter()
+		filter.Filters["metadata[tier]"] = "gold"
+		result := ApplyFilters(items, filter)
+		if len(result) != 2 {
+			t.Fatalf("expected 2 gold-tier items, got %d", len(result))
+		}
+		if result[0].ID != "1" || result[1].ID != "3" {
+			t.Errorf("expected IDs 1 and 3, got %s and %s", result[0].ID, result[1].ID)
+		}
+	})
+
+	t.Run("filter by non-existent nested path", func(t *testing.T) {
+		filter := DefaultQueryFilter()
+		filter.Filters["metadata[nonexistent]"] = "anything"
+		result := ApplyFilters(items, filter)
+		if len(result) != 0 {
+			t.Errorf("expected 0 items for non-existent path, got %d", len(result))
+		}
+	})
+
+	t.Run("combined nested and flat filter", func(t *testing.T) {
+		filter := DefaultQueryFilter()
+		filter.Filters["metadata[tier]"] = "gold"
+		filter.Filters["metadata[region]"] = "eu"
+		result := ApplyFilters(items, filter)
+		if len(result) != 1 {
+			t.Fatalf("expected 1 item (gold+eu), got %d", len(result))
+		}
+		if result[0].ID != "3" {
+			t.Errorf("expected ID 3, got %s", result[0].ID)
+		}
+	})
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 func makeTestItems(n int) []*ResourceItem {

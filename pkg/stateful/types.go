@@ -65,6 +65,14 @@ type PaginatedResponse struct {
 	Meta PaginationMeta `json:"meta"`
 }
 
+// RelationshipInfo defines a foreign key relationship for expand support.
+// This is the stateful-package-local equivalent of config.Relationship,
+// avoiding import cycles between stateful and config packages.
+type RelationshipInfo struct {
+	Table string // target table name
+	Field string // field in target table to match (default: target's idField)
+}
+
 // ResourceConfig is an alias for config.StatefulResourceConfig.
 // This is the single canonical type for stateful resource configuration.
 type ResourceConfig = config.StatefulResourceConfig

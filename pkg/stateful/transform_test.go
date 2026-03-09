@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTransformItem_NilConfig(t *testing.T) {
@@ -748,4 +749,177 @@ func TestTransformList_NonHasMoreExtraFields(t *testing.T) {
 	if envelope["url"] != "/v1/items" {
 		t.Errorf("expected url='/v1/items', got %v", envelope["url"])
 	}
+}
+
+// ── WrapArrayFieldsAsList tests ──────────────────────────────────────────────
+
+func TestWrapArrayFieldsAsList(t *testing.T) {
+	tests := []struct {
+		name   string
+		data   map[string]interface{}
+		wraps  map[string]*config.ListWrapConfig
+		expect map[string]interface{}
+	}{
+		{
+			name: "wraps simple array",
+			data: map[string]interface{}{
+				"id":    "sub_123",
+				"items": []interface{}{map[string]interface{}{"id": "si_1"}},
+			},
+			wraps: map[string]*config.ListWrapConfig{
+				"items": nil,
+			},
+			expect: map[string]interface{}{
+				"id": "sub_123",
+				"items": map[string]interface{}{
+					"object":   "list",
+					"data":     []interface{}{map[string]interface{}{"id": "si_1"}},
+					"has_more": false,
+				},
+			},
+		},
+		{
+			name: "wraps with URL template",
+			data: map[string]interface{}{
+				"id":    "sub_123",
+				"items": []interface{}{map[string]interface{}{"id": "si_1"}},
+			},
+			wraps: map[string]*config.ListWrapConfig{
+				"items": {URL: "/v1/subscriptions/{{id}}/items"},
+			},
+			expect: map[string]interface{}{
+				"id": "sub_123",
+				"items": map[string]interface{}{
+					"object":   "list",
+					"data":     []interface{}{map[string]interface{}{"id": "si_1"}},
+					"has_more": false,
+					"url":      "/v1/subscriptions/sub_123/items",
+				},
+			},
+		},
+		{
+			name: "wraps empty array",
+			data: map[string]interface{}{
+				"id":    "sub_456",
+				"items": []interface{}{},
+			},
+			wraps: map[string]*config.ListWrapConfig{
+				"items": nil,
+			},
+			expect: map[string]interface{}{
+				"id": "sub_456",
+				"items": map[string]interface{}{
+					"object":   "list",
+					"data":     []interface{}{},
+					"has_more": false,
+				},
+			},
+		},
+		{
+			name: "skips missing field",
+			data: map[string]interface{}{
+				"id": "sub_789",
+			},
+			wraps: map[string]*config.ListWrapConfig{
+				"items": nil,
+			},
+			expect: map[string]interface{}{
+				"id": "sub_789",
+			},
+		},
+		{
+			name: "skips non-array field",
+			data: map[string]interface{}{
+				"id":   "sub_abc",
+				"name": "test",
+			},
+			wraps: map[string]*config.ListWrapConfig{
+				"name": nil,
+			},
+			expect: map[string]interface{}{
+				"id":   "sub_abc",
+				"name": "test",
+			},
+		},
+		{
+			name: "wraps typed map slice",
+			data: map[string]interface{}{
+				"id": "sub_def",
+				"items": []map[string]interface{}{
+					{"id": "si_1", "price": "price_abc"},
+					{"id": "si_2", "price": "price_xyz"},
+				},
+			},
+			wraps: map[string]*config.ListWrapConfig{
+				"items": {URL: "/v1/subscriptions/{{id}}/items"},
+			},
+			expect: map[string]interface{}{
+				"id": "sub_def",
+				"items": map[string]interface{}{
+					"object": "list",
+					"data": []interface{}{
+						map[string]interface{}{"id": "si_1", "price": "price_abc"},
+						map[string]interface{}{"id": "si_2", "price": "price_xyz"},
+					},
+					"has_more": false,
+					"url":      "/v1/subscriptions/sub_def/items",
+				},
+			},
+		},
+		{
+			name: "multiple fields wrapped",
+			data: map[string]interface{}{
+				"id":        "obj_123",
+				"items":     []interface{}{map[string]interface{}{"id": "i_1"}},
+				"discounts": []interface{}{map[string]interface{}{"id": "d_1"}},
+			},
+			wraps: map[string]*config.ListWrapConfig{
+				"items":     nil,
+				"discounts": nil,
+			},
+			expect: map[string]interface{}{
+				"id": "obj_123",
+				"items": map[string]interface{}{
+					"object": "list", "data": []interface{}{map[string]interface{}{"id": "i_1"}}, "has_more": false,
+				},
+				"discounts": map[string]interface{}{
+					"object": "list", "data": []interface{}{map[string]interface{}{"id": "d_1"}}, "has_more": false,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wrapArrayFieldsAsList(tt.data, tt.wraps)
+			assert.Equal(t, tt.expect, tt.data)
+		})
+	}
+}
+
+func TestTransformItem_WrapAsList(t *testing.T) {
+	data := map[string]interface{}{
+		"id":    "sub_123",
+		"items": []interface{}{map[string]interface{}{"id": "si_1"}},
+	}
+	cfg := &config.ResponseTransform{
+		Fields: &config.FieldTransform{
+			Inject: map[string]interface{}{"object": "subscription"},
+			WrapAsList: map[string]*config.ListWrapConfig{
+				"items": {URL: "/v1/subscriptions/{{id}}/items"},
+			},
+		},
+	}
+
+	result := TransformItem(data, cfg)
+
+	assert.Equal(t, "subscription", result["object"])
+	items, ok := result["items"].(map[string]interface{})
+	assert.True(t, ok, "items should be a map after wrapping")
+	assert.Equal(t, "list", items["object"])
+	assert.Equal(t, false, items["has_more"])
+	assert.Equal(t, "/v1/subscriptions/sub_123/items", items["url"])
+	dataArr, ok := items["data"].([]interface{})
+	assert.True(t, ok, "items.data should be an array")
+	assert.Len(t, dataArr, 1)
 }

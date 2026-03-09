@@ -96,6 +96,21 @@ func (h *Handler) handleBindingGet(w http.ResponseWriter, r *http.Request, table
 	}
 
 	data := stateful.TransformItem(result.Item.ToJSON(), responseCfg)
+
+	// Apply ?expand[] if requested
+	expandFields := parseExpandFields(r)
+	if len(expandFields) > 0 {
+		resource := h.statefulBridge.Store().Get(table)
+		if resource != nil {
+			if rels := resource.Relationships(); len(rels) > 0 {
+				resolver := func(tableName string) *stateful.StatefulResource {
+					return h.statefulBridge.Store().Get(tableName)
+				}
+				data = stateful.ExpandRelationships(data, expandFields, rels, resolver)
+			}
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(data)
 	return http.StatusOK
@@ -117,6 +132,19 @@ func (h *Handler) handleBindingList(w http.ResponseWriter, r *http.Request, tabl
 	})
 	if result.Error != nil {
 		return h.writeBindingError(w, result, table, "", responseCfg)
+	}
+
+	// Apply ?expand[] to each item in the list if requested
+	expandFields := parseExpandFields(r)
+	if len(expandFields) > 0 {
+		if rels := resource.Relationships(); len(rels) > 0 {
+			resolver := func(tableName string) *stateful.StatefulResource {
+				return h.statefulBridge.Store().Get(tableName)
+			}
+			for i, item := range result.List.Data {
+				result.List.Data[i] = stateful.ExpandRelationships(item, expandFields, rels, resolver)
+			}
+		}
 	}
 
 	response := stateful.TransformList(result.List.Data, result.List.Meta, responseCfg)
@@ -182,12 +210,23 @@ func (h *Handler) handleBindingMutate(w http.ResponseWriter, r *http.Request, ta
 }
 
 // handleBindingDelete removes an item via Bridge.
+// If the delete override has Preserve set, the item is read but not removed (soft-delete).
 func (h *Handler) handleBindingDelete(w http.ResponseWriter, r *http.Request, table, itemID string, responseCfg *config.ResponseTransform) int {
-	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
-		Resource:   table,
-		Action:     stateful.ActionDelete,
-		ResourceID: itemID,
-	})
+	// If preserve mode, read the item instead of deleting it
+	var result *stateful.OperationResult
+	if responseCfg != nil && responseCfg.Delete != nil && responseCfg.Delete.Preserve {
+		result = h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
+			Resource:   table,
+			Action:     stateful.ActionGet,
+			ResourceID: itemID,
+		})
+	} else {
+		result = h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
+			Resource:   table,
+			Action:     stateful.ActionDelete,
+			ResourceID: itemID,
+		})
+	}
 	if result.Error != nil {
 		return h.writeBindingError(w, result, table, itemID, responseCfg)
 	}
@@ -522,6 +561,14 @@ func numericMapToSlice(m map[string]any) []any {
 // natural Go type. Form data arrives as strings, but downstream consumers
 // (e.g. the Stripe Go SDK) expect numeric and boolean JSON types.
 func coerceFormValue(s string) any {
+	// Null sentinels — form encoding has no null literal, so certain
+	// string values conventionally represent null/nil. The most common
+	// is "inf" (e.g., Stripe SDKs send tiers[N][up_to]=inf meaning
+	// "unlimited", and the real API returns null in JSON responses).
+	if s == "inf" {
+		return nil
+	}
+
 	// Boolean
 	if s == "true" {
 		return true
@@ -593,6 +640,23 @@ func setNested(result map[string]any, base, path, val string) {
 	}
 }
 
+// reservedQueryParams are query parameters that should NOT be treated as field filters.
+// These are common pagination, sorting, expansion, and control params used across APIs.
+var reservedQueryParams = map[string]bool{
+	// Pagination
+	"limit": true, "offset": true, "page": true, "per_page": true,
+	"starting_after": true, "ending_before": true,
+	"cursor": true, "page_size": true, "page_token": true,
+	// Sorting
+	"sort": true, "order": true, "sort_by": true, "order_by": true,
+	// Expansion / field selection
+	"expand": true, "expand[]": true, "fields": true, "include": true,
+	"exclude": true, "select": true,
+	// Other common non-filter params
+	"format": true, "pretty": true, "api_version": true,
+	"idempotency_key": true, "request_id": true,
+}
+
 // parseQueryFilter extracts filter parameters from query string.
 func (h *Handler) parseQueryFilter(r *http.Request, resource *stateful.StatefulResource, pathParams map[string]string) *stateful.QueryFilter {
 	filter := stateful.DefaultQueryFilter()
@@ -635,14 +699,22 @@ func (h *Handler) parseQueryFilter(r *http.Request, resource *stateful.StatefulR
 		}
 	}
 
-	reserved := map[string]bool{"limit": true, "offset": true, "sort": true, "order": true, "starting_after": true, "ending_before": true}
 	for key, values := range query {
-		if !reserved[key] && len(values) > 0 {
+		if !reservedQueryParams[key] && len(values) > 0 {
 			filter.Filters[key] = values[0]
 		}
 	}
 
 	return filter
+}
+
+// parseExpandFields extracts ?expand[] and ?expand query params from the request.
+func parseExpandFields(r *http.Request) []string {
+	expandFields := stateful.ParseExpandParam(r.URL.Query()["expand[]"])
+	if len(expandFields) == 0 {
+		expandFields = stateful.ParseExpandParam(r.URL.Query()["expand"])
+	}
+	return expandFields
 }
 
 // parseIntParam parses an integer parameter safely using strconv.

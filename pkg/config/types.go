@@ -229,6 +229,16 @@ type ImportEntry struct {
 	Format string `json:"format,omitempty" yaml:"format,omitempty"`
 }
 
+// Relationship defines a foreign key relationship from a table field to another table.
+// Used for ?expand[] support: when a client requests expansion of a field, mockd
+// looks up the related item and inlines the full object.
+type Relationship struct {
+	// Table is the name of the target table to look up (e.g., "customers").
+	Table string `json:"table" yaml:"table"`
+	// Field is the field in the target table to match against. Defaults to the target table's idField.
+	Field string `json:"field,omitempty" yaml:"field,omitempty"`
+}
+
 // TableConfig defines a stateful data table (pure data, no routing).
 // Tables store items and handle CRUD operations but have no knowledge of
 // protocols, routes, or response formats. Use extend: bindings to attach
@@ -252,6 +262,14 @@ type TableConfig struct {
 	// Extend bindings can override this per-mock. If a binding has no
 	// response override, this default is used.
 	Response *ResponseTransform `json:"response,omitempty" yaml:"response,omitempty"`
+	// ParentField is the field name used as a foreign key to a parent resource.
+	// For sub-resource tables (e.g., invoice line items under invoices), this field
+	// is used to filter items by parent ID from the URL path parameter.
+	ParentField string `json:"parentField,omitempty" yaml:"parentField,omitempty"`
+	// Relationships maps field names to related tables for ?expand[] support.
+	// When a client requests expansion (e.g., ?expand[]=customer), mockd looks up the
+	// field value as an ID in the related table and inlines the full object.
+	Relationships map[string]*Relationship `json:"relationships,omitempty" yaml:"relationships,omitempty"`
 }
 
 // ExtendBinding binds a mock to a stateful table with a specific action.
@@ -350,6 +368,8 @@ type StatefulResourceConfig struct {
 	// This is the API gateway layer — same transforms apply across HTTP, SOAP, and GraphQL.
 	// Nil means no transforms (current behavior, fully backward compatible).
 	Response *ResponseTransform `json:"response,omitempty" yaml:"response,omitempty"`
+	// Relationships maps field names to related tables for ?expand[] support.
+	Relationships map[string]*Relationship `json:"relationships,omitempty" yaml:"relationships,omitempty"`
 }
 
 // ResponseTransform defines how stateful resource responses are shaped.
@@ -383,6 +403,14 @@ type TimestampTransform struct {
 	Fields map[string]string `json:"fields,omitempty" yaml:"fields,omitempty"`
 }
 
+// ListWrapConfig defines how a nested array field should be wrapped in a
+// list object envelope: {object: "list", data: [...], has_more: false}.
+type ListWrapConfig struct {
+	// URL template for this sub-resource (e.g., "/v1/subscriptions/{{id}}/items").
+	// Supports {{fieldName}} template substitution from the parent item.
+	URL string `json:"url,omitempty" yaml:"url,omitempty"`
+}
+
 // FieldTransform controls field-level modifications applied to every item response.
 type FieldTransform struct {
 	// Inject adds fields to every item response. Values are literals.
@@ -395,6 +423,10 @@ type FieldTransform struct {
 	// Key is original field name, value is output field name.
 	// Example: {"firstName": "first_name"}
 	Rename map[string]string `json:"rename,omitempty" yaml:"rename,omitempty"`
+	// WrapAsList wraps specified array fields in list object envelopes.
+	// Key is the field name containing an array; value configures the envelope.
+	// The array is moved to "data", and "object":"list", "has_more":false are added.
+	WrapAsList map[string]*ListWrapConfig `json:"wrapAsList,omitempty" yaml:"wrapAsList,omitempty"`
 }
 
 // ListTransform controls the HTTP JSON list response envelope.
@@ -420,6 +452,10 @@ type VerbOverride struct {
 	// Body overrides the response body. Supports {{item.fieldName}} template substitution
 	// from the affected item's fields.
 	Body map[string]interface{} `json:"body,omitempty" yaml:"body,omitempty"`
+	// Preserve prevents the item from being removed on delete.
+	// When true, DELETE returns the configured response but the item remains in the store.
+	// Useful for APIs with soft-delete semantics or test environments.
+	Preserve bool `json:"preserve,omitempty" yaml:"preserve,omitempty"`
 }
 
 // ErrorTransform customizes the shape of error responses for a stateful resource.

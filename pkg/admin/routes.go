@@ -93,6 +93,10 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /sessions/{id}", a.proxyManager.handleGetSession)
 	mux.HandleFunc("DELETE /sessions/{id}", a.proxyManager.handleDeleteSession)
 
+	// Table reset (top-level convenience endpoints)
+	mux.HandleFunc("POST /reset", a.requireEngine(a.handleResetTables))
+	mux.HandleFunc("POST /reset/{table}", a.requireEngine(a.handleResetTable))
+
 	// State management (stateful resources)
 	mux.HandleFunc("GET /state", a.requireEngine(a.handleStateOverview))
 	mux.HandleFunc("POST /state/reset", a.requireEngine(a.handleStateReset))

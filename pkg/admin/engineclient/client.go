@@ -604,23 +604,36 @@ func (c *Client) GetStateOverview(ctx context.Context) (*StateOverview, error) {
 // ResetState resets stateful resources to initial state.
 // If resourceName is empty, all resources are reset.
 func (c *Client) ResetState(ctx context.Context, resourceName string) error {
+	_, err := c.ResetStateWithResponse(ctx, resourceName)
+	return err
+}
+
+// ResetStateWithResponse resets stateful resources and returns the response
+// containing which resources were reset. If resourceName is empty, all
+// resources are reset.
+func (c *Client) ResetStateWithResponse(ctx context.Context, resourceName string) (*ResetStateResponse, error) {
 	body := map[string]string{}
 	if resourceName != "" {
 		body["resource"] = resourceName
 	}
 	resp, err := c.post(ctx, "/state/reset", body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return ErrNotFound
+		return nil, ErrNotFound
 	}
 	if resp.StatusCode != http.StatusOK {
-		return c.parseError(resp)
+		return nil, c.parseError(resp)
 	}
-	return nil
+
+	var result ResetStateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode reset response: %w", err)
+	}
+	return &result, nil
 }
 
 // GetStateResource returns a specific stateful resource.

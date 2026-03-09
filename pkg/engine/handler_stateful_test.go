@@ -2,12 +2,14 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/stateful"
 )
 
@@ -643,7 +645,10 @@ func TestCoerceFormValue(t *testing.T) {
 		{name: "negative float", input: "-1.5", want: float64(-1.5)},
 		{name: "plain string", input: "hello", want: "hello"},
 		{name: "empty string", input: "", want: ""},
-		{name: "inf stays string", input: "inf", want: "inf"},
+		{name: "inf becomes nil", input: "inf", want: nil},
+		{name: "infinity stays string", input: "infinity", want: "infinity"},
+		{name: "info stays string", input: "info", want: "info"},
+		{name: "Inf stays string (case sensitive)", input: "Inf", want: "Inf"},
 		{name: "mixed alphanumeric stays string", input: "123abc", want: "123abc"},
 		{name: "large int", input: "1000000000000", want: int64(1000000000000)},
 	}
@@ -851,5 +856,124 @@ func TestParseStatefulBody_FormEncodedArrays(t *testing.T) {
 		if items[i] != want {
 			t.Errorf("items[%d] = %v, want %v", i, items[i], want)
 		}
+	}
+}
+
+// ── handleBindingDelete preserve tests ───────────────────────────────────────
+
+func TestHandleBindingDelete_PreserveKeepsItem(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	// Create an item first
+	createResult := br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "customers",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "cus_123", "name": "Alice"},
+	})
+	if createResult.Error != nil {
+		t.Fatalf("failed to create item: %v", createResult.Error)
+	}
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	responseCfg := &config.ResponseTransform{
+		Delete: &config.VerbOverride{
+			Status:   200,
+			Preserve: true,
+			Body: map[string]interface{}{
+				"id":      "{{item.id}}",
+				"deleted": true,
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/customers/cus_123", nil)
+
+	status := h.handleBindingDelete(w, req, "customers", "cus_123", responseCfg)
+
+	// Should return configured status
+	if status != 200 {
+		t.Errorf("expected status 200, got %d", status)
+	}
+
+	// Should return configured body
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["id"] != "cus_123" {
+		t.Errorf("expected id=cus_123, got %v", body["id"])
+	}
+	if body["deleted"] != true {
+		t.Errorf("expected deleted=true, got %v", body["deleted"])
+	}
+
+	// Item should STILL exist in the store
+	getResult := br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource:   "customers",
+		Action:     stateful.ActionGet,
+		ResourceID: "cus_123",
+	})
+	if getResult.Error != nil {
+		t.Fatalf("item should still exist after preserve-delete, got error: %v", getResult.Error)
+	}
+	if getResult.Item == nil {
+		t.Fatal("item should still exist after preserve-delete, got nil item")
+	}
+}
+
+func TestHandleBindingDelete_DefaultRemovesItem(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	// Create an item first
+	createResult := br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "customers",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "cus_456", "name": "Bob"},
+	})
+	if createResult.Error != nil {
+		t.Fatalf("failed to create item: %v", createResult.Error)
+	}
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/customers/cus_456", nil)
+
+	// No preserve — default behavior
+	status := h.handleBindingDelete(w, req, "customers", "cus_456", nil)
+
+	// Should return default 204
+	if status != 204 {
+		t.Errorf("expected status 204, got %d", status)
+	}
+
+	// Item should be GONE from the store
+	getResult := br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource:   "customers",
+		Action:     stateful.ActionGet,
+		ResourceID: "cus_456",
+	})
+	if getResult.Error == nil {
+		t.Fatal("item should be deleted, but GET succeeded")
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -1092,9 +1093,23 @@ func daemonize(_ []string, pidFilePath string, httpPort, adminPort int) error {
 	cmd := exec.Command(os.Args[0], os.Args[1:]...) //nolint:gosec // G702 — self-exec daemonization; re-running current binary with same args
 	cmd.Env = append(os.Environ(), "MOCKD_CHILD=1")
 
-	// Detach from terminal
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	// Determine the daemon log file path — use ~/.mockd/daemon.log so that
+	// child stderr (port conflicts, config errors, panics) is never lost.
+	logFilePath := daemonLogPath()
+	logDir := filepath.Dir(logFilePath)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		output.Warn("could not create daemon log directory %s: %v", logDir, err)
+	}
+
+	// Redirect child stderr (and stdout) to the log file instead of /dev/null.
+	// The file is intentionally NOT closed in the parent — the child inherits
+	// the file descriptor and needs it after fork/exec.
+	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644) //nolint:gosec // G304 — path is derived from user home dir, not external input
+	if err != nil {
+		output.Warn("could not open daemon log file %s: %v — child stderr will be discarded", logFilePath, err)
+	}
+	cmd.Stdout = logFile // may be nil if open failed, which is the old behaviour
+	cmd.Stderr = logFile
 	cmd.Stdin = nil
 
 	// Start the child process
@@ -1102,13 +1117,20 @@ func daemonize(_ []string, pidFilePath string, httpPort, adminPort int) error {
 		return fmt.Errorf("failed to start daemon: %w", err)
 	}
 
-	// Wait briefly for child to start and write PID file
-	time.Sleep(500 * time.Millisecond)
-
-	// Verify the daemon started by checking PID file
-	pidInfo, err := ReadPIDFile(pidFilePath)
-	if err != nil {
-		output.Warn("daemon may have failed to start (could not read PID file: %v)", err)
+	// Poll for the PID file — the child writes it after full startup
+	// which includes spec parsing and engine health checks.
+	var pidInfo *PIDFile
+	var pidErr error
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+		pidInfo, pidErr = ReadPIDFile(pidFilePath)
+		if pidErr == nil {
+			break
+		}
+	}
+	if pidErr != nil {
+		output.Warn("daemon may have failed to start (could not read PID file after 30s: %v). Check %s for errors", pidErr, logFilePath)
 		return nil
 	}
 
@@ -1127,6 +1149,15 @@ func daemonize(_ []string, pidFilePath string, httpPort, adminPort int) error {
 	}
 
 	return nil
+}
+
+// daemonLogPath returns the path to the daemon log file (~/.mockd/daemon.log).
+func daemonLogPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".mockd", "daemon.log")
+	}
+	return filepath.Join(home, ".mockd", "daemon.log")
 }
 
 // writePIDFileForServe writes the PID file with server component information.

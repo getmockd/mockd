@@ -6,6 +6,7 @@ package stateful
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
@@ -33,8 +34,8 @@ var templateVarPattern = regexp.MustCompile(`\{\{item\.(\w+)\}\}`)
 
 // TransformItem applies response transforms to a single item's JSON representation.
 // If cfg is nil, returns input unchanged (fully backward compatible).
-// Transform order: rename → hide → timestamps → inject (inject last so injected fields
-// are always present and can't be accidentally hidden or renamed).
+// Transform order: rename → hide → wrapAsList → timestamps → inject (inject last so
+// injected fields are always present and can't be accidentally hidden or renamed).
 func TransformItem(data map[string]interface{}, cfg *config.ResponseTransform) map[string]interface{} {
 	if cfg == nil || data == nil {
 		return data
@@ -57,12 +58,17 @@ func TransformItem(data map[string]interface{}, cfg *config.ResponseTransform) m
 		}
 	}
 
-	// 3. Timestamps — format conversion and/or key rename
+	// 3. Wrap array fields as list objects
+	if cfg.Fields != nil && len(cfg.Fields.WrapAsList) > 0 {
+		wrapArrayFieldsAsList(data, cfg.Fields.WrapAsList)
+	}
+
+	// 4. Timestamps — format conversion and/or key rename
 	if cfg.Timestamps != nil {
 		transformTimestamps(data, cfg.Timestamps)
 	}
 
-	// 4. Inject fields (last — always present, can't be hidden/renamed accidentally)
+	// 5. Inject fields (last — always present, can't be hidden/renamed accidentally)
 	if cfg.Fields != nil && len(cfg.Fields.Inject) > 0 {
 		for key, val := range cfg.Fields.Inject {
 			data[key] = val
@@ -343,4 +349,49 @@ func resolveTemplateValue(val interface{}, itemData map[string]interface{}) inte
 	})
 
 	return result
+}
+
+// wrapArrayFieldsAsList wraps specified array fields in list object envelopes.
+// This is a general-purpose transform for APIs that use list objects as nested
+// sub-resource containers (e.g., Stripe's subscription.items).
+func wrapArrayFieldsAsList(data map[string]interface{}, wraps map[string]*config.ListWrapConfig) {
+	for field, wrapCfg := range wraps {
+		val, ok := data[field]
+		if !ok {
+			continue
+		}
+
+		var arr []interface{}
+		switch v := val.(type) {
+		case []interface{}:
+			arr = v
+		case []map[string]interface{}:
+			arr = make([]interface{}, len(v))
+			for i, item := range v {
+				arr[i] = item
+			}
+		default:
+			continue // not an array, skip silently
+		}
+
+		envelope := map[string]interface{}{
+			"object":   "list",
+			"data":     arr,
+			"has_more": false,
+		}
+
+		if wrapCfg != nil && wrapCfg.URL != "" {
+			url := wrapCfg.URL
+			// Simple {{fieldName}} template substitution from parent item
+			for k, v := range data {
+				placeholder := "{{" + k + "}}"
+				if s, ok := v.(string); ok {
+					url = strings.Replace(url, placeholder, s, -1)
+				}
+			}
+			envelope["url"] = url
+		}
+
+		data[field] = envelope
+	}
 }

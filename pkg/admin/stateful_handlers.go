@@ -286,6 +286,51 @@ func mapStatefulResourceError(err error, log *slog.Logger, notFoundMsg, operatio
 	return http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, log, operation)
 }
 
+// --- Table Reset Handlers (top-level /reset endpoints) ---
+
+// handleResetTables resets all stateful tables to their seed data.
+// POST /reset
+func (a *API) handleResetTables(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+
+	resp, err := engine.ResetStateWithResponse(ctx, "")
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "reset tables"))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "reset",
+		"tables": len(resp.Resources),
+	})
+}
+
+// handleResetTable resets a single stateful table to its seed data.
+// POST /reset/{table}
+func (a *API) handleResetTable(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+
+	table := r.PathValue("table")
+	if table == "" {
+		writeError(w, http.StatusBadRequest, "missing_table", "Table name is required")
+		return
+	}
+
+	if err := engine.ResetState(ctx, table); err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Table not found: "+table)
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "reset table"))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "reset",
+		"table":  table,
+	})
+}
+
 // --- Custom Operation Handlers ---
 
 // handleListCustomOperations returns all registered custom operations.

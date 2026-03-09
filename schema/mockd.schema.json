@@ -787,9 +787,33 @@
         "response": {
           "$ref": "#/definitions/responseTransform",
           "description": "Default response transform for all bindings to this table"
+        },
+        "relationships": {
+          "type": "object",
+          "description": "Maps field names to related tables for ?expand[] support",
+          "additionalProperties": {
+            "$ref": "#/definitions/relationship"
+          }
         }
       },
       "additionalProperties": true
+    },
+
+    "relationship": {
+      "type": "object",
+      "description": "Foreign key relationship to another table for ?expand[] support",
+      "required": ["table"],
+      "properties": {
+        "table": {
+          "type": "string",
+          "description": "Target table name"
+        },
+        "field": {
+          "type": "string",
+          "description": "Field in target table to match (defaults to target's idField)"
+        }
+      },
+      "additionalProperties": false
     },
 
     "extendBinding": {
@@ -824,7 +848,15 @@
           "type": "object",
           "properties": {
             "inject": { "type": "object", "additionalProperties": true, "description": "Fields to inject into every item" },
-            "hide": { "type": "array", "items": { "type": "string" }, "description": "Fields to hide from responses" }
+            "hide": { "type": "array", "items": { "type": "string" }, "description": "Fields to hide from responses" },
+            "rename": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Rename field keys in responses (key is original name, value is output name)" },
+            "wrapAsList": {
+              "type": "object",
+              "description": "Wraps specified array fields in list object envelopes ({object: 'list', data: [...], has_more: false}). Key is field name, value is envelope config.",
+              "additionalProperties": {
+                "$ref": "#/definitions/listWrapConfig"
+              }
+            }
           }
         },
         "list": {
@@ -845,7 +877,8 @@
           "type": "object",
           "properties": {
             "status": { "type": "integer", "description": "HTTP status for delete (default: 204)" },
-            "body": { "type": "object", "additionalProperties": true, "description": "Custom delete response body (supports {{item.field}} templates)" }
+            "body": { "type": "object", "additionalProperties": true, "description": "Custom delete response body (supports {{item.field}} templates)" },
+            "preserve": { "type": "boolean", "description": "When true, the item is not removed from the store. DELETE returns the configured response but the data is preserved. Useful for soft-delete APIs." }
           }
         },
         "errors": {
@@ -859,6 +892,18 @@
         }
       },
       "additionalProperties": true
+    },
+
+    "listWrapConfig": {
+      "type": ["object", "null"],
+      "description": "Configuration for wrapping an array field in a list object envelope. Null means default envelope with no URL.",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "URL template for the sub-resource list. Supports {{fieldName}} substitution from the parent item."
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

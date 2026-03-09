@@ -54,4 +54,5 @@ type (
 	CircuitBreakerStatus         = types.CircuitBreakerStatus
 	RetryAfterStatus             = types.RetryAfterStatus
 	ProgressiveDegradationStatus = types.ProgressiveDegradationStatus
+	ResetStateResponse           = types.ResetStateResponse
 )

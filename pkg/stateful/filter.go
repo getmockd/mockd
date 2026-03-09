@@ -3,9 +3,59 @@ package stateful
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
+
+// resolveNestedField resolves a potentially bracket-notated field key against a data map.
+// For example, "metadata[tier]" resolves to data["metadata"]["tier"].
+// Plain keys like "status" resolve to data["status"] (fast path).
+func resolveNestedField(data map[string]interface{}, key string) (interface{}, bool) {
+	// Fast path: no brackets means direct lookup
+	idx := strings.IndexByte(key, '[')
+	if idx < 0 {
+		val, ok := data[key]
+		return val, ok
+	}
+
+	// Bracket notation: metadata[tier] -> data["metadata"]["tier"]
+	base := key[:idx]
+	current, ok := data[base]
+	if !ok {
+		return nil, false
+	}
+
+	rest := key[idx:]
+	for strings.HasPrefix(rest, "[") {
+		end := strings.IndexByte(rest, ']')
+		if end < 0 {
+			return nil, false
+		}
+		segment := rest[1:end]
+		rest = rest[end+1:]
+
+		switch v := current.(type) {
+		case map[string]interface{}:
+			var ok bool
+			current, ok = v[segment]
+			if !ok {
+				return nil, false
+			}
+		case []interface{}:
+			// Numeric index into a slice (e.g., lookup_keys[0])
+			n, err := strconv.Atoi(segment)
+			if err != nil || n < 0 || n >= len(v) {
+				return nil, false
+			}
+			current = v[n]
+		default:
+			return nil, false
+		}
+	}
+
+	return current, true
+}
 
 // ApplyFilters filters items based on the query filter.
 // Supports parent filtering for nested resources and exact match filtering on any field.
@@ -34,7 +84,7 @@ func ApplyFilters(items []*ResourceItem, filter *QueryFilter) []*ResourceItem {
 			case "id":
 				itemValue = item.ID
 			default:
-				itemValue = item.Data[field]
+				itemValue, _ = resolveNestedField(item.Data, field)
 			}
 
 			if fmt.Sprintf("%v", itemValue) != value {

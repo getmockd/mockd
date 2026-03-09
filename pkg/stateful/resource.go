@@ -40,6 +40,7 @@ type StatefulResource struct {
 	validator        *validation.StatefulValidator
 	validationConfig *validation.StatefulValidation
 	responseCfg      *config.ResponseTransform
+	relationships    map[string]*RelationshipInfo // for ?expand[] support
 }
 
 // NewStatefulResource creates a new StatefulResource from config.
@@ -65,6 +66,17 @@ func NewStatefulResourceWithLogger(config *ResourceConfig, logger *slog.Logger) 
 		seedData:         config.SeedData,
 		validationConfig: config.Validation,
 		responseCfg:      config.Response,
+	}
+
+	// Convert config.Relationship to stateful.RelationshipInfo
+	if len(config.Relationships) > 0 {
+		r.relationships = make(map[string]*RelationshipInfo, len(config.Relationships))
+		for field, rel := range config.Relationships {
+			r.relationships[field] = &RelationshipInfo{
+				Table: rel.Table,
+				Field: rel.Field,
+			}
+		}
 	}
 
 	// Initialize validation
@@ -446,6 +458,16 @@ func (r *StatefulResource) ParentField() string {
 	return r.parentField
 }
 
+// IDField returns the field name used as the item's primary key.
+func (r *StatefulResource) IDField() string {
+	return r.idField
+}
+
+// Relationships returns the relationship map for ?expand[] support.
+func (r *StatefulResource) Relationships() map[string]*RelationshipInfo {
+	return r.relationships
+}
+
 // HasValidation returns true if validation is configured for this resource.
 func (r *StatefulResource) HasValidation() bool {
 	return r.validator != nil
@@ -516,6 +538,15 @@ func (r *StatefulResource) Config() *ResourceConfig {
 	}
 	if r.responseCfg != nil {
 		cfg.Response = r.responseCfg
+	}
+	if len(r.relationships) > 0 {
+		cfg.Relationships = make(map[string]*config.Relationship, len(r.relationships))
+		for field, rel := range r.relationships {
+			cfg.Relationships[field] = &config.Relationship{
+				Table: rel.Table,
+				Field: rel.Field,
+			}
+		}
 	}
 	return cfg
 }

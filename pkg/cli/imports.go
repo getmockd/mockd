@@ -129,13 +129,15 @@ func processTablesAndExtend(collection *config.MockCollection) error {
 
 			// Convert TableConfig → StatefulResourceConfig (no basePath — bridge-only)
 			res := &config.StatefulResourceConfig{
-				Name:       table.Name,
-				IDField:    table.IDField,
-				IDStrategy: table.IDStrategy,
-				IDPrefix:   table.IDPrefix,
-				MaxItems:   table.MaxItems,
-				SeedData:   table.SeedData,
-				Response:   table.Response,
+				Name:          table.Name,
+				IDField:       table.IDField,
+				IDStrategy:    table.IDStrategy,
+				IDPrefix:      table.IDPrefix,
+				ParentField:   table.ParentField,
+				MaxItems:      table.MaxItems,
+				SeedData:      table.SeedData,
+				Response:      table.Response,
+				Relationships: table.Relationships,
 			}
 			collection.StatefulResources = append(collection.StatefulResources, res)
 		}
