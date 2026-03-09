@@ -26,7 +26,6 @@
 //	store := stateful.NewStateStore()
 //	config := &stateful.ResourceConfig{
 //	    Name:     "users",
-//	    BasePath: "/api/users",
 //	    SeedData: []map[string]interface{}{
 //	        {"id": "1", "name": "Alice"},
 //	    },

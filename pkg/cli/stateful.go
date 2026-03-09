@@ -279,24 +279,18 @@ func runStatefulAdd(_ *cobra.Command, args []string) error {
 	}
 
 	client := NewAdminClientWithAuth(adminURL)
-	err := client.CreateStatefulResource(name, statefulAddPath, statefulAddIDField)
+	err := client.CreateStatefulResource(name, statefulAddIDField)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
 
-	bridgeOnly := statefulAddPath == ""
-
 	if jsonOutput {
 		result := struct {
-			Resource  string   `json:"resource"`
-			BasePath  string   `json:"basePath,omitempty"`
-			IDField   string   `json:"idField,omitempty"`
-			Action    string   `json:"action"`
-			Mode      string   `json:"mode"`
-			Endpoints []string `json:"endpoints,omitempty"`
+			Resource string `json:"resource"`
+			IDField  string `json:"idField,omitempty"`
+			Action   string `json:"action"`
 		}{
 			Resource: name,
-			BasePath: statefulAddPath,
 			Action:   "created",
 		}
 
@@ -304,36 +298,11 @@ func runStatefulAdd(_ *cobra.Command, args []string) error {
 			result.IDField = statefulAddIDField
 		}
 
-		if bridgeOnly {
-			result.Mode = "bridge-only"
-		} else {
-			result.Mode = "http+bridge"
-			result.Endpoints = []string{
-				"GET    " + statefulAddPath,
-				"POST   " + statefulAddPath,
-				"GET    " + statefulAddPath + "/{id}",
-				"PUT    " + statefulAddPath + "/{id}",
-				"DELETE " + statefulAddPath + "/{id}",
-			}
-		}
-
 		return output.JSON(result)
 	}
 
 	fmt.Printf("Created stateful resource: %s\n", name)
-
-	if bridgeOnly {
-		fmt.Printf("  Mode: bridge-only (no HTTP endpoints)\n")
-		fmt.Printf("  Access via: SOAP, GraphQL, gRPC, or other protocol integrations\n")
-	} else {
-		fmt.Printf("  Base path: %s\n", statefulAddPath)
-		fmt.Printf("  Endpoints:\n")
-		fmt.Printf("    GET    %s        — List all %s\n", statefulAddPath, name)
-		fmt.Printf("    POST   %s        — Create a %s\n", statefulAddPath, singularize(name))
-		fmt.Printf("    GET    %s/{id}   — Get a %s by ID\n", statefulAddPath, singularize(name))
-		fmt.Printf("    PUT    %s/{id}   — Update a %s\n", statefulAddPath, singularize(name))
-		fmt.Printf("    DELETE %s/{id}   — Delete a %s\n", statefulAddPath, singularize(name))
-	}
+	fmt.Printf("  Access via: extend bindings or protocol integrations (SOAP, GraphQL, gRPC)\n")
 
 	if statefulAddIDField != "" {
 		fmt.Printf("  ID field: %s\n", statefulAddIDField)
@@ -367,19 +336,15 @@ func runStatefulList(_ *cobra.Command, _ []string) error {
 	printList(overview, func() {
 		fmt.Printf("Stateful Resources (%d):\n\n", overview.Total)
 		tw := output.Table()
-		_, _ = fmt.Fprintf(tw, "NAME\tBASE PATH\tITEMS\tSEED\tID FIELD\n")
-		_, _ = fmt.Fprintf(tw, "----\t---------\t-----\t----\t--------\n")
+		_, _ = fmt.Fprintf(tw, "NAME\tITEMS\tSEED\tID FIELD\n")
+		_, _ = fmt.Fprintf(tw, "----\t-----\t----\t--------\n")
 		for _, r := range overview.Resources {
-			basePath := r.BasePath
-			if basePath == "" {
-				basePath = "(bridge-only)"
-			}
 			idField := r.IDField
 			if idField == "" {
 				idField = "id"
 			}
-			_, _ = fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%s\n",
-				r.Name, basePath, r.ItemCount, r.SeedCount, idField)
+			_, _ = fmt.Fprintf(tw, "%s\t%d\t%d\t%s\n",
+				r.Name, r.ItemCount, r.SeedCount, idField)
 		}
 		_ = tw.Flush()
 

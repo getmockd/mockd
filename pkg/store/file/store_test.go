@@ -1543,8 +1543,7 @@ func TestStatefulResourceStore_CRUD(t *testing.T) {
 	srs := fs.StatefulResources()
 
 	res := &config.StatefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}
 	if err := srs.Create(ctx, res); err != nil {
 		t.Fatalf("Create() failed: %v", err)
@@ -1573,8 +1572,8 @@ func TestStatefulResourceStore_Create_DuplicateName(t *testing.T) {
 	ctx := context.Background()
 	srs := fs.StatefulResources()
 
-	_ = srs.Create(ctx, &config.StatefulResourceConfig{Name: "users", BasePath: "/api/users"})
-	err := srs.Create(ctx, &config.StatefulResourceConfig{Name: "users", BasePath: "/api/v2/users"})
+	_ = srs.Create(ctx, &config.StatefulResourceConfig{Name: "users"})
+	err := srs.Create(ctx, &config.StatefulResourceConfig{Name: "users"})
 	if !errors.Is(err, store.ErrAlreadyExists) {
 		t.Errorf("expected ErrAlreadyExists, got %v", err)
 	}
@@ -1659,7 +1658,7 @@ func TestFileStore_Persistence_RoundTrip(t *testing.T) {
 	_ = fs1.Folders().Create(ctx, &config.Folder{ID: "fld-persist", Name: "Persistent Folder"})
 	_ = fs1.Recordings().Create(ctx, &store.Recording{ID: "rec-persist", Protocol: "http"})
 	_ = fs1.RequestLog().Append(ctx, &store.RequestLogEntry{ID: "log-persist", Method: "GET"})
-	_ = fs1.StatefulResources().Create(ctx, &config.StatefulResourceConfig{Name: "persist-res", BasePath: "/api/test"})
+	_ = fs1.StatefulResources().Create(ctx, &config.StatefulResourceConfig{Name: "persist-res"})
 	_ = fs1.Preferences().Set(ctx, &store.Preferences{Theme: "dark", DefaultMockPort: 4280})
 	_ = fs1.Close()
 

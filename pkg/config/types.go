@@ -190,17 +190,88 @@ type MockCollection struct {
 	Metadata *CollectionMetadata `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 	// Name is the collection name/description (prefer metadata.name for new configs)
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	// Imports declares external specs to import on startup (OpenAPI, Postman, etc.).
+	// Loaded fresh on every startup. Format is auto-detected.
+	Imports []*ImportEntry `json:"imports,omitempty" yaml:"imports,omitempty"`
+	// Tables defines stateful data tables (pure data, no routing).
+	// Tables are referenced by extend bindings to attach stateful behavior to mocks.
+	Tables []*TableConfig `json:"tables,omitempty" yaml:"tables,omitempty"`
+	// Extend binds imported mocks to stateful tables.
+	// Each entry maps one mock (by operationId or "METHOD /path") to a table + action.
+	Extend []*ExtendBinding `json:"extend,omitempty" yaml:"extend,omitempty"`
 	// Mocks is an array of mock definitions
 	Mocks []*MockConfiguration `json:"mocks" yaml:"mocks"`
 	// ServerConfig contains server settings (if embedded)
 	ServerConfig *ServerConfiguration `json:"serverConfig,omitempty" yaml:"serverConfig,omitempty"`
-	// StatefulResources defines stateful CRUD resources
+	// StatefulResources defines stateful CRUD resources (LEGACY — use tables: + extend: instead).
 	StatefulResources []*StatefulResourceConfig `json:"statefulResources,omitempty" yaml:"statefulResources,omitempty"`
 	// CustomOperations defines multi-step custom operations that compose reads, writes,
 	// and expression-evaluated transforms against stateful resources.
 	CustomOperations []*CustomOperationConfig `json:"customOperations,omitempty" yaml:"customOperations,omitempty"`
 	// WebSocketEndpoints defines WebSocket endpoints
 	WebSocketEndpoints []*WebSocketEndpointConfig `json:"websocketEndpoints,omitempty" yaml:"websocketEndpoints,omitempty"`
+}
+
+// ImportEntry declares an external spec to import on startup.
+// Format is auto-detected from content and file extension.
+// Exactly one of Path or URL must be set.
+type ImportEntry struct {
+	// Path is a local file path (resolved relative to the config file).
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
+	// URL is a remote URL to fetch the spec from.
+	URL string `json:"url,omitempty" yaml:"url,omitempty"`
+	// As is the namespace prefix for referencing imported mocks.
+	// Imported mocks get OperationID = "{as}.{operationId}".
+	// If empty, the raw operationId is used without a namespace.
+	As string `json:"as,omitempty" yaml:"as,omitempty"`
+	// Format forces a specific import format (e.g., "openapi", "postman").
+	// If empty, the format is auto-detected.
+	Format string `json:"format,omitempty" yaml:"format,omitempty"`
+}
+
+// TableConfig defines a stateful data table (pure data, no routing).
+// Tables store items and handle CRUD operations but have no knowledge of
+// protocols, routes, or response formats. Use extend: bindings to attach
+// tables to mocks.
+type TableConfig struct {
+	// Name is the unique table identifier (e.g., "customers").
+	Name string `json:"name" yaml:"name"`
+	// IDField is the field name used as the item's primary key (default: "id").
+	IDField string `json:"idField,omitempty" yaml:"idField,omitempty"`
+	// IDStrategy controls how IDs are generated: "uuid" (default), "prefix", "auto-increment", "none".
+	IDStrategy string `json:"idStrategy,omitempty" yaml:"idStrategy,omitempty"`
+	// IDPrefix is prepended to generated IDs (only with idStrategy: prefix).
+	IDPrefix string `json:"idPrefix,omitempty" yaml:"idPrefix,omitempty"`
+	// MaxItems limits the number of items (0 = unlimited).
+	MaxItems int `json:"maxItems,omitempty" yaml:"maxItems,omitempty"`
+	// SeedData is initial data loaded on startup and after reset.
+	SeedData []map[string]interface{} `json:"seedData,omitempty" yaml:"seedData,omitempty"`
+	// Validation defines input validation rules.
+	Validation *validation.ValidationConfig `json:"validation,omitempty" yaml:"validation,omitempty"`
+	// Response is the DEFAULT response transform for this table.
+	// Extend bindings can override this per-mock. If a binding has no
+	// response override, this default is used.
+	Response *ResponseTransform `json:"response,omitempty" yaml:"response,omitempty"`
+}
+
+// ExtendBinding binds a mock to a stateful table with a specific action.
+// This is the core mechanism for adding stateful behavior to imported mocks.
+type ExtendBinding struct {
+	// Mock references a mock by its namespaced operationId (e.g., "stripe.PostCustomers")
+	// or by "METHOD /path" for non-imported mocks (e.g., "POST /api/todos").
+	Mock string `json:"mock" yaml:"mock"`
+	// Table references a TableConfig by name (e.g., "customers").
+	Table string `json:"table" yaml:"table"`
+	// Action is the CRUD action or "custom" for custom operations.
+	// Valid values: create, get, list, update, patch, delete, custom.
+	Action string `json:"action" yaml:"action"`
+	// Operation names a registered custom operation to execute when Action is "custom".
+	// The operation receives the request body as input and executes via Bridge.Execute().
+	// Required when Action is "custom", ignored otherwise.
+	Operation string `json:"operation,omitempty" yaml:"operation,omitempty"`
+	// Response overrides the table's default response transforms for this binding.
+	// If nil, the table's default Response is used.
+	Response *ResponseTransform `json:"response,omitempty" yaml:"response,omitempty"`
 }
 
 // CollectionMetadata contains metadata about a mock collection.
@@ -259,8 +330,6 @@ type StatefulResourceConfig struct {
 	Name string `json:"name" yaml:"name"`
 	// Workspace is the workspace this resource belongs to (YAML config only, not persisted)
 	Workspace string `json:"workspace,omitempty" yaml:"workspace,omitempty"`
-	// BasePath is the URL path prefix (e.g., "/api/users")
-	BasePath string `json:"basePath" yaml:"basePath"`
 	// IDField is the field name for ID (default: "id")
 	IDField string `json:"idField,omitempty" yaml:"idField,omitempty"`
 	// IDStrategy controls how IDs are generated for new items.

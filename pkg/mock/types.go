@@ -36,6 +36,11 @@ type Mock struct {
 	// Name is a human-readable name for the mock
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 
+	// OperationID is a stable identifier from the source spec (e.g., OpenAPI operationId).
+	// Used by extend bindings to reference imported mocks (e.g., "stripe.PostCustomers").
+	// Not set for manually-created mocks.
+	OperationID string `json:"operationId,omitempty" yaml:"operationId,omitempty"`
+
 	// Description is an optional longer description
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
@@ -265,6 +270,34 @@ type HTTPSpec struct {
 	// operation result is returned as JSON. This allows HTTP endpoints like
 	// POST /api/transfer to execute multi-step custom operations (e.g., TransferFunds).
 	StatefulOperation string `json:"statefulOperation,omitempty" yaml:"statefulOperation,omitempty"`
+
+	// StatefulBinding is set by extend resolution at config-load time.
+	// When present, the mock delegates to Bridge.Execute() instead of returning
+	// a static response. Not authored by users in mock YAML — set programmatically
+	// from the extend: config section.
+	StatefulBinding *StatefulBinding `json:"statefulBinding,omitempty" yaml:"statefulBinding,omitempty"`
+}
+
+// StatefulBinding is the resolved binding from an extend entry.
+// It tells the handler which table to use and what action to perform.
+type StatefulBinding struct {
+	// Table is the name of the stateful table (e.g., "customers").
+	Table string `json:"table" yaml:"table"`
+	// Action is the CRUD action or "custom" for custom operations.
+	// Valid values: create, get, list, update, patch, delete, custom.
+	Action string `json:"action" yaml:"action"`
+	// Operation names the custom operation to execute when Action is "custom".
+	// The operation is invoked via Bridge.Execute() with ActionCustom.
+	Operation string `json:"operation,omitempty" yaml:"operation,omitempty"`
+	// Response overrides the table's default response transforms for this binding.
+	// If nil, the table's default response config is used.
+	Response *StatefulBindingResponse `json:"-" yaml:"-"` // not serialized — resolved at load time
+}
+
+// StatefulBindingResponse holds the merged response transform for a binding.
+// This is a runtime-only type, not part of the config YAML.
+type StatefulBindingResponse struct {
+	Transform interface{} `json:"-" yaml:"-"` // *config.ResponseTransform — avoid import cycle
 }
 
 // HTTPMatcher defines criteria used to match incoming HTTP requests.

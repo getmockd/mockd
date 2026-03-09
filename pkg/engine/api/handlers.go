@@ -589,10 +589,9 @@ func (s *Server) handleRegisterStatefulResource(w http.ResponseWriter, r *http.R
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"name":     cfg.Name,
-		"basePath": cfg.BasePath,
-		"idField":  cfg.IDField,
-		"message":  "Stateful resource registered",
+		"name":    cfg.Name,
+		"idField": cfg.IDField,
+		"message": "Stateful resource registered",
 	})
 }
 
@@ -858,6 +857,19 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Import custom operations
+	customOpCount := 0
+	for _, opCfg := range req.Config.CustomOperations {
+		if opCfg == nil {
+			continue
+		}
+		if err := s.engine.RegisterCustomOperation(opCfg); err != nil {
+			s.log.Warn("failed to import custom operation", "name", opCfg.Name, "error", err)
+			continue
+		}
+		customOpCount++
+	}
+
 	response := map[string]any{
 		"imported": imported,
 		"total":    len(req.Config.Mocks),
@@ -865,6 +877,9 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if statefulCount > 0 {
 		response["statefulResources"] = statefulCount
+	}
+	if customOpCount > 0 {
+		response["customOperations"] = customOpCount
 	}
 	if len(importErrors) > 0 {
 		response["errors"] = importErrors

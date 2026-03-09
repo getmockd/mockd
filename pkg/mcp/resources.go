@@ -252,7 +252,6 @@ func (p *ResourceProvider) readStatefulResource(name string) ([]ResourceContent,
 
 	content := map[string]interface{}{
 		"name":          found.Name,
-		"basePath":      found.BasePath,
 		"idField":       found.IDField,
 		"itemCount":     found.ItemCount,
 		"hasSeedData":   found.SeedCount > 0,

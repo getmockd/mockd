@@ -107,6 +107,26 @@ mocks:
         body: '[{"id":"{{uuid}}","name":"{{faker.name}}"}]'
 ```
 
+## Tables + Extend (Stateful Config)
+
+The recommended way to add stateful CRUD to imported specs in config files:
+
+```yaml
+version: "1.0"
+imports:
+  - path: api-spec.yaml
+    as: api
+tables:
+  - name: users
+    idField: id
+extend:
+  - { mock: api.ListUsers, table: users, action: list }
+  - { mock: api.CreateUser, table: users, action: create }
+  - { mock: api.GetUser, table: users, action: get }
+```
+
+Tables are pure data stores (no routing, no basePath). Extend binds imported mocks to table CRUD actions. Custom operations use `action: custom` + `operation: OpName`.
+
 ## Template Functions
 
 - `{{uuid}}`, `{{uuid.short}}` — UUIDs
@@ -124,7 +144,7 @@ mocks:
 1. Always use ports 4280/4290, never 8080
 2. `id` and `type` are auto-generated if omitted in config files
 3. Admin API: `POST /mocks` with `type` + protocol wrapper (`http: { matcher: ..., response: ... }`)
-4. Stateful CRUD: `mockd add http --path /api/users --stateful` or `statefulResources` in config
+4. Stateful CRUD: `mockd add http --path /api/users --stateful` for quick prototyping, or tables+extend in config (recommended)
 5. Request logs: `mockd logs --requests` (not `mockd logs`)
 6. Stop daemon: `mockd stop` (not Ctrl+C on a daemon)
-7. List responses from stateful resources are paginated: `{"data": [...], "meta": {"total", "limit", "offset", "count"}}`
+7. Stateful list responses default to `{"data": [...], "meta": {"total", "limit", "offset", "count"}}` — response transforms can customize the envelope

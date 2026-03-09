@@ -16,8 +16,7 @@ func setupBridgeTest(t *testing.T) (*Bridge, *MetricsObserver) {
 	store.SetObserver(obs)
 
 	err := store.Register(&ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "u1", "name": "Alice", "email": "alice@example.com"},
 			{"id": "u2", "name": "Bob", "email": "bob@example.com"},
@@ -499,7 +498,6 @@ func TestBridge_BridgeOnlyResource_CRUD(t *testing.T) {
 	store := NewStateStore()
 	err := store.Register(&ResourceConfig{
 		Name: "internal-data",
-		// No BasePath — bridge-only
 	})
 	require.NoError(t, err)
 
@@ -525,17 +523,7 @@ func TestBridge_BridgeOnlyResource_CRUD(t *testing.T) {
 	require.Equal(t, StatusSuccess, getResult.Status)
 	assert.Equal(t, "value", getResult.Item.Data["key"])
 
-	// HTTP path matching returns false (no HTTP routing)
-	resource := store.Get("internal-data")
-	require.NotNil(t, resource)
-	_, _, matched := resource.MatchPath("/internal-data")
-	assert.False(t, matched, "bridge-only resource should not match HTTP paths")
-	_, _, matched2 := resource.MatchPath("/api/internal-data/" + itemID)
-	assert.False(t, matched2, "bridge-only resource should not match any path")
-
-	// Store.MatchPath also skips it
-	r, _, _ := store.MatchPath("/internal-data")
-	assert.Nil(t, r, "store should not match bridge-only resources via path")
+	_ = itemID // suppress unused warning
 }
 
 func TestBridge_BridgeOnlyResource_Registration(t *testing.T) {
@@ -546,12 +534,4 @@ func TestBridge_BridgeOnlyResource_Registration(t *testing.T) {
 		Name: "bridge-only",
 	})
 	require.NoError(t, err)
-
-	// Non-slash basePath still rejected
-	err = store.Register(&ResourceConfig{
-		Name:     "bad-path",
-		BasePath: "no-slash",
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "must start with /")
 }

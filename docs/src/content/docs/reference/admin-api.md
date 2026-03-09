@@ -368,8 +368,8 @@ Get stateful resource overview.
 ```json
 {
   "resources": [
-    {"name": "users", "basePath": "/api/users", "itemCount": 10, "seedCount": 2, "idField": "id"},
-    {"name": "posts", "basePath": "/api/posts", "itemCount": 5, "seedCount": 3, "idField": "id"}
+    {"name": "users", "itemCount": 10, "seedCount": 2, "idField": "id"},
+    {"name": "posts", "itemCount": 5, "seedCount": 3, "idField": "id"}
   ],
   "total": 2,
   "totalItems": 15,
@@ -394,7 +394,6 @@ Create a new stateful resource at runtime.
 ```json
 {
   "name": "products",
-  "path": "/api/products",
   "idField": "id"
 }
 ```
@@ -402,14 +401,13 @@ Create a new stateful resource at runtime.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | Yes | Resource name (must be unique) |
-| `path` | string | No | URL base path for auto-generated CRUD endpoints |
 | `idField` | string | No | Custom ID field name (default: `id`) |
 
 **Response:** `201 Created`
 
 #### GET /state/resources/{name}
 
-Get details for a specific resource (item count, seed count, basePath).
+Get details for a specific resource (item count, seed count, ID field).
 
 #### POST /state/resources/{name}/reset
 

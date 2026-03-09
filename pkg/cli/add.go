@@ -185,7 +185,7 @@ func runAdd(cmd *cobra.Command, args []string) error { //nolint:gocyclo // CLI d
 
 	// Handle --stateful: create a stateful CRUD resource instead of a mock
 	if addStateful != "" {
-		return runAddStateful(addStateful, addPath)
+		return runAddStateful(addStateful)
 	}
 
 	// Mutual exclusivity: --path and --path-pattern
@@ -931,20 +931,14 @@ func buildOAuthMock(name, issuer, clientID, clientSecret, username, password str
 }
 
 // runAddStateful creates a stateful CRUD resource via the admin API.
-func runAddStateful(name, basePath string) error {
-	if basePath == "" {
-		// Default basePath from name: "users" -> "/api/users"
-		basePath = "/api/" + name
-	}
-
+func runAddStateful(name string) error {
 	// Build a config with just the stateful resource
 	collection := &config.MockCollection{
 		Version: "1.0",
 		Mocks:   []*config.MockConfiguration{},
 		StatefulResources: []*config.StatefulResourceConfig{
 			{
-				Name:     name,
-				BasePath: basePath,
+				Name: name,
 			},
 		},
 	}
@@ -957,32 +951,16 @@ func runAddStateful(name, basePath string) error {
 
 	if jsonOutput {
 		return output.JSON(struct {
-			Resource  string   `json:"resource"`
-			BasePath  string   `json:"basePath"`
-			Action    string   `json:"action"`
-			Endpoints []string `json:"endpoints"`
+			Resource string `json:"resource"`
+			Action   string `json:"action"`
 		}{
 			Resource: name,
-			BasePath: basePath,
 			Action:   "created",
-			Endpoints: []string{
-				"GET    " + basePath,
-				"POST   " + basePath,
-				"GET    " + basePath + "/{id}",
-				"PUT    " + basePath + "/{id}",
-				"DELETE " + basePath + "/{id}",
-			},
 		})
 	}
 
 	fmt.Printf("Created stateful resource: %s\n", name)
-	fmt.Printf("  Base path: %s\n", basePath)
-	fmt.Printf("  Endpoints:\n")
-	fmt.Printf("    GET    %s        — List all %s\n", basePath, name)
-	fmt.Printf("    POST   %s        — Create a %s\n", basePath, singularize(name))
-	fmt.Printf("    GET    %s/{id}   — Get a %s by ID\n", basePath, singularize(name))
-	fmt.Printf("    PUT    %s/{id}   — Update a %s\n", basePath, singularize(name))
-	fmt.Printf("    DELETE %s/{id}   — Delete a %s\n", basePath, singularize(name))
+	fmt.Printf("  Access via: extend bindings or protocol integrations\n")
 	return nil
 }
 

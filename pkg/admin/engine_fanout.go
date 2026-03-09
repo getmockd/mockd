@@ -293,11 +293,14 @@ func (a *API) pushImportToEngines(ctx context.Context, collection *config.MockCo
 			wsMap := buildWorkspaceMap(workspaces)
 			prefixedMocks := prefixMocksForEngine(collection.Mocks, wsMap, store.DefaultWorkspaceID)
 			engineCollection = &config.MockCollection{
-				Version:           collection.Version,
-				Kind:              collection.Kind,
-				Name:              collection.Name,
-				Mocks:             prefixedMocks,
-				StatefulResources: collection.StatefulResources,
+				Version:            collection.Version,
+				Kind:               collection.Kind,
+				Name:               collection.Name,
+				Mocks:              prefixedMocks,
+				StatefulResources:  collection.StatefulResources,
+				CustomOperations:   collection.CustomOperations,
+				ServerConfig:       collection.ServerConfig,
+				WebSocketEndpoints: collection.WebSocketEndpoints,
 			}
 		}
 	}

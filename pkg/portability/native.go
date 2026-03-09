@@ -162,7 +162,6 @@ type NativeV1ScenarioEndpoint struct {
 // NativeV1StatefulResource defines a stateful CRUD resource.
 type NativeV1StatefulResource struct {
 	Name        string                   `json:"name" yaml:"name"`
-	BasePath    string                   `json:"basePath" yaml:"basePath"`
 	IDField     string                   `json:"idField,omitempty" yaml:"idField,omitempty"`
 	ParentField string                   `json:"parentField,omitempty" yaml:"parentField,omitempty"`
 	SeedData    []map[string]interface{} `json:"seedData,omitempty" yaml:"seedData,omitempty"`
@@ -221,7 +220,6 @@ func NativeV1ToMockCollection(native *NativeV1) (*config.MockCollection, error) 
 	for _, sr := range native.Stateful {
 		resource := &config.StatefulResourceConfig{
 			Name:        sr.Name,
-			BasePath:    sr.BasePath,
 			IDField:     sr.IDField,
 			ParentField: sr.ParentField,
 			SeedData:    sr.SeedData,
@@ -400,7 +398,6 @@ func MockCollectionToNativeV1(collection *config.MockCollection) (*NativeV1, err
 	for _, sr := range collection.StatefulResources {
 		native.Stateful = append(native.Stateful, NativeV1StatefulResource{
 			Name:        sr.Name,
-			BasePath:    sr.BasePath,
 			IDField:     sr.IDField,
 			ParentField: sr.ParentField,
 			SeedData:    sr.SeedData,

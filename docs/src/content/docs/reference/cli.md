@@ -1130,7 +1130,7 @@ mockd stateful [command]
 
 ### mockd stateful add
 
-Create a new stateful CRUD resource. By default, resources are "bridge-only" (accessible via SOAP, GraphQL, gRPC, etc. but without HTTP REST endpoints). Use `--path` to also expose HTTP REST endpoints.
+Create a new stateful CRUD resource (data store). Resources are created as pure data stores with no auto-generated HTTP endpoints. Use [extend bindings](/reference/configuration/#extend-bindings) in config files to wire mocks to tables, or use `mockd http add --stateful` for quick CLI prototyping.
 
 ```bash
 mockd stateful add <name> [flags]
@@ -1140,21 +1140,19 @@ mockd stateful add <name> [flags]
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--path` | URL base path for HTTP REST endpoints (omit for bridge-only) | |
 | `--id-field` | Custom ID field name | `id` |
 
 **Examples:**
 
 ```bash
-# Create with HTTP REST endpoints
-mockd stateful add users --path /api/users
-# Endpoints: GET/POST /api/users, GET/PUT/DELETE /api/users/{id}
-
-# Bridge-only (no HTTP endpoints, accessible via SOAP/GraphQL/gRPC)
-mockd stateful add products
+# Create a data store
+mockd stateful add users
 
 # Custom ID field
-mockd stateful add orders --path /api/orders --id-field orderId
+mockd stateful add orders --id-field orderId
+
+# Quick prototyping: create resource + HTTP CRUD mocks in one step
+mockd http add --path /api/users --stateful
 ```
 
 ---
@@ -1181,11 +1179,11 @@ mockd stateful list [flags]
 ```
 Stateful Resources (3):
 
-NAME        BASE PATH       ITEMS  SEED  ID FIELD
-----        ---------       -----  ----  --------
-users       /api/users      5      3     id
-products    /api/products   12     10    id
-orders      (bridge-only)   0      0     orderId
+NAME        ITEMS  SEED  ID FIELD
+----        -----  ----  --------
+users       5      3     id
+products    12     10    id
+orders      0      0     orderId
 
 Total items across all resources: 17
 ```

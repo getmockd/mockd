@@ -94,652 +94,6 @@ func TestParseIntParam(t *testing.T) {
 	}
 }
 
-func TestHandleStatefulCreate_ConflictError(t *testing.T) {
-	// This test verifies that handleStatefulCreate properly extracts the ID
-	// from ConflictError instead of panicking on type assertion.
-
-	// Create a handler with a logger
-	h := &Handler{
-		log: slog.Default(),
-	}
-
-	// Create a stateful resource with seed data via StateStore (which loads seed data)
-	store := stateful.NewStateStore()
-	cfg := &stateful.ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
-		SeedData: []map[string]interface{}{
-			{"id": "existing-user", "name": "John"},
-		},
-	}
-	if err := store.Register(cfg); err != nil {
-		t.Fatalf("Failed to register resource: %v", err)
-	}
-	resource := store.Get("users")
-
-	// Test 1: Try to create a duplicate with explicit ID
-	t.Run("duplicate with explicit ID", func(t *testing.T) {
-		body := []byte(`{"id": "existing-user", "name": "Jane"}`)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
-
-		status := h.handleStatefulCreate(w, req, resource, nil, body)
-
-		if status != http.StatusConflict {
-			t.Errorf("Expected status %d, got %d", http.StatusConflict, status)
-		}
-
-		var resp stateful.ErrorResponse
-		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
-
-		if resp.ID != "existing-user" {
-			t.Errorf("Expected error response ID 'existing-user', got '%s'", resp.ID)
-		}
-		if resp.StatusCode != http.StatusConflict {
-			t.Errorf("Expected status code %d in response, got %d", http.StatusConflict, resp.StatusCode)
-		}
-	})
-
-	// Test 2: Create without ID (should auto-generate and succeed)
-	t.Run("create without ID succeeds", func(t *testing.T) {
-		body := []byte(`{"name": "New User"}`)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
-
-		status := h.handleStatefulCreate(w, req, resource, nil, body)
-
-		if status != http.StatusCreated {
-			t.Errorf("Expected status %d, got %d", http.StatusCreated, status)
-		}
-	})
-
-	// Test 3: Verify no panic on conflict with auto-generated ID scenario
-	// This is the bug we fixed - previously data["id"].(string) would panic
-	// if ID wasn't in the request body
-	t.Run("no panic on conflict error handling", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r != nil {
-				t.Errorf("handleStatefulCreate panicked: %v", r)
-			}
-		}()
-
-		// Create a resource, then try to create another with same ID
-		body := []byte(`{"id": "test-conflict", "name": "First"}`)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
-		h.handleStatefulCreate(w, req, resource, nil, body)
-
-		// Now try duplicate
-		w = httptest.NewRecorder()
-		req = httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
-		h.handleStatefulCreate(w, req, resource, nil, body)
-
-		// Should get conflict without panic
-		if w.Code != http.StatusConflict {
-			t.Errorf("Expected conflict status, got %d", w.Code)
-		}
-	})
-}
-
-func TestHandleStatefulCreate_InvalidJSON(t *testing.T) {
-	h := &Handler{
-		log: slog.Default(),
-	}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	body := []byte(`{invalid json}`)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/items", bytes.NewReader(body))
-
-	status := h.handleStatefulCreate(w, req, resource, nil, body)
-
-	if status != http.StatusBadRequest {
-		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, status)
-	}
-}
-
-func TestHandleStatefulCreate_BodyTooLarge(t *testing.T) {
-	h := &Handler{
-		log: slog.Default(),
-	}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	// Create a body larger than MaxStatefulBodySize
-	largeBody := bytes.Repeat([]byte("x"), MaxStatefulBodySize+1)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/items", bytes.NewReader(largeBody))
-
-	status := h.handleStatefulCreate(w, req, resource, nil, largeBody)
-
-	if status != http.StatusRequestEntityTooLarge {
-		t.Errorf("Expected status %d, got %d", http.StatusRequestEntityTooLarge, status)
-	}
-}
-
-func TestHandleStatefulUpdate_NotFound(t *testing.T) {
-	h := &Handler{
-		log: slog.Default(),
-	}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	body := []byte(`{"name": "Updated"}`)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, "/api/items/nonexistent-id", bytes.NewReader(body))
-
-	status := h.handleStatefulUpdate(w, req, resource, "nonexistent-id", nil, body)
-
-	if status != http.StatusNotFound {
-		t.Errorf("Expected status %d, got %d", http.StatusNotFound, status)
-	}
-
-	var resp stateful.ErrorResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
-
-	if resp.ID != "nonexistent-id" {
-		t.Errorf("Expected error response ID 'nonexistent-id', got '%s'", resp.ID)
-	}
-}
-
-func TestHandleStatefulDelete_NotFound(t *testing.T) {
-	h := &Handler{
-		log: slog.Default(),
-	}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	w := httptest.NewRecorder()
-
-	status := h.handleStatefulDelete(w, resource, "nonexistent-id")
-
-	if status != http.StatusNotFound {
-		t.Errorf("Expected status %d, got %d", http.StatusNotFound, status)
-	}
-}
-
-func TestHandleStatefulGet_NotFound(t *testing.T) {
-	h := &Handler{
-		log: slog.Default(),
-	}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	w := httptest.NewRecorder()
-
-	status := h.handleStatefulGet(w, resource, "nonexistent-id")
-
-	if status != http.StatusNotFound {
-		t.Errorf("Expected status %d, got %d", http.StatusNotFound, status)
-	}
-}
-
-func TestHandleStateful_MethodRouting(t *testing.T) {
-	h := &Handler{
-		log: slog.Default(),
-	}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-		SeedData: []map[string]interface{}{
-			{"id": "item-1", "name": "Test Item"},
-		},
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	tests := []struct {
-		name           string
-		method         string
-		itemID         string
-		body           string
-		expectedStatus int
-	}{
-		{
-			name:           "GET item",
-			method:         http.MethodGet,
-			itemID:         "item-1",
-			body:           "",
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "GET collection",
-			method:         http.MethodGet,
-			itemID:         "",
-			body:           "",
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "POST create",
-			method:         http.MethodPost,
-			itemID:         "",
-			body:           `{"name": "New Item"}`,
-			expectedStatus: http.StatusCreated,
-		},
-		{
-			name:           "PUT without ID returns error",
-			method:         http.MethodPut,
-			itemID:         "",
-			body:           `{"name": "Updated"}`,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "PUT with ID",
-			method:         http.MethodPut,
-			itemID:         "item-1",
-			body:           `{"name": "Updated Item"}`,
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "DELETE without ID returns error",
-			method:         http.MethodDelete,
-			itemID:         "",
-			body:           "",
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "DELETE with ID",
-			method:         http.MethodDelete,
-			itemID:         "item-1",
-			body:           "",
-			expectedStatus: http.StatusNoContent,
-		},
-		{
-			name:           "PATCH with ID",
-			method:         http.MethodPatch,
-			itemID:         "item-1",
-			body:           `{"name": "Patched"}`,
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "PATCH without ID returns error",
-			method:         http.MethodPatch,
-			itemID:         "",
-			body:           `{"name": "Patched"}`,
-			expectedStatus: http.StatusBadRequest,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Reset resource for each test
-			resource.Reset()
-
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest(tt.method, "/api/items", bytes.NewBufferString(tt.body))
-
-			status := h.handleStateful(w, req, resource, tt.itemID, nil, []byte(tt.body))
-
-			if status != tt.expectedStatus {
-				t.Errorf("Expected status %d, got %d", tt.expectedStatus, status)
-			}
-		})
-	}
-}
-
-// ── Full CRUD lifecycle ──────────────────────────────────────────────────────
-
-func TestHandleStateful_FullCRUDLifecycle(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "products",
-		BasePath: "/api/products",
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	// 1. Create
-	createBody := []byte(`{"id": "prod-1", "name": "Widget", "price": 9.99}`)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/products", bytes.NewReader(createBody))
-	status := h.handleStatefulCreate(w, req, resource, nil, createBody)
-
-	if status != http.StatusCreated {
-		t.Fatalf("Create: expected %d, got %d", http.StatusCreated, status)
-	}
-
-	var created map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
-		t.Fatalf("Create decode: %v", err)
-	}
-	if created["id"] != "prod-1" {
-		t.Errorf("Create: expected id 'prod-1', got %v", created["id"])
-	}
-	if created["name"] != "Widget" {
-		t.Errorf("Create: expected name 'Widget', got %v", created["name"])
-	}
-	if _, ok := created["createdAt"]; !ok {
-		t.Error("Create: response should contain createdAt")
-	}
-	if _, ok := created["updatedAt"]; !ok {
-		t.Error("Create: response should contain updatedAt")
-	}
-
-	// 2. Get
-	w = httptest.NewRecorder()
-	status = h.handleStatefulGet(w, resource, "prod-1")
-
-	if status != http.StatusOK {
-		t.Fatalf("Get: expected %d, got %d", http.StatusOK, status)
-	}
-
-	var fetched map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&fetched); err != nil {
-		t.Fatalf("Get decode: %v", err)
-	}
-	if fetched["name"] != "Widget" {
-		t.Errorf("Get: expected name 'Widget', got %v", fetched["name"])
-	}
-
-	// 3. List (should have 1 item)
-	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/api/products", nil)
-	status = h.handleStatefulList(w, req, resource, nil)
-
-	if status != http.StatusOK {
-		t.Fatalf("List: expected %d, got %d", http.StatusOK, status)
-	}
-
-	var listResp stateful.PaginatedResponse
-	if err := json.NewDecoder(w.Body).Decode(&listResp); err != nil {
-		t.Fatalf("List decode: %v", err)
-	}
-	if listResp.Meta.Total != 1 {
-		t.Errorf("List: expected total 1, got %d", listResp.Meta.Total)
-	}
-	if listResp.Meta.Count != 1 {
-		t.Errorf("List: expected count 1, got %d", listResp.Meta.Count)
-	}
-
-	// 4. Update (PUT)
-	updateBody := []byte(`{"name": "Super Widget", "price": 19.99}`)
-	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPut, "/api/products/prod-1", bytes.NewReader(updateBody))
-	status = h.handleStatefulUpdate(w, req, resource, "prod-1", nil, updateBody)
-
-	if status != http.StatusOK {
-		t.Fatalf("Update: expected %d, got %d", http.StatusOK, status)
-	}
-
-	var updated map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&updated); err != nil {
-		t.Fatalf("Update decode: %v", err)
-	}
-	if updated["name"] != "Super Widget" {
-		t.Errorf("Update: expected name 'Super Widget', got %v", updated["name"])
-	}
-
-	// 5. Delete
-	w = httptest.NewRecorder()
-	status = h.handleStatefulDelete(w, resource, "prod-1")
-
-	if status != http.StatusNoContent {
-		t.Fatalf("Delete: expected %d, got %d", http.StatusNoContent, status)
-	}
-
-	// 6. Verify deleted — Get should 404
-	w = httptest.NewRecorder()
-	status = h.handleStatefulGet(w, resource, "prod-1")
-
-	if status != http.StatusNotFound {
-		t.Errorf("Get after delete: expected %d, got %d", http.StatusNotFound, status)
-	}
-}
-
-// ── Capacity limit tests ─────────────────────────────────────────────────────
-
-func TestHandleStatefulCreate_CapacityLimit(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "limited",
-		BasePath: "/api/limited",
-		MaxItems: 2,
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	// Create 2 items (at capacity)
-	for i := 0; i < 2; i++ {
-		body := []byte(`{"name": "item"}`)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/limited", bytes.NewReader(body))
-		status := h.handleStatefulCreate(w, req, resource, nil, body)
-		if status != http.StatusCreated {
-			t.Fatalf("Create %d: expected %d, got %d", i, http.StatusCreated, status)
-		}
-	}
-
-	// Third create should fail with 507
-	body := []byte(`{"name": "one too many"}`)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/limited", bytes.NewReader(body))
-	status := h.handleStatefulCreate(w, req, resource, nil, body)
-
-	if status != http.StatusInsufficientStorage {
-		t.Errorf("Expected %d for capacity exceeded, got %d", http.StatusInsufficientStorage, status)
-	}
-
-	var resp stateful.ErrorResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("Decode error response: %v", err)
-	}
-	if resp.Hint == "" {
-		t.Error("Capacity error response should include a hint")
-	}
-	if resp.Resource != "limited" {
-		t.Errorf("Error response resource: expected 'limited', got %q", resp.Resource)
-	}
-}
-
-// ── Method not allowed ───────────────────────────────────────────────────────
-
-func TestHandleStateful_MethodNotAllowed(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest("OPTIONS", "/api/items", nil)
-	status := h.handleStateful(w, req, resource, "", nil, nil)
-
-	if status != http.StatusMethodNotAllowed {
-		t.Errorf("Expected %d, got %d", http.StatusMethodNotAllowed, status)
-	}
-}
-
-// ── Update/Patch edge cases ──────────────────────────────────────────────────
-
-func TestHandleStatefulUpdate_BodyTooLarge(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-		SeedData: []map[string]interface{}{
-			{"id": "item-1", "name": "Original"},
-		},
-	}
-	store := stateful.NewStateStore()
-	if err := store.Register(cfg); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	resource := store.Get("items")
-
-	largeBody := bytes.Repeat([]byte("x"), MaxStatefulBodySize+1)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, "/api/items/item-1", bytes.NewReader(largeBody))
-	status := h.handleStatefulUpdate(w, req, resource, "item-1", nil, largeBody)
-
-	if status != http.StatusRequestEntityTooLarge {
-		t.Errorf("Expected %d, got %d", http.StatusRequestEntityTooLarge, status)
-	}
-}
-
-func TestHandleStatefulUpdate_InvalidJSON(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-		SeedData: []map[string]interface{}{
-			{"id": "item-1", "name": "Original"},
-		},
-	}
-	store := stateful.NewStateStore()
-	if err := store.Register(cfg); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	resource := store.Get("items")
-
-	body := []byte(`{bad json}`)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, "/api/items/item-1", bytes.NewReader(body))
-	status := h.handleStatefulUpdate(w, req, resource, "item-1", nil, body)
-
-	if status != http.StatusBadRequest {
-		t.Errorf("Expected %d, got %d", http.StatusBadRequest, status)
-	}
-}
-
-func TestHandleStatefulPatch_NotFound(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	body := []byte(`{"name": "Patched"}`)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/api/items/ghost", bytes.NewReader(body))
-	status := h.handleStatefulPatch(w, req, resource, "ghost", nil, body)
-
-	if status != http.StatusNotFound {
-		t.Errorf("Expected %d, got %d", http.StatusNotFound, status)
-	}
-}
-
-func TestHandleStatefulPatch_InvalidJSON(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-		SeedData: []map[string]interface{}{
-			{"id": "item-1", "name": "Original"},
-		},
-	}
-	store := stateful.NewStateStore()
-	if err := store.Register(cfg); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	resource := store.Get("items")
-
-	body := []byte(`not json`)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/api/items/item-1", bytes.NewReader(body))
-	status := h.handleStatefulPatch(w, req, resource, "item-1", nil, body)
-
-	if status != http.StatusBadRequest {
-		t.Errorf("Expected %d, got %d", http.StatusBadRequest, status)
-	}
-}
-
-func TestHandleStatefulPatch_BodyTooLarge(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-		SeedData: []map[string]interface{}{
-			{"id": "item-1", "name": "Original"},
-		},
-	}
-	store := stateful.NewStateStore()
-	if err := store.Register(cfg); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	resource := store.Get("items")
-
-	largeBody := bytes.Repeat([]byte("x"), MaxStatefulBodySize+1)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/api/items/item-1", bytes.NewReader(largeBody))
-	status := h.handleStatefulPatch(w, req, resource, "item-1", nil, largeBody)
-
-	if status != http.StatusRequestEntityTooLarge {
-		t.Errorf("Expected %d, got %d", http.StatusRequestEntityTooLarge, status)
-	}
-}
-
-func TestHandleStatefulPatch_MergesFields(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-		SeedData: []map[string]interface{}{
-			{"id": "item-1", "name": "Original", "color": "blue"},
-		},
-	}
-	store := stateful.NewStateStore()
-	if err := store.Register(cfg); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	resource := store.Get("items")
-
-	// Patch only the name — color should be preserved
-	body := []byte(`{"name": "Patched"}`)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPatch, "/api/items/item-1", bytes.NewReader(body))
-	status := h.handleStatefulPatch(w, req, resource, "item-1", nil, body)
-
-	if status != http.StatusOK {
-		t.Fatalf("Patch: expected %d, got %d", http.StatusOK, status)
-	}
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("Decode: %v", err)
-	}
-
-	if resp["name"] != "Patched" {
-		t.Errorf("Expected patched name, got %v", resp["name"])
-	}
-	if resp["color"] != "blue" {
-		t.Errorf("Expected color 'blue' to be preserved, got %v", resp["color"])
-	}
-}
-
 // ── Error response format ────────────────────────────────────────────────────
 
 func TestWriteStatefulError_ResponseBody(t *testing.T) {
@@ -797,8 +151,7 @@ func TestParseQueryFilter_Defaults(t *testing.T) {
 	h := &Handler{log: slog.Default()}
 
 	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 	}
 	resource := stateful.NewStatefulResource(cfg)
 
@@ -817,8 +170,7 @@ func TestParseQueryFilter_WithParams(t *testing.T) {
 	h := &Handler{log: slog.Default()}
 
 	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 	}
 	resource := stateful.NewStatefulResource(cfg)
 
@@ -846,8 +198,7 @@ func TestParseQueryFilter_InvalidLimitIgnored(t *testing.T) {
 	h := &Handler{log: slog.Default()}
 
 	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 	}
 	resource := stateful.NewStatefulResource(cfg)
 
@@ -864,8 +215,7 @@ func TestParseQueryFilter_ZeroLimitIgnored(t *testing.T) {
 	h := &Handler{log: slog.Default()}
 
 	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 	}
 	resource := stateful.NewStatefulResource(cfg)
 
@@ -883,7 +233,6 @@ func TestParseQueryFilter_WithParentField(t *testing.T) {
 
 	cfg := &stateful.ResourceConfig{
 		Name:        "comments",
-		BasePath:    "/api/posts/:postId/comments",
 		ParentField: "postId",
 	}
 	resource := stateful.NewStatefulResource(cfg)
@@ -904,8 +253,7 @@ func TestParseQueryFilter_ReservedKeysExcludedFromFilters(t *testing.T) {
 	h := &Handler{log: slog.Default()}
 
 	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 	}
 	resource := stateful.NewStatefulResource(cfg)
 
@@ -925,201 +273,7 @@ func TestParseQueryFilter_ReservedKeysExcludedFromFilters(t *testing.T) {
 	}
 }
 
-// ── List with query parameters (end-to-end through handler) ──────────────────
-
-func TestHandleStatefulList_Pagination(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	seeds := make([]map[string]interface{}, 10)
-	for i := 0; i < 10; i++ {
-		seeds[i] = map[string]interface{}{
-			"id":   "item-" + string(rune('a'+i)),
-			"name": "Item " + string(rune('A'+i)),
-		}
-	}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-		SeedData: seeds,
-	}
-	store := stateful.NewStateStore()
-	if err := store.Register(cfg); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	resource := store.Get("items")
-
-	// Get page with limit=3&offset=0
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/items?limit=3&offset=0", nil)
-	status := h.handleStatefulList(w, req, resource, nil)
-
-	if status != http.StatusOK {
-		t.Fatalf("List: expected %d, got %d", http.StatusOK, status)
-	}
-
-	var resp stateful.PaginatedResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("Decode: %v", err)
-	}
-
-	if resp.Meta.Total != 10 {
-		t.Errorf("Total: expected 10, got %d", resp.Meta.Total)
-	}
-	if resp.Meta.Count != 3 {
-		t.Errorf("Count: expected 3, got %d", resp.Meta.Count)
-	}
-	if resp.Meta.Limit != 3 {
-		t.Errorf("Limit in meta: expected 3, got %d", resp.Meta.Limit)
-	}
-	if len(resp.Data) != 3 {
-		t.Errorf("Data length: expected 3, got %d", len(resp.Data))
-	}
-}
-
-func TestHandleStatefulList_EmptyCollection(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "empty",
-		BasePath: "/api/empty",
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/empty", nil)
-	status := h.handleStatefulList(w, req, resource, nil)
-
-	if status != http.StatusOK {
-		t.Fatalf("List empty: expected %d, got %d", http.StatusOK, status)
-	}
-
-	var resp stateful.PaginatedResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("Decode: %v", err)
-	}
-
-	if resp.Meta.Total != 0 {
-		t.Errorf("Total: expected 0, got %d", resp.Meta.Total)
-	}
-	if len(resp.Data) != 0 {
-		t.Errorf("Data: expected empty, got %d items", len(resp.Data))
-	}
-}
-
-// ── Get success with response body validation ────────────────────────────────
-
-func TestHandleStatefulGet_Success_ResponseContainsAllFields(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-		SeedData: []map[string]interface{}{
-			{"id": "item-1", "name": "Test", "tags": []interface{}{"a", "b"}},
-		},
-	}
-	store := stateful.NewStateStore()
-	if err := store.Register(cfg); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	resource := store.Get("items")
-
-	w := httptest.NewRecorder()
-	status := h.handleStatefulGet(w, resource, "item-1")
-
-	if status != http.StatusOK {
-		t.Fatalf("Get: expected %d, got %d", http.StatusOK, status)
-	}
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("Decode: %v", err)
-	}
-
-	if resp["id"] != "item-1" {
-		t.Errorf("id: got %v", resp["id"])
-	}
-	if resp["name"] != "Test" {
-		t.Errorf("name: got %v", resp["name"])
-	}
-	if resp["createdAt"] == nil {
-		t.Error("createdAt should be present")
-	}
-	if resp["updatedAt"] == nil {
-		t.Error("updatedAt should be present")
-	}
-
-	// Note: Content-Type is set by the parent handleStateful dispatcher,
-	// not by handleStatefulGet directly, so we skip that check here.
-}
-
-// ── Delete success ───────────────────────────────────────────────────────────
-
-func TestHandleStatefulDelete_Success_NoResponseBody(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-		SeedData: []map[string]interface{}{
-			{"id": "item-1", "name": "Doomed"},
-		},
-	}
-	store := stateful.NewStateStore()
-	if err := store.Register(cfg); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	resource := store.Get("items")
-
-	w := httptest.NewRecorder()
-	status := h.handleStatefulDelete(w, resource, "item-1")
-
-	if status != http.StatusNoContent {
-		t.Errorf("Delete: expected %d, got %d", http.StatusNoContent, status)
-	}
-
-	// 204 should have no response body
-	if w.Body.Len() != 0 {
-		t.Errorf("Delete should return empty body, got %d bytes", w.Body.Len())
-	}
-
-	// Verify item is gone
-	if resource.Get("item-1") != nil {
-		t.Error("Item should have been deleted")
-	}
-}
-
-// ── Create auto-generates ID ─────────────────────────────────────────────────
-
-func TestHandleStatefulCreate_AutoID(t *testing.T) {
-	h := &Handler{log: slog.Default()}
-
-	cfg := &stateful.ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
-	}
-	resource := stateful.NewStatefulResource(cfg)
-
-	body := []byte(`{"name": "No ID Provided"}`)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/items", bytes.NewReader(body))
-	status := h.handleStatefulCreate(w, req, resource, nil, body)
-
-	if status != http.StatusCreated {
-		t.Fatalf("Create: expected %d, got %d", http.StatusCreated, status)
-	}
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("Decode: %v", err)
-	}
-
-	id, ok := resp["id"].(string)
-	if !ok || id == "" {
-		t.Error("Create without explicit ID should auto-generate a UUID")
-	}
-}
+// ── handleCustomOperation tests ──────────────────────────────────────────────
 
 func TestHandleCustomOperation_BodyTooLarge(t *testing.T) {
 	h := &Handler{
@@ -1145,5 +299,328 @@ func TestHandleCustomOperation_BodyTooLarge(t *testing.T) {
 	}
 	if resp.Error != "request body too large" {
 		t.Fatalf("response error = %q, want request body too large", resp.Error)
+	}
+}
+
+// ── parseStatefulBody tests ──────────────────────────────────────────────────
+
+func TestParseStatefulBody_JSON(t *testing.T) {
+	body := []byte(`{"name":"Alice","age":30}`)
+	data, err := parseStatefulBody(body, "application/json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if data["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", data["name"])
+	}
+	if data["age"] != float64(30) {
+		t.Errorf("expected age=30, got %v (type %T)", data["age"], data["age"])
+	}
+}
+
+func TestParseStatefulBody_JSONWithCharset(t *testing.T) {
+	body := []byte(`{"name":"Bob"}`)
+	data, err := parseStatefulBody(body, "application/json; charset=utf-8")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if data["name"] != "Bob" {
+		t.Errorf("expected name=Bob, got %v", data["name"])
+	}
+}
+
+func TestParseStatefulBody_EmptyContentType(t *testing.T) {
+	body := []byte(`{"name":"Charlie"}`)
+	data, err := parseStatefulBody(body, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if data["name"] != "Charlie" {
+		t.Errorf("expected name=Charlie, got %v", data["name"])
+	}
+}
+
+func TestParseStatefulBody_FormEncoded(t *testing.T) {
+	body := []byte("name=Alice&email=alice%40example.com")
+	data, err := parseStatefulBody(body, "application/x-www-form-urlencoded")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if data["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", data["name"])
+	}
+	if data["email"] != "alice@example.com" {
+		t.Errorf("expected email=alice@example.com, got %v", data["email"])
+	}
+}
+
+func TestParseStatefulBody_FormEncodedNested(t *testing.T) {
+	body := []byte("name=Alice&metadata[tier]=premium&metadata[source]=api")
+	data, err := parseStatefulBody(body, "application/x-www-form-urlencoded")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if data["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", data["name"])
+	}
+	meta, ok := data["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected metadata as map, got %T", data["metadata"])
+	}
+	if meta["tier"] != "premium" {
+		t.Errorf("expected metadata.tier=premium, got %v", meta["tier"])
+	}
+	if meta["source"] != "api" {
+		t.Errorf("expected metadata.source=api, got %v", meta["source"])
+	}
+}
+
+func TestParseStatefulBody_FormEncodedDeepNested(t *testing.T) {
+	body := []byte("items[0][price]=price_123&items[0][quantity]=1")
+	data, err := parseStatefulBody(body, "application/x-www-form-urlencoded")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Numeric-keyed maps are converted to arrays
+	items, ok := data["items"].([]any)
+	if !ok {
+		t.Fatalf("expected items as []any (array), got %T", data["items"])
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	item0, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected items[0] as map, got %T", items[0])
+	}
+	if item0["price"] != "price_123" {
+		t.Errorf("expected price=price_123, got %v", item0["price"])
+	}
+	// quantity is coerced to int64 from form value
+	if item0["quantity"] != int64(1) {
+		t.Errorf("expected quantity=1 (int64), got %v (%T)", item0["quantity"], item0["quantity"])
+	}
+}
+
+func TestParseStatefulBody_InvalidJSON(t *testing.T) {
+	body := []byte(`{not valid json}`)
+	_, err := parseStatefulBody(body, "application/json")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestParseStatefulBody_UnknownContentTypeFallsBackToJSON(t *testing.T) {
+	body := []byte(`{"name":"Dave"}`)
+	data, err := parseStatefulBody(body, "text/plain")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if data["name"] != "Dave" {
+		t.Errorf("expected name=Dave, got %v", data["name"])
+	}
+}
+
+func TestParseStatefulBody_UnknownContentTypeInvalidJSON(t *testing.T) {
+	body := []byte(`not json at all`)
+	_, err := parseStatefulBody(body, "text/plain")
+	if err == nil {
+		t.Fatal("expected error for unknown content type with invalid JSON")
+	}
+}
+
+// ── formToMap tests ──────────────────────────────────────────────────────────
+
+func TestFormToMap_Simple(t *testing.T) {
+	values := map[string][]string{
+		"name":  {"Alice"},
+		"email": {"alice@example.com"},
+	}
+	result := formToMap(values)
+	if result["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", result["name"])
+	}
+	if result["email"] != "alice@example.com" {
+		t.Errorf("expected email=alice@example.com, got %v", result["email"])
+	}
+}
+
+func TestFormToMap_BracketNested(t *testing.T) {
+	values := map[string][]string{
+		"metadata[tier]":   {"premium"},
+		"metadata[source]": {"api"},
+	}
+	result := formToMap(values)
+	meta, ok := result["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected metadata as map, got %T", result["metadata"])
+	}
+	if meta["tier"] != "premium" {
+		t.Errorf("expected tier=premium, got %v", meta["tier"])
+	}
+	if meta["source"] != "api" {
+		t.Errorf("expected source=api, got %v", meta["source"])
+	}
+}
+
+func TestFormToMap_EmptyValues(t *testing.T) {
+	values := map[string][]string{
+		"empty": {},
+	}
+	result := formToMap(values)
+	if _, ok := result["empty"]; ok {
+		t.Error("expected empty values to be skipped")
+	}
+}
+
+func TestFormToMap_MultipleValues_UsesFirst(t *testing.T) {
+	values := map[string][]string{
+		"name": {"Alice", "Bob"},
+	}
+	result := formToMap(values)
+	if result["name"] != "Alice" {
+		t.Errorf("expected first value Alice, got %v", result["name"])
+	}
+}
+
+// ── setNested tests ──────────────────────────────────────────────────────────
+
+func TestSetNested_SingleLevel(t *testing.T) {
+	result := make(map[string]any)
+	setNested(result, "metadata", "[tier]", "premium")
+	meta, ok := result["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map, got %T", result["metadata"])
+	}
+	if meta["tier"] != "premium" {
+		t.Errorf("expected tier=premium, got %v", meta["tier"])
+	}
+}
+
+func TestSetNested_MultiLevel(t *testing.T) {
+	result := make(map[string]any)
+	setNested(result, "a", "[b][c]", "deep")
+	a, ok := result["a"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map at a, got %T", result["a"])
+	}
+	b, ok := a["b"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map at a.b, got %T", a["b"])
+	}
+	if b["c"] != "deep" {
+		t.Errorf("expected c=deep, got %v", b["c"])
+	}
+}
+
+func TestSetNested_ExistingMap(t *testing.T) {
+	result := map[string]any{
+		"metadata": map[string]any{"existing": "value"},
+	}
+	setNested(result, "metadata", "[new]", "added")
+	meta := result["metadata"].(map[string]any)
+	if meta["existing"] != "value" {
+		t.Error("expected existing value to be preserved")
+	}
+	if meta["new"] != "added" {
+		t.Errorf("expected new=added, got %v", meta["new"])
+	}
+}
+
+func TestSetNested_ConflictBaseNotMap(t *testing.T) {
+	result := map[string]any{
+		"metadata": "not a map",
+	}
+	setNested(result, "metadata", "[key]", "value")
+	// Should not overwrite the string — setNested returns early on conflict
+	if result["metadata"] != "not a map" {
+		t.Errorf("expected conflict to be skipped, got %v", result["metadata"])
+	}
+}
+
+// ── httpStatusToErrorCode tests ──────────────────────────────────────────────
+
+func TestHttpStatusToErrorCode(t *testing.T) {
+	tests := []struct {
+		status   int
+		expected stateful.ErrorCode
+	}{
+		{http.StatusNotFound, stateful.ErrCodeNotFound},
+		{http.StatusConflict, stateful.ErrCodeConflict},
+		{http.StatusBadRequest, stateful.ErrCodeValidation},
+		{http.StatusUnprocessableEntity, stateful.ErrCodeValidation},
+		{http.StatusRequestEntityTooLarge, stateful.ErrCodePayloadTooLarge},
+		{http.StatusInsufficientStorage, stateful.ErrCodeCapacityExceeded},
+		{http.StatusInternalServerError, stateful.ErrCodeInternal},
+		{http.StatusServiceUnavailable, stateful.ErrCodeInternal}, // unmapped → internal
+		{http.StatusForbidden, stateful.ErrCodeInternal},          // unmapped → internal
+	}
+
+	for _, tt := range tests {
+		t.Run(http.StatusText(tt.status), func(t *testing.T) {
+			got := httpStatusToErrorCode(tt.status)
+			if got != tt.expected {
+				t.Errorf("httpStatusToErrorCode(%d) = %v, want %v", tt.status, got, tt.expected)
+			}
+		})
+	}
+}
+
+// ── parseQueryFilter cursor params tests ─────────────────────────────────────
+
+func TestParseQueryFilter_CursorParams(t *testing.T) {
+	h := &Handler{log: slog.Default()}
+
+	cfg := &stateful.ResourceConfig{
+		Name: "items",
+	}
+	resource := stateful.NewStatefulResource(cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/items?starting_after=item-5&limit=10", nil)
+	filter := h.parseQueryFilter(req, resource, nil)
+
+	if filter.StartingAfter != "item-5" {
+		t.Errorf("expected starting_after=item-5, got %q", filter.StartingAfter)
+	}
+	if filter.Limit != 10 {
+		t.Errorf("expected limit=10, got %d", filter.Limit)
+	}
+}
+
+func TestParseQueryFilter_EndingBeforeParam(t *testing.T) {
+	h := &Handler{log: slog.Default()}
+
+	cfg := &stateful.ResourceConfig{
+		Name: "items",
+	}
+	resource := stateful.NewStatefulResource(cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/items?ending_before=item-10", nil)
+	filter := h.parseQueryFilter(req, resource, nil)
+
+	if filter.EndingBefore != "item-10" {
+		t.Errorf("expected ending_before=item-10, got %q", filter.EndingBefore)
+	}
+}
+
+func TestParseQueryFilter_CursorParamsExcludedFromFilters(t *testing.T) {
+	h := &Handler{log: slog.Default()}
+
+	cfg := &stateful.ResourceConfig{
+		Name: "items",
+	}
+	resource := stateful.NewStatefulResource(cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/items?starting_after=abc&ending_before=xyz&custom=value", nil)
+	filter := h.parseQueryFilter(req, resource, nil)
+
+	if _, ok := filter.Filters["starting_after"]; ok {
+		t.Error("starting_after should be excluded from Filters map")
+	}
+	if _, ok := filter.Filters["ending_before"]; ok {
+		t.Error("ending_before should be excluded from Filters map")
+	}
+	if filter.Filters["custom"] != "value" {
+		t.Errorf("expected custom=value in Filters, got %q", filter.Filters["custom"])
 	}
 }

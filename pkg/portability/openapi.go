@@ -397,7 +397,7 @@ func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ 
 	}
 
 	enabled := true
-	return &config.MockConfiguration{
+	m := &config.MockConfiguration{
 		ID:        generateImportID(),
 		Type:      mock.TypeHTTP,
 		Name:      name,
@@ -410,6 +410,13 @@ func (i *OpenAPIImporter) operationToMock(path, method string, op *Operation, _ 
 			Response: respDef,
 		},
 	}
+	if op.OperationID != "" {
+		m.OperationID = op.OperationID
+		if m.Name == "" || m.Name == fmt.Sprintf("%s %s", method, path) {
+			m.Name = op.OperationID
+		}
+	}
+	return m
 }
 
 // importSwagger2 imports a Swagger 2.0 specification.
@@ -540,7 +547,7 @@ func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *Swagge
 	}
 
 	enabled2 := true
-	return &config.MockConfiguration{
+	m := &config.MockConfiguration{
 		ID:        generateImportID(),
 		Type:      mock.TypeHTTP,
 		Name:      name,
@@ -557,6 +564,13 @@ func (i *OpenAPIImporter) swaggerOperationToMock(path, method string, op *Swagge
 			},
 		},
 	}
+	if op.OperationID != "" {
+		m.OperationID = op.OperationID
+		if m.Name == "" || m.Name == fmt.Sprintf("%s %s", method, path) {
+			m.Name = op.OperationID
+		}
+	}
+	return m
 }
 
 // Format returns FormatOpenAPI.

@@ -101,6 +101,34 @@ mocks:
           {"id":"{{uuid}}","created":true}
 ```
 
+## Tables + Extend (Stateful Config)
+
+The recommended way to add stateful CRUD to imported API specs in config files:
+
+```yaml
+# Tables + Extend (recommended for imported specs)
+version: "1.0"
+imports:
+  - path: api-spec.yaml
+    as: api
+tables:
+  - name: users
+    idField: id
+    seedData:
+      - { id: "1", name: "Alice", email: "alice@example.com" }
+extend:
+  - { mock: api.ListUsers, table: users, action: list }
+  - { mock: api.CreateUser, table: users, action: create }
+  - { mock: api.GetUser, table: users, action: get }
+  - { mock: api.UpdateUser, table: users, action: update }
+  - { mock: api.DeleteUser, table: users, action: delete }
+```
+
+- **tables**: Pure data stores — no routing, no basePath. Just a name, optional idField, and optional seedData.
+- **extend**: Binds imported mock endpoints to table CRUD actions (`list`, `get`, `create`, `update`, `delete`).
+- **Custom operations**: Use `action: custom` + `operation: OpName` for non-CRUD actions (e.g., confirm, capture, cancel).
+- The default list response format is `{"data":[...],"meta":{...}}`. Use response transforms to customize the envelope.
+
 ## Template Functions
 
 Use `{{...}}` in response bodies:
@@ -130,6 +158,6 @@ Use `{{...}}` in response bodies:
 1. Always use ports 4280/4290, never 8080
 2. The `id` and `type` fields are auto-generated if omitted in config files
 3. Admin API expects `type` + protocol wrapper (e.g., `type: http` + `http: { matcher: ..., response: ... }`)
-4. For stateful CRUD, use `mockd add http --path /api/users --stateful` or configure `statefulResources` in YAML
+4. For stateful CRUD, use `mockd add http --path /api/users --stateful` for quick prototyping, or configure tables+extend in YAML config files (recommended)
 5. Request logs: `mockd logs --requests` (not `mockd logs`)
 6. Stop daemon: `mockd stop` (not Ctrl+C on a daemon)

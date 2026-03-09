@@ -428,8 +428,7 @@ func TestHandleExportConfig(t *testing.T) {
 
 		ctx := t.Context()
 		_ = api.dataStore.StatefulResources().Create(ctx, &config.StatefulResourceConfig{
-			Name:     "users",
-			BasePath: "/api/users",
+			Name: "users",
 		})
 
 		req := httptest.NewRequest("GET", "/config", nil)

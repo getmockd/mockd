@@ -269,6 +269,21 @@ func runStart(cmd *cobra.Command, args []string) error {
 		baseDir := config.GetMockFileBaseDir(sf.ConfigFile)
 		server.Handler().SetBaseDir(baseDir)
 
+		// Process imports: read referenced specs, auto-detect format, merge mocks.
+		if err := processImports(collection, baseDir); err != nil {
+			_ = server.Stop()
+			_ = adminAPI.Stop()
+			return fmt.Errorf("failed to process imports: %w", err)
+		}
+
+		// Process tables + extend: convert tables to stateful resources,
+		// resolve extend bindings onto imported mocks.
+		if err := processTablesAndExtend(collection); err != nil {
+			_ = server.Stop()
+			_ = adminAPI.Stop()
+			return fmt.Errorf("failed to process tables/extend: %w", err)
+		}
+
 		// CLI flags take precedence over config file chaos settings.
 		// If chaos was already configured via --chaos-enabled flags,
 		// clear the config file's chaos so ImportConfigDirect doesn't overwrite it.

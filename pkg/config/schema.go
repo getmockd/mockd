@@ -793,9 +793,6 @@ func mergeStatefulResource(base, overlay StatefulResourceConfig) StatefulResourc
 	if overlay.Workspace != "" {
 		base.Workspace = overlay.Workspace
 	}
-	if overlay.BasePath != "" {
-		base.BasePath = overlay.BasePath
-	}
 	if overlay.IDField != "" {
 		base.IDField = overlay.IDField
 	}

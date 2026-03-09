@@ -13,9 +13,42 @@ import (
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
+	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// crudMocksForTable generates 6 CRUD mock definitions that bind to a stateful table.
+func crudMocksForTable(name string) []*config.MockConfiguration {
+	type crudAction struct {
+		id, method, path, action string
+	}
+	base := "/items"
+	actions := []crudAction{
+		{name + "-create", "POST", base, "create"},
+		{name + "-list", "GET", base, "list"},
+		{name + "-get", "GET", base + "/{id}", "get"},
+		{name + "-update", "PUT", base + "/{id}", "update"},
+		{name + "-patch", "PATCH", base + "/{id}", "patch"},
+		{name + "-delete", "DELETE", base + "/{id}", "delete"},
+	}
+	mocks := make([]*config.MockConfiguration, len(actions))
+	for i, a := range actions {
+		mocks[i] = &config.MockConfiguration{
+			ID:   a.id,
+			Type: mock.TypeHTTP,
+			HTTP: &mock.HTTPSpec{
+				Matcher:  &mock.HTTPMatcher{Method: a.method, Path: a.path},
+				Response: &mock.HTTPResponse{StatusCode: 200},
+				StatefulBinding: &mock.StatefulBinding{
+					Table:  name,
+					Action: a.action,
+				},
+			},
+		}
+	}
+	return mocks
+}
 
 // =============================================================================
 // Performance Benchmarks for Stateful Mocking
@@ -48,11 +81,11 @@ func createBenchmarkServer(b *testing.B, seedCount int) *benchServerBundle {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		AdminPort:    adminPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		AdminPort:      adminPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -68,17 +101,17 @@ func createBenchmarkServer(b *testing.B, seedCount int) *benchServerBundle {
 		}
 	}
 
-	// Register resource via ImportConfig with a MockCollection
+	// Register resource and CRUD mocks via ImportConfig
 	collection := &config.MockCollection{
 		Version: "1.0",
 		StatefulResources: []*config.StatefulResourceConfig{
 			{
 				Name:     "items",
-				BasePath: "/items",
 				IDField:  "id",
 				SeedData: seedData,
 			},
 		},
+		Mocks: crudMocksForTable("items"),
 	}
 	if err := srv.ImportConfig(collection, false); err != nil {
 		b.Fatalf("failed to register resource: %v", err)
@@ -116,11 +149,11 @@ func createTestServer(t *testing.T, seedCount int) *benchServerBundle {
 	managementPort := getFreePort()
 
 	cfg := &config.ServerConfiguration{
-		HTTPPort:     httpPort,
-		AdminPort:    adminPort,
-		ManagementPort:  managementPort,
-		ReadTimeout:  30,
-		WriteTimeout: 30,
+		HTTPPort:       httpPort,
+		AdminPort:      adminPort,
+		ManagementPort: managementPort,
+		ReadTimeout:    30,
+		WriteTimeout:   30,
 	}
 
 	srv := engine.NewServer(cfg)
@@ -135,17 +168,17 @@ func createTestServer(t *testing.T, seedCount int) *benchServerBundle {
 		}
 	}
 
-	// Register resource via ImportConfig with a MockCollection
+	// Register resource and CRUD mocks via ImportConfig
 	collection := &config.MockCollection{
 		Version: "1.0",
 		StatefulResources: []*config.StatefulResourceConfig{
 			{
 				Name:     "items",
-				BasePath: "/items",
 				IDField:  "id",
 				SeedData: seedData,
 			},
 		},
+		Mocks: crudMocksForTable("items"),
 	}
 	require.NoError(t, srv.ImportConfig(collection, false))
 

@@ -18,28 +18,79 @@ Changes persist for the lifetime of the server session.
 
 ## Quick Start
 
-Create a stateful resource using the CLI or configuration file:
+### CLI Shortcut (Quick Prototyping)
+
+The fastest way to get a stateful CRUD API running:
 
 ```bash
-# Via CLI (creates the resource on a running server)
-mockd stateful add users --path /api/users
+# Creates a data store + HTTP CRUD mocks in one step
+mockd http add --path /api/users --stateful
+```
 
-# Or for a bridge-only resource (accessible via SOAP/GraphQL/gRPC but not HTTP)
+Or create the resource manually:
+
+```bash
 mockd stateful add users
 ```
 
-Or define it in your configuration file:
+### Config File (Production)
 
-```json
-{
-  "statefulResources": [
-    {
-      "name": "users",
-      "basePath": "/api/users",
-      "idField": "id"
-    }
-  ]
-}
+For production configs, use **tables** (pure data stores) and **extend** (explicit bindings from mocks to tables):
+
+```yaml
+version: "1.0"
+
+tables:
+  users:
+    idField: id
+
+mocks:
+  - id: list-users
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users }
+      response: { statusCode: 200 }
+
+  - id: create-user
+    type: http
+    http:
+      matcher: { method: POST, path: /api/users }
+      response: { statusCode: 201 }
+
+  - id: get-user
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users/{id} }
+      response: { statusCode: 200 }
+
+  - id: update-user
+    type: http
+    http:
+      matcher: { method: PUT, path: /api/users/{id} }
+      response: { statusCode: 200 }
+
+  - id: delete-user
+    type: http
+    http:
+      matcher: { method: DELETE, path: /api/users/{id} }
+      response: { statusCode: 200 }
+
+extend:
+  - mock: list-users
+    table: users
+    action: list
+  - mock: create-user
+    table: users
+    action: create
+  - mock: get-user
+    table: users
+    action: get
+  - mock: update-user
+    table: users
+    action: update
+  - mock: delete-user
+    table: users
+    action: delete
 ```
 
 Start the server and interact:
@@ -75,66 +126,97 @@ curl http://localhost:4280/api/users/a1b2c3d4-...
 
 ## Configuration
 
-### Basic Resource
+### Tables
 
-```json
-{
-  "statefulResources": [
-    {
-      "name": "users",
-      "basePath": "/api/users"
-    }
-  ]
-}
+Tables are pure data stores — they hold seed data and a schema but have no HTTP routing attached. Routing is handled by extend bindings.
+
+```yaml
+tables:
+  users:
+    idField: id
+    seedData:
+      - id: "1"
+        name: "Alice"
+        email: "alice@example.com"
+      - id: "2"
+        name: "Bob"
+        email: "bob@example.com"
 ```
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `name` | Unique resource name | Required |
-| `basePath` | URL path prefix for HTTP REST endpoints (omit for bridge-only) | `""` |
 | `idField` | Field name for resource ID | `"id"` |
-| `parentField` | Parent FK field for nested resources | - |
 | `seedData` | Initial data array | `[]` |
 
-### Multiple Resources
+### Extend Bindings
 
-```json
-{
-  "statefulResources": [
-    {
-      "name": "users",
-      "basePath": "/api/users"
-    },
-    {
-      "name": "posts",
-      "basePath": "/api/posts"
-    },
-    {
-      "name": "comments",
-      "basePath": "/api/posts/:postId/comments",
-      "parentField": "postId"
-    }
-  ]
-}
+Each extend binding connects a mock endpoint to a table with a specific action:
+
+```yaml
+extend:
+  - mock: list-users       # references mock id
+    table: users            # references table name
+    action: list            # CRUD action
 ```
 
-### Initial Data (Seeding)
+| Field | Description | Required |
+|-------|-------------|----------|
+| `mock` | ID of the mock to bind | Yes |
+| `table` | Name of the table | Yes |
+| `action` | `list`, `get`, `create`, `update`, `patch`, `delete`, `custom` | Yes |
+| `operation` | Custom operation name (when `action: custom`) | No |
 
-Pre-populate resources:
+### Multiple Tables
 
-```json
-{
-  "statefulResources": [
-    {
-      "name": "users",
-      "basePath": "/api/users",
-      "seedData": [
-        {"id": "1", "name": "Alice", "email": "alice@example.com"},
-        {"id": "2", "name": "Bob", "email": "bob@example.com"}
-      ]
-    }
-  ]
-}
+```yaml
+tables:
+  users:
+    seedData:
+      - id: "1"
+        name: "Alice"
+  posts:
+    seedData:
+      - id: "1"
+        title: "First Post"
+  comments:
+    idField: id
+    # parentField not needed — parent scoping is handled by mock path params
+
+mocks:
+  - id: list-users
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users }
+      response: { statusCode: 200 }
+  - id: list-posts
+    type: http
+    http:
+      matcher: { method: GET, path: /api/posts }
+      response: { statusCode: 200 }
+
+extend:
+  - mock: list-users
+    table: users
+    action: list
+  - mock: list-posts
+    table: posts
+    action: list
+```
+
+### Seed Data
+
+Pre-populate tables:
+
+```yaml
+tables:
+  users:
+    seedData:
+      - id: "1"
+        name: "Alice"
+        email: "alice@example.com"
+      - id: "2"
+        name: "Bob"
+        email: "bob@example.com"
 ```
 
 ## CRUD Operations
@@ -226,25 +308,39 @@ Response: `204 No Content`
 
 ## Nested Resources
 
-Handle parent-child relationships:
+Handle parent-child relationships using tables with extend bindings:
 
-```json
-{
-  "statefulResources": [
-    {
-      "name": "posts",
-      "basePath": "/api/posts"
-    },
-    {
-      "name": "comments",
-      "basePath": "/api/posts/:postId/comments",
-      "parentField": "postId"
-    }
-  ]
-}
+```yaml
+tables:
+  posts:
+    seedData:
+      - id: "1"
+        title: "First Post"
+  comments:
+    seedData: []
+
+mocks:
+  - id: list-comments
+    type: http
+    http:
+      matcher: { method: GET, path: /api/posts/{postId}/comments }
+      response: { statusCode: 200 }
+  - id: create-comment
+    type: http
+    http:
+      matcher: { method: POST, path: /api/posts/{postId}/comments }
+      response: { statusCode: 201 }
+
+extend:
+  - mock: list-comments
+    table: comments
+    action: list
+  - mock: create-comment
+    table: comments
+    action: create
 ```
 
-Comments are scoped to their parent post:
+Comments are scoped to their parent post via the path parameter:
 
 ```bash
 # Get comments for post 1
@@ -307,9 +403,8 @@ Validate incoming requests before creating or updating resources. Validation ens
 ### Quick Example
 
 ```yaml
-statefulResources:
-  - name: users
-    basePath: /api/users
+tables:
+  users:
     validation:
       mode: strict
       fields:
@@ -394,53 +489,90 @@ curl -X POST http://localhost:4290/state/resources/users/items \
 
 ## Combined with Static Mocks
 
-Stateful resources work alongside traditional mocks:
+Tables and extend bindings work alongside traditional static mocks:
 
-```json
-{
-  "mocks": [
-    {
-      "id": "health-check",
-      "type": "http",
-      "http": {
-        "matcher": {"method": "GET", "path": "/api/health"},
-        "response": {"statusCode": 200, "body": "{\"status\": \"ok\"}"}
-      }
-    }
-  ],
-  "statefulResources": [
-    {
-      "name": "users",
-      "basePath": "/api/users"
-    }
-  ]
-}
+```yaml
+version: "1.0"
+
+tables:
+  users:
+    seedData:
+      - id: "1"
+        name: "Alice"
+
+mocks:
+  - id: health-check
+    type: http
+    http:
+      matcher: { method: GET, path: /api/health }
+      response: { statusCode: 200, body: '{"status": "ok"}' }
+
+  - id: list-users
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users }
+      response: { statusCode: 200 }
+
+extend:
+  - mock: list-users
+    table: users
+    action: list
 ```
 
-Static mocks take priority when matched.
+Static mocks without extend bindings return their configured response. Mocks with extend bindings route through the stateful table.
 
 ## Complete Example
 
-```json
-{
-  "server": {
-    "port": 4280
-  },
-  "statefulResources": [
-    {
-      "name": "users",
-      "basePath": "/api/users",
-      "idField": "id",
-      "seedData": [
-        {"id": "1", "name": "Admin", "role": "admin"}
-      ]
-    },
-    {
-      "name": "posts",
-      "basePath": "/api/posts"
-    }
-  ]
-}
+```yaml
+version: "1.0"
+
+serverConfig:
+  httpPort: 4280
+  adminPort: 4290
+
+tables:
+  users:
+    idField: id
+    seedData:
+      - id: "1"
+        name: "Admin"
+        role: "admin"
+  posts:
+    seedData: []
+
+mocks:
+  - id: list-users
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users }
+      response: { statusCode: 200 }
+  - id: create-user
+    type: http
+    http:
+      matcher: { method: POST, path: /api/users }
+      response: { statusCode: 201 }
+  - id: get-user
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users/{id} }
+      response: { statusCode: 200 }
+  - id: list-posts
+    type: http
+    http:
+      matcher: { method: GET, path: /api/posts }
+      response: { statusCode: 200 }
+  - id: create-post
+    type: http
+    http:
+      matcher: { method: POST, path: /api/posts }
+      response: { statusCode: 201 }
+
+extend:
+  - { mock: list-users,  table: users, action: list }
+  - { mock: create-user, table: users, action: create }
+  - { mock: get-user,    table: users, action: get }
+  - { mock: list-posts,  table: posts, action: list }
+  - { mock: create-post, table: posts, action: create }
 ```
 
 ## Multi-Protocol State Sharing
@@ -452,11 +584,19 @@ Stateful resources are **protocol-agnostic**. The same in-memory store backs HTT
 ```yaml
 version: "1.0"
 
-statefulResources:
-  - name: users
-    basePath: /api/users
+tables:
+  users:
+    seedData:
+      - id: "1"
+        name: "Alice"
 
 mocks:
+  - id: create-user
+    type: http
+    http:
+      matcher: { method: POST, path: /api/users }
+      response: { statusCode: 201 }
+
   - type: soap
     soap:
       path: /soap/UserService
@@ -467,6 +607,11 @@ mocks:
         CreateUser:
           statefulResource: users
           statefulAction: create
+
+extend:
+  - mock: create-user
+    table: users
+    action: create
 ```
 
 ```bash
@@ -483,6 +628,8 @@ curl -X POST http://localhost:4280/soap/UserService \
       </soap:Envelope>'
 ```
 
+SOAP operations use `statefulResource` and `statefulAction` directly on the operation config (that hasn't changed). REST endpoints use the tables+extend pattern. Both share the same underlying data store.
+
 This is especially useful for testing systems that use REST internally but expose SOAP externally (or vice versa).
 
 ## Custom Operations
@@ -492,9 +639,8 @@ Custom operations compose reads, writes, and expression-evaluated transforms aga
 ### Example: Fund Transfer
 
 ```yaml
-statefulResources:
-  - name: accounts
-    basePath: /api/accounts
+tables:
+  accounts:
     seedData:
       - { id: "acct-1", owner: "Alice", balance: 1000 }
       - { id: "acct-2", owner: "Bob", balance: 500 }
@@ -688,6 +834,102 @@ curl -X POST http://localhost:4290/state/operations/TransferFunds/execute \
   -H "Content-Type: application/json" \
   -d '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
 ```
+
+## Importing Specs and Binding to Tables
+
+Use `imports` to load external API specs (OpenAPI, WSDL) and bind the generated mocks to tables:
+
+```yaml
+version: "1.0"
+
+imports:
+  - spec: ./stripe-openapi.yaml
+    namespace: stripe
+    format: openapi
+
+tables:
+  customers:
+    seedData:
+      - id: "cus_001"
+        name: "Alice"
+        email: "alice@example.com"
+
+extend:
+  - mock: stripe/list-customers
+    table: customers
+    action: list
+  - mock: stripe/create-customer
+    table: customers
+    action: create
+  - mock: stripe/get-customer
+    table: customers
+    action: get
+```
+
+Imported mocks receive IDs prefixed with the namespace (e.g., `stripe/list-customers`). The `extend` bindings wire those generated mocks to your local tables, creating a stateful digital twin of the imported API.
+
+## Response Transform Pipeline
+
+When a mock has an extend binding, the response flows through a transform pipeline:
+
+1. **Request arrives** and matches a mock via the standard matcher
+2. **Extend binding** routes the request to the table's Bridge
+3. **Bridge executes** the CRUD action (list, get, create, update, delete, custom)
+4. **Result is serialized** as the response body (JSON for HTTP, XML for SOAP)
+5. **Response headers and status code** from the mock definition are applied
+
+The mock's `response.body` field is ignored when an extend binding is active — the table's data becomes the response. However, `response.statusCode` and `response.headers` are still respected.
+
+## Custom Operations via Extend
+
+Extend bindings support `action: custom` to trigger multi-step custom operations:
+
+```yaml
+tables:
+  accounts:
+    seedData:
+      - { id: "acct-1", owner: "Alice", balance: 1000 }
+      - { id: "acct-2", owner: "Bob", balance: 500 }
+
+customOperations:
+  - name: TransferFunds
+    consistency: atomic
+    steps:
+      - type: read
+        resource: accounts
+        id: "input.sourceId"
+        as: source
+      - type: update
+        resource: accounts
+        id: "input.sourceId"
+        set: { balance: "source.balance - input.amount" }
+    response:
+      status: '"completed"'
+
+mocks:
+  - id: transfer
+    type: http
+    http:
+      matcher: { method: POST, path: /api/transfer }
+      response: { statusCode: 200 }
+
+extend:
+  - mock: transfer
+    table: accounts
+    action: custom
+    operation: TransferFunds
+```
+
+## CLI vs Config: When to Use Each
+
+| Approach | Use Case |
+|----------|----------|
+| `mockd http add --stateful` | Quick prototyping, one-off testing |
+| `mockd stateful add` + manual mocks | Interactive exploration |
+| `tables` + `extend` in config | Production configs, version-controlled setups |
+| `imports` + `extend` | Digital twins of third-party APIs |
+
+The CLI `--stateful` shortcut is equivalent to creating a table + mocks + extend bindings in a config file. Use it for speed; use config files for reproducibility.
 
 ## Next Steps
 

@@ -455,3 +455,297 @@ func TestResolveTemplateValue_MissingField(t *testing.T) {
 		t.Errorf("expected unresolved template, got %v", result)
 	}
 }
+
+// ── TransformError tests ─────────────────────────────────────────────────────
+
+func TestTransformError_NilConfig(t *testing.T) {
+	result := TransformError(ErrCodeNotFound, "not found", "users", "user-1", "", nil)
+	if result != nil {
+		t.Errorf("expected nil for nil config, got %v", result)
+	}
+}
+
+func TestTransformError_NilErrors(t *testing.T) {
+	cfg := &config.ResponseTransform{} // Errors is nil
+	result := TransformError(ErrCodeNotFound, "not found", "users", "user-1", "", cfg)
+	if result != nil {
+		t.Errorf("expected nil when Errors is nil, got %v", result)
+	}
+}
+
+func TestTransformError_DefaultFields(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Errors: &config.ErrorTransform{},
+	}
+	result := TransformError(ErrCodeNotFound, "not found", "users", "user-1", "", cfg)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result["message"] != "not found" {
+		t.Errorf("expected message='not found', got %v", result["message"])
+	}
+	if result["resource"] != "users" {
+		t.Errorf("expected resource='users', got %v", result["resource"])
+	}
+	if result["id"] != "user-1" {
+		t.Errorf("expected id='user-1', got %v", result["id"])
+	}
+}
+
+func TestTransformError_EmptyFieldsOmitted(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Errors: &config.ErrorTransform{},
+	}
+	// Pass empty field and id — they should not appear in output
+	result := TransformError(ErrCodeNotFound, "not found", "", "", "", cfg)
+	if _, ok := result["resource"]; ok {
+		t.Error("empty resource should be omitted")
+	}
+	if _, ok := result["id"]; ok {
+		t.Error("empty id should be omitted")
+	}
+	if _, ok := result["field"]; ok {
+		t.Error("empty field should be omitted")
+	}
+}
+
+func TestTransformError_CustomFieldMapping(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Errors: &config.ErrorTransform{
+			Fields: map[string]string{
+				"message": "msg",
+				"id":      "item_id",
+			},
+		},
+	}
+	result := TransformError(ErrCodeNotFound, "not found", "users", "user-1", "", cfg)
+	if result["msg"] != "not found" {
+		t.Errorf("expected msg='not found', got %v", result["msg"])
+	}
+	if result["item_id"] != "user-1" {
+		t.Errorf("expected item_id='user-1', got %v", result["item_id"])
+	}
+	// Old field names should not be present
+	if _, ok := result["message"]; ok {
+		t.Error("default 'message' key should not be present when mapped")
+	}
+}
+
+func TestTransformError_Wrap(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Errors: &config.ErrorTransform{
+			Wrap: "error",
+		},
+	}
+	result := TransformError(ErrCodeNotFound, "not found", "users", "user-1", "", cfg)
+	errObj, ok := result["error"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected wrapped error object, got %T", result["error"])
+	}
+	if errObj["message"] != "not found" {
+		t.Errorf("expected message='not found', got %v", errObj["message"])
+	}
+}
+
+func TestTransformError_Inject(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Errors: &config.ErrorTransform{
+			Inject: map[string]interface{}{
+				"doc_url": "https://docs.example.com/errors",
+				"status":  "error",
+			},
+		},
+	}
+	result := TransformError(ErrCodeNotFound, "not found", "", "", "", cfg)
+	if result["doc_url"] != "https://docs.example.com/errors" {
+		t.Errorf("expected injected doc_url, got %v", result["doc_url"])
+	}
+	if result["status"] != "error" {
+		t.Errorf("expected injected status='error', got %v", result["status"])
+	}
+}
+
+func TestTransformError_TypeMap(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Errors: &config.ErrorTransform{
+			Fields: map[string]string{
+				"type": "type",
+			},
+			TypeMap: map[string]string{
+				"NOT_FOUND":        "invalid_request_error",
+				"CONFLICT":         "idempotency_error",
+				"VALIDATION_ERROR": "invalid_request_error",
+			},
+		},
+	}
+	result := TransformError(ErrCodeNotFound, "not found", "", "", "", cfg)
+	if result["type"] != "invalid_request_error" {
+		t.Errorf("expected type='invalid_request_error', got %v", result["type"])
+	}
+}
+
+func TestTransformError_CodeMap(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Errors: &config.ErrorTransform{
+			Fields: map[string]string{
+				"code": "code",
+			},
+			CodeMap: map[string]string{
+				"NOT_FOUND": "resource_missing",
+				"CONFLICT":  "resource_already_exists",
+			},
+		},
+	}
+	result := TransformError(ErrCodeNotFound, "not found", "", "", "", cfg)
+	if result["code"] != "resource_missing" {
+		t.Errorf("expected code='resource_missing', got %v", result["code"])
+	}
+}
+
+func TestTransformError_StripeStyle(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Errors: &config.ErrorTransform{
+			Wrap: "error",
+			Fields: map[string]string{
+				"message": "message",
+				"type":    "type",
+				"code":    "code",
+			},
+			TypeMap: map[string]string{
+				"NOT_FOUND": "invalid_request_error",
+			},
+			CodeMap: map[string]string{
+				"NOT_FOUND": "resource_missing",
+			},
+			Inject: map[string]interface{}{
+				"doc_url": "https://stripe.com/docs/error-codes/resource-missing",
+			},
+		},
+	}
+	result := TransformError(ErrCodeNotFound, "No such customer: cus_xxx", "customers", "cus_xxx", "", cfg)
+	errObj, ok := result["error"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected wrapped error, got %T", result["error"])
+	}
+	if errObj["message"] != "No such customer: cus_xxx" {
+		t.Errorf("expected message, got %v", errObj["message"])
+	}
+	if errObj["type"] != "invalid_request_error" {
+		t.Errorf("expected type='invalid_request_error', got %v", errObj["type"])
+	}
+	if errObj["code"] != "resource_missing" {
+		t.Errorf("expected code='resource_missing', got %v", errObj["code"])
+	}
+	if errObj["doc_url"] != "https://stripe.com/docs/error-codes/resource-missing" {
+		t.Errorf("expected doc_url injected, got %v", errObj["doc_url"])
+	}
+}
+
+func TestTransformError_FieldValidationError(t *testing.T) {
+	cfg := &config.ResponseTransform{
+		Errors: &config.ErrorTransform{
+			Fields: map[string]string{
+				"message": "message",
+				"field":   "param",
+			},
+		},
+	}
+	result := TransformError(ErrCodeValidation, "required", "", "", "email", cfg)
+	if result["message"] != "required" {
+		t.Errorf("expected message='required', got %v", result["message"])
+	}
+	if result["param"] != "email" {
+		t.Errorf("expected param='email', got %v", result["param"])
+	}
+}
+
+// ── TransformList computed has_more tests ─────────────────────────────────────
+
+func TestTransformList_ComputedHasMore_True(t *testing.T) {
+	items := []map[string]interface{}{
+		{"id": "1", "name": "Alice"},
+	}
+	meta := PaginationMeta{Total: 5, Limit: 1, Offset: 0, Count: 1, HasMore: true}
+	cfg := &config.ResponseTransform{
+		List: &config.ListTransform{
+			ExtraFields: map[string]interface{}{
+				"object":   "list",
+				"has_more": false, // Static value — should be overridden by computed
+			},
+			HideMeta: true,
+		},
+	}
+	result := TransformList(items, meta, cfg)
+	envelope, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+	if envelope["has_more"] != true {
+		t.Errorf("expected has_more=true (computed from meta), got %v", envelope["has_more"])
+	}
+}
+
+func TestTransformList_ComputedHasMore_False(t *testing.T) {
+	items := []map[string]interface{}{
+		{"id": "1", "name": "Alice"},
+	}
+	meta := PaginationMeta{Total: 1, Limit: 10, Offset: 0, Count: 1, HasMore: false}
+	cfg := &config.ResponseTransform{
+		List: &config.ListTransform{
+			ExtraFields: map[string]interface{}{
+				"has_more": true, // Static value — should be overridden
+			},
+			HideMeta: true,
+		},
+	}
+	result := TransformList(items, meta, cfg)
+	envelope, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+	if envelope["has_more"] != false {
+		t.Errorf("expected has_more=false (computed), got %v", envelope["has_more"])
+	}
+}
+
+func TestTransformList_ComputedHasMore_CamelCase(t *testing.T) {
+	items := []map[string]interface{}{
+		{"id": "1"},
+	}
+	meta := PaginationMeta{Total: 10, Limit: 1, Offset: 0, Count: 1, HasMore: true}
+	cfg := &config.ResponseTransform{
+		List: &config.ListTransform{
+			ExtraFields: map[string]interface{}{
+				"hasMore": false,
+			},
+			HideMeta: true,
+		},
+	}
+	result := TransformList(items, meta, cfg)
+	envelope := result.(map[string]interface{})
+	if envelope["hasMore"] != true {
+		t.Errorf("expected hasMore=true (camelCase key), got %v", envelope["hasMore"])
+	}
+}
+
+func TestTransformList_NonHasMoreExtraFields(t *testing.T) {
+	items := []map[string]interface{}{{"id": "1"}}
+	meta := PaginationMeta{Total: 1, Limit: 10, Offset: 0, Count: 1}
+	cfg := &config.ResponseTransform{
+		List: &config.ListTransform{
+			ExtraFields: map[string]interface{}{
+				"object": "list",
+				"url":    "/v1/items",
+			},
+			HideMeta: true,
+		},
+	}
+	result := TransformList(items, meta, cfg)
+	envelope := result.(map[string]interface{})
+	if envelope["object"] != "list" {
+		t.Errorf("expected object='list', got %v", envelope["object"])
+	}
+	if envelope["url"] != "/v1/items" {
+		t.Errorf("expected url='/v1/items', got %v", envelope["url"])
+	}
+}

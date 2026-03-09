@@ -35,6 +35,27 @@
         "$ref": "#/definitions/customOperation"
       }
     },
+    "imports": {
+      "type": "array",
+      "description": "Import API specs (OpenAPI, Swagger, WSDL, etc.) and namespace their mocks",
+      "items": {
+        "$ref": "#/definitions/importEntry"
+      }
+    },
+    "tables": {
+      "type": "array",
+      "description": "Stateful data tables. Tables are pure data stores with no routing — endpoints are bound via extend.",
+      "items": {
+        "$ref": "#/definitions/tableConfig"
+      }
+    },
+    "extend": {
+      "type": "array",
+      "description": "Bind imported mocks to stateful tables with explicit actions",
+      "items": {
+        "$ref": "#/definitions/extendBinding"
+      }
+    },
     "serverConfig": {
       "$ref": "#/definitions/serverConfig"
     }
@@ -526,11 +547,12 @@
     "statefulResource": {
       "type": "object",
       "description": "A stateful CRUD resource that persists data across requests",
-      "required": ["name", "basePath"],
+      "required": ["name"],
       "properties": {
         "name": { "type": "string", "description": "Resource name (used in URLs)" },
-        "basePath": { "type": "string", "description": "URL base path (e.g., /api/users)" },
         "idField": { "type": "string", "description": "Field to use as item ID", "default": "id" },
+        "idStrategy": { "type": "string", "description": "ID generation strategy", "enum": ["uuid", "prefix", "auto-increment"] },
+        "idPrefix": { "type": "string", "description": "ID prefix when idStrategy is 'prefix' (e.g., 'cus_')" },
         "maxItems": { "type": "integer", "description": "Maximum items in the collection" },
         "seedData": {
           "type": "array",
@@ -724,6 +746,117 @@
         "uniqueItems": { "type": "boolean" },
         "enum": { "type": "array" },
         "message": { "type": "string", "description": "Custom error message" }
+      },
+      "additionalProperties": true
+    },
+
+    "importEntry": {
+      "type": "object",
+      "description": "An API spec import with optional namespace",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "description": "File path to the API spec (relative to config file)" },
+        "url": { "type": "string", "description": "URL to fetch the API spec from (alternative to path)" },
+        "as": { "type": "string", "description": "Namespace prefix for imported mocks (e.g., 'stripe')" },
+        "format": { "type": "string", "description": "Explicit format (auto-detected if omitted)", "enum": ["openapi", "swagger", "postman", "har", "wiremock", "wsdl", "mockoon", "curl", "yaml", "json"] }
+      },
+      "additionalProperties": false
+    },
+
+    "tableConfig": {
+      "type": "object",
+      "description": "A stateful data table definition",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "description": "Table name (e.g., 'customers')" },
+        "idField": { "type": "string", "description": "Field to use as item ID", "default": "id" },
+        "idStrategy": { "type": "string", "description": "ID generation strategy", "enum": ["uuid", "prefix", "auto-increment"] },
+        "idPrefix": { "type": "string", "description": "ID prefix when idStrategy is 'prefix' (e.g., 'cus_')" },
+        "maxItems": { "type": "integer", "description": "Maximum items in the collection" },
+        "parentField": { "type": "string", "description": "Foreign key field for nested resources" },
+        "seedData": {
+          "type": "array",
+          "description": "Initial data to populate the table",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "validation": {
+          "type": "object",
+          "description": "Validation rules for create/update operations",
+          "additionalProperties": true
+        },
+        "response": {
+          "$ref": "#/definitions/responseTransform",
+          "description": "Default response transform for all bindings to this table"
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "extendBinding": {
+      "type": "object",
+      "description": "Binds an imported mock to a table with a specific action",
+      "required": ["mock", "table", "action"],
+      "properties": {
+        "mock": { "type": "string", "description": "Mock reference: namespaced operationId (e.g., 'stripe.PostCustomers') or 'METHOD /path'" },
+        "table": { "type": "string", "description": "Target table name" },
+        "action": { "type": "string", "description": "Action to perform", "enum": ["create", "get", "list", "update", "patch", "delete", "custom"] },
+        "operation": { "type": "string", "description": "Custom operation name (required when action is 'custom')" },
+        "response": {
+          "$ref": "#/definitions/responseTransform",
+          "description": "Response transform override for this specific binding"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "responseTransform": {
+      "type": "object",
+      "description": "Response transform configuration for shaping stateful resource responses",
+      "properties": {
+        "timestamps": {
+          "type": "object",
+          "properties": {
+            "format": { "type": "string", "enum": ["iso", "unix", "unix_ms"], "description": "Timestamp format" },
+            "fields": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Field rename map (e.g., createdAt → created)" }
+          }
+        },
+        "fields": {
+          "type": "object",
+          "properties": {
+            "inject": { "type": "object", "additionalProperties": true, "description": "Fields to inject into every item" },
+            "hide": { "type": "array", "items": { "type": "string" }, "description": "Fields to hide from responses" }
+          }
+        },
+        "list": {
+          "type": "object",
+          "properties": {
+            "dataField": { "type": "string", "description": "Name of the array field (default: 'data')" },
+            "extraFields": { "type": "object", "additionalProperties": true, "description": "Extra fields on list response" },
+            "hideMeta": { "type": "boolean", "description": "Hide the default meta object" }
+          }
+        },
+        "create": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "integer", "description": "HTTP status for create (default: 201)" }
+          }
+        },
+        "delete": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "integer", "description": "HTTP status for delete (default: 204)" },
+            "body": { "type": "object", "additionalProperties": true, "description": "Custom delete response body (supports {{item.field}} templates)" }
+          }
+        },
+        "errors": {
+          "type": "object",
+          "properties": {
+            "wrap": { "type": "string", "description": "Wrap error in a named object (e.g., 'error')" },
+            "fields": { "type": "object", "additionalProperties": { "type": "string" } },
+            "typeMap": { "type": "object", "additionalProperties": { "type": "string" } },
+            "codeMap": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        }
       },
       "additionalProperties": true
     }

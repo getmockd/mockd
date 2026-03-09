@@ -510,19 +510,35 @@ jobs:
 
 ### 1. Seed Data for Tests
 
-```json
-{
-  "statefulResources": [
-    {
-      "name": "users",
-      "basePath": "/api/users",
-      "idField": "id",
-      "seedData": [
-        {"id": "1", "name": "Test User", "email": "test@example.com"}
-      ]
-    }
-  ]
-}
+```yaml
+tables:
+  users:
+    seedData:
+      - id: "1"
+        name: "Test User"
+        email: "test@example.com"
+
+mocks:
+  - id: list-users
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users }
+      response: { statusCode: 200 }
+  - id: create-user
+    type: http
+    http:
+      matcher: { method: POST, path: /api/users }
+      response: { statusCode: 201 }
+  - id: get-user
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users/{id} }
+      response: { statusCode: 200 }
+
+extend:
+  - { mock: list-users,  table: users, action: list }
+  - { mock: create-user, table: users, action: create }
+  - { mock: get-user,    table: users, action: get }
 ```
 
 ### 2. Test Different Scenarios

@@ -320,7 +320,6 @@ func (a *ControlAPIAdapter) GetStateOverview() *api.StateOverview {
 		if err == nil && info != nil {
 			resources = append(resources, api.StatefulResource{
 				Name:        info.Name,
-				BasePath:    info.BasePath,
 				ItemCount:   info.ItemCount,
 				SeedCount:   info.SeedCount,
 				IDField:     info.IDField,
@@ -351,7 +350,6 @@ func (a *ControlAPIAdapter) GetStateResource(name string) (*api.StatefulResource
 
 	return &api.StatefulResource{
 		Name:        info.Name,
-		BasePath:    info.BasePath,
 		ItemCount:   info.ItemCount,
 		SeedCount:   info.SeedCount,
 		IDField:     info.IDField,

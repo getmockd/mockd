@@ -15,80 +15,134 @@ We'll create a mock API for a task management system with:
 
 ## Configuration
 
-Create `tasks-api.json`:
+Create `tasks-api.yaml`:
 
-```json
-{
-  "version": "1.0",
-  "server": {
-    "port": 4280
-  },
-  "statefulResources": [
-    {
-      "name": "users",
-      "basePath": "/api/users",
-      "idField": "id",
-      "seedData": [
-        {"id": "1", "name": "Alice", "email": "alice@example.com"},
-        {"id": "2", "name": "Bob", "email": "bob@example.com"}
-      ]
-    },
-    {
-      "name": "tasks",
-      "basePath": "/api/tasks",
-      "idField": "id",
-      "seedData": [
-        {
-          "id": "1",
-          "title": "Setup project",
-          "description": "Initialize the project structure",
-          "status": "done",
-          "assigneeId": 1,
-          "createdAt": "2024-01-10T09:00:00Z"
-        },
-        {
-          "id": "2",
-          "title": "Write documentation",
-          "description": "Create user documentation",
-          "status": "in_progress",
-          "assigneeId": 2,
-          "createdAt": "2024-01-11T10:00:00Z"
-        },
-        {
-          "id": "3",
-          "title": "Add tests",
-          "description": "Write unit tests",
-          "status": "todo",
-          "assigneeId": null,
-          "createdAt": "2024-01-12T11:00:00Z"
-        }
-      ]
-    }
-  ],
-  "mocks": [
-    {
-      "id": "health-check",
-      "type": "http",
-      "name": "Health check",
-      "http": {
-        "matcher": {
-          "method": "GET",
-          "path": "/health"
-        },
-        "response": {
-          "statusCode": 200,
-          "body": "{\"status\": \"ok\", \"timestamp\": \"{{now}}\"}"
-        }
-      }
-    }
-  ]
-}
+```yaml
+version: "1.0"
+
+serverConfig:
+  httpPort: 4280
+  adminPort: 4290
+
+tables:
+  users:
+    seedData:
+      - id: "1"
+        name: "Alice"
+        email: "alice@example.com"
+      - id: "2"
+        name: "Bob"
+        email: "bob@example.com"
+  tasks:
+    seedData:
+      - id: "1"
+        title: "Setup project"
+        description: "Initialize the project structure"
+        status: "done"
+        assigneeId: 1
+        createdAt: "2024-01-10T09:00:00Z"
+      - id: "2"
+        title: "Write documentation"
+        description: "Create user documentation"
+        status: "in_progress"
+        assigneeId: 2
+        createdAt: "2024-01-11T10:00:00Z"
+      - id: "3"
+        title: "Add tests"
+        description: "Write unit tests"
+        status: "todo"
+        assigneeId: null
+        createdAt: "2024-01-12T11:00:00Z"
+
+mocks:
+  - id: health-check
+    type: http
+    name: Health check
+    http:
+      matcher: { method: GET, path: /health }
+      response:
+        statusCode: 200
+        body: '{"status": "ok", "timestamp": "{{now}}"}'
+
+  # Users CRUD
+  - id: list-users
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users }
+      response: { statusCode: 200 }
+  - id: create-user
+    type: http
+    http:
+      matcher: { method: POST, path: /api/users }
+      response: { statusCode: 201 }
+  - id: get-user
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users/{id} }
+      response: { statusCode: 200 }
+  - id: update-user
+    type: http
+    http:
+      matcher: { method: PUT, path: /api/users/{id} }
+      response: { statusCode: 200 }
+  - id: delete-user
+    type: http
+    http:
+      matcher: { method: DELETE, path: /api/users/{id} }
+      response: { statusCode: 200 }
+
+  # Tasks CRUD
+  - id: list-tasks
+    type: http
+    http:
+      matcher: { method: GET, path: /api/tasks }
+      response: { statusCode: 200 }
+  - id: create-task
+    type: http
+    http:
+      matcher: { method: POST, path: /api/tasks }
+      response: { statusCode: 201 }
+  - id: get-task
+    type: http
+    http:
+      matcher: { method: GET, path: /api/tasks/{id} }
+      response: { statusCode: 200 }
+  - id: update-task
+    type: http
+    http:
+      matcher: { method: PUT, path: /api/tasks/{id} }
+      response: { statusCode: 200 }
+  - id: patch-task
+    type: http
+    http:
+      matcher: { method: PATCH, path: /api/tasks/{id} }
+      response: { statusCode: 200 }
+  - id: delete-task
+    type: http
+    http:
+      matcher: { method: DELETE, path: /api/tasks/{id} }
+      response: { statusCode: 200 }
+
+extend:
+  # Users
+  - { mock: list-users,   table: users, action: list }
+  - { mock: create-user,  table: users, action: create }
+  - { mock: get-user,     table: users, action: get }
+  - { mock: update-user,  table: users, action: update }
+  - { mock: delete-user,  table: users, action: delete }
+  # Tasks
+  - { mock: list-tasks,   table: tasks, action: list }
+  - { mock: create-task,  table: tasks, action: create }
+  - { mock: get-task,     table: tasks, action: get }
+  - { mock: update-task,  table: tasks, action: update }
+  - { mock: patch-task,   table: tasks, action: patch }
+  - { mock: delete-task,  table: tasks, action: delete }
 ```
 
 ## Start the Server
 
 ```bash
-mockd start --config tasks-api.json
+mockd start --config tasks-api.yaml
 ```
 
 ## API Operations
@@ -280,7 +334,6 @@ curl -X POST http://localhost:4290/config \
     "config": {
       "statefulResources": [{
         "name": "tasks",
-        "basePath": "/api/tasks",
         "idField": "id",
         "seedData": [
           {"id": "1", "title": "Fresh task", "status": "todo"}
@@ -292,7 +345,7 @@ curl -X POST http://localhost:4290/config \
 
 ## State Lifecycle
 
-Stateful resource **definitions** (name, basePath, seedData) are persisted to the admin file store and survive restarts. However, **runtime data** (items created, updated, or deleted via CRUD operations) is held in memory only. When the server restarts, runtime data resets to the seed data.
+Stateful resource **definitions** (name, seedData) are persisted to the admin file store and survive restarts. However, **runtime data** (items created, updated, or deleted via CRUD operations) is held in memory only. When the server restarts, runtime data resets to the seed data.
 
 ## Workflow Example
 

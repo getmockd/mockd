@@ -276,9 +276,6 @@ func TestMockoonImporter_CRUDRoute(t *testing.T) {
 	if res.Name != "products" {
 		t.Errorf("resource name = %q, want products", res.Name)
 	}
-	if res.BasePath != "/products" {
-		t.Errorf("resource basePath = %q, want /products", res.BasePath)
-	}
 	if len(res.SeedData) != 1 {
 		t.Errorf("expected 1 seed data item, got %d", len(res.SeedData))
 	}

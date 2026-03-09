@@ -82,10 +82,31 @@ mocks:
 - `{{random.Int 1 100}}` — Random numbers
 - `{{faker.words(5)}}` — Parameterized
 
+## Tables + Extend (Stateful Config)
+
+The recommended way to add stateful CRUD to imported API specs in config files:
+
+```yaml
+version: "1.0"
+imports:
+  - path: api-spec.yaml
+    as: api
+tables:
+  - name: users
+    idField: id
+extend:
+  - { mock: api.ListUsers, table: users, action: list }
+  - { mock: api.CreateUser, table: users, action: create }
+  - { mock: api.GetUser, table: users, action: get }
+```
+
+Tables are pure data stores (no routing, no basePath). Extend binds imported mocks to table CRUD actions. Custom operations use `action: custom` + `operation: OpName`.
+
 ## Key Rules
 
 1. Ports 4280 (mock) and 4290 (admin) — never 8080
 2. `id` and `type` auto-generated if omitted in config
 3. Admin API: `POST /mocks` with `type` + protocol wrapper
-4. Logs: `mockd logs --requests`
-5. Stop: `mockd stop`
+4. Stateful CRUD: `mockd add http --path /api/users --stateful` for quick prototyping, or tables+extend in config (recommended)
+5. Logs: `mockd logs --requests`
+6. Stop: `mockd stop`

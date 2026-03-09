@@ -220,16 +220,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 	var matchedID string
 	var nearMissInfos []requestlog.NearMissInfo
 
-	// Check stateful resources first
-	if h.statefulStore != nil {
-		if resource, itemID, pathParams := h.statefulStore.MatchPath(r.URL.Path); resource != nil {
-			statusCode = h.handleStateful(w, r, resource, itemID, pathParams, bodyBytes)
-			matchedID = "stateful:" + resource.Name()
-			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode, nil)
-			return
-		}
-	}
-
 	// Get all mocks (already sorted by priority) - only HTTP type mocks
 	mocks := h.store.ListByType(mock.TypeHTTP)
 
@@ -296,6 +286,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 				}
 				// statusCode 0 means permissive/warn mode — continue to response
 			}
+		}
+
+		// Check for stateful table binding (extend)
+		if match.HTTP != nil && match.HTTP.StatefulBinding != nil {
+			statusCode = h.handleStatefulBinding(w, r, match, bodyBytes, pathParams)
+			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode, nil)
+			return
 		}
 
 		// Check for stateful custom operation

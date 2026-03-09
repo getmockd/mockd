@@ -96,6 +96,32 @@ mockd parses the WSDL operations and generates SOAP mock endpoints. Use `--forma
 mockd soap import service.wsdl --stateful
 ```
 
+### Using `imports` in Config Files
+
+For declarative spec loading, use the `imports` field in your config file instead of the CLI. This loads specs at startup with namespace prefixes, allowing you to wire the generated mocks to tables via `extend`:
+
+```yaml
+version: "1.0"
+
+imports:
+  - spec: ./stripe-openapi.yaml
+    namespace: stripe
+    format: openapi
+
+tables:
+  customers:
+    seedData:
+      - id: "cus_001"
+        name: "Alice"
+
+extend:
+  - mock: stripe/list-customers
+    table: customers
+    action: list
+```
+
+See the [Stateful Mocking guide](/guides/stateful-mocking/#importing-specs-and-binding-to-tables) for more details.
+
 ### From cURL Commands
 
 Convert a cURL command directly into a mock:

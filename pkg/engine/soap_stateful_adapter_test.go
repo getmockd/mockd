@@ -15,8 +15,7 @@ func TestSOAPStatefulAdapter_Create_Get_List_Delete(t *testing.T) {
 	// Full lifecycle test: create a user via SOAP adapter, get it, list, delete it
 	store := stateful.NewStateStore()
 	if err := store.Register(&config.StatefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}); err != nil {
 		t.Fatalf("failed to register resource: %v", err)
 	}
@@ -112,8 +111,7 @@ func TestSOAPStatefulAdapter_Create_Get_List_Delete(t *testing.T) {
 func TestSOAPStatefulAdapter_Update(t *testing.T) {
 	store := stateful.NewStateStore()
 	if err := store.Register(&config.StatefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}); err != nil {
 		t.Fatalf("failed to register resource: %v", err)
 	}
@@ -153,8 +151,7 @@ func TestSOAPStatefulAdapter_Update(t *testing.T) {
 func TestSOAPStatefulAdapter_Patch(t *testing.T) {
 	store := stateful.NewStateStore()
 	if err := store.Register(&config.StatefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}); err != nil {
 		t.Fatalf("failed to register resource: %v", err)
 	}
@@ -197,8 +194,7 @@ func TestSOAPStatefulAdapter_Patch(t *testing.T) {
 func TestSOAPStatefulAdapter_NotFound_Error(t *testing.T) {
 	store := stateful.NewStateStore()
 	if err := store.Register(&config.StatefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}); err != nil {
 		t.Fatalf("failed to register resource: %v", err)
 	}
@@ -247,8 +243,7 @@ func TestSOAPStatefulAdapter_ResourceNotRegistered(t *testing.T) {
 func TestSOAPStatefulAdapter_Conflict_Error(t *testing.T) {
 	store := stateful.NewStateStore()
 	if err := store.Register(&config.StatefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}); err != nil {
 		t.Fatalf("failed to register resource: %v", err)
 	}
@@ -325,8 +320,7 @@ func TestSOAPStatefulAdapter_CustomOperation_FullStack(t *testing.T) {
 	// Proves that a custom multi-step operation works through the full adapter stack.
 	store := stateful.NewStateStore()
 	if err := store.Register(&config.StatefulResourceConfig{
-		Name:     "accounts",
-		BasePath: "/api/accounts",
+		Name: "accounts",
 		SeedData: []map[string]interface{}{
 			{"id": "acc-1", "name": "Alice", "balance": float64(1000)},
 			{"id": "acc-2", "name": "Bob", "balance": float64(500)},
@@ -440,8 +434,7 @@ func TestSOAPStatefulAdapter_SharedState_HTTP_And_SOAP(t *testing.T) {
 	// SS-14: HTTP stateful + SOAP stateful see the same data (shared state)
 	store := stateful.NewStateStore()
 	if err := store.Register(&config.StatefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}); err != nil {
 		t.Fatalf("failed to register resource: %v", err)
 	}

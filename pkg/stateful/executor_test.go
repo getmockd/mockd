@@ -19,8 +19,7 @@ func setupExecutorTest(t *testing.T) (*StateStore, *OperationExecutor) {
 	store.SetObserver(obs)
 
 	err := store.Register(&ResourceConfig{
-		Name:     "accounts",
-		BasePath: "/api/accounts",
+		Name: "accounts",
 		SeedData: []map[string]interface{}{
 			{"id": "acc-1", "name": "Alice", "balance": float64(1000)},
 			{"id": "acc-2", "name": "Bob", "balance": float64(500)},
@@ -29,8 +28,7 @@ func setupExecutorTest(t *testing.T) (*StateStore, *OperationExecutor) {
 	require.NoError(t, err)
 
 	err = store.Register(&ResourceConfig{
-		Name:     "logs",
-		BasePath: "/api/logs",
+		Name: "logs",
 	})
 	require.NoError(t, err)
 

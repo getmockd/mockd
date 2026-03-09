@@ -1,207 +1,312 @@
-// Stateful resource CRUD handlers for the mock engine.
+// Stateful table binding handlers for the mock engine.
+//
+// All stateful routing goes through handleStatefulBinding, which dispatches
+// by the explicit action from an extend binding (not HTTP method). The binding
+// is resolved at config-load time by processTablesAndExtend.
 
 package engine
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/stateful"
-	"github.com/getmockd/mockd/pkg/validation"
 )
 
-// handleStateful handles CRUD operations for stateful resources.
-func (h *Handler) handleStateful(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, itemID string, pathParams map[string]string, bodyBytes []byte) int {
+// handleStatefulBinding handles a request that has been bound to a stateful table
+// via an extend binding. The binding specifies the table name and CRUD action.
+//
+// This method:
+//  1. Looks up the table in the StateStore
+//  2. Extracts item ID from path params (last param for single-item actions)
+//  3. Parses request body (JSON or form-encoded)
+//  4. Calls Bridge.Execute() with the configured action
+//  5. Applies response transforms (binding override > table default)
+//  6. Writes the response
+func (h *Handler) handleStatefulBinding(w http.ResponseWriter, r *http.Request, matched *mock.Mock, bodyBytes []byte, pathParams map[string]string) int {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Validate path params for all operations (if validation configured)
-	if resource.HasValidation() && len(pathParams) > 0 {
-		ctx := r.Context()
-		result := resource.ValidatePathParams(ctx, pathParams)
-		if !result.Valid {
-			status := h.writeValidationError(w, result, resource.GetValidationMode())
-			if status != 0 {
-				return status
-			}
+	binding := matched.HTTP.StatefulBinding
+	if h.statefulBridge == nil {
+		return h.writeStatefulError(w, http.StatusServiceUnavailable, "stateful bridge not configured", binding.Table, "")
+	}
+
+	action := stateful.Action(binding.Action)
+
+	// Resolve response transform config: binding override > table default.
+	// The binding's Response.Transform was resolved at config-load time.
+	var responseCfg *config.ResponseTransform
+	if binding.Response != nil {
+		if transform, ok := binding.Response.Transform.(*config.ResponseTransform); ok {
+			responseCfg = transform
+		}
+	}
+	// Fall back to the table's configured response transform
+	if responseCfg == nil {
+		responseCfg = h.statefulBridge.GetResponseConfig(binding.Table)
+	}
+
+	// Extract item ID from path params. Convention: last path param value
+	// is the item ID for single-item operations.
+	// Custom actions handle their own ID extraction via the operation steps.
+	var itemID string
+	if action != stateful.ActionList && action != stateful.ActionCreate && action != stateful.ActionCustom {
+		itemID = extractLastPathParam(matched, pathParams)
+		if itemID == "" {
+			return h.writeStatefulError(w, http.StatusBadRequest, "item ID required for "+binding.Action, binding.Table, "")
 		}
 	}
 
-	switch r.Method {
-	case http.MethodGet:
-		if itemID != "" {
-			return h.handleStatefulGet(w, resource, itemID)
-		}
-		return h.handleStatefulList(w, r, resource, pathParams)
-
-	case http.MethodPost:
-		return h.handleStatefulCreate(w, r, resource, pathParams, bodyBytes)
-
-	case http.MethodPut:
-		if itemID == "" {
-			return h.writeStatefulError(w, http.StatusBadRequest, "ID required for PUT", resource.Name(), "")
-		}
-		return h.handleStatefulUpdate(w, r, resource, itemID, pathParams, bodyBytes)
-
-	case http.MethodPatch:
-		if itemID == "" {
-			return h.writeStatefulError(w, http.StatusBadRequest, "ID required for PATCH", resource.Name(), "")
-		}
-		return h.handleStatefulPatch(w, r, resource, itemID, pathParams, bodyBytes)
-
-	case http.MethodDelete:
-		if itemID == "" {
-			return h.writeStatefulError(w, http.StatusBadRequest, "ID required for DELETE", resource.Name(), "")
-		}
-		return h.handleStatefulDelete(w, resource, itemID)
-
+	// Dispatch by action
+	switch action {
+	case stateful.ActionList:
+		return h.handleBindingList(w, r, binding.Table, pathParams, responseCfg)
+	case stateful.ActionGet:
+		return h.handleBindingGet(w, r, binding.Table, itemID, responseCfg)
+	case stateful.ActionCreate:
+		return h.handleBindingCreate(w, r, binding.Table, pathParams, bodyBytes, responseCfg)
+	case stateful.ActionUpdate:
+		return h.handleBindingMutate(w, r, binding.Table, itemID, pathParams, bodyBytes, responseCfg, stateful.ActionUpdate)
+	case stateful.ActionPatch:
+		return h.handleBindingMutate(w, r, binding.Table, itemID, pathParams, bodyBytes, responseCfg, stateful.ActionPatch)
+	case stateful.ActionDelete:
+		return h.handleBindingDelete(w, r, binding.Table, itemID, responseCfg)
+	case stateful.ActionCustom:
+		return h.handleBindingCustom(w, r, binding, pathParams, bodyBytes, responseCfg)
 	default:
-		return h.writeStatefulError(w, http.StatusMethodNotAllowed, "method not allowed", resource.Name(), "")
+		return h.writeStatefulError(w, http.StatusBadRequest, "unsupported action: "+binding.Action, binding.Table, "")
 	}
 }
 
-// handleStatefulGet retrieves a single item by ID.
-func (h *Handler) handleStatefulGet(w http.ResponseWriter, resource *stateful.StatefulResource, itemID string) int {
-	item := resource.Get(itemID)
-	if item == nil {
-		return h.writeResourceError(w, http.StatusNotFound, "resource not found", resource, itemID)
+// handleBindingGet retrieves a single item via Bridge.
+func (h *Handler) handleBindingGet(w http.ResponseWriter, r *http.Request, table, itemID string, responseCfg *config.ResponseTransform) int {
+	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
+		Resource:   table,
+		Action:     stateful.ActionGet,
+		ResourceID: itemID,
+	})
+	if result.Error != nil {
+		return h.writeBindingError(w, result, table, itemID, responseCfg)
 	}
 
-	data := stateful.TransformItem(item.ToJSON(), resource.ResponseConfig())
+	data := stateful.TransformItem(result.Item.ToJSON(), responseCfg)
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		h.log.Error("failed to encode stateful get response", "error", err)
-	}
+	_ = json.NewEncoder(w).Encode(data)
 	return http.StatusOK
 }
 
-// handleStatefulList returns a paginated collection of items.
-func (h *Handler) handleStatefulList(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, pathParams map[string]string) int {
+// handleBindingList returns a paginated collection via Bridge.
+func (h *Handler) handleBindingList(w http.ResponseWriter, r *http.Request, table string, pathParams map[string]string, responseCfg *config.ResponseTransform) int {
+	// Get the resource to reuse parseQueryFilter (it needs the resource for parentField)
+	resource := h.statefulBridge.Store().Get(table)
+	if resource == nil {
+		return h.writeStatefulError(w, http.StatusNotFound, "table not found", table, "")
+	}
+
 	filter := h.parseQueryFilter(r, resource, pathParams)
-	result := resource.List(filter)
-
-	response := stateful.TransformList(result.Data, result.Meta, resource.ResponseConfig())
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		h.log.Error("failed to encode stateful list response", "error", err)
+	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
+		Resource: table,
+		Action:   stateful.ActionList,
+		Filter:   filter,
+	})
+	if result.Error != nil {
+		return h.writeBindingError(w, result, table, "", responseCfg)
 	}
+
+	response := stateful.TransformList(result.List.Data, result.List.Meta, responseCfg)
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(response)
 	return http.StatusOK
 }
 
-// handleStatefulCreate creates a new item.
-func (h *Handler) handleStatefulCreate(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, pathParams map[string]string, bodyBytes []byte) int {
+// handleBindingCreate creates a new item via Bridge.
+func (h *Handler) handleBindingCreate(w http.ResponseWriter, r *http.Request, table string, pathParams map[string]string, bodyBytes []byte, responseCfg *config.ResponseTransform) int {
 	if len(bodyBytes) > MaxStatefulBodySize {
-		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", resource.Name(), "", "Reduce request body size to under 1MB")
+		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", table, "", "Reduce request body size to under 1MB")
 	}
 
 	data, err := parseStatefulBody(bodyBytes, r.Header.Get("Content-Type"))
 	if err != nil {
-		return h.writeResourceError(w, http.StatusBadRequest, err.Error(), resource, "")
+		return h.writeStatefulError(w, http.StatusBadRequest, err.Error(), table, "")
 	}
 
-	// Run validation if configured
-	if resource.HasValidation() {
-		ctx := r.Context()
-		result := resource.ValidateCreate(ctx, data, pathParams)
-		if !result.Valid {
-			return h.writeValidationError(w, result, resource.GetValidationMode())
-		}
+	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
+		Resource: table,
+		Action:   stateful.ActionCreate,
+		Data:     data,
+		Params:   pathParams,
+	})
+	if result.Error != nil {
+		return h.writeBindingError(w, result, table, "", responseCfg)
 	}
 
-	item, err := resource.Create(data, pathParams)
-	if err != nil {
-		var conflictErr *stateful.ConflictError
-		var capErr *stateful.CapacityError
-		if errors.As(err, &conflictErr) {
-			return h.writeResourceError(w, http.StatusConflict, "resource already exists", resource, conflictErr.ID)
-		}
-		if errors.As(err, &capErr) {
-			return h.writeStatefulErrorWithHint(w, http.StatusInsufficientStorage, capErr.Error(), resource.Name(), "", capErr.Hint())
-		}
-		return h.writeResourceError(w, http.StatusInternalServerError, err.Error(), resource, "")
-	}
-
-	cfg := resource.ResponseConfig()
-	responseData := stateful.TransformItem(item.ToJSON(), cfg)
-	createStatus := stateful.TransformCreateStatus(cfg)
+	responseData := stateful.TransformItem(result.Item.ToJSON(), responseCfg)
+	createStatus := stateful.TransformCreateStatus(responseCfg)
 	w.WriteHeader(createStatus)
-	if err := json.NewEncoder(w).Encode(responseData); err != nil {
-		h.log.Error("failed to encode stateful create response", "error", err)
-	}
+	_ = json.NewEncoder(w).Encode(responseData)
 	return createStatus
 }
 
-// handleStatefulUpdate updates an existing item (full replace).
-func (h *Handler) handleStatefulUpdate(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, itemID string, pathParams map[string]string, bodyBytes []byte) int {
-	return h.handleStatefulMutate(w, r, resource, itemID, pathParams, bodyBytes, resource.Update)
-}
-
-// handleStatefulPatch partially updates an existing item by merging fields.
-func (h *Handler) handleStatefulPatch(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, itemID string, pathParams map[string]string, bodyBytes []byte) int {
-	return h.handleStatefulMutate(w, r, resource, itemID, pathParams, bodyBytes, resource.Patch)
-}
-
-// handleStatefulMutate is the shared implementation for update and patch operations.
-func (h *Handler) handleStatefulMutate(w http.ResponseWriter, r *http.Request, resource *stateful.StatefulResource, itemID string, pathParams map[string]string, bodyBytes []byte, mutate func(string, map[string]any) (*stateful.ResourceItem, error)) int {
+// handleBindingMutate handles update/patch via Bridge.
+func (h *Handler) handleBindingMutate(w http.ResponseWriter, r *http.Request, table, itemID string, pathParams map[string]string, bodyBytes []byte, responseCfg *config.ResponseTransform, action stateful.Action) int {
 	if len(bodyBytes) > MaxStatefulBodySize {
-		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", resource.Name(), itemID, "Reduce request body size to under 1MB")
+		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", table, itemID, "Reduce request body size to under 1MB")
 	}
 
 	data, err := parseStatefulBody(bodyBytes, r.Header.Get("Content-Type"))
 	if err != nil {
-		return h.writeResourceError(w, http.StatusBadRequest, err.Error(), resource, itemID)
+		return h.writeStatefulError(w, http.StatusBadRequest, err.Error(), table, itemID)
 	}
 
-	// Run validation if configured
-	if resource.HasValidation() {
-		ctx := r.Context()
-		result := resource.ValidateUpdate(ctx, data, pathParams)
-		if !result.Valid {
-			return h.writeValidationError(w, result, resource.GetValidationMode())
-		}
+	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
+		Resource:   table,
+		Action:     action,
+		ResourceID: itemID,
+		Data:       data,
+		Params:     pathParams,
+	})
+	if result.Error != nil {
+		return h.writeBindingError(w, result, table, itemID, responseCfg)
 	}
 
-	item, err := mutate(itemID, data)
-	if err != nil {
-		var notFoundErr *stateful.NotFoundError
-		if errors.As(err, &notFoundErr) {
-			return h.writeResourceError(w, http.StatusNotFound, "resource not found", resource, itemID)
-		}
-		return h.writeResourceError(w, http.StatusInternalServerError, err.Error(), resource, itemID)
-	}
-
-	mutateData := stateful.TransformItem(item.ToJSON(), resource.ResponseConfig())
+	responseData := stateful.TransformItem(result.Item.ToJSON(), responseCfg)
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(mutateData); err != nil {
-		h.log.Error("failed to encode stateful response", "error", err)
-	}
+	_ = json.NewEncoder(w).Encode(responseData)
 	return http.StatusOK
 }
 
-// handleStatefulDelete removes an item.
-func (h *Handler) handleStatefulDelete(w http.ResponseWriter, resource *stateful.StatefulResource, itemID string) int {
-	deletedItem, err := resource.Delete(itemID)
-	if err != nil {
-		var notFoundErr *stateful.NotFoundError
-		if errors.As(err, &notFoundErr) {
-			return h.writeResourceError(w, http.StatusNotFound, "resource not found", resource, itemID)
-		}
-		return h.writeResourceError(w, http.StatusInternalServerError, err.Error(), resource, itemID)
+// handleBindingDelete removes an item via Bridge.
+func (h *Handler) handleBindingDelete(w http.ResponseWriter, r *http.Request, table, itemID string, responseCfg *config.ResponseTransform) int {
+	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
+		Resource:   table,
+		Action:     stateful.ActionDelete,
+		ResourceID: itemID,
+	})
+	if result.Error != nil {
+		return h.writeBindingError(w, result, table, itemID, responseCfg)
 	}
 
-	cfg := resource.ResponseConfig()
-	deleteStatus, deleteBody := stateful.TransformDeleteResponse(deletedItem, cfg)
+	deleteStatus, deleteBody := stateful.TransformDeleteResponse(result.Item, responseCfg)
 	w.WriteHeader(deleteStatus)
 	if deleteBody != nil {
-		if err := json.NewEncoder(w).Encode(deleteBody); err != nil {
-			h.log.Error("failed to encode stateful delete response", "error", err)
-		}
+		_ = json.NewEncoder(w).Encode(deleteBody)
 	}
 	return deleteStatus
+}
+
+// writeBindingError maps a Bridge operation error to an HTTP error response,
+// applying error transforms if configured.
+func (h *Handler) writeBindingError(w http.ResponseWriter, result *stateful.OperationResult, table, itemID string, responseCfg *config.ResponseTransform) int {
+	statusCode := bridgeStatusToHTTP(result.Status)
+
+	if responseCfg != nil && responseCfg.Errors != nil {
+		code := httpStatusToErrorCode(statusCode)
+		if transformed := stateful.TransformError(code, result.Error.Error(), table, itemID, "", responseCfg); transformed != nil {
+			w.WriteHeader(statusCode)
+			_ = json.NewEncoder(w).Encode(transformed)
+			return statusCode
+		}
+	}
+
+	return h.writeStatefulError(w, statusCode, result.Error.Error(), table, itemID)
+}
+
+// bridgeStatusToHTTP maps Bridge result status to HTTP status codes.
+func bridgeStatusToHTTP(status stateful.ResultStatus) int {
+	switch status {
+	case stateful.StatusNotFound:
+		return http.StatusNotFound
+	case stateful.StatusConflict:
+		return http.StatusConflict
+	case stateful.StatusValidationError:
+		return http.StatusBadRequest
+	case stateful.StatusCapacityExceeded:
+		return http.StatusInsufficientStorage
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// extractLastPathParam returns the value of the last path parameter from the
+// mock's matched path pattern. For "/v1/customers/{customer}", returns the
+// value of "customer" from pathParams.
+func extractLastPathParam(m *mock.Mock, pathParams map[string]string) string {
+	if m.HTTP == nil || m.HTTP.Matcher == nil || len(pathParams) == 0 {
+		return ""
+	}
+
+	path := m.HTTP.Matcher.Path
+	if path == "" {
+		return ""
+	}
+
+	// Walk path segments backward to find the last {param}
+	segments := strings.Split(path, "/")
+	for i := len(segments) - 1; i >= 0; i-- {
+		seg := segments[i]
+		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
+			paramName := seg[1 : len(seg)-1]
+			return pathParams[paramName]
+		}
+	}
+
+	return ""
+}
+
+// handleBindingCustom handles an extend binding with action: custom.
+// It delegates to Bridge.Execute() with ActionCustom, passing the operation name
+// from the binding and the parsed request body as input. Path params are merged
+// into the input so custom operations can access resource IDs.
+func (h *Handler) handleBindingCustom(w http.ResponseWriter, r *http.Request, binding *mock.StatefulBinding, pathParams map[string]string, bodyBytes []byte, responseCfg *config.ResponseTransform) int {
+	if binding.Operation == "" {
+		return h.writeStatefulError(w, http.StatusBadRequest, "extend binding with action: custom requires an operation name", binding.Table, "")
+	}
+
+	// Parse body (JSON or form-encoded). Allow empty body for action endpoints.
+	var input map[string]interface{}
+	if len(bodyBytes) > 0 {
+		var err error
+		input, err = parseStatefulBody(bodyBytes, r.Header.Get("Content-Type"))
+		if err != nil {
+			return h.writeStatefulError(w, http.StatusBadRequest, "invalid request body: "+err.Error(), binding.Table, "")
+		}
+	}
+	if input == nil {
+		input = make(map[string]interface{})
+	}
+
+	// Merge path params into input so custom operations can reference resource IDs
+	for k, v := range pathParams {
+		input[k] = v
+	}
+
+	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
+		Action:        stateful.ActionCustom,
+		OperationName: binding.Operation,
+		Data:          input,
+	})
+
+	if result.Error != nil {
+		return h.writeBindingError(w, result, binding.Table, "", responseCfg)
+	}
+
+	// Apply response transform if the custom operation returned an item
+	if result.Item != nil {
+		data := stateful.TransformItem(result.Item.ToJSON(), responseCfg)
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(data)
+		return http.StatusOK
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	return http.StatusOK
 }
 
 // handleCustomOperation executes a registered custom operation via the Bridge.
@@ -288,22 +393,6 @@ func (h *Handler) writeStatefulErrorWithHint(w http.ResponseWriter, statusCode i
 	return statusCode
 }
 
-// writeResourceError writes an error response, applying error transforms if the resource has them configured.
-func (h *Handler) writeResourceError(w http.ResponseWriter, statusCode int, errorMsg string, resource *stateful.StatefulResource, id string) int {
-	cfg := resource.ResponseConfig()
-	if cfg != nil && cfg.Errors != nil {
-		code := httpStatusToErrorCode(statusCode)
-		if transformed := stateful.TransformError(code, errorMsg, resource.Name(), id, "", cfg); transformed != nil {
-			w.WriteHeader(statusCode)
-			if err := json.NewEncoder(w).Encode(transformed); err != nil {
-				h.log.Error("failed to encode error response", "error", err)
-			}
-			return statusCode
-		}
-	}
-	return h.writeStatefulError(w, statusCode, errorMsg, resource.Name(), id)
-}
-
 // httpStatusToErrorCode maps common HTTP status codes to stateful ErrorCode values.
 func httpStatusToErrorCode(status int) stateful.ErrorCode {
 	switch status {
@@ -320,39 +409,6 @@ func httpStatusToErrorCode(status int) stateful.ErrorCode {
 	default:
 		return stateful.ErrCodeInternal
 	}
-}
-
-// writeValidationError writes a validation error response.
-func (h *Handler) writeValidationError(w http.ResponseWriter, result *validation.Result, mode string) int {
-	// In warn mode, log but don't fail
-	if mode == validation.ModeWarn {
-		for _, err := range result.Errors {
-			h.log.Warn("validation warning", "field", err.Field, "message", err.Message)
-		}
-		return 0 // Continue processing
-	}
-
-	// In permissive mode, only fail on required field errors
-	if mode == validation.ModePermissive {
-		hasRequired := false
-		for _, err := range result.Errors {
-			if err.Code == validation.ErrCodeRequired {
-				hasRequired = true
-				break
-			}
-		}
-		if !hasRequired {
-			for _, err := range result.Errors {
-				h.log.Warn("validation warning (permissive)", "field", err.Field, "message", err.Message)
-			}
-			return 0 // Continue processing
-		}
-	}
-
-	// Strict mode (default) - return error response
-	resp := validation.NewErrorResponse(result, http.StatusBadRequest)
-	resp.WriteResponse(w)
-	return http.StatusBadRequest
 }
 
 // parseStatefulBody parses the request body based on Content-Type.
@@ -388,7 +444,12 @@ func parseStatefulBody(bodyBytes []byte, contentType string) (map[string]any, er
 // formToMap converts url.Values to a map, handling bracket-nested keys.
 // "name=Alice" → {"name":"Alice"}
 // "metadata[tier]=premium" → {"metadata":{"tier":"premium"}}
-// "items[0][price]=price_123" → {"items":{"0":{"price":"price_123"}}}
+// "items[0][price]=price_123" → {"items":[{"price":"price_123"}]}
+// "payment_method_types[0]=card" → {"payment_method_types":["card"]}
+//
+// Maps whose keys are consecutive numeric strings ("0","1","2",...) are
+// automatically converted to slices so the result matches the JSON arrays
+// that Stripe SDKs expect.
 func formToMap(values url.Values) map[string]any {
 	result := make(map[string]any)
 
@@ -404,11 +465,86 @@ func formToMap(values url.Values) map[string]any {
 			rest := key[idx:]
 			setNested(result, base, rest, val)
 		} else {
-			result[key] = val
+			result[key] = coerceFormValue(val)
 		}
 	}
 
+	convertNumericKeysToArrays(result)
 	return result
+}
+
+// convertNumericKeysToArrays recursively converts maps with consecutive numeric
+// string keys ("0", "1", "2", ...) into slices. This handles form-encoded arrays
+// like items[0][price]=X&items[1][price]=Y which url.ParseQuery produces as
+// nested maps with "0" and "1" keys instead of Go slices.
+func convertNumericKeysToArrays(m map[string]any) {
+	for key, val := range m {
+		if sub, ok := val.(map[string]any); ok {
+			// Recurse first so nested maps are converted bottom-up.
+			convertNumericKeysToArrays(sub)
+			// Check if all keys are consecutive integers starting from 0.
+			if isNumericKeyedMap(sub) {
+				m[key] = numericMapToSlice(sub)
+				// Recurse into the resulting slice elements too.
+				if arr, ok := m[key].([]any); ok {
+					for _, elem := range arr {
+						if elemMap, ok := elem.(map[string]any); ok {
+							convertNumericKeysToArrays(elemMap)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func isNumericKeyedMap(m map[string]any) bool {
+	if len(m) == 0 {
+		return false
+	}
+	for i := 0; i < len(m); i++ {
+		if _, ok := m[strconv.Itoa(i)]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func numericMapToSlice(m map[string]any) []any {
+	result := make([]any, len(m))
+	for i := 0; i < len(m); i++ {
+		result[i] = m[strconv.Itoa(i)]
+	}
+	return result
+}
+
+// coerceFormValue attempts to convert a form-encoded string value to its
+// natural Go type. Form data arrives as strings, but downstream consumers
+// (e.g. the Stripe Go SDK) expect numeric and boolean JSON types.
+func coerceFormValue(s string) any {
+	// Boolean
+	if s == "true" {
+		return true
+	}
+	if s == "false" {
+		return false
+	}
+
+	// Integer (no decimal point)
+	if !strings.Contains(s, ".") {
+		if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return n
+		}
+	}
+
+	// Float (has decimal point)
+	if strings.Contains(s, ".") {
+		if f, err := strconv.ParseFloat(s, 64); err == nil {
+			return f
+		}
+	}
+
+	return s
 }
 
 // setNested sets a value in a nested map using bracket notation path.
@@ -438,7 +574,7 @@ func setNested(result map[string]any, base, path, val string) {
 
 		if path == "" || !strings.HasPrefix(path, "[") {
 			// Last segment — set the value
-			current[segment] = val
+			current[segment] = coerceFormValue(val)
 			return
 		}
 

@@ -83,8 +83,6 @@ type StateOverview struct {
 type ResourceInfo struct {
 	// Name is the resource name
 	Name string `json:"name"`
-	// BasePath is the URL path prefix
-	BasePath string `json:"basePath"`
 	// ItemCount is the current number of items
 	ItemCount int `json:"itemCount"`
 	// SeedCount is the number of seed data items

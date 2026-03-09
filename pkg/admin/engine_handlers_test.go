@@ -70,8 +70,7 @@ func TestSyncAdminStoreToEngine(t *testing.T) {
 			Type: mock.TypeHTTP,
 		}))
 		require.NoError(t, api.dataStore.StatefulResources().Create(ctx, &config.StatefulResourceConfig{
-			Name:     "users",
-			BasePath: "/api/users",
+			Name: "users",
 		}))
 
 		// Run sync.

@@ -360,7 +360,6 @@ type ProgressiveDegradationStatus struct {
 // StatefulResource represents a stateful mock resource for the API.
 type StatefulResource struct {
 	Name        string `json:"name"`
-	BasePath    string `json:"basePath"`
 	ItemCount   int    `json:"itemCount"`
 	SeedCount   int    `json:"seedCount"`
 	IDField     string `json:"idField"`

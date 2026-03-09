@@ -21,9 +21,8 @@ Use validation when you want your mocks to reject invalid requests rather than a
 Add a `validation` block to any stateful resource or HTTP mock:
 
 ```yaml
-statefulResources:
-  - name: users
-    basePath: /api/users
+tables:
+  users:
     seedData:
       - id: "1"
         email: "alice@example.com"
@@ -47,9 +46,8 @@ With this configuration, requests with an invalid email or out-of-range age will
 Stateful resources support validation on create and update operations. The validation block sits at the resource level:
 
 ```yaml
-statefulResources:
-  - name: products
-    basePath: /api/products
+tables:
+  products:
     seedData:
       - id: "1"
         sku: "WIDGET-001"
@@ -386,9 +384,8 @@ The response uses `Content-Type: application/problem+json` and includes:
 When seed data is provided without explicit validation rules, mockd can infer basic type validation:
 
 ```yaml
-statefulResources:
-  - name: users
-    basePath: /api/users
+tables:
+  users:
     validation:
       auto: true
     seedData:
@@ -405,9 +402,8 @@ This automatically creates validators based on the seed data types. Explicit fie
 ### Stateful Resource with Full Validation
 
 ```yaml
-statefulResources:
-  - name: orders
-    basePath: /api/orders
+tables:
+  orders:
     seedData:
       - id: "1"
         customerId: "cust_abc123"

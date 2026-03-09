@@ -241,7 +241,10 @@ mocks:
 |-------|-------------|----------|
 | `version` | Config version (`"1.0"`) | Yes |
 | `mocks` | Array of mock definitions | Yes |
-| `statefulResources` | Array of CRUD resources | No |
+| `tables` | Named data stores (pure data, no routing) | No |
+| `extend` | Bindings from mocks to tables | No |
+| `imports` | External spec imports with namespacing | No |
+| `statefulResources` | Low-level CRUD resources (prefer `tables` + `extend`) | No |
 
 ## Stateful Mocking
 
@@ -254,18 +257,31 @@ mockd can simulate stateful CRUD APIs where:
 
 State persists across requests during the server session.
 
-```json
-{
-  "statefulResources": [
-    {
-      "name": "users",
-      "basePath": "/api/users",
-      "idField": "id",
-      "seedData": []
-    }
-  ]
-}
+The stateful architecture uses two concepts:
+
+- **Tables** — Pure data stores that hold seed data. No routing is attached.
+- **Extend bindings** — Wire mock endpoints to tables with a specific action (list, get, create, update, delete, custom).
+
+```yaml
+tables:
+  users:
+    idField: id
+    seedData: []
+
+mocks:
+  - id: list-users
+    type: http
+    http:
+      matcher: { method: GET, path: /api/users }
+      response: { statusCode: 200 }
+
+extend:
+  - mock: list-users
+    table: users
+    action: list
 ```
+
+For quick prototyping, the CLI shortcut `mockd http add --path /api/users --stateful` creates a table + mocks + extend bindings in one step.
 
 See [Stateful Mocking Guide](/guides/stateful-mocking/).
 

@@ -138,13 +138,32 @@ mockd chaos apply slow-api
 
 ### Stateful Mocking
 
-Simulate CRUD resources with automatic ID generation, pagination, and persistence. State is shared across protocols — REST and SOAP operate on the same data:
+Simulate CRUD resources with automatic ID generation, pagination, and persistence. Import an API spec and bind its endpoints to stateful tables with the tables+extend pattern:
 
 ```yaml
-# mockd.yaml
-statefulResources:
+# mockd.yaml — tables + extend (recommended for config files)
+version: "1.0"
+imports:
+  - path: openapi.yaml
+    as: api
+tables:
   - name: users
-    basePath: /api/users
+    seedData:
+      - { id: "1", name: "Alice", email: "alice@example.com" }
+extend:
+  - { mock: api.GetUsers, table: users, action: list }
+  - { mock: api.PostUsers, table: users, action: create }
+  - { mock: api.GetUsersId, table: users, action: get }
+```
+
+Tables are pure data stores (no routing, no basePath). Extend bindings wire imported mock endpoints to table CRUD actions (`list`, `get`, `create`, `update`, `delete`). Custom operations are also supported via `action: custom` + `operation: OpName`.
+
+State is shared across protocols — REST and SOAP can operate on the same table:
+
+```yaml
+# Cross-protocol stateful mocking
+tables:
+  - name: users
     seedData:
       - { id: "1", name: "Alice", email: "alice@example.com" }
 
@@ -158,18 +177,7 @@ mocks:
           statefulAction: get
 ```
 
-```bash
-mockd serve --config mockd.yaml
-
-# Create via REST
-curl -X POST http://localhost:4280/api/users \
-  -d '{"name": "Bob"}' -H 'Content-Type: application/json'
-
-# Retrieve via SOAP — same user!
-curl -X POST http://localhost:4280/soap/UserService \
-  -H 'SOAPAction: GetUser' -H 'Content-Type: text/xml' \
-  -d '<soap:Envelope>...<GetUser><Id>...</Id></GetUser>...</soap:Envelope>'
-```
+For quick CLI prototyping, `mockd add http --path /api/users --stateful` still works to auto-create CRUD endpoints.
 
 ### Proxy Recording
 

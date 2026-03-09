@@ -70,7 +70,7 @@ type AdminClient interface {
 	GetPortsVerbose(verbose bool) ([]PortInfo, error)
 
 	// CreateStatefulResource registers a new stateful resource definition.
-	CreateStatefulResource(name, basePath, idField string) error
+	CreateStatefulResource(name, idField string) error
 	// GetStateOverview returns an overview of all stateful resources.
 	GetStateOverview() (*StateOverviewResult, error)
 	// ListStatefulItems returns paginated items for a stateful resource.
@@ -225,7 +225,6 @@ type StateOverviewResult struct {
 // StatefulResourceInfo describes a single stateful resource.
 type StatefulResourceInfo struct {
 	Name        string `json:"name"`
-	BasePath    string `json:"basePath"`
 	ItemCount   int    `json:"itemCount"`
 	SeedCount   int    `json:"seedCount"`
 	IDField     string `json:"idField"`
@@ -1128,14 +1127,13 @@ func (c *adminClient) GetPortsVerbose(verbose bool) ([]PortInfo, error) {
 }
 
 // CreateStatefulResource registers a new stateful resource definition via POST /state/resources.
-func (c *adminClient) CreateStatefulResource(name, basePath, idField string) error {
+func (c *adminClient) CreateStatefulResource(name, idField string) error {
 	if idField == "" {
 		idField = "id"
 	}
 	payload := map[string]interface{}{
-		"name":     name,
-		"basePath": basePath,
-		"idField":  idField,
+		"name":    name,
+		"idField": idField,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

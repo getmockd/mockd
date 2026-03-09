@@ -34,6 +34,9 @@ mocks:
 
 serverConfig: { ... }       # Optional server settings
 statefulResources: [ ... ]  # Optional CRUD resources
+tables: { ... }             # Optional named data stores
+extend: [ ... ]             # Optional mock-to-table bindings
+imports: [ ... ]            # Optional spec imports with namespacing
 customOperations: [ ... ]   # Optional multi-step operations
 ```
 
@@ -42,7 +45,10 @@ customOperations: [ ... ]   # Optional multi-step operations
 | `version` | string | Yes | Config version (e.g., `"1.0"`) |
 | `mocks` | array | Yes | Mock definitions |
 | `serverConfig` | object | No | Server configuration |
-| `statefulResources` | array | No | Stateful CRUD resources |
+| `statefulResources` | array | No | Stateful CRUD resources (low-level) |
+| `tables` | map | No | Named data stores (pure data, no routing) |
+| `extend` | array | No | Bindings from mocks to tables (action + table reference) |
+| `imports` | array | No | Import external specs (OpenAPI, WSDL) with namespace prefixes |
 | `customOperations` | array | No | Multi-step custom operations with expression evaluation |
 
 ---
@@ -915,16 +921,182 @@ See the [Chaos Engineering guide](/guides/chaos-engineering/) for detailed usage
 
 ---
 
+## Tables
+
+Tables are named data stores — pure in-memory collections with no routing or HTTP endpoints attached. Tables hold seed data and are referenced by [extend bindings](#extend-bindings) to wire mock endpoints to CRUD actions.
+
+```yaml
+version: "1.0"
+
+tables:
+  users:
+    idField: id
+    seedData:
+      - id: "1"
+        name: "Alice"
+        email: "alice@example.com"
+      - id: "2"
+        name: "Bob"
+        email: "bob@example.com"
+  products:
+    idField: sku
+    seedData:
+      - sku: "WIDGET-001"
+        name: "Blue Widget"
+        price: 29.99
+
+mocks: []
+```
+
+### Table Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `idField` | string | `"id"` | Field name for resource ID |
+| `seedData` | array | `[]` | Initial data to load |
+| `validation` | object | | Validation rules ([see Validation](#validation)) |
+
+Tables are keyed by name (e.g., `users`, `products`). Internally, tables are converted into `statefulResources` entries — but unlike the legacy `statefulResources` + `basePath` pattern, tables never auto-generate HTTP endpoints. All routing is explicit via `extend`.
+
+---
+
+## Extend Bindings
+
+Extend bindings wire mock endpoints to tables. Each binding references a mock (by `id`), a table, and an action to perform.
+
+```yaml
+version: "1.0"
+
+tables:
+  users:
+    seedData:
+      - id: "1"
+        name: "Alice"
+
+mocks:
+  - id: list-users
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/users
+      response:
+        statusCode: 200
+
+  - id: create-user
+    type: http
+    http:
+      matcher:
+        method: POST
+        path: /api/users
+      response:
+        statusCode: 201
+
+  - id: get-user
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/users/{id}
+      response:
+        statusCode: 200
+
+extend:
+  - mock: list-users
+    table: users
+    action: list
+
+  - mock: create-user
+    table: users
+    action: create
+
+  - mock: get-user
+    table: users
+    action: get
+```
+
+### Extend Binding Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `mock` | string | Yes | ID of the mock to bind |
+| `table` | string | Yes | Name of the table to operate on |
+| `action` | string | Yes | CRUD action: `list`, `get`, `create`, `update`, `patch`, `delete`, `custom` |
+| `operation` | string | No | Operation name (required when `action: custom`) |
+
+### Supported Actions
+
+| Action | Description |
+|--------|-------------|
+| `list` | List all items in the table |
+| `get` | Get a single item by ID (extracted from path parameter) |
+| `create` | Create a new item from the request body |
+| `update` | Replace an item (PUT semantics) |
+| `patch` | Partially update an item (PATCH semantics) |
+| `delete` | Delete an item by ID |
+| `custom` | Execute a named custom operation (requires `operation` field) |
+
+### Custom Operations via Extend
+
+To trigger a custom operation from a mock endpoint, use `action: custom` with an `operation` field:
+
+```yaml
+extend:
+  - mock: transfer-endpoint
+    table: accounts
+    action: custom
+    operation: TransferFunds
+```
+
+---
+
+## Imports
+
+Imports load external API specifications (OpenAPI, WSDL) and generate mocks with a namespace prefix. This is useful for creating digital twins of third-party APIs.
+
+```yaml
+version: "1.0"
+
+imports:
+  - spec: ./stripe-openapi.yaml
+    namespace: stripe
+    format: openapi
+
+tables:
+  customers:
+    seedData:
+      - id: "cus_001"
+        name: "Alice"
+
+extend:
+  - mock: stripe/list-customers
+    table: customers
+    action: list
+```
+
+### Import Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec` | string | Yes | Path to the spec file (OpenAPI, WSDL, etc.) |
+| `namespace` | string | Yes | Prefix for generated mock IDs (e.g., `stripe`) |
+| `format` | string | No | Spec format (auto-detected if omitted): `openapi`, `wsdl` |
+
+Imported mocks receive IDs prefixed with the namespace (e.g., `stripe/list-customers`). You can then reference these IDs in `extend` bindings to wire them to your tables.
+
+---
+
 ## Stateful Resources
 
-Stateful resources provide automatic CRUD operations with in-memory state. Resource definitions and seed data are persisted to the admin file store, but runtime data (created/updated/deleted items) is held in memory and resets to seed data on restart.
+Stateful resources are the low-level internal representation of data stores. In most cases, you should use [tables](#tables) and [extend bindings](#extend-bindings) instead — they provide a cleaner separation between data and routing.
+
+The `statefulResources` field is still supported for backward compatibility and for the CLI `mockd stateful add` workflow. Tables are converted into `statefulResources` entries internally.
 
 ```yaml
 version: "1.0"
 
 statefulResources:
   - name: users
-    basePath: /api/users
     idField: id
     parentField: ""
     seedData:
@@ -943,24 +1115,10 @@ mocks: []
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `name` | string | Required | Resource name (e.g., "users") |
-| `basePath` | string | Required | Base URL path (e.g., "/api/users") |
 | `idField` | string | `"id"` | Field name for resource ID |
 | `parentField` | string | | Parent FK field for nested resources |
 | `seedData` | array | `[]` | Initial data to load |
 | `validation` | object | | Validation rules ([see Validation](#validation)) |
-
-### Generated Endpoints
-
-For a resource with `basePath: /api/users`:
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/users` | List all resources |
-| POST | `/api/users` | Create resource |
-| GET | `/api/users/{id}` | Get resource by ID |
-| PUT | `/api/users/{id}` | Replace resource |
-| PATCH | `/api/users/{id}` | Update resource |
-| DELETE | `/api/users/{id}` | Delete resource |
 
 ### Validation
 
@@ -1177,13 +1335,51 @@ mocks:
         Query.hello:
           response: "Hello, World!"
 
-statefulResources:
-  - name: posts
-    basePath: /api/posts
+  # Stateful CRUD via tables + extend
+  - id: list-posts
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/posts
+      response:
+        statusCode: 200
+
+  - id: create-post
+    type: http
+    http:
+      matcher:
+        method: POST
+        path: /api/posts
+      response:
+        statusCode: 201
+
+  - id: get-post
+    type: http
+    http:
+      matcher:
+        method: GET
+        path: /api/posts/{id}
+      response:
+        statusCode: 200
+
+tables:
+  posts:
     seedData:
       - id: "1"
         title: "First Post"
         content: "Hello, World!"
+
+extend:
+  - mock: list-posts
+    table: posts
+    action: list
+  - mock: create-post
+    table: posts
+    action: create
+  - mock: get-post
+    table: posts
+    action: get
 ```
 
 ## See Also

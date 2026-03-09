@@ -365,6 +365,79 @@ func TestOpenAPIImporter_Import(t *testing.T) {
 		}
 	})
 
+	t.Run("propagates operationId to Mock.OperationID", func(t *testing.T) {
+		spec := `{
+			"openapi": "3.0.3",
+			"info": {"title": "Test API", "version": "1.0.0"},
+			"paths": {
+				"/users": {
+					"get": {
+						"operationId": "GetUsers",
+						"summary": "List users",
+						"responses": { "200": {"description": "Success"} }
+					},
+					"post": {
+						"operationId": "PostUsers",
+						"responses": { "201": {"description": "Created"} }
+					}
+				},
+				"/users/{id}": {
+					"get": {
+						"operationId": "GetUsersId",
+						"responses": { "200": {"description": "Success"} }
+					},
+					"delete": {
+						"responses": { "204": {"description": "Deleted"} }
+					}
+				}
+			}
+		}`
+
+		collection, err := importer.Import([]byte(spec))
+		if err != nil {
+			t.Fatalf("Import failed: %v", err)
+		}
+
+		if len(collection.Mocks) != 4 {
+			t.Fatalf("Expected 4 mocks, got %d", len(collection.Mocks))
+		}
+
+		opIDs := make(map[string]string) // method+path → operationId
+		for _, m := range collection.Mocks {
+			key := m.HTTP.Matcher.Method + " " + m.HTTP.Matcher.Path
+			opIDs[key] = m.OperationID
+		}
+
+		if opIDs["GET /users"] != "GetUsers" {
+			t.Errorf("GET /users: expected operationId 'GetUsers', got %q", opIDs["GET /users"])
+		}
+		if opIDs["POST /users"] != "PostUsers" {
+			t.Errorf("POST /users: expected operationId 'PostUsers', got %q", opIDs["POST /users"])
+		}
+		if opIDs["GET /users/{id}"] != "GetUsersId" {
+			t.Errorf("GET /users/{id}: expected operationId 'GetUsersId', got %q", opIDs["GET /users/{id}"])
+		}
+		// DELETE has no operationId — should be empty
+		if opIDs["DELETE /users/{id}"] != "" {
+			t.Errorf("DELETE /users/{id}: expected empty operationId, got %q", opIDs["DELETE /users/{id}"])
+		}
+
+		// Check that Name falls back to operationId when Summary is empty
+		for _, m := range collection.Mocks {
+			if m.OperationID == "PostUsers" {
+				if m.Name != "PostUsers" {
+					t.Errorf("PostUsers mock Name should be operationId when no Summary, got %q", m.Name)
+				}
+			}
+			if m.OperationID == "GetUsers" {
+				// Has Summary "List users" — Name should be Summary, not operationId
+				if m.Name != "List users" {
+					t.Errorf("GetUsers mock Name should be Summary 'List users', got %q", m.Name)
+				}
+			}
+		}
+	})
+
 	t.Run("imports Swagger 2.0 specification", func(t *testing.T) {
 		spec := `{
 			"swagger": "2.0",
@@ -2112,8 +2185,7 @@ func TestNativeExporter_WithStateful(t *testing.T) {
 		},
 		StatefulResources: []*config.StatefulResourceConfig{
 			{
-				Name:     "products",
-				BasePath: "/api/products",
+				Name: "products",
 			},
 		},
 	}

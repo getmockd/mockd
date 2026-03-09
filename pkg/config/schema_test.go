@@ -561,8 +561,7 @@ func TestDefaultProjectConfig(t *testing.T) {
 func TestMergeStatefulResource_MaxItems(t *testing.T) {
 	t.Run("overlay sets MaxItems on base", func(t *testing.T) {
 		base := StatefulResourceConfig{
-			Name:     "products",
-			BasePath: "/products",
+			Name: "products",
 		}
 		overlay := StatefulResourceConfig{
 			Name:     "products",
@@ -606,12 +605,12 @@ func TestMergeStatefulResource_MaxItems(t *testing.T) {
 
 	t.Run("mergeStatefulResources propagates MaxItems by name", func(t *testing.T) {
 		base := []StatefulResourceConfig{
-			{Name: "users", BasePath: "/users", MaxItems: 10},
-			{Name: "orders", BasePath: "/orders"},
+			{Name: "users", MaxItems: 10},
+			{Name: "orders"},
 		}
 		overlay := []StatefulResourceConfig{
 			{Name: "orders", MaxItems: 500},
-			{Name: "products", BasePath: "/products", MaxItems: 1000},
+			{Name: "products", MaxItems: 1000},
 		}
 		result := mergeStatefulResources(base, overlay)
 		if len(result) != 3 {

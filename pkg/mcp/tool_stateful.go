@@ -45,10 +45,9 @@ func handleAddStatefulResource(args map[string]interface{}, session *MCPSession,
 		return ToolResultError("resource name is required"), nil
 	}
 
-	basePath := getString(args, "path", "")
 	idField := getString(args, "id_field", "")
 
-	err := client.CreateStatefulResource(name, basePath, idField)
+	err := client.CreateStatefulResource(name, idField)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to create stateful resource: " + adminError(err, session.GetAdminURL())), nil
@@ -61,12 +60,6 @@ func handleAddStatefulResource(args map[string]interface{}, session *MCPSession,
 	}
 	if idField == "" {
 		result["idField"] = "id"
-	}
-	if basePath != "" {
-		result["basePath"] = basePath
-		result["mode"] = "http+bridge"
-	} else {
-		result["mode"] = "bridge-only"
 	}
 
 	return ToolResultJSON(result)

@@ -22,8 +22,7 @@ import (
 // data that doesn't match the defined rules
 func TestStateful_Validation_RejectsInvalidData(t *testing.T) {
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	})
 
 	err := srv.Start()
@@ -58,8 +57,7 @@ func TestStateful_Validation_RejectsInvalidData(t *testing.T) {
 // TestStateful_Validation_AcceptsValidData tests that valid data is accepted
 func TestStateful_Validation_AcceptsValidData(t *testing.T) {
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "products",
-		BasePath: "/api/products",
+		Name: "products",
 	})
 
 	err := srv.Start()
@@ -96,8 +94,7 @@ func TestStateful_Validation_AcceptsValidData(t *testing.T) {
 // TestStateful_Validation_UpdateValidation tests validation on PUT requests
 func TestStateful_Validation_UpdateValidation(t *testing.T) {
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 		SeedData: []map[string]interface{}{
 			{"id": "item-1", "name": "Original", "price": 10.0},
 		},
@@ -135,15 +132,13 @@ func TestStateful_Validation_UpdateValidation(t *testing.T) {
 func TestStateful_Validation_NestedResourceValidation(t *testing.T) {
 	srv, httpPort, _ := createStatefulServer(t,
 		&statefulResourceConfig{
-			Name:     "posts",
-			BasePath: "/api/posts",
+			Name: "posts",
 			SeedData: []map[string]interface{}{
 				{"id": "post-1", "title": "Test Post"},
 			},
 		},
 		&statefulResourceConfig{
 			Name:        "comments",
-			BasePath:    "/api/posts/:postId/comments",
 			ParentField: "postId",
 		},
 	)
@@ -178,8 +173,7 @@ func TestStateful_Validation_NestedResourceValidation(t *testing.T) {
 // TestStateful_Validation_EmptyBody tests handling of empty request body
 func TestStateful_Validation_EmptyBody(t *testing.T) {
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 	})
 
 	err := srv.Start()
@@ -226,10 +220,56 @@ func TestBinaryE2E_ValidationConfigFile(t *testing.T) {
 			"name":    "validation-test",
 			"statefulResources": []map[string]interface{}{
 				{
-					"name":     "validated-users",
-					"basePath": "/api/validated-users",
+					"name": "validated-users",
 					"seedData": []map[string]interface{}{
 						{"id": "user-1", "email": "test@example.com", "age": 25},
+					},
+				},
+			},
+			"mocks": []map[string]interface{}{
+				{
+					"id":   "create-validated-users",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/validated-users"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "validated-users", "action": "create"},
+					},
+				},
+				{
+					"id":   "list-validated-users",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/validated-users"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "validated-users", "action": "list"},
+					},
+				},
+				{
+					"id":   "get-validated-users",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/validated-users/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "validated-users", "action": "get"},
+					},
+				},
+				{
+					"id":   "update-validated-users",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/validated-users/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "validated-users", "action": "update"},
+					},
+				},
+				{
+					"id":   "delete-validated-users",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/validated-users/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "validated-users", "action": "delete"},
 					},
 				},
 			},
@@ -345,8 +385,54 @@ func TestBinaryE2E_ValidationErrorResponse(t *testing.T) {
 			"name":    "error-test",
 			"statefulResources": []map[string]interface{}{
 				{
-					"name":     "error-test-users",
-					"basePath": "/api/error-test-users",
+					"name": "error-test-users",
+				},
+			},
+			"mocks": []map[string]interface{}{
+				{
+					"id":   "create-error-test-users",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/error-test-users"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "error-test-users", "action": "create"},
+					},
+				},
+				{
+					"id":   "list-error-test-users",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/error-test-users"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "error-test-users", "action": "list"},
+					},
+				},
+				{
+					"id":   "get-error-test-users",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/error-test-users/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "error-test-users", "action": "get"},
+					},
+				},
+				{
+					"id":   "update-error-test-users",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/error-test-users/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "error-test-users", "action": "update"},
+					},
+				},
+				{
+					"id":   "delete-error-test-users",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/error-test-users/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "error-test-users", "action": "delete"},
+					},
 				},
 			},
 		},
@@ -398,10 +484,56 @@ func TestBinaryE2E_StatefulCRUDWithValidation(t *testing.T) {
 			"name":    "crud-test",
 			"statefulResources": []map[string]interface{}{
 				{
-					"name":     "crud-validated",
-					"basePath": "/api/crud-validated",
+					"name": "crud-validated",
 					"seedData": []map[string]interface{}{
 						{"id": "seed-1", "name": "Seed Item", "status": "active"},
+					},
+				},
+			},
+			"mocks": []map[string]interface{}{
+				{
+					"id":   "create-crud-validated",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/crud-validated"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "crud-validated", "action": "create"},
+					},
+				},
+				{
+					"id":   "list-crud-validated",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/crud-validated"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "crud-validated", "action": "list"},
+					},
+				},
+				{
+					"id":   "get-crud-validated",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/crud-validated/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "crud-validated", "action": "get"},
+					},
+				},
+				{
+					"id":   "update-crud-validated",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/crud-validated/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "crud-validated", "action": "update"},
+					},
+				},
+				{
+					"id":   "delete-crud-validated",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/crud-validated/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "crud-validated", "action": "delete"},
 					},
 				},
 			},
@@ -535,16 +667,108 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 			"name":    "nested-test",
 			"statefulResources": []map[string]interface{}{
 				{
-					"name":     "articles",
-					"basePath": "/api/articles",
+					"name": "articles",
 					"seedData": []map[string]interface{}{
 						{"id": "article-1", "title": "Test Article"},
 					},
 				},
 				{
 					"name":        "article-comments",
-					"basePath":    "/api/articles/:articleId/comments",
 					"parentField": "articleId",
+				},
+			},
+			"mocks": []map[string]interface{}{
+				// Articles CRUD mocks
+				{
+					"id":   "create-articles",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/articles"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "articles", "action": "create"},
+					},
+				},
+				{
+					"id":   "list-articles",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/articles"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "articles", "action": "list"},
+					},
+				},
+				{
+					"id":   "get-articles",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/articles/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "articles", "action": "get"},
+					},
+				},
+				{
+					"id":   "update-articles",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/articles/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "articles", "action": "update"},
+					},
+				},
+				{
+					"id":   "delete-articles",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/articles/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "articles", "action": "delete"},
+					},
+				},
+				// Nested article-comments CRUD mocks
+				{
+					"id":   "create-article-comments",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/articles/{articleId}/comments"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "article-comments", "action": "create"},
+					},
+				},
+				{
+					"id":   "list-article-comments",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/articles/{articleId}/comments"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "article-comments", "action": "list"},
+					},
+				},
+				{
+					"id":   "get-article-comments",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/articles/{articleId}/comments/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "article-comments", "action": "get"},
+					},
+				},
+				{
+					"id":   "update-article-comments",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/articles/{articleId}/comments/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "article-comments", "action": "update"},
+					},
+				},
+				{
+					"id":   "delete-article-comments",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/articles/{articleId}/comments/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "article-comments", "action": "delete"},
+					},
 				},
 			},
 		},
@@ -619,8 +843,54 @@ func TestBinaryE2E_LargeBodyRejection(t *testing.T) {
 			"name":    "large-body-test",
 			"statefulResources": []map[string]interface{}{
 				{
-					"name":     "large-body-test",
-					"basePath": "/api/large-body-test",
+					"name": "large-body-test",
+				},
+			},
+			"mocks": []map[string]interface{}{
+				{
+					"id":   "create-large-body-test",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/large-body-test"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "large-body-test", "action": "create"},
+					},
+				},
+				{
+					"id":   "list-large-body-test",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/large-body-test"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "large-body-test", "action": "list"},
+					},
+				},
+				{
+					"id":   "get-large-body-test",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/large-body-test/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "large-body-test", "action": "get"},
+					},
+				},
+				{
+					"id":   "update-large-body-test",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/large-body-test/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "large-body-test", "action": "update"},
+					},
+				},
+				{
+					"id":   "delete-large-body-test",
+					"type": "http",
+					"http": map[string]interface{}{
+						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/large-body-test/{id}"},
+						"response":        map[string]interface{}{"statusCode": 200},
+						"statefulBinding": map[string]interface{}{"table": "large-body-test", "action": "delete"},
+					},
 				},
 			},
 		},

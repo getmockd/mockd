@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -53,12 +52,6 @@ func (s *StateStore) Register(config *ResourceConfig) error {
 		return errors.New("resource name cannot be empty")
 	}
 
-	// basePath is optional — when empty, the resource is only accessible
-	// via the Bridge (SOAP, GraphQL, gRPC, etc.), not via HTTP REST.
-	if config.BasePath != "" && !strings.HasPrefix(config.BasePath, "/") {
-		return errors.New("resource basePath must start with /")
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -95,37 +88,6 @@ func (s *StateStore) List() []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// MatchPath finds a resource matching the given URL path.
-// Returns the matched resource, the extracted ID (if single resource), and path params.
-// Resources are checked in order of longest BasePath first so that more specific
-// routes (e.g. /api/users/:userId/orders) are matched before shorter ones (e.g. /api/users).
-func (s *StateStore) MatchPath(path string) (*StatefulResource, string, map[string]string) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Collect keys and sort by BasePath length descending (most specific first)
-	keys := make([]string, 0, len(s.resources))
-	for name := range s.resources {
-		keys = append(keys, name)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		pi := s.resources[keys[i]].BasePath()
-		pj := s.resources[keys[j]].BasePath()
-		if len(pi) != len(pj) {
-			return len(pi) > len(pj)
-		}
-		return keys[i] < keys[j] // stable tiebreak by name
-	})
-
-	for _, name := range keys {
-		if id, params, matched := s.resources[name].MatchPath(path); matched {
-			return s.resources[name], id, params
-		}
-	}
-
-	return nil, "", nil
 }
 
 // Reset resets stateful resources to their initial seed state.

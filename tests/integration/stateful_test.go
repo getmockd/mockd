@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,13 +17,13 @@ import (
 	"github.com/getmockd/mockd/pkg/admin"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
+	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/stateful"
 )
 
 // statefulResourceConfig is used in tests to configure resources
 type statefulResourceConfig struct {
 	Name        string
-	BasePath    string
 	IDField     string
 	ParentField string
 	SeedData    []map[string]interface{}
@@ -36,10 +37,9 @@ func createTestStore() *stateful.StateStore {
 }
 
 //nolint:unused // kept for future tests
-func createTestResource(store *stateful.StateStore, name, basePath string, seedData []map[string]interface{}) error {
+func createTestResource(store *stateful.StateStore, name string, seedData []map[string]interface{}) error {
 	cfg := &stateful.ResourceConfig{
 		Name:     name,
-		BasePath: basePath,
 		SeedData: seedData,
 	}
 	return store.Register(cfg)
@@ -127,19 +127,68 @@ func createStatefulServerWithAdmin(t *testing.T, resources ...*statefulResourceC
 	for _, res := range resources {
 		statefulResources = append(statefulResources, &config.StatefulResourceConfig{
 			Name:        res.Name,
-			BasePath:    res.BasePath,
 			IDField:     res.IDField,
 			ParentField: res.ParentField,
 			SeedData:    res.SeedData,
 		})
 	}
 
-	// Import resources via MockCollection
+	// Build CRUD mock definitions for each resource so they are accessible
+	// via HTTP. Stateful resources are only reachable through mocks that
+	// have StatefulBinding set.
+	var mocks []*config.MockConfiguration
+	for _, res := range resources {
+		// Determine the base path: flat vs nested resource
+		basePath := "/api/" + res.Name
+		if res.ParentField != "" {
+			// Nested resource: /api/{parentPlural}/{parentParam}/{childName}
+			// Convention: "userId" → parent path "users", param "{userId}"
+			parentParam := res.ParentField
+			parentPlural := strings.TrimSuffix(parentParam, "Id") + "s"
+			basePath = "/api/" + parentPlural + "/{" + parentParam + "}/" + res.Name
+		}
+
+		actions := []struct {
+			id     string
+			method string
+			path   string
+			action string
+		}{
+			{"create-" + res.Name, "POST", basePath, "create"},
+			{"list-" + res.Name, "GET", basePath, "list"},
+			{"get-" + res.Name, "GET", basePath + "/{id}", "get"},
+			{"update-" + res.Name, "PUT", basePath + "/{id}", "update"},
+			{"patch-" + res.Name, "PATCH", basePath + "/{id}", "patch"},
+			{"delete-" + res.Name, "DELETE", basePath + "/{id}", "delete"},
+		}
+		for _, a := range actions {
+			mocks = append(mocks, &config.MockConfiguration{
+				ID:   a.id,
+				Type: mock.TypeHTTP,
+				HTTP: &mock.HTTPSpec{
+					Matcher: &mock.HTTPMatcher{
+						Method: a.method,
+						Path:   a.path,
+					},
+					Response: &mock.HTTPResponse{
+						StatusCode: 200,
+					},
+					StatefulBinding: &mock.StatefulBinding{
+						Table:  res.Name,
+						Action: a.action,
+					},
+				},
+			})
+		}
+	}
+
+	// Import resources and mocks via MockCollection
 	if len(statefulResources) > 0 {
 		collection := &config.MockCollection{
 			Version:           "1.0",
 			Name:              "stateful-test",
 			StatefulResources: statefulResources,
+			Mocks:             mocks,
 		}
 		err := srv.ImportConfig(collection, true)
 		require.NoError(t, err, "failed to import stateful resources")
@@ -176,8 +225,7 @@ func createStatefulServerWithAdmin(t *testing.T, resources ...*statefulResourceC
 func TestStateful_US1_PostCreatesResourceReturns201(t *testing.T) {
 	// T011: Integration test: POST creates resource and returns 201
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	})
 
 	err := srv.Start()
@@ -213,8 +261,7 @@ func TestStateful_US1_PostCreatesResourceReturns201(t *testing.T) {
 func TestStateful_US1_GetRetrievesSingleResourceByID(t *testing.T) {
 	// T012: Integration test: GET retrieves single resource by ID
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "user-123", "name": "Bob", "role": "admin"},
 		},
@@ -245,8 +292,7 @@ func TestStateful_US1_GetRetrievesSingleResourceByID(t *testing.T) {
 func TestStateful_US1_GetCollectionReturnsAllResources(t *testing.T) {
 	// T013: Integration test: GET collection returns all resources
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "user-1", "name": "Alice"},
 			{"id": "user-2", "name": "Bob"},
@@ -279,8 +325,7 @@ func TestStateful_US1_GetCollectionReturnsAllResources(t *testing.T) {
 func TestStateful_US1_PutUpdatesExistingResource(t *testing.T) {
 	// T014: Integration test: PUT updates existing resource
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "user-123", "name": "Bob", "role": "user"},
 		},
@@ -316,8 +361,7 @@ func TestStateful_US1_PutUpdatesExistingResource(t *testing.T) {
 func TestStateful_US1_DeleteRemovesResourceReturns204(t *testing.T) {
 	// T015: Integration test: DELETE removes resource and returns 204
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "user-123", "name": "ToDelete"},
 		},
@@ -350,8 +394,7 @@ func TestStateful_US1_DeleteRemovesResourceReturns204(t *testing.T) {
 func TestStateful_US1_GetReturns404ForNonExistent(t *testing.T) {
 	// T016: Integration test: GET returns 404 for non-existent resource
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	})
 
 	err := srv.Start()
@@ -371,14 +414,13 @@ func TestStateful_US1_GetReturns404ForNonExistent(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
 
-	assert.Equal(t, "resource not found", result.Error)
+	assert.Contains(t, result.Error, "not found")
 }
 
 func TestStateful_US1_PostReturns409ForDuplicateID(t *testing.T) {
 	// T017: Integration test: POST returns 409 for duplicate ID
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "existing-id", "name": "Existing"},
 		},
@@ -410,8 +452,7 @@ func TestStateful_US1_PostReturns409ForDuplicateID(t *testing.T) {
 func TestStateful_US2_SeedDataAvailableAfterStart(t *testing.T) {
 	// T027: Integration test: Seed data available immediately after server start
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "products",
-		BasePath: "/api/products",
+		Name: "products",
 		SeedData: []map[string]interface{}{
 			{"id": "prod-1", "name": "Widget", "price": 9.99},
 			{"id": "prod-2", "name": "Gadget", "price": 19.99},
@@ -453,8 +494,7 @@ func TestStateful_US2_SeedDataAvailableAfterStart(t *testing.T) {
 func TestStateful_US2_SeedDataPersistsUntilRestart(t *testing.T) {
 	// T028: Integration test: Seed data persists until server restart
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "user-1", "name": "Original"},
 		},
@@ -501,8 +541,7 @@ func TestStateful_US2_SeedDataPersistsUntilRestart(t *testing.T) {
 func TestStateful_US3_PostWithoutIDGeneratesUniqueID(t *testing.T) {
 	// T038: Integration test: POST without ID field generates unique ID
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 	})
 
 	err := srv.Start()
@@ -539,8 +578,7 @@ func TestStateful_US3_PostWithoutIDGeneratesUniqueID(t *testing.T) {
 func TestStateful_US3_CreatedResourceHasCreatedAtTimestamp(t *testing.T) {
 	// T039: Integration test: Created resource has createdAt timestamp
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 	})
 
 	err := srv.Start()
@@ -576,8 +614,7 @@ func TestStateful_US3_CreatedResourceHasCreatedAtTimestamp(t *testing.T) {
 func TestStateful_US3_UpdatedResourceHasNewUpdatedAtTimestamp(t *testing.T) {
 	// T040: Integration test: Updated resource has new updatedAt timestamp
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 		SeedData: []map[string]interface{}{
 			{"id": "item-1", "name": "Original"},
 		},
@@ -630,8 +667,7 @@ func TestStateful_US3_UpdatedResourceHasNewUpdatedAtTimestamp(t *testing.T) {
 func TestStateful_US4_PostResetResetsAllResources(t *testing.T) {
 	// T045: Integration test: POST /admin/state/reset resets all resources
 	srv, httpPort, adminPort := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "user-1", "name": "Original"},
 		},
@@ -684,15 +720,13 @@ func TestStateful_US4_ResetWithResourceParamResetsOnlyThat(t *testing.T) {
 	// T046: Integration test: Reset with resource param resets only that resource
 	srv, httpPort, adminPort := createStatefulServer(t,
 		&statefulResourceConfig{
-			Name:     "users",
-			BasePath: "/api/users",
+			Name: "users",
 			SeedData: []map[string]interface{}{
 				{"id": "user-1", "name": "User1"},
 			},
 		},
 		&statefulResourceConfig{
-			Name:     "products",
-			BasePath: "/api/products",
+			Name: "products",
 			SeedData: []map[string]interface{}{
 				{"id": "prod-1", "name": "Product1"},
 			},
@@ -744,15 +778,13 @@ func TestStateful_US4_GetStateReturnsOverview(t *testing.T) {
 	// T047: Integration test: GET /admin/state returns state overview
 	srv, httpPort, adminPort := createStatefulServer(t,
 		&statefulResourceConfig{
-			Name:     "users",
-			BasePath: "/api/users",
+			Name: "users",
 			SeedData: []map[string]interface{}{
 				{"id": "user-1", "name": "User1"},
 			},
 		},
 		&statefulResourceConfig{
-			Name:     "products",
-			BasePath: "/api/products",
+			Name: "products",
 		},
 	)
 
@@ -797,8 +829,7 @@ func TestStateful_US4_GetStateReturnsOverview(t *testing.T) {
 func TestStateful_US4_GetResourceDetailsReturnsInfo(t *testing.T) {
 	// T048: Integration test: GET /admin/state/resources/{name} returns resource details
 	srv, _, adminPort := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "user-1", "name": "User1"},
 			{"id": "user-2", "name": "User2"},
@@ -821,7 +852,6 @@ func TestStateful_US4_GetResourceDetailsReturnsInfo(t *testing.T) {
 	// Use anonymous struct matching the API response format
 	var info struct {
 		Name      string `json:"name"`
-		BasePath  string `json:"basePath"`
 		ItemCount int    `json:"itemCount"`
 		SeedCount int    `json:"seedCount"`
 		IDField   string `json:"idField"`
@@ -830,7 +860,6 @@ func TestStateful_US4_GetResourceDetailsReturnsInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "users", info.Name)
-	assert.Equal(t, "/api/users", info.BasePath)
 	assert.Equal(t, 2, info.ItemCount)
 	assert.Equal(t, 2, info.SeedCount)
 	assert.Equal(t, "id", info.IDField)
@@ -852,7 +881,6 @@ func TestStateful_US5_LimitOffsetReturnsCorrectPage(t *testing.T) {
 
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
 		Name:     "items",
-		BasePath: "/api/items",
 		SeedData: seedData,
 	})
 
@@ -881,8 +909,7 @@ func TestStateful_US5_LimitOffsetReturnsCorrectPage(t *testing.T) {
 func TestStateful_US5_FilterByFieldValue(t *testing.T) {
 	// T059: Integration test: ?status=active filters by field value
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "user-1", "name": "Alice", "status": "active"},
 			{"id": "user-2", "name": "Bob", "status": "inactive"},
@@ -915,8 +942,7 @@ func TestStateful_US5_FilterByFieldValue(t *testing.T) {
 func TestStateful_US5_SortByFieldWithOrder(t *testing.T) {
 	// T060: Integration test: ?sort=name&order=asc sorts correctly
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "user-1", "name": "Charlie"},
 			{"id": "user-2", "name": "Alice"},
@@ -948,8 +974,7 @@ func TestStateful_US5_SortByFieldWithOrder(t *testing.T) {
 func TestStateful_US5_ResponseIncludesPaginationMeta(t *testing.T) {
 	// T061: Integration test: Response includes meta with total/limit/offset/count
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 		SeedData: []map[string]interface{}{
 			{"id": "item-1", "name": "Item1"},
 			{"id": "item-2", "name": "Item2"},
@@ -985,8 +1010,7 @@ func TestStateful_US6_GetNestedResourcesFiltersByParent(t *testing.T) {
 	// T069: Integration test: GET /users/123/orders returns only orders for user 123
 	srv, httpPort, _ := createStatefulServer(t,
 		&statefulResourceConfig{
-			Name:     "users",
-			BasePath: "/api/users",
+			Name: "users",
 			SeedData: []map[string]interface{}{
 				{"id": "user-1", "name": "Alice"},
 				{"id": "user-2", "name": "Bob"},
@@ -994,7 +1018,6 @@ func TestStateful_US6_GetNestedResourcesFiltersByParent(t *testing.T) {
 		},
 		&statefulResourceConfig{
 			Name:        "orders",
-			BasePath:    "/api/users/:userId/orders",
 			ParentField: "userId",
 			SeedData: []map[string]interface{}{
 				{"id": "order-1", "userId": "user-1", "total": 100},
@@ -1031,15 +1054,13 @@ func TestStateful_US6_PostNestedResourceAutoSetsParentID(t *testing.T) {
 	// T070: Integration test: POST /users/123/orders auto-sets userId field
 	srv, httpPort, _ := createStatefulServer(t,
 		&statefulResourceConfig{
-			Name:     "users",
-			BasePath: "/api/users",
+			Name: "users",
 			SeedData: []map[string]interface{}{
 				{"id": "user-1", "name": "Alice"},
 			},
 		},
 		&statefulResourceConfig{
 			Name:        "orders",
-			BasePath:    "/api/users/:userId/orders",
 			ParentField: "userId",
 		},
 	)
@@ -1074,7 +1095,6 @@ func TestStateful_US6_PathParameterExtractedFromNestedPath(t *testing.T) {
 	srv, httpPort, _ := createStatefulServer(t,
 		&statefulResourceConfig{
 			Name:        "comments",
-			BasePath:    "/api/posts/:postId/comments",
 			ParentField: "postId",
 			SeedData: []map[string]interface{}{
 				{"id": "comment-1", "postId": "post-A", "text": "Comment on A"},
@@ -1118,8 +1138,7 @@ func TestStateful_CrossProtocol_REST_Creates_SOAP_Retrieves(t *testing.T) {
 	// Create a user via HTTP REST POST, then retrieve it via the SOAP
 	// stateful bridge adapter — proving the Bridge architecture works.
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	})
 
 	require.NoError(t, srv.Start(), "server should start")
@@ -1189,8 +1208,7 @@ func TestStateful_CrossProtocol_REST_Creates_SOAP_Retrieves(t *testing.T) {
 func TestStateful_CrossProtocol_Bridge_Creates_REST_Retrieves(t *testing.T) {
 	// Reverse direction: create via Bridge (as SOAP would), retrieve via HTTP REST.
 	srv, httpPort, _ := createStatefulServer(t, &statefulResourceConfig{
-		Name:     "products",
-		BasePath: "/api/products",
+		Name: "products",
 	})
 
 	require.NoError(t, srv.Start(), "server should start")

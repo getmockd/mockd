@@ -108,16 +108,33 @@ mocks:
         headers:
           Content-Type: application/json
         body: '[{"id":"{{uuid}}","name":"{{faker.name}}"}]'
+```
 
-statefulResources:
+### Tables + Extend (Stateful Config)
+
+The recommended way to add stateful CRUD to imported specs in config files:
+
+```yaml
+version: "1.0"
+imports:
+  - path: api-spec.yaml
+    as: api
+tables:
   - name: users
-    basePath: /api/users
     idField: id
     seedData:
       - id: "1"
         name: "Alice"
         email: "alice@example.com"
+extend:
+  - { mock: api.ListUsers, table: users, action: list }
+  - { mock: api.CreateUser, table: users, action: create }
+  - { mock: api.GetUser, table: users, action: get }
+  - { mock: api.UpdateUser, table: users, action: update }
+  - { mock: api.DeleteUser, table: users, action: delete }
 ```
+
+Tables are pure data stores (no routing, no basePath). Extend binds imported mocks to table CRUD actions. Custom operations use `action: custom` + `operation: OpName`.
 
 ## Response Templates
 
@@ -135,7 +152,7 @@ Use `{{...}}` in response bodies for dynamic data:
 
 ## Stateful Resource Responses
 
-List endpoints on stateful resources return paginated envelopes:
+List endpoints on stateful resources return paginated envelopes by default:
 
 ```json
 {
@@ -143,6 +160,8 @@ List endpoints on stateful resources return paginated envelopes:
   "meta": { "total": 1, "limit": 20, "offset": 0, "count": 1 }
 }
 ```
+
+The response format is configurable via response transforms — you can customize the envelope structure, field names, and pagination style.
 
 ## Common Mistakes to Avoid
 

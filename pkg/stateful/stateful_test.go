@@ -33,8 +33,7 @@ func TestStateStore_Register(t *testing.T) {
 		{
 			name: "valid config",
 			config: &ResourceConfig{
-				Name:     "users",
-				BasePath: "/api/users",
+				Name: "users",
 			},
 			wantErr: false,
 		},
@@ -47,8 +46,7 @@ func TestStateStore_Register(t *testing.T) {
 		{
 			name: "empty name",
 			config: &ResourceConfig{
-				Name:     "",
-				BasePath: "/api/users",
+				Name: "",
 			},
 			wantErr: true,
 			errMsg:  "resource name cannot be empty",
@@ -56,25 +54,14 @@ func TestStateStore_Register(t *testing.T) {
 		{
 			name: "empty basePath (bridge-only)",
 			config: &ResourceConfig{
-				Name:     "bridge-only",
-				BasePath: "",
+				Name: "bridge-only",
 			},
 			wantErr: false,
 		},
 		{
-			name: "basePath without leading slash",
-			config: &ResourceConfig{
-				Name:     "users",
-				BasePath: "api/users",
-			},
-			wantErr: true,
-			errMsg:  "resource basePath must start with /",
-		},
-		{
 			name: "with seed data",
 			config: &ResourceConfig{
-				Name:     "products",
-				BasePath: "/api/products",
+				Name: "products",
 				SeedData: []map[string]interface{}{
 					{"id": "p1", "name": "Product 1"},
 					{"id": "p2", "name": "Product 2"},
@@ -85,8 +72,7 @@ func TestStateStore_Register(t *testing.T) {
 		{
 			name: "duplicate seed data IDs",
 			config: &ResourceConfig{
-				Name:     "items",
-				BasePath: "/api/items",
+				Name: "items",
 				SeedData: []map[string]interface{}{
 					{"id": "dup", "name": "First"},
 					{"id": "dup", "name": "Second"},
@@ -120,8 +106,7 @@ func TestStateStore_Register(t *testing.T) {
 func TestStateStore_RegisterDuplicate(t *testing.T) {
 	store := NewStateStore()
 	config := &ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}
 
 	if err := store.Register(config); err != nil {
@@ -137,8 +122,7 @@ func TestStateStore_RegisterDuplicate(t *testing.T) {
 func TestStateStore_Get(t *testing.T) {
 	store := NewStateStore()
 	config := &ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}
 	store.Register(config)
 
@@ -165,8 +149,8 @@ func TestStateStore_List(t *testing.T) {
 	}
 
 	// Add resources
-	store.Register(&ResourceConfig{Name: "users", BasePath: "/api/users"})
-	store.Register(&ResourceConfig{Name: "products", BasePath: "/api/products"})
+	store.Register(&ResourceConfig{Name: "users"})
+	store.Register(&ResourceConfig{Name: "products"})
 
 	names = store.List()
 	if len(names) != 2 {
@@ -174,54 +158,10 @@ func TestStateStore_List(t *testing.T) {
 	}
 }
 
-func TestStateStore_MatchPath(t *testing.T) {
-	store := NewStateStore()
-	store.Register(&ResourceConfig{Name: "users", BasePath: "/api/users"})
-	store.Register(&ResourceConfig{Name: "orders", BasePath: "/api/users/:userId/orders"})
-
-	tests := []struct {
-		path       string
-		wantMatch  bool
-		wantID     string
-		wantParams map[string]string
-	}{
-		{"/api/users", true, "", nil},
-		{"/api/users/123", true, "123", nil},
-		{"/api/users/u1/orders", true, "", map[string]string{"userId": "u1"}},
-		{"/api/users/u1/orders/o1", true, "o1", map[string]string{"userId": "u1"}},
-		{"/api/unknown", false, "", nil},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			resource, id, params := store.MatchPath(tt.path)
-
-			if tt.wantMatch {
-				if resource == nil {
-					t.Error("expected match but got nil resource")
-				}
-				if id != tt.wantID {
-					t.Errorf("id = %q, want %q", id, tt.wantID)
-				}
-				for k, v := range tt.wantParams {
-					if params[k] != v {
-						t.Errorf("param[%s] = %q, want %q", k, params[k], v)
-					}
-				}
-			} else {
-				if resource != nil {
-					t.Error("expected no match but got resource")
-				}
-			}
-		})
-	}
-}
-
 func TestStateStore_Reset(t *testing.T) {
 	store := NewStateStore()
 	store.Register(&ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "u1", "name": "User 1"},
 		},
@@ -254,7 +194,7 @@ func TestStateStore_Reset(t *testing.T) {
 	}
 
 	// Reset all
-	store.Register(&ResourceConfig{Name: "products", BasePath: "/api/products"})
+	store.Register(&ResourceConfig{Name: "products"})
 	resp, err = store.Reset("")
 	if err != nil {
 		t.Fatalf("reset all failed: %v", err)
@@ -266,8 +206,8 @@ func TestStateStore_Reset(t *testing.T) {
 
 func TestStateStore_Clear(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{Name: "users", BasePath: "/api/users"})
-	store.Register(&ResourceConfig{Name: "products", BasePath: "/api/products"})
+	store.Register(&ResourceConfig{Name: "users"})
+	store.Register(&ResourceConfig{Name: "products"})
 
 	store.Clear()
 
@@ -279,16 +219,16 @@ func TestStateStore_Clear(t *testing.T) {
 func TestStateStore_Overview(t *testing.T) {
 	store := NewStateStore()
 	store.Register(&ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
+
 		SeedData: []map[string]interface{}{
 			{"id": "u1"},
 			{"id": "u2"},
 		},
 	})
 	store.Register(&ResourceConfig{
-		Name:     "products",
-		BasePath: "/api/products",
+		Name: "products",
+
 		SeedData: []map[string]interface{}{
 			{"id": "p1"},
 		},
@@ -306,9 +246,9 @@ func TestStateStore_Overview(t *testing.T) {
 func TestStateStore_ResourceInfo(t *testing.T) {
 	store := NewStateStore()
 	store.Register(&ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
-		IDField:  "userId",
+		Name: "users",
+
+		IDField: "userId",
 		SeedData: []map[string]interface{}{
 			{"userId": "u1", "name": "User 1"},
 		},
@@ -338,8 +278,8 @@ func TestStateStore_ResourceInfo(t *testing.T) {
 func TestStateStore_ClearResource(t *testing.T) {
 	store := NewStateStore()
 	store.Register(&ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
+
 		SeedData: []map[string]interface{}{
 			{"id": "u1"},
 			{"id": "u2"},
@@ -372,8 +312,7 @@ func TestStateStore_ClearResource(t *testing.T) {
 
 func TestStatefulResource_CRUD(t *testing.T) {
 	config := &ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}
 	resource := NewStatefulResource(config)
 
@@ -465,8 +404,7 @@ func TestStatefulResource_CRUD(t *testing.T) {
 
 func TestStatefulResource_CreateDuplicate(t *testing.T) {
 	config := &ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}
 	resource := NewStatefulResource(config)
 
@@ -483,8 +421,7 @@ func TestStatefulResource_CreateDuplicate(t *testing.T) {
 
 func TestStatefulResource_List(t *testing.T) {
 	config := &ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
 	}
 	resource := NewStatefulResource(config)
 
@@ -518,8 +455,8 @@ func TestStatefulResource_List(t *testing.T) {
 
 func TestStatefulResource_Reset(t *testing.T) {
 	config := &ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
+
 		SeedData: []map[string]interface{}{
 			{"id": "seed-1", "name": "Seed User"},
 		},
@@ -548,8 +485,8 @@ func TestStatefulResource_Reset(t *testing.T) {
 
 func TestStatefulResource_Clear(t *testing.T) {
 	config := &ResourceConfig{
-		Name:     "users",
-		BasePath: "/api/users",
+		Name: "users",
+
 		SeedData: []map[string]interface{}{
 			{"id": "seed-1", "name": "Seed User"},
 		},
@@ -570,16 +507,12 @@ func TestStatefulResource_Clear(t *testing.T) {
 func TestStatefulResource_Accessors(t *testing.T) {
 	config := &ResourceConfig{
 		Name:        "users",
-		BasePath:    "/api/users",
 		ParentField: "orgId",
 	}
 	resource := NewStatefulResource(config)
 
 	if resource.Name() != "users" {
 		t.Errorf("Name() = %q, want %q", resource.Name(), "users")
-	}
-	if resource.BasePath() != "/api/users" {
-		t.Errorf("BasePath() = %q, want %q", resource.BasePath(), "/api/users")
 	}
 	if resource.ParentField() != "orgId" {
 		t.Errorf("ParentField() = %q, want %q", resource.ParentField(), "orgId")
@@ -588,8 +521,8 @@ func TestStatefulResource_Accessors(t *testing.T) {
 
 func TestStatefulResource_NestedWithParentField(t *testing.T) {
 	config := &ResourceConfig{
-		Name:        "orders",
-		BasePath:    "/api/users/:userId/orders",
+		Name: "orders",
+
 		ParentField: "userId",
 	}
 	resource := NewStatefulResource(config)
@@ -1221,8 +1154,8 @@ func TestResource_EdgeCase_EmptyResource(t *testing.T) {
 	// Test operations on an empty resource (no seed data)
 	store := NewStateStore()
 	err := store.Register(&ResourceConfig{
-		Name:     "empty",
-		BasePath: "/api/empty",
+		Name: "empty",
+
 		// No seed data
 	})
 	if err != nil {
@@ -1274,8 +1207,8 @@ func TestResource_EdgeCase_EmptyResource(t *testing.T) {
 func TestResource_EdgeCase_NegativeOffset(t *testing.T) {
 	store := NewStateStore()
 	store.Register(&ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
+
 		SeedData: []map[string]interface{}{
 			{"id": "1", "name": "Item 1"},
 			{"id": "2", "name": "Item 2"},
@@ -1302,8 +1235,8 @@ func TestResource_EdgeCase_NegativeOffset(t *testing.T) {
 func TestResource_EdgeCase_ZeroLimit(t *testing.T) {
 	store := NewStateStore()
 	store.Register(&ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
+
 		SeedData: []map[string]interface{}{
 			{"id": "1", "name": "Item 1"},
 			{"id": "2", "name": "Item 2"},
@@ -1324,8 +1257,8 @@ func TestResource_EdgeCase_ZeroLimit(t *testing.T) {
 func TestResource_EdgeCase_LargeOffset(t *testing.T) {
 	store := NewStateStore()
 	store.Register(&ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
+
 		SeedData: []map[string]interface{}{
 			{"id": "1", "name": "Item 1"},
 		},
@@ -1348,8 +1281,7 @@ func TestResource_EdgeCase_LargeOffset(t *testing.T) {
 func TestResource_EdgeCase_SpecialCharactersInID(t *testing.T) {
 	store := NewStateStore()
 	store.Register(&ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 	})
 
 	resource := store.Get("items")
@@ -1393,8 +1325,8 @@ func TestResource_EdgeCase_SpecialCharactersInID(t *testing.T) {
 func TestResource_EdgeCase_EmptyUpdate(t *testing.T) {
 	store := NewStateStore()
 	store.Register(&ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
+
 		SeedData: []map[string]interface{}{
 			{"id": "1", "name": "Original"},
 		},
@@ -1438,8 +1370,7 @@ func TestResource_EdgeCase_EmptyUpdate(t *testing.T) {
 func TestResource_EdgeCase_NullValues(t *testing.T) {
 	store := NewStateStore()
 	store.Register(&ResourceConfig{
-		Name:     "items",
-		BasePath: "/api/items",
+		Name: "items",
 	})
 
 	resource := store.Get("items")
@@ -1499,8 +1430,8 @@ func TestResource_MaxItems(t *testing.T) {
 	t.Run("enforces max items on create", func(t *testing.T) {
 		store := NewStateStore()
 		store.Register(&ResourceConfig{
-			Name:     "limited",
-			BasePath: "/api/limited",
+			Name: "limited",
+
 			MaxItems: 2,
 		})
 
@@ -1542,8 +1473,8 @@ func TestResource_MaxItems(t *testing.T) {
 	t.Run("zero maxItems means unlimited", func(t *testing.T) {
 		store := NewStateStore()
 		store.Register(&ResourceConfig{
-			Name:     "unlimited",
-			BasePath: "/api/unlimited",
+			Name: "unlimited",
+
 			MaxItems: 0,
 		})
 
@@ -1563,8 +1494,8 @@ func TestResource_MaxItems(t *testing.T) {
 	t.Run("reset frees capacity", func(t *testing.T) {
 		store := NewStateStore()
 		store.Register(&ResourceConfig{
-			Name:     "resettable",
-			BasePath: "/api/resettable",
+			Name: "resettable",
+
 			MaxItems: 1,
 		})
 
@@ -1617,8 +1548,8 @@ func TestStateStore_ResetDoesNotHoldStoreLock(t *testing.T) {
 	// Register multiple resources with seed data
 	for _, name := range []string{"users", "products", "orders"} {
 		store.Register(&ResourceConfig{
-			Name:     name,
-			BasePath: "/api/" + name,
+			Name: name,
+
 			SeedData: []map[string]interface{}{
 				{"id": "seed-1", "name": name + " seed"},
 			},
@@ -1707,8 +1638,8 @@ func TestGenerateID_Default(t *testing.T) {
 
 func TestResourceCreate_WithPrefixIDStrategy(t *testing.T) {
 	cfg := &ResourceConfig{
-		Name:       "customers",
-		BasePath:   "/v1/customers",
+		Name: "customers",
+
 		IDStrategy: IDStrategyPrefix,
 		IDPrefix:   "cus_",
 	}
@@ -1724,8 +1655,8 @@ func TestResourceCreate_WithPrefixIDStrategy(t *testing.T) {
 
 func TestResourceCreate_WithSequenceIDStrategy(t *testing.T) {
 	cfg := &ResourceConfig{
-		Name:       "orders",
-		BasePath:   "/v1/orders",
+		Name: "orders",
+
 		IDStrategy: IDStrategySequence,
 	}
 	r := NewStatefulResource(cfg)
@@ -1738,8 +1669,8 @@ func TestResourceCreate_WithSequenceIDStrategy(t *testing.T) {
 
 func TestResourceSeed_SequenceCounterContinues(t *testing.T) {
 	cfg := &ResourceConfig{
-		Name:       "items",
-		BasePath:   "/v1/items",
+		Name: "items",
+
 		IDStrategy: IDStrategySequence,
 		SeedData: []map[string]interface{}{
 			{"id": "1", "name": "Seed1"},
@@ -1761,8 +1692,8 @@ func TestResourceSeed_SequenceCounterContinues(t *testing.T) {
 
 func TestResourceResponseConfig(t *testing.T) {
 	cfg := &ResourceConfig{
-		Name:     "test",
-		BasePath: "/test",
+		Name: "test",
+
 		Response: &config.ResponseTransform{
 			Fields: &config.FieldTransform{
 				Inject: map[string]interface{}{"object": "test"},
@@ -1783,8 +1714,8 @@ func TestResourceConfig_ExportsNewFields(t *testing.T) {
 		Timestamps: &config.TimestampTransform{Format: TimestampFormatUnix},
 	}
 	cfg := &ResourceConfig{
-		Name:       "test",
-		BasePath:   "/test",
+		Name: "test",
+
 		IDStrategy: IDStrategyPrefix,
 		IDPrefix:   "tst_",
 		Response:   transform,

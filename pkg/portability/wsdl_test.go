@@ -213,7 +213,6 @@ func TestWSDLImporter_Stateful_UserService(t *testing.T) {
 	for _, rc := range collection.StatefulResources {
 		if rc.Name == "users" {
 			usersResource = &struct{ found bool }{true}
-			assert.Equal(t, "/api/users", rc.BasePath)
 			// Should have seed data from User complex type
 			if assert.NotEmpty(t, rc.SeedData, "should have seed data from XSD") {
 				seed := rc.SeedData[0]

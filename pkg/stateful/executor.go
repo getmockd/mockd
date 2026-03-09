@@ -244,10 +244,19 @@ func (e *OperationExecutor) Execute(ctx context.Context, op *CustomOperation, re
 		execSpan.SetStatus(tracing.StatusOK, "")
 	}
 
+	// Extract ID from response data if present, otherwise use a placeholder.
+	// This ensures ToJSON() doesn't clobber the evaluated "id" expression.
+	itemID := "custom"
+	if id, ok := responseData["id"]; ok {
+		if idStr, ok := id.(string); ok {
+			itemID = idStr
+		}
+	}
+
 	return &OperationResult{
 		Status: StatusSuccess,
 		Item: &ResourceItem{
-			ID:        "custom",
+			ID:        itemID,
 			Data:      responseData,
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -30,7 +29,6 @@ const DefaultIDField = "id"
 type StatefulResource struct {
 	mu               sync.RWMutex
 	name             string
-	basePath         string
 	idField          string
 	idStrategy       string // uuid (default), prefix, ulid, sequence, short
 	idPrefix         string // for "prefix" strategy (e.g., "cus_")
@@ -39,8 +37,6 @@ type StatefulResource struct {
 	maxItems         int
 	items            map[string]*ResourceItem
 	seedData         []map[string]interface{}
-	pathRegex        *regexp.Regexp
-	pathParams       []string
 	validator        *validation.StatefulValidator
 	validationConfig *validation.StatefulValidation
 	responseCfg      *config.ResponseTransform
@@ -60,7 +56,6 @@ func NewStatefulResourceWithLogger(config *ResourceConfig, logger *slog.Logger) 
 
 	r := &StatefulResource{
 		name:             config.Name,
-		basePath:         config.BasePath,
 		idField:          idField,
 		idStrategy:       config.IDStrategy,
 		idPrefix:         config.IDPrefix,
@@ -70,11 +65,6 @@ func NewStatefulResourceWithLogger(config *ResourceConfig, logger *slog.Logger) 
 		seedData:         config.SeedData,
 		validationConfig: config.Validation,
 		responseCfg:      config.Response,
-	}
-
-	// Build path regex for HTTP matching (skip if no basePath — bridge-only resource)
-	if r.basePath != "" {
-		r.buildPathMatcher()
 	}
 
 	// Initialize validation
@@ -91,7 +81,7 @@ func (r *StatefulResource) initValidation(logger *slog.Logger) {
 
 	// Auto-infer validation from seed data if enabled
 	if r.validationConfig.Auto && len(r.seedData) > 0 {
-		inferred := validation.InferValidation(r.seedData, r.basePath, logger)
+		inferred := validation.InferValidation(r.seedData, "", logger)
 		if inferred != nil {
 			// Merge inferred with explicit config (explicit takes precedence)
 			r.validationConfig = mergeStatefulValidation(inferred, r.validationConfig)
@@ -175,57 +165,6 @@ func (r *StatefulResource) generateID() string {
 // ResponseConfig returns the response transform configuration, if any.
 func (r *StatefulResource) ResponseConfig() *config.ResponseTransform {
 	return r.responseCfg
-}
-
-// buildPathMatcher creates a regex for matching incoming request paths.
-func (r *StatefulResource) buildPathMatcher() {
-	// Convert path params like :userId to regex groups
-	paramPattern := regexp.MustCompile(`:(\w+)`)
-	matches := paramPattern.FindAllStringSubmatch(r.basePath, -1)
-
-	r.pathParams = make([]string, 0)
-	for _, match := range matches {
-		r.pathParams = append(r.pathParams, match[1])
-	}
-
-	// Build regex pattern
-	pattern := "^" + paramPattern.ReplaceAllString(regexp.QuoteMeta(r.basePath), `([^/]+)`)
-
-	// Allow optional trailing ID segment
-	pattern += "(?:/([^/]+))?$"
-
-	r.pathRegex = regexp.MustCompile(pattern)
-}
-
-// MatchPath checks if the given path matches this resource.
-// Returns: itemID (if present), path params, and whether it matched.
-// Returns false for bridge-only resources (no basePath / no HTTP routing).
-func (r *StatefulResource) MatchPath(path string) (string, map[string]string, bool) {
-	if r.pathRegex == nil {
-		return "", nil, false
-	}
-	matches := r.pathRegex.FindStringSubmatch(path)
-	if matches == nil {
-		return "", nil, false
-	}
-
-	params := make(map[string]string)
-
-	// Extract path parameters (e.g., :userId)
-	for i, paramName := range r.pathParams {
-		if i+1 < len(matches) {
-			params[paramName] = matches[i+1]
-		}
-	}
-
-	// The last capture group is the optional item ID
-	itemID := ""
-	lastIdx := len(r.pathParams) + 1
-	if lastIdx < len(matches) && matches[lastIdx] != "" {
-		itemID = matches[lastIdx]
-	}
-
-	return itemID, params, true
 }
 
 // loadSeed populates the resource with seed data on first initialization.
@@ -489,7 +428,6 @@ func (r *StatefulResource) Info() *ResourceInfo {
 
 	return &ResourceInfo{
 		Name:        r.name,
-		BasePath:    r.basePath,
 		ItemCount:   len(r.items),
 		SeedCount:   len(r.seedData),
 		IDField:     r.idField,
@@ -501,11 +439,6 @@ func (r *StatefulResource) Info() *ResourceInfo {
 // Name returns the resource name.
 func (r *StatefulResource) Name() string {
 	return r.name
-}
-
-// BasePath returns the resource base path.
-func (r *StatefulResource) BasePath() string {
-	return r.basePath
 }
 
 // ParentField returns the parent field name (for nested resources).
@@ -561,7 +494,6 @@ func (r *StatefulResource) Config() *ResourceConfig {
 	defer r.mu.RUnlock()
 	cfg := &ResourceConfig{
 		Name:     r.name,
-		BasePath: r.basePath,
 		MaxItems: r.maxItems,
 	}
 	if r.idField != DefaultIDField {

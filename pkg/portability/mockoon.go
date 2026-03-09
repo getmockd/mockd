@@ -262,7 +262,6 @@ func (i *MockoonImporter) convertCRUDRoute(route *MockoonRoute, env *MockoonEnvi
 
 	return &config.StatefulResourceConfig{
 		Name:     name,
-		BasePath: path,
 		IDField:  "id",
 		SeedData: seedData,
 	}

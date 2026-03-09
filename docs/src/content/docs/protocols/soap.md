@@ -734,7 +734,7 @@ Wire a SOAP operation directly to a stateful resource from the command line:
 
 ```bash
 # First, create a stateful resource (if one doesn't exist)
-mockd stateful add users --path /api/users
+mockd stateful add users
 
 # Wire SOAP operations to the resource
 mockd soap add --path /soap --action ListUsers --stateful-resource users --stateful-action list
@@ -974,9 +974,8 @@ Add `statefulResource` and `statefulAction` to any SOAP operation:
 ```yaml
 version: "1.0"
 
-statefulResources:
-  - name: users
-    basePath: /api/users
+tables:
+  users:
     seedData:
       - { id: "1", name: "Alice", email: "alice@example.com" }
 

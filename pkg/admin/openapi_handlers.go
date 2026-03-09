@@ -101,14 +101,9 @@ func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 					// e.g., "todos" -> "todo-1", "orders" -> "order-1"
 					sampleID := strings.TrimSuffix(res.Name, "s") + "-1"
 
-					// Extract parent path params from basePath (e.g., :postId from /api/posts/:postId/comments)
-					pathParams := extractPathParams(res.BasePath)
-
 					statefulResources = append(statefulResources, statefulResourceInfo{
-						Name:       res.Name,
-						BasePath:   res.BasePath,
-						SampleID:   sampleID,
-						PathParams: pathParams,
+						Name:     res.Name,
+						SampleID: sampleID,
 					})
 				}
 			}
@@ -511,10 +506,8 @@ func mockToInsomniaResource(m *config.MockConfiguration, parentID string, now in
 
 // statefulResourceInfo holds basic info about a stateful resource for export
 type statefulResourceInfo struct {
-	Name       string
-	BasePath   string
-	SampleID   string            // A sample ID to pre-fill in path parameters
-	PathParams map[string]string // Parent path params (e.g., "postId" -> "post-1")
+	Name     string
+	SampleID string // A sample ID to pre-fill in path parameters
 }
 
 // extractPathParams extracts path parameter names from a URL path and generates sample values.
@@ -1043,7 +1036,7 @@ func writeStatefulResourceRequestsV5(sb *strings.Builder, res statefulResourceIn
 	}
 
 	for i, op := range ops {
-		fmt.Fprintf(sb, "          - url: \"{{ _.base_url }}%s%s\"\n", res.BasePath, op.suffix)
+		fmt.Fprintf(sb, "          - url: \"{{ _.base_url }}/api/%s%s\"\n", res.Name, op.suffix)
 		fmt.Fprintf(sb, "            name: %s %s\n", op.name, res.Name)
 		sb.WriteString("            meta:\n")
 		fmt.Fprintf(sb, "              id: req_state_%s_%s\n", safeID, op.idSuffix)
@@ -1063,20 +1056,11 @@ func writeStatefulResourceRequestsV5(sb *strings.Builder, res statefulResourceIn
 			sb.WriteString("                value: application/json\n")
 		}
 
-		// Add path parameters (parent params + item ID if needed)
-		hasPathParams := op.hasID || len(res.PathParams) > 0
-		if hasPathParams {
+		// Add path parameters (item ID if needed)
+		if op.hasID {
 			sb.WriteString("            pathParameters:\n")
-			// Add parent path params first (e.g., postId)
-			for paramName, paramValue := range res.PathParams {
-				fmt.Fprintf(sb, "              - name: %s\n", paramName)
-				fmt.Fprintf(sb, "                value: \"%s\"\n", paramValue)
-			}
-			// Add item ID param if this operation uses it
-			if op.hasID {
-				sb.WriteString("              - name: id\n")
-				fmt.Fprintf(sb, "                value: \"%s\"\n", res.SampleID)
-			}
+			sb.WriteString("              - name: id\n")
+			fmt.Fprintf(sb, "                value: \"%s\"\n", res.SampleID)
 		}
 
 		writeInsomniaSettings(sb, "            ")

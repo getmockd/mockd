@@ -143,10 +143,9 @@ func (a *API) handleCreateStateResource(w http.ResponseWriter, r *http.Request, 
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"name":     cfg.Name,
-		"basePath": cfg.BasePath,
-		"idField":  cfg.IDField,
-		"message":  "Stateful resource created",
+		"name":    cfg.Name,
+		"idField": cfg.IDField,
+		"message": "Stateful resource created",
 	})
 }
 

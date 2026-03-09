@@ -329,13 +329,6 @@ func validateStatefulResource(resource *StatefulResourceConfig, path string, nam
 		names[resource.Name] = true
 	}
 
-	// BasePath is required
-	if resource.BasePath == "" {
-		result.AddError(path+".basePath", "required")
-	} else if !strings.HasPrefix(resource.BasePath, "/") {
-		result.AddError(path+".basePath", "must start with /")
-	}
-
 	// Validate workspace reference
 	if resource.Workspace != "" && len(workspaceNames) > 0 && !workspaceNames[resource.Workspace] {
 		result.AddError(path+".workspace", fmt.Sprintf("references unknown workspace %q", resource.Workspace))

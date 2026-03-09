@@ -766,6 +766,17 @@ func handleLocalMode(sctx *serveContext) error {
 	baseDir := config.GetMockFileBaseDir(sctx.flags.configFile)
 	sctx.server.Handler().SetBaseDir(baseDir)
 
+	// Process imports: read referenced specs, auto-detect format, merge mocks.
+	if err := processImports(collection, baseDir); err != nil {
+		return fmt.Errorf("failed to process imports: %w", err)
+	}
+
+	// Process tables + extend: convert tables to stateful resources,
+	// resolve extend bindings onto imported mocks.
+	if err := processTablesAndExtend(collection); err != nil {
+		return fmt.Errorf("failed to process tables/extend: %w", err)
+	}
+
 	// CLI flags take precedence over config file chaos settings.
 	// If chaos was already configured via --chaos-enabled/--chaos-profile flags,
 	// clear the config file's chaos so ImportConfigDirect doesn't overwrite it.

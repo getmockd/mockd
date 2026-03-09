@@ -11,7 +11,7 @@ mockd provides a JSON Schema (Draft-07) for configuration validation. Use this s
 https://raw.githubusercontent.com/getmockd/mockd/main/schema/mockd.schema.json
 ```
 
-The schema covers all 7 protocols (HTTP, GraphQL, gRPC, WebSocket, MQTT, SOAP, OAuth), stateful resources, custom operations, chaos config, and server settings.
+The schema covers all 7 protocols (HTTP, GraphQL, gRPC, WebSocket, MQTT, SOAP, OAuth), stateful resources, tables, extend bindings, imports, custom operations, chaos config, and server settings.
 
 ## Editor Setup
 
@@ -98,6 +98,21 @@ Add to `coc-settings.json`:
     "statefulResources": {
       "type": "array",
       "items": { "$ref": "#/definitions/statefulResource" }
+    },
+    "tables": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/table" },
+      "description": "Named data stores (pure data, no routing)"
+    },
+    "extend": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/extendBinding" },
+      "description": "Bindings from mocks to tables"
+    },
+    "imports": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/importSpec" },
+      "description": "External spec imports with namespacing"
     }
   }
 }
@@ -284,6 +299,90 @@ fields are auto-generated if omitted in config files.
 }
 ```
 
+### Table Definition
+
+```json
+{
+  "definitions": {
+    "table": {
+      "type": "object",
+      "properties": {
+        "idField": {
+          "type": "string",
+          "default": "id",
+          "description": "Field used as the unique identifier"
+        },
+        "seedData": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Initial data to populate the table"
+        }
+      }
+    }
+  }
+}
+```
+
+### Extend Binding Definition
+
+```json
+{
+  "definitions": {
+    "extendBinding": {
+      "type": "object",
+      "required": ["mock", "table", "action"],
+      "properties": {
+        "mock": {
+          "type": "string",
+          "description": "ID of the mock to bind"
+        },
+        "table": {
+          "type": "string",
+          "description": "Name of the table to operate on"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["list", "get", "create", "update", "patch", "delete", "custom"],
+          "description": "CRUD action to perform"
+        },
+        "operation": {
+          "type": "string",
+          "description": "Custom operation name (required when action is 'custom')"
+        }
+      }
+    }
+  }
+}
+```
+
+### Import Definition
+
+```json
+{
+  "definitions": {
+    "importSpec": {
+      "type": "object",
+      "required": ["spec", "namespace"],
+      "properties": {
+        "spec": {
+          "type": "string",
+          "description": "Path to the spec file (OpenAPI, WSDL, etc.)"
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Prefix for generated mock IDs"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["openapi", "wsdl"],
+          "description": "Spec format (auto-detected if omitted)"
+        }
+      }
+    }
+  }
+}
+```
+
 ### Stateful Resources Definition
 
 ```json
@@ -295,15 +394,11 @@ fields are auto-generated if omitted in config files.
     },
     "statefulResource": {
       "type": "object",
-      "required": ["name", "basePath"],
+      "required": ["name"],
       "properties": {
         "name": {
           "type": "string",
           "description": "Resource name (e.g., users, products)"
-        },
-        "basePath": {
-          "type": "string",
-          "description": "Base path for CRUD endpoints (e.g., /api/users)"
         },
         "idField": {
           "type": "string",
@@ -326,7 +421,7 @@ fields are auto-generated if omitted in config files.
 }
 ```
 
-> **Note:** Resource definitions and seed data are persisted to the admin file store. Runtime data (CRUD operations) is in-memory only and resets to seed data on restart.
+> **Note:** In most cases, prefer using `tables` and `extend` over `statefulResources` directly. Tables provide a cleaner separation of data and routing. Resource definitions and seed data are persisted to the admin file store. Runtime data (CRUD operations) is in-memory only and resets to seed data on restart.
 
 ## Validation
 

@@ -587,8 +587,7 @@ func (w *WSDLImporter) inferStatefulResources(def *wsdlDefinitions, types map[st
 			}
 
 			rc := &config.StatefulResourceConfig{
-				Name:     resource,
-				BasePath: "/api/" + resource,
+				Name: resource,
 			}
 
 			// Try to infer seed data schema from XSD types
