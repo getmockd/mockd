@@ -207,10 +207,10 @@ func (e *OperationExecutor) Execute(ctx context.Context, op *CustomOperation, re
 			if execSpan != nil {
 				execSpan.SetStatus(tracing.StatusError, err.Error())
 			}
-			return &OperationResult{
-				Status: StatusError,
-				Error:  fmt.Errorf("step %d (%s) failed: %w", i, step.Type, err),
-			}
+			// Wrap the error with step context but preserve the underlying error type
+			// so the caller can map NotFoundError → 404, ValidationError → 400, etc.
+			wrappedErr := fmt.Errorf("step %d (%s) failed: %w", i, step.Type, err)
+			return errorToResult(wrappedErr)
 		}
 	}
 

@@ -181,7 +181,7 @@ func TestExecutor_ReadStep_NotFound(t *testing.T) {
 		Data: map[string]interface{}{},
 	})
 
-	assert.Equal(t, StatusError, result.Status)
+	assert.Equal(t, StatusNotFound, result.Status)
 	assert.Contains(t, result.Error.Error(), "step 0")
 }
 
@@ -235,7 +235,7 @@ func TestExecutor_ReadStep_ResourceDoesNotExist(t *testing.T) {
 		Data: map[string]interface{}{},
 	})
 
-	assert.Equal(t, StatusError, result.Status)
+	assert.Equal(t, StatusNotFound, result.Status)
 }
 
 // --- CO-11: Update step with expression ---
@@ -319,7 +319,7 @@ func TestExecutor_UpdateStep_NotFound(t *testing.T) {
 		Data: map[string]interface{}{},
 	})
 
-	assert.Equal(t, StatusError, result.Status)
+	assert.Equal(t, StatusNotFound, result.Status)
 }
 
 // --- CO-12: Multi-step TransferFunds scenario ---
@@ -410,7 +410,7 @@ func TestExecutor_TransferFunds_SourceNotFound(t *testing.T) {
 		},
 	})
 
-	assert.Equal(t, StatusError, result.Status)
+	assert.Equal(t, StatusNotFound, result.Status)
 	assert.Contains(t, result.Error.Error(), "step 0")
 }
 
@@ -494,7 +494,7 @@ func TestExecutor_DeleteStep_NotFound(t *testing.T) {
 		Data: map[string]interface{}{},
 	})
 
-	assert.Equal(t, StatusError, result.Status)
+	assert.Equal(t, StatusNotFound, result.Status)
 }
 
 // --- CO-13: Error handling ---
@@ -605,7 +605,7 @@ func TestExecutor_BestEffort_PreservesPartialWrites_OnFailure(t *testing.T) {
 	}
 
 	result := executor.Execute(context.Background(), op, &OperationRequest{Data: map[string]interface{}{}})
-	require.Equal(t, StatusError, result.Status)
+	require.Equal(t, StatusNotFound, result.Status)
 	require.Equal(t, ErrCodeNotFound, GetErrorCode(result.Error))
 
 	acc1 := store.Get("accounts").Get("acc-1")
@@ -628,7 +628,7 @@ func TestExecutor_Atomic_RollsBackPartialWrites_OnFailure(t *testing.T) {
 	}
 
 	result := executor.Execute(context.Background(), op, &OperationRequest{Data: map[string]interface{}{}})
-	require.Equal(t, StatusError, result.Status)
+	require.Equal(t, StatusNotFound, result.Status)
 	require.Error(t, result.Error)
 	require.Equal(t, ErrCodeNotFound, GetErrorCode(result.Error))
 
@@ -781,7 +781,7 @@ func TestBridge_ExecuteCustom_StepFailure(t *testing.T) {
 		Data:     map[string]interface{}{},
 	})
 
-	assert.Equal(t, StatusError, result.Status)
+	assert.Equal(t, StatusNotFound, result.Status)
 	assert.Error(t, result.Error)
 	assert.Equal(t, int64(1), obs.Snapshot().ErrorCount)
 }

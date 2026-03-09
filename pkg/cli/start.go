@@ -409,6 +409,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Print startup message
 	printStartupMessage(sf.Port, sf.AdminPort, sf.HTTPSPort)
 
+	// Mark the admin API as ready — config (if any) has been loaded and
+	// all startup tasks are complete.
+	adminAPI.SetReady()
+
 	// Wait for shutdown signal using shared function
 	WaitForShutdown(server, adminAPI)
 

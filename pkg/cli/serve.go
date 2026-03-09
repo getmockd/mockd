@@ -397,6 +397,10 @@ func runServeWithFlags(flags *serveFlags) error {
 		return err
 	}
 
+	// Mark the admin API as ready — config (if any) has been loaded and
+	// all startup tasks are complete.
+	sctx.adminAPI.SetReady()
+
 	// Run main event loop (blocks until shutdown signal)
 	return runMainLoop(sctx)
 }

@@ -101,6 +101,10 @@ type API struct {
 	// Tunnel state for local engine
 	localTunnel *store.TunnelConfig
 	tunnelMu    sync.RWMutex
+
+	// ready indicates that the server has completed initialization
+	// (config loaded, engine healthy, ready to serve traffic).
+	ready atomic.Bool
 }
 
 // NewAPI creates a new API.
@@ -519,6 +523,17 @@ func (a *API) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return a.httpServer.Shutdown(ctx)
+}
+
+// SetReady marks the API as ready to serve traffic.
+// Called after initial config import completes.
+func (a *API) SetReady() {
+	a.ready.Store(true)
+}
+
+// IsReady returns true if the API has completed initialization.
+func (a *API) IsReady() bool {
+	return a.ready.Load()
 }
 
 // Uptime returns the API uptime in seconds.

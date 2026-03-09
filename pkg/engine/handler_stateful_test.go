@@ -624,3 +624,232 @@ func TestParseQueryFilter_CursorParamsExcludedFromFilters(t *testing.T) {
 		t.Errorf("expected custom=value in Filters, got %q", filter.Filters["custom"])
 	}
 }
+
+// ── coerceFormValue tests ────────────────────────────────────────────────────
+
+func TestCoerceFormValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  any
+	}{
+		{name: "true bool", input: "true", want: true},
+		{name: "false bool", input: "false", want: false},
+		{name: "positive int", input: "42", want: int64(42)},
+		{name: "zero int", input: "0", want: int64(0)},
+		{name: "negative int", input: "-5", want: int64(-5)},
+		{name: "positive float", input: "3.14", want: float64(3.14)},
+		{name: "zero float", input: "0.0", want: float64(0.0)},
+		{name: "negative float", input: "-1.5", want: float64(-1.5)},
+		{name: "plain string", input: "hello", want: "hello"},
+		{name: "empty string", input: "", want: ""},
+		{name: "inf stays string", input: "inf", want: "inf"},
+		{name: "mixed alphanumeric stays string", input: "123abc", want: "123abc"},
+		{name: "large int", input: "1000000000000", want: int64(1000000000000)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := coerceFormValue(tt.input)
+			if got != tt.want {
+				t.Errorf("coerceFormValue(%q) = %v (%T), want %v (%T)",
+					tt.input, got, got, tt.want, tt.want)
+			}
+		})
+	}
+}
+
+// ── convertNumericKeysToArrays tests ─────────────────────────────────────────
+
+func TestConvertNumericKeysToArrays(t *testing.T) {
+	t.Run("simple numeric-keyed map becomes array", func(t *testing.T) {
+		m := map[string]any{
+			"items": map[string]any{"0": "a", "1": "b", "2": "c"},
+		}
+		convertNumericKeysToArrays(m)
+		arr, ok := m["items"].([]any)
+		if !ok {
+			t.Fatalf("expected []any, got %T", m["items"])
+		}
+		if len(arr) != 3 {
+			t.Fatalf("expected len 3, got %d", len(arr))
+		}
+		if arr[0] != "a" || arr[1] != "b" || arr[2] != "c" {
+			t.Errorf("expected [a b c], got %v", arr)
+		}
+	})
+
+	t.Run("array of objects", func(t *testing.T) {
+		m := map[string]any{
+			"items": map[string]any{
+				"0": map[string]any{"x": "1"},
+				"1": map[string]any{"x": "2"},
+			},
+		}
+		convertNumericKeysToArrays(m)
+		arr, ok := m["items"].([]any)
+		if !ok {
+			t.Fatalf("expected []any, got %T", m["items"])
+		}
+		if len(arr) != 2 {
+			t.Fatalf("expected len 2, got %d", len(arr))
+		}
+		obj0, ok := arr[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected map at [0], got %T", arr[0])
+		}
+		if obj0["x"] != "1" {
+			t.Errorf("expected x=1, got %v", obj0["x"])
+		}
+	})
+
+	t.Run("mixed keys — nested numeric converted", func(t *testing.T) {
+		m := map[string]any{
+			"name": "Alice",
+			"tags": map[string]any{"0": "vip", "1": "new"},
+		}
+		convertNumericKeysToArrays(m)
+		if m["name"] != "Alice" {
+			t.Errorf("expected name=Alice, got %v", m["name"])
+		}
+		arr, ok := m["tags"].([]any)
+		if !ok {
+			t.Fatalf("expected tags as []any, got %T", m["tags"])
+		}
+		if len(arr) != 2 || arr[0] != "vip" || arr[1] != "new" {
+			t.Errorf("expected [vip new], got %v", arr)
+		}
+	})
+
+	t.Run("non-numeric keys — no conversion", func(t *testing.T) {
+		m := map[string]any{
+			"data": map[string]any{"tier": "premium", "source": "api"},
+		}
+		convertNumericKeysToArrays(m)
+		sub, ok := m["data"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected map, got %T", m["data"])
+		}
+		if sub["tier"] != "premium" || sub["source"] != "api" {
+			t.Errorf("expected unchanged map, got %v", sub)
+		}
+	})
+
+	t.Run("non-consecutive keys — no conversion", func(t *testing.T) {
+		m := map[string]any{
+			"items": map[string]any{"1": "a", "3": "c"},
+		}
+		convertNumericKeysToArrays(m)
+		sub, ok := m["items"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected map (unconverted), got %T", m["items"])
+		}
+		if sub["1"] != "a" || sub["3"] != "c" {
+			t.Errorf("expected unchanged map, got %v", sub)
+		}
+	})
+
+	t.Run("single element array", func(t *testing.T) {
+		m := map[string]any{
+			"items": map[string]any{"0": "only"},
+		}
+		convertNumericKeysToArrays(m)
+		arr, ok := m["items"].([]any)
+		if !ok {
+			t.Fatalf("expected []any, got %T", m["items"])
+		}
+		if len(arr) != 1 || arr[0] != "only" {
+			t.Errorf("expected [only], got %v", arr)
+		}
+	})
+
+	t.Run("empty map stays empty", func(t *testing.T) {
+		m := map[string]any{
+			"data": map[string]any{},
+		}
+		convertNumericKeysToArrays(m)
+		sub, ok := m["data"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected empty map, got %T", m["data"])
+		}
+		if len(sub) != 0 {
+			t.Errorf("expected empty map, got %v", sub)
+		}
+	})
+
+	t.Run("deeply nested numeric keys converted", func(t *testing.T) {
+		m := map[string]any{
+			"items": map[string]any{
+				"0": map[string]any{
+					"tags": map[string]any{"0": "a", "1": "b"},
+				},
+			},
+		}
+		convertNumericKeysToArrays(m)
+		items, ok := m["items"].([]any)
+		if !ok {
+			t.Fatalf("expected items as []any, got %T", m["items"])
+		}
+		if len(items) != 1 {
+			t.Fatalf("expected 1 item, got %d", len(items))
+		}
+		item0, ok := items[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected item[0] as map, got %T", items[0])
+		}
+		tags, ok := item0["tags"].([]any)
+		if !ok {
+			t.Fatalf("expected tags as []any, got %T", item0["tags"])
+		}
+		if len(tags) != 2 || tags[0] != "a" || tags[1] != "b" {
+			t.Errorf("expected [a b], got %v", tags)
+		}
+	})
+}
+
+// ── Integration: form-encoded type coercion ──────────────────────────────────
+
+func TestParseStatefulBody_FormEncodedTypeCoercion(t *testing.T) {
+	body := []byte("amount=2000&active=true&rate=3.14&name=Test")
+	data, err := parseStatefulBody(body, "application/x-www-form-urlencoded")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if data["amount"] != int64(2000) {
+		t.Errorf("expected amount=int64(2000), got %v (%T)", data["amount"], data["amount"])
+	}
+	if data["active"] != true {
+		t.Errorf("expected active=true (bool), got %v (%T)", data["active"], data["active"])
+	}
+	if data["rate"] != float64(3.14) {
+		t.Errorf("expected rate=float64(3.14), got %v (%T)", data["rate"], data["rate"])
+	}
+	if data["name"] != "Test" {
+		t.Errorf("expected name=Test (string), got %v (%T)", data["name"], data["name"])
+	}
+}
+
+// ── Integration: form-encoded arrays ─────────────────────────────────────────
+
+func TestParseStatefulBody_FormEncodedArrays(t *testing.T) {
+	body := []byte("items[0]=card&items[1]=bank")
+	data, err := parseStatefulBody(body, "application/x-www-form-urlencoded")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	items, ok := data["items"].([]any)
+	if !ok {
+		t.Fatalf("expected items as []any, got %T", data["items"])
+	}
+	expected := []any{"card", "bank"}
+	if len(items) != len(expected) {
+		t.Fatalf("expected %d items, got %d", len(expected), len(items))
+	}
+	for i, want := range expected {
+		if items[i] != want {
+			t.Errorf("items[%d] = %v, want %v", i, items[i], want)
+		}
+	}
+}

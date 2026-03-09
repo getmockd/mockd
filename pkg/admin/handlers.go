@@ -51,6 +51,24 @@ func (a *API) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleReady handles GET /ready.
+// Returns 200 when config is loaded and server is ready to serve traffic.
+// Returns 503 when still initializing (e.g., importing a large spec).
+func (a *API) handleReady(w http.ResponseWriter, r *http.Request) {
+	if !a.ready.Load() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"status":    "initializing",
+			"timestamp": time.Now().UTC(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":    "ready",
+		"uptime":    a.Uptime(),
+		"timestamp": time.Now().UTC(),
+	})
+}
+
 // handleGetStatus handles GET /status and returns detailed server status.
 func (a *API) handleGetStatus(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()

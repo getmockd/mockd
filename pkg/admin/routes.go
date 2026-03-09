@@ -8,8 +8,9 @@ import (
 
 // registerRoutes sets up all API routes.
 func (a *API) registerRoutes(mux *http.ServeMux) {
-	// Health check, status, metrics, and ports
+	// Health check, readiness, status, metrics, and ports
 	mux.HandleFunc("GET /health", a.handleHealth)
+	mux.HandleFunc("GET /ready", a.handleReady)
 	mux.HandleFunc("GET /status", a.requireEngine(a.handleGetStatus))
 	mux.HandleFunc("GET /ports", a.handleListPorts)
 	mux.Handle("GET /metrics", a.metricsRegistry.Handler())
