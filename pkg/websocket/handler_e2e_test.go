@@ -282,3 +282,78 @@ func TestHandlerE2E_MaxConnections(t *testing.T) {
 	assert.Equal(t, gorillaWs.TextMessage, msgType)
 	assert.Equal(t, "after-reconnect", string(msg))
 }
+
+func TestHandlerE2E_HeartbeatPing(t *testing.T) {
+	// Heartbeat with short interval keeps the connection alive.
+	endpoint, err := NewEndpoint(&EndpointConfig{
+		Path: "/ws/heartbeat",
+		Heartbeat: &HeartbeatConfig{
+			Enabled:  true,
+			Interval: Duration(200 * time.Millisecond),
+			Timeout:  Duration(500 * time.Millisecond),
+		},
+	})
+	require.NoError(t, err)
+
+	ts, _ := setupHandler(t, endpoint)
+	defer ts.Close()
+
+	conn, _, err := dialWS(t, ts, "/ws/heartbeat")
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// Gorilla needs an active reader to process control frames (pings).
+	// Start a reader goroutine that collects any application-level messages.
+	msgCh := make(chan string, 10)
+	errCh := make(chan error, 1)
+	go func() {
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				errCh <- err
+				return
+			}
+			msgCh <- string(msg)
+		}
+	}()
+
+	// Wait through several heartbeat cycles (200ms interval × 3+ cycles).
+	// If the client fails to pong, the server closes the connection.
+	time.Sleep(700 * time.Millisecond)
+
+	// Connection should still be alive — send a message and get an echo.
+	err = conn.WriteMessage(gorillaWs.TextMessage, []byte("still-alive"))
+	require.NoError(t, err)
+
+	select {
+	case msg := <-msgCh:
+		assert.Equal(t, "still-alive", msg)
+	case readErr := <-errCh:
+		t.Fatalf("connection closed unexpectedly: %v", readErr)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for echo response")
+	}
+}
+
+func TestHandlerE2E_IdleTimeout(t *testing.T) {
+	// An idle connection should be closed after the idle timeout.
+	endpoint, err := NewEndpoint(&EndpointConfig{
+		Path:        "/ws/idle",
+		IdleTimeout: Duration(1500 * time.Millisecond), // 1.5s
+	})
+	require.NoError(t, err)
+
+	ts, _ := setupHandler(t, endpoint)
+	defer ts.Close()
+
+	conn, _, err := dialWS(t, ts, "/ws/idle")
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// Don't send any messages — let the connection go idle.
+	// The idle timeout is 1.5s and polls every 1s, so the disconnect
+	// should happen within ~2.5s.
+	conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+	_, _, err = conn.ReadMessage()
+	require.Error(t, err, "expected read to fail after idle timeout")
+}

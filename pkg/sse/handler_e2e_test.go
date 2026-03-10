@@ -2,11 +2,13 @@ package sse
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
@@ -342,3 +344,170 @@ func (w *e2eNonFlushWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 func (w *e2eNonFlushWriter) WriteHeader(code int) { w.code = code }
+
+// TestHandlerE2E_LastEventIDResume verifies that a client can resume an SSE
+// stream from a given position using the Last-Event-ID header. When resume is
+// enabled and events have explicit IDs, a reconnect with Last-Event-ID skips
+// all events up to and including the given ID.
+func TestHandlerE2E_LastEventIDResume(t *testing.T) {
+	handler := NewSSEHandler(100)
+	mockCfg := &config.MockConfiguration{
+		ID:   "e2e-resume",
+		Type: mock.TypeHTTP,
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/events"},
+			SSE: &mock.SSEConfig{
+				Events: []mock.SSEEventDef{
+					{ID: "1", Data: "alpha"},
+					{ID: "2", Data: "beta"},
+					{ID: "3", Data: "gamma"},
+					{ID: "4", Data: "delta"},
+				},
+				Lifecycle: mock.SSELifecycleConfig{
+					MaxEvents: 4,
+				},
+				Resume: mock.SSEResumeConfig{
+					Enabled:    true,
+					BufferSize: 100,
+				},
+			},
+		},
+	}
+
+	ts := startTestServer(handler, mockCfg)
+	defer ts.Close()
+
+	// First request: receive all 4 events to populate the resume buffer.
+	resp, err := http.Get(ts.URL + "/events")
+	if err != nil {
+		t.Fatalf("first GET failed: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatalf("reading first body: %v", err)
+	}
+
+	events := parseSSEEvents(string(body))
+	dataEvents := events[1:] // skip retry directive
+	if len(dataEvents) != 4 {
+		t.Fatalf("first request: got %d data events, want 4; raw:\n%s", len(dataEvents), string(body))
+	}
+	if dataEvents[0].ID != "1" {
+		t.Errorf("event[0].ID = %q, want %q", dataEvents[0].ID, "1")
+	}
+	if dataEvents[3].ID != "4" {
+		t.Errorf("event[3].ID = %q, want %q", dataEvents[3].ID, "4")
+	}
+
+	// Second request: resume after event ID "2" — should skip alpha and beta.
+	req, err := http.NewRequest("GET", ts.URL+"/events", nil)
+	if err != nil {
+		t.Fatalf("creating resume request: %v", err)
+	}
+	req.Header.Set("Last-Event-ID", "2")
+
+	resp2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("second GET failed: %v", err)
+	}
+	body2, err := io.ReadAll(resp2.Body)
+	resp2.Body.Close()
+	if err != nil {
+		t.Fatalf("reading second body: %v", err)
+	}
+
+	events2 := parseSSEEvents(string(body2))
+	dataEvents2 := events2[1:] // skip retry directive
+	if len(dataEvents2) < 2 {
+		t.Fatalf("second request: got %d data events, want at least 2; raw:\n%s", len(dataEvents2), string(body2))
+	}
+	if dataEvents2[0].Data != "gamma" {
+		t.Errorf("resumed event[0].Data = %q, want %q", dataEvents2[0].Data, "gamma")
+	}
+	if dataEvents2[1].Data != "delta" {
+		t.Errorf("resumed event[1].Data = %q, want %q", dataEvents2[1].Data, "delta")
+	}
+}
+
+// TestHandlerE2E_KeepaliveComments verifies that the handler sends keepalive
+// comments (": keepalive") at the configured interval while the stream is open.
+// The test uses a long per-event delay on the second event so the stream stays
+// open in the select loop, giving the 1-second keepalive ticker time to fire.
+// A ConnectionTimeout ensures the stream terminates even though the event delay
+// is never satisfied (the keepalive select case resets the event timer each
+// iteration, so ConnectionTimeout provides the exit path).
+func TestHandlerE2E_KeepaliveComments(t *testing.T) {
+	handler := NewSSEHandler(100)
+
+	longDelay := 30000 // 30s — intentionally longer than ConnectionTimeout
+	mockCfg := &config.MockConfiguration{
+		ID:   "e2e-keepalive",
+		Type: mock.TypeHTTP,
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/events"},
+			SSE: &mock.SSEConfig{
+				Events: []mock.SSEEventDef{
+					{Data: "first"},                     // fires immediately (0 delay)
+					{Data: "second", Delay: &longDelay}, // blocks in select loop
+				},
+				Lifecycle: mock.SSELifecycleConfig{
+					KeepaliveInterval: 1, // 1 second
+					ConnectionTimeout: 3, // 3 seconds — stream closes here
+				},
+			},
+		},
+	}
+
+	ts := startTestServer(handler, mockCfg)
+	defer ts.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", ts.URL+"/events", nil)
+	if err != nil {
+		t.Fatalf("creating request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Stream closes after ConnectionTimeout=3s, so ReadAll returns once the
+	// server closes the connection.
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("reading body: %v", err)
+	}
+
+	raw := string(body)
+	events := parseSSEEvents(raw)
+
+	// Verify the first event was delivered.
+	foundFirst := false
+	for _, ev := range events {
+		if ev.Data == "first" {
+			foundFirst = true
+			break
+		}
+	}
+	if !foundFirst {
+		t.Errorf("expected first event with Data=%q; raw body:\n%s", "first", raw)
+	}
+
+	// Look for at least one keepalive comment in the parsed events.
+	// FormatKeepalive() produces ": keepalive\n\n" — after the parser strips
+	// the leading ":" the Comment field will be " keepalive".
+	foundKeepalive := false
+	for _, ev := range events {
+		if ev.Comment == " keepalive" {
+			foundKeepalive = true
+			break
+		}
+	}
+	if !foundKeepalive {
+		t.Errorf("expected at least one keepalive comment; raw body:\n%s", raw)
+	}
+}
