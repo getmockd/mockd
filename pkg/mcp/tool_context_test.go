@@ -353,8 +353,8 @@ func TestHandleManageWorkspace_UnknownAction(t *testing.T) {
 	}
 
 	text := resultText(t, result)
-	if text != "invalid action: nuke. Use: list, switch" {
-		t.Errorf("error text = %q, want %q", text, "invalid action: nuke. Use: list, switch")
+	if text != "invalid action: nuke. Use: list, switch, create" {
+		t.Errorf("error text = %q, want %q", text, "invalid action: nuke. Use: list, switch, create")
 	}
 }
 
@@ -484,6 +484,129 @@ func TestHandleManageWorkspace_SwitchListFails(t *testing.T) {
 	// Verify session workspace was updated despite list failure
 	if session.GetWorkspace() != "ws-3" {
 		t.Errorf("session workspace = %s, want ws-3", session.GetWorkspace())
+	}
+}
+
+// =============================================================================
+// handleCreateWorkspace Tests
+// =============================================================================
+
+func TestHandleManageWorkspace_CreateSuccess(t *testing.T) {
+	t.Parallel()
+
+	createdName := ""
+	client := &mockAdminClient{
+		createWorkspaceFn: func(name string) (*cli.WorkspaceResult, error) {
+			createdName = name
+			return &cli.WorkspaceResult{
+				ID:   "ws-new-123",
+				Name: name,
+				Type: "local",
+			}, nil
+		},
+	}
+
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	args := map[string]interface{}{"action": "create", "name": "my-workspace"}
+	result, err := handleManageWorkspace(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageWorkspace() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	if createdName != "my-workspace" {
+		t.Errorf("created name = %s, want my-workspace", createdName)
+	}
+
+	var parsed map[string]interface{}
+	resultJSON(t, result, &parsed)
+
+	if parsed["created"] != true {
+		t.Errorf("created = %v, want true", parsed["created"])
+	}
+	if parsed["id"] != "ws-new-123" {
+		t.Errorf("id = %v, want ws-new-123", parsed["id"])
+	}
+	if parsed["name"] != "my-workspace" {
+		t.Errorf("name = %v, want my-workspace", parsed["name"])
+	}
+	if parsed["type"] != "local" {
+		t.Errorf("type = %v, want local", parsed["type"])
+	}
+}
+
+func TestHandleManageWorkspace_CreateMissingName(t *testing.T) {
+	t.Parallel()
+
+	client := &mockAdminClient{}
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	args := map[string]interface{}{"action": "create"}
+	result, err := handleManageWorkspace(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageWorkspace() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for create without name")
+	}
+
+	text := resultText(t, result)
+	if text != "name is required" {
+		t.Errorf("error text = %q, want %q", text, "name is required")
+	}
+}
+
+func TestHandleManageWorkspace_CreateFailure(t *testing.T) {
+	t.Parallel()
+
+	client := &mockAdminClient{
+		createWorkspaceFn: func(name string) (*cli.WorkspaceResult, error) {
+			return nil, fmt.Errorf("dial tcp: connection refused")
+		},
+	}
+
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	args := map[string]interface{}{"action": "create", "name": "my-workspace"}
+	result, err := handleManageWorkspace(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageWorkspace() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for create failure")
+	}
+
+	text := resultText(t, result)
+	if !strings.Contains(text, "failed to create workspace") {
+		t.Errorf("error text = %q, want containing 'failed to create workspace'", text)
+	}
+}
+
+func TestHandleManageWorkspace_CreateNoClient(t *testing.T) {
+	t.Parallel()
+
+	session := NewSession()
+	session.SetState(SessionStateReady)
+	server := newTestServer(nil)
+
+	args := map[string]interface{}{"action": "create", "name": "test"}
+	result, err := handleManageWorkspace(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageWorkspace() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result when admin client is nil")
+	}
+
+	text := resultText(t, result)
+	if text != "admin client not available" {
+		t.Errorf("error text = %q, want %q", text, "admin client not available")
 	}
 }
 

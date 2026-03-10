@@ -25,8 +25,8 @@ func handleManageContext(args map[string]interface{}, session *MCPSession, serve
 }
 
 // handleManageWorkspace dispatches workspace operations based on the action parameter.
-// Use "list" to see all workspaces, or "switch" to route subsequent operations
-// to a specific workspace.
+// Use "list" to see all workspaces, "switch" to route subsequent operations
+// to a specific workspace, or "create" to create a new workspace.
 func handleManageWorkspace(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
 	action := getString(args, "action", "")
 	switch action {
@@ -34,8 +34,10 @@ func handleManageWorkspace(args map[string]interface{}, session *MCPSession, ser
 		return handleListWorkspaces(args, session, server)
 	case "switch":
 		return handleSwitchWorkspace(args, session, server)
+	case "create":
+		return handleCreateWorkspace(args, session, server)
 	default:
-		return ToolResultError("invalid action: " + action + ". Use: list, switch"), nil
+		return ToolResultError("invalid action: " + action + ". Use: list, switch, create"), nil
 	}
 }
 
@@ -197,6 +199,36 @@ func handleSwitchWorkspace(args map[string]interface{}, session *MCPSession, _ *
 	result := map[string]interface{}{
 		"switched":  true,
 		"workspace": id,
+	}
+
+	return ToolResultJSON(result)
+}
+
+// handleCreateWorkspace creates a new workspace on the admin server.
+func handleCreateWorkspace(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
+	client := session.GetAdminClient()
+	if client == nil {
+		return ToolResultError("admin client not available"), nil
+	}
+
+	name := getString(args, "name", "")
+	if name == "" {
+		return ToolResultError("name is required"), nil
+	}
+
+	ws, err := client.CreateWorkspace(name)
+	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+		return ToolResultError("failed to create workspace: " + adminError(err, session.GetAdminURL())), nil
+	}
+
+	result := map[string]interface{}{
+		"created": true,
+		"id":      ws.ID,
+		"name":    ws.Name,
+	}
+	if ws.Type != "" {
+		result["type"] = ws.Type
 	}
 
 	return ToolResultJSON(result)

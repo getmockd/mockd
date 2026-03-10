@@ -33,6 +33,16 @@ func handleGetChaosConfig(args map[string]interface{}, session *MCPSession, serv
 		chaosConfig["stats"] = chaosStats
 	}
 
+	// Include available profiles so agents know what's available
+	profiles, err := client.ListChaosProfiles()
+	if err == nil && len(profiles) > 0 {
+		profileNames := make([]string, len(profiles))
+		for i, p := range profiles {
+			profileNames[i] = p.Name
+		}
+		chaosConfig["availableProfiles"] = profileNames
+	}
+
 	return ToolResultJSON(chaosConfig)
 }
 

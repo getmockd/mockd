@@ -228,7 +228,7 @@ var defManageWorkspace = ToolDefinition{
 			"action": map[string]interface{}{
 				"type":        "string",
 				"description": "Operation to perform",
-				"enum":        []string{"list", "switch"},
+				"enum":        []string{"list", "switch", "create"},
 			},
 			"id": map[string]interface{}{
 				"type":        "string",
@@ -236,7 +236,7 @@ var defManageWorkspace = ToolDefinition{
 			},
 			"name": map[string]interface{}{
 				"type":        "string",
-				"description": "Workspace name (for switch, alternative to ID)",
+				"description": "Workspace name (required for create, alternative to ID for switch)",
 			},
 		},
 		"required": []string{"action"},
@@ -371,7 +371,7 @@ var defManageState = ToolDefinition{
 
 Examples:
   Overview:    {"action":"overview"}
-  Add resource:{"action":"add_resource","resource":"users","path":"/api/users"}
+  Add resource:{"action":"add_resource","resource":"users"}
   List items:  {"action":"list_items","resource":"users","limit":10}
   Get item:    {"action":"get_item","resource":"users","item_id":"abc123"}
   Create item: {"action":"create_item","resource":"users","data":{"name":"Alice"}}
@@ -387,10 +387,6 @@ Examples:
 			"resource": map[string]interface{}{
 				"type":        "string",
 				"description": "Resource name (required for add_resource/list_items/get_item/create_item/reset)",
-			},
-			"path": map[string]interface{}{
-				"type":        "string",
-				"description": "URL base path for the resource (e.g., /api/users). Omit for bridge-only mode (for add_resource)",
 			},
 			"id_field": map[string]interface{}{
 				"type":        "string",

@@ -159,6 +159,94 @@ func TestHandleGetChaosConfig_NoClient(t *testing.T) {
 	}
 }
 
+func TestHandleGetChaosConfig_WithProfiles(t *testing.T) {
+	t.Parallel()
+
+	client := &mockAdminClient{
+		getChaosConfigFn: func() (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"enabled": false,
+			}, nil
+		},
+		listChaosProfilesFn: func() ([]cli.ChaosProfileInfo, error) {
+			return []cli.ChaosProfileInfo{
+				{Name: "slow-api", Description: "200-800ms latency"},
+				{Name: "flaky", Description: "30% error rate"},
+				{Name: "offline", Description: "100% 503 errors"},
+			}, nil
+		},
+	}
+
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	result, err := handleGetChaosConfig(nil, session, server)
+	if err != nil {
+		t.Fatalf("handleGetChaosConfig() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	var parsed map[string]interface{}
+	resultJSON(t, result, &parsed)
+
+	profiles, ok := parsed["availableProfiles"].([]interface{})
+	if !ok {
+		t.Fatal("expected availableProfiles array in response")
+	}
+	if len(profiles) != 3 {
+		t.Fatalf("expected 3 profiles, got %d", len(profiles))
+	}
+	if profiles[0] != "slow-api" {
+		t.Errorf("profiles[0] = %v, want slow-api", profiles[0])
+	}
+	if profiles[1] != "flaky" {
+		t.Errorf("profiles[1] = %v, want flaky", profiles[1])
+	}
+	if profiles[2] != "offline" {
+		t.Errorf("profiles[2] = %v, want offline", profiles[2])
+	}
+}
+
+func TestHandleGetChaosConfig_ProfilesFailure(t *testing.T) {
+	t.Parallel()
+
+	// When ListChaosProfiles fails, config should still be returned without profiles
+	client := &mockAdminClient{
+		getChaosConfigFn: func() (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"enabled": true,
+			}, nil
+		},
+		listChaosProfilesFn: func() ([]cli.ChaosProfileInfo, error) {
+			return nil, fmt.Errorf("profiles not supported")
+		},
+	}
+
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	result, err := handleGetChaosConfig(nil, session, server)
+	if err != nil {
+		t.Fatalf("handleGetChaosConfig() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	var parsed map[string]interface{}
+	resultJSON(t, result, &parsed)
+
+	if parsed["enabled"] != true {
+		t.Errorf("enabled = %v, want true", parsed["enabled"])
+	}
+	// availableProfiles should not be present when ListChaosProfiles fails
+	if _, ok := parsed["availableProfiles"]; ok {
+		t.Error("expected no availableProfiles when ListChaosProfiles fails")
+	}
+}
+
 // =============================================================================
 // handleSetChaosConfig Tests
 // =============================================================================
