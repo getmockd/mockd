@@ -630,7 +630,7 @@ func (c *Client) ResetStateWithResponse(ctx context.Context, resourceName string
 	}
 
 	var result ResetStateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil && err != io.EOF {
 		return nil, fmt.Errorf("failed to decode reset response: %w", err)
 	}
 	return &result, nil

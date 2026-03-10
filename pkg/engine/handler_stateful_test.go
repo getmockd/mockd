@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/stateful"
 )
 
@@ -651,6 +654,8 @@ func TestCoerceFormValue(t *testing.T) {
 		{name: "Inf stays string (case sensitive)", input: "Inf", want: "Inf"},
 		{name: "mixed alphanumeric stays string", input: "123abc", want: "123abc"},
 		{name: "large int", input: "1000000000000", want: int64(1000000000000)},
+		{name: "phone number with + stays string", input: "+15551234567", want: "+15551234567"},
+		{name: "positive float with + stays string", input: "+3.14", want: "+3.14"},
 	}
 
 	for _, tt := range tests {
@@ -975,5 +980,1008 @@ func TestHandleBindingDelete_DefaultRemovesItem(t *testing.T) {
 	})
 	if getResult.Error == nil {
 		t.Fatal("item should be deleted, but GET succeeded")
+	}
+}
+
+// ── extractLastPathParam tests ───────────────────────────────────────────────
+
+func TestExtractLastPathParam_SingleParam(t *testing.T) {
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{
+				Path: "/v1/customers/{customer}",
+			},
+		},
+	}
+	pathParams := map[string]string{"customer": "cus_1"}
+	got := extractLastPathParam(m, pathParams)
+	if got != "cus_1" {
+		t.Errorf("extractLastPathParam() = %q, want %q", got, "cus_1")
+	}
+}
+
+func TestExtractLastPathParam_MultipleParams(t *testing.T) {
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{
+				Path: "/v1/customers/{customer}/subscriptions/{subscription}",
+			},
+		},
+	}
+	pathParams := map[string]string{"customer": "cus_1", "subscription": "sub_2"}
+	got := extractLastPathParam(m, pathParams)
+	if got != "sub_2" {
+		t.Errorf("extractLastPathParam() = %q, want %q (last param)", got, "sub_2")
+	}
+}
+
+func TestExtractLastPathParam_NoParams(t *testing.T) {
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{
+				Path: "/v1/customers",
+			},
+		},
+	}
+	pathParams := map[string]string{"customer": "cus_1"}
+	got := extractLastPathParam(m, pathParams)
+	if got != "" {
+		t.Errorf("extractLastPathParam() = %q, want empty (no {param} in path)", got)
+	}
+}
+
+func TestExtractLastPathParam_NilHTTP(t *testing.T) {
+	m := &mock.Mock{}
+	pathParams := map[string]string{"customer": "cus_1"}
+	got := extractLastPathParam(m, pathParams)
+	if got != "" {
+		t.Errorf("extractLastPathParam() = %q, want empty (nil HTTP)", got)
+	}
+}
+
+func TestExtractLastPathParam_EmptyPathParams(t *testing.T) {
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{
+				Path: "/v1/customers/{customer}",
+			},
+		},
+	}
+	pathParams := map[string]string{}
+	got := extractLastPathParam(m, pathParams)
+	if got != "" {
+		t.Errorf("extractLastPathParam() = %q, want empty (param in path but not in pathParams)", got)
+	}
+}
+
+func TestExtractLastPathParam_ParamWithSuffix(t *testing.T) {
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{
+				Path: "/2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json",
+			},
+		},
+	}
+	pathParams := map[string]string{"AccountSid": "AC_test", "Sid": "SM123abc"}
+	got := extractLastPathParam(m, pathParams)
+	if got != "SM123abc" {
+		t.Errorf("extractLastPathParam() = %q, want %q (param with .json suffix)", got, "SM123abc")
+	}
+}
+
+func TestExtractLastPathParam_ParamWithPrefix(t *testing.T) {
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{
+				Path: "/api/v{version}/items",
+			},
+		},
+	}
+	pathParams := map[string]string{"version": "3"}
+	got := extractLastPathParam(m, pathParams)
+	if got != "3" {
+		t.Errorf("extractLastPathParam() = %q, want %q (param with prefix)", got, "3")
+	}
+}
+
+// ── parseExpandFields tests ──────────────────────────────────────────────────
+
+func TestParseExpandFields_BracketNotation(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/v1/charges?expand[]=data.source&expand[]=customer", nil)
+	got := parseExpandFields(req)
+
+	if len(got) != 2 {
+		t.Fatalf("parseExpandFields() returned %d fields, want 2", len(got))
+	}
+	want := map[string]bool{"data.source": true, "customer": true}
+	for _, field := range got {
+		if !want[field] {
+			t.Errorf("unexpected expand field %q", field)
+		}
+	}
+}
+
+func TestParseExpandFields_PlainNotation(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/v1/charges?expand=customer&expand=invoice", nil)
+	got := parseExpandFields(req)
+
+	if len(got) != 2 {
+		t.Fatalf("parseExpandFields() returned %d fields, want 2", len(got))
+	}
+	want := map[string]bool{"customer": true, "invoice": true}
+	for _, field := range got {
+		if !want[field] {
+			t.Errorf("unexpected expand field %q", field)
+		}
+	}
+}
+
+func TestParseExpandFields_NoExpand(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/v1/charges?limit=10", nil)
+	got := parseExpandFields(req)
+
+	if len(got) != 0 {
+		t.Errorf("parseExpandFields() returned %v, want empty slice", got)
+	}
+}
+
+// ── bridgeStatusToHTTP tests ─────────────────────────────────────────────────
+
+func TestBridgeStatusToHTTP(t *testing.T) {
+	tests := []struct {
+		name   string
+		status stateful.ResultStatus
+		want   int
+	}{
+		{"StatusNotFound → 404", stateful.StatusNotFound, http.StatusNotFound},
+		{"StatusConflict → 409", stateful.StatusConflict, http.StatusConflict},
+		{"StatusValidationError → 400", stateful.StatusValidationError, http.StatusBadRequest},
+		{"StatusCapacityExceeded → 507", stateful.StatusCapacityExceeded, http.StatusInsufficientStorage},
+		{"StatusError → 500", stateful.StatusError, http.StatusInternalServerError},
+		{"StatusSuccess → 500 (default)", stateful.StatusSuccess, http.StatusInternalServerError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := bridgeStatusToHTTP(tt.status)
+			if got != tt.want {
+				t.Errorf("bridgeStatusToHTTP(%v) = %d, want %d", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
+// ── handleStatefulBinding dispatch tests ─────────────────────────────────────
+
+func TestHandleStatefulBinding_Dispatch(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{Name: "customers", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	// Seed a test item
+	br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "customers",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "cus_1", "name": "Alice"},
+	})
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/customers/{customer}"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "customers",
+				Action: "get",
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/customers/cus_1", nil)
+	pathParams := map[string]string{"customer": "cus_1"}
+
+	status := h.handleStatefulBinding(w, req, m, nil, pathParams)
+
+	if status != http.StatusOK {
+		t.Fatalf("handleStatefulBinding() status = %d, want %d", status, http.StatusOK)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["id"] != "cus_1" {
+		t.Errorf("response id = %v, want cus_1", body["id"])
+	}
+	if body["name"] != "Alice" {
+		t.Errorf("response name = %v, want Alice", body["name"])
+	}
+}
+
+func TestHandleStatefulBinding_NilBridge(t *testing.T) {
+	h := &Handler{log: slog.Default(), statefulBridge: nil}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/customers/{customer}"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "customers",
+				Action: "get",
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/customers/cus_1", nil)
+	pathParams := map[string]string{"customer": "cus_1"}
+
+	status := h.handleStatefulBinding(w, req, m, nil, pathParams)
+
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("handleStatefulBinding() with nil bridge = %d, want %d", status, http.StatusServiceUnavailable)
+	}
+}
+
+// ── handleBindingGet tests ───────────────────────────────────────────────────
+
+func TestHandleBindingGet_Success(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	createResult := br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "customers",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "cus_1", "name": "Alice"},
+	})
+	if createResult.Error != nil {
+		t.Fatalf("failed to create item: %v", createResult.Error)
+	}
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/customers/cus_1", nil)
+
+	status := h.handleBindingGet(w, req, "customers", "cus_1", nil)
+
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["id"] != "cus_1" {
+		t.Errorf("expected id=cus_1, got %v", body["id"])
+	}
+	if body["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", body["name"])
+	}
+}
+
+func TestHandleBindingGet_NotFound(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/customers/nonexistent", nil)
+
+	status := h.handleBindingGet(w, req, "customers", "nonexistent", nil)
+
+	if status != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", status)
+	}
+}
+
+func TestHandleBindingGet_WithResponseTransform(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	createResult := br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "customers",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "cus_1", "name": "Alice"},
+	})
+	if createResult.Error != nil {
+		t.Fatalf("failed to create item: %v", createResult.Error)
+	}
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	responseCfg := &config.ResponseTransform{
+		Fields: &config.FieldTransform{
+			Rename: map[string]string{"id": "customer_id"},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/customers/cus_1", nil)
+
+	status := h.handleBindingGet(w, req, "customers", "cus_1", responseCfg)
+
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["customer_id"] != "cus_1" {
+		t.Errorf("expected customer_id=cus_1, got %v", body["customer_id"])
+	}
+	if _, exists := body["id"]; exists {
+		t.Errorf("expected 'id' to be renamed away, but it still exists")
+	}
+	if body["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", body["name"])
+	}
+}
+
+// ── handleBindingList tests ──────────────────────────────────────────────────
+
+func TestHandleBindingList_Success(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	for _, d := range []map[string]interface{}{
+		{"id": "cus_1", "name": "Alice"},
+		{"id": "cus_2", "name": "Bob"},
+	} {
+		r := br.Execute(context.Background(), &stateful.OperationRequest{
+			Resource: "customers",
+			Action:   stateful.ActionCreate,
+			Data:     d,
+		})
+		if r.Error != nil {
+			t.Fatalf("failed to create item: %v", r.Error)
+		}
+	}
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/customers", nil)
+
+	status := h.handleBindingList(w, req, "customers", nil, nil)
+
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	data, ok := body["data"].([]interface{})
+	if !ok {
+		t.Fatalf("expected data as array, got %T", body["data"])
+	}
+	if len(data) != 2 {
+		t.Errorf("expected 2 items, got %d", len(data))
+	}
+
+	meta, ok := body["meta"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected meta as object, got %T", body["meta"])
+	}
+	if total, ok := meta["total"].(float64); !ok || int(total) != 2 {
+		t.Errorf("expected meta.total=2, got %v", meta["total"])
+	}
+}
+
+func TestHandleBindingList_TableNotFound(t *testing.T) {
+	store := stateful.NewStateStore()
+	br := stateful.NewBridge(store)
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/bogus", nil)
+
+	status := h.handleBindingList(w, req, "bogus", nil, nil)
+
+	if status != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", status)
+	}
+}
+
+func TestHandleBindingList_WithPagination(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("cus_%d", i)
+		r := br.Execute(context.Background(), &stateful.OperationRequest{
+			Resource: "customers",
+			Action:   stateful.ActionCreate,
+			Data:     map[string]interface{}{"id": id, "name": "User"},
+		})
+		if r.Error != nil {
+			t.Fatalf("failed to create item %d: %v", i, r.Error)
+		}
+	}
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/customers?limit=2", nil)
+
+	status := h.handleBindingList(w, req, "customers", nil, nil)
+
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	data, ok := body["data"].([]interface{})
+	if !ok {
+		t.Fatalf("expected data as array, got %T", body["data"])
+	}
+	if len(data) != 2 {
+		t.Errorf("expected 2 items (limit=2), got %d", len(data))
+	}
+}
+
+// ── handleBindingCreate tests ────────────────────────────────────────────────
+
+func TestHandleBindingCreate_Success(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	bodyBytes := []byte(`{"name":"Bob"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/customers", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	status := h.handleBindingCreate(w, req, "customers", nil, bodyBytes, nil)
+
+	if status != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["name"] != "Bob" {
+		t.Errorf("expected name=Bob, got %v", body["name"])
+	}
+	if body["id"] == nil || body["id"] == "" {
+		t.Errorf("expected a generated id, got %v", body["id"])
+	}
+}
+
+func TestHandleBindingCreate_InvalidBody(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	bodyBytes := []byte(`{not valid json}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/customers", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	status := h.handleBindingCreate(w, req, "customers", nil, bodyBytes, nil)
+
+	if status != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", status)
+	}
+}
+
+func TestHandleBindingCreate_BodyTooLarge(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	largeBody := bytes.Repeat([]byte("x"), MaxStatefulBodySize+1)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/customers", bytes.NewReader(largeBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	status := h.handleBindingCreate(w, req, "customers", nil, largeBody, nil)
+
+	if status != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected status 413, got %d", status)
+	}
+}
+
+// ── handleBindingMutate tests ────────────────────────────────────────────────
+
+func TestHandleBindingMutate_PatchSuccess(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	createResult := br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "customers",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "cus_1", "name": "Alice"},
+	})
+	if createResult.Error != nil {
+		t.Fatalf("failed to create item: %v", createResult.Error)
+	}
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	bodyBytes := []byte(`{"name":"Updated"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/customers/cus_1", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	status := h.handleBindingMutate(w, req, "customers", "cus_1", nil, bodyBytes, nil, stateful.ActionPatch)
+
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["name"] != "Updated" {
+		t.Errorf("expected name=Updated, got %v", body["name"])
+	}
+	if body["id"] != "cus_1" {
+		t.Errorf("expected id=cus_1, got %v", body["id"])
+	}
+}
+
+func TestHandleBindingMutate_NotFound(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	bodyBytes := []byte(`{"name":"Updated"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/customers/nonexistent", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	status := h.handleBindingMutate(w, req, "customers", "nonexistent", nil, bodyBytes, nil, stateful.ActionPatch)
+
+	if status != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", status)
+	}
+}
+
+func TestHandleBindingMutate_InvalidBody(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	bodyBytes := []byte(`{bad json}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/customers/cus_1", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	status := h.handleBindingMutate(w, req, "customers", "cus_1", nil, bodyBytes, nil, stateful.ActionPatch)
+
+	if status != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", status)
+	}
+}
+
+// ── handleBindingCustom tests ────────────────────────────────────────────────
+
+func TestHandleBindingCustom_Success(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	// Create an item that the custom operation will read
+	createResult := br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "customers",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "cus_1", "name": "Alice"},
+	})
+	if createResult.Error != nil {
+		t.Fatalf("failed to create item: %v", createResult.Error)
+	}
+
+	// Register a custom operation on the bridge
+	br.RegisterCustomOperation("double-name", &stateful.CustomOperation{
+		Name: "double-name",
+		Steps: []stateful.Step{
+			{Type: stateful.StepRead, Resource: "customers", ID: `input.userId`, As: "user"},
+			{Type: stateful.StepSet, Var: "result", Value: `user.name + " " + user.name`},
+		},
+		Response: map[string]string{
+			"doubled": "result",
+		},
+	})
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	binding := &mock.StatefulBinding{
+		Table:     "customers",
+		Action:    "custom",
+		Operation: "double-name",
+	}
+
+	bodyBytes := []byte(`{"userId":"cus_1"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/customers/double-name", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	status := h.handleBindingCustom(w, req, binding, nil, bodyBytes, nil)
+
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["doubled"] != "Alice Alice" {
+		t.Errorf("expected doubled='Alice Alice', got %v", body["doubled"])
+	}
+}
+
+func TestHandleBindingCustom_MissingOperation(t *testing.T) {
+	store := stateful.NewStateStore()
+	br := stateful.NewBridge(store)
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	binding := &mock.StatefulBinding{
+		Table:     "customers",
+		Action:    "custom",
+		Operation: "", // empty — should fail
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/customers/action", nil)
+
+	status := h.handleBindingCustom(w, req, binding, nil, nil, nil)
+
+	if status != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", status)
+	}
+
+	var body stateful.ErrorResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if body.Error == "" {
+		t.Fatal("expected error message in response")
+	}
+	if !strings.Contains(body.Error, "requires an operation name") {
+		t.Errorf("expected error about 'requires an operation name', got %q", body.Error)
+	}
+}
+
+func TestHandleBindingCustom_EmptyBody(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	// Create an item
+	createResult := br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "customers",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "cus_1", "name": "Alice"},
+	})
+	if createResult.Error != nil {
+		t.Fatalf("failed to create item: %v", createResult.Error)
+	}
+
+	// Register a custom operation that uses a path param instead of body input
+	br.RegisterCustomOperation("get-by-path", &stateful.CustomOperation{
+		Name: "get-by-path",
+		Steps: []stateful.Step{
+			{Type: stateful.StepRead, Resource: "customers", ID: `input.customerId`, As: "user"},
+		},
+		Response: map[string]string{
+			"name": "user.name",
+		},
+	})
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	binding := &mock.StatefulBinding{
+		Table:     "customers",
+		Action:    "custom",
+		Operation: "get-by-path",
+	}
+
+	// Empty bodyBytes — path params should be merged into input
+	pathParams := map[string]string{"customerId": "cus_1"}
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/customers/cus_1/action", nil)
+	req.Header.Set("Content-Type", "application/json")
+
+	status := h.handleBindingCustom(w, req, binding, pathParams, nil, nil)
+
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", body["name"])
+	}
+}
+
+// ── writeBindingError tests ──────────────────────────────────────────────────
+
+func TestWriteBindingError_NotFound(t *testing.T) {
+	h := &Handler{log: slog.Default()}
+
+	result := &stateful.OperationResult{
+		Status: stateful.StatusNotFound,
+		Error:  &stateful.NotFoundError{Resource: "customers", ID: "cus_1"},
+	}
+
+	w := httptest.NewRecorder()
+	status := h.writeBindingError(w, result, "customers", "cus_1", nil)
+
+	if status != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", status)
+	}
+
+	var body stateful.ErrorResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if body.StatusCode != http.StatusNotFound {
+		t.Errorf("expected statusCode=404, got %d", body.StatusCode)
+	}
+}
+
+func TestWriteBindingError_WithErrorTransform(t *testing.T) {
+	h := &Handler{log: slog.Default()}
+
+	result := &stateful.OperationResult{
+		Status: stateful.StatusNotFound,
+		Error:  &stateful.NotFoundError{Resource: "customers", ID: "cus_1"},
+	}
+
+	responseCfg := &config.ResponseTransform{
+		Errors: &config.ErrorTransform{
+			Wrap: "error",
+			Fields: map[string]string{
+				"message": "message",
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	status := h.writeBindingError(w, result, "customers", "cus_1", responseCfg)
+
+	if status != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+
+	// Should be wrapped under "error" key
+	errObj, ok := body["error"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected error wrapped under 'error' key, got %v", body)
+	}
+	if errObj["message"] == nil || errObj["message"] == "" {
+		t.Errorf("expected 'message' field in transformed error, got %v", errObj)
+	}
+}
+
+// ── handleCustomOperation additional path tests ──────────────────────────────
+
+func TestHandleCustomOperation_NilBridge(t *testing.T) {
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: nil, // nil bridge
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/operations/test", nil)
+
+	status := h.handleCustomOperation(w, req, "test-op", nil)
+
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("expected status 503, got %d", status)
+	}
+}
+
+func TestHandleCustomOperation_InvalidJSON(t *testing.T) {
+	store := stateful.NewStateStore()
+	br := stateful.NewBridge(store)
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	bodyBytes := []byte(`{not valid json}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/operations/test", bytes.NewReader(bodyBytes))
+
+	status := h.handleCustomOperation(w, req, "test-op", bodyBytes)
+
+	if status != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", status)
+	}
+}
+
+func TestHandleCustomOperation_Success(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register(&stateful.ResourceConfig{
+		Name:    "customers",
+		IDField: "id",
+	})
+
+	br := stateful.NewBridge(store)
+
+	// Create an item
+	createResult := br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "customers",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "cus_1", "name": "Alice"},
+	})
+	if createResult.Error != nil {
+		t.Fatalf("failed to create item: %v", createResult.Error)
+	}
+
+	// Register a custom operation
+	br.RegisterCustomOperation("greet", &stateful.CustomOperation{
+		Name: "greet",
+		Steps: []stateful.Step{
+			{Type: stateful.StepRead, Resource: "customers", ID: `input.userId`, As: "user"},
+			{Type: stateful.StepSet, Var: "greeting", Value: `"Hello " + user.name`},
+		},
+		Response: map[string]string{
+			"message": "greeting",
+		},
+	})
+
+	h := &Handler{
+		log:            slog.Default(),
+		statefulBridge: br,
+	}
+
+	bodyBytes := []byte(`{"userId":"cus_1"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/operations/greet", bytes.NewReader(bodyBytes))
+
+	status := h.handleCustomOperation(w, req, "greet", bodyBytes)
+
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["message"] != "Hello Alice" {
+		t.Errorf("expected message='Hello Alice', got %v", body["message"])
 	}
 }

@@ -285,13 +285,25 @@ func extractLastPathParam(m *mock.Mock, pathParams map[string]string) string {
 		return ""
 	}
 
-	// Walk path segments backward to find the last {param}
+	// Walk path segments backward to find the last {param}.
+	// Handles both pure params like {id} and params with literal
+	// suffixes like {Sid}.json (common in Twilio-style APIs).
 	segments := strings.Split(path, "/")
 	for i := len(segments) - 1; i >= 0; i-- {
 		seg := segments[i]
 		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
+			// Pure param: {id}
 			paramName := seg[1 : len(seg)-1]
 			return pathParams[paramName]
+		}
+		if strings.Contains(seg, "{") && strings.Contains(seg, "}") {
+			// Param with literal prefix/suffix: {Sid}.json, v{version}, etc.
+			openIdx := strings.Index(seg, "{")
+			closeIdx := strings.Index(seg, "}")
+			if openIdx < closeIdx {
+				paramName := seg[openIdx+1 : closeIdx]
+				return pathParams[paramName]
+			}
 		}
 	}
 
@@ -577,15 +589,17 @@ func coerceFormValue(s string) any {
 		return false
 	}
 
-	// Integer (no decimal point)
-	if !strings.Contains(s, ".") {
+	// Integer (no decimal point, no leading +/- sign that could be a phone number prefix)
+	// We only coerce values that look purely numeric. Leading '+' is valid for
+	// strconv.ParseInt but common in phone numbers (+15551234567), so reject it.
+	if !strings.Contains(s, ".") && !strings.HasPrefix(s, "+") {
 		if n, err := strconv.ParseInt(s, 10, 64); err == nil {
 			return n
 		}
 	}
 
-	// Float (has decimal point)
-	if strings.Contains(s, ".") {
+	// Float (has decimal point, no leading +)
+	if strings.Contains(s, ".") && !strings.HasPrefix(s, "+") {
 		if f, err := strconv.ParseFloat(s, 64); err == nil {
 			return f
 		}

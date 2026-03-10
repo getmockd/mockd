@@ -99,7 +99,8 @@ func MatchPath(pattern, path string) int {
 }
 
 // matchNamedParams checks if path matches a pattern with named parameters.
-// Example: "/users/{id}" matches "/users/123"
+// Supports full-segment params ("/users/{id}") and params with literal
+// prefix/suffix ("/users/{id}.json", "v{version}-api").
 func matchNamedParams(pattern, path string) bool {
 	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
 	pathParts := strings.Split(strings.Trim(path, "/"), "/")
@@ -110,9 +111,17 @@ func matchNamedParams(pattern, path string) bool {
 	}
 
 	for i, patternPart := range patternParts {
-		// Named parameter matches any value
+		// Full-segment named parameter matches any value
 		if strings.HasPrefix(patternPart, "{") && strings.HasSuffix(patternPart, "}") {
 			continue
+		}
+		// Segment containing a {param} with literal prefix/suffix
+		// e.g., "{Sid}.json" matches "SM123.json", "v{ver}-api" matches "v2-api"
+		if strings.Contains(patternPart, "{") && strings.Contains(patternPart, "}") {
+			if matchSegmentWithParam(patternPart, pathParts[i]) {
+				continue
+			}
+			return false
 		}
 		// Literal parts must match exactly
 		if patternPart != pathParts[i] {
@@ -121,6 +130,37 @@ func matchNamedParams(pattern, path string) bool {
 	}
 
 	return true
+}
+
+// matchSegmentWithParam checks if a path segment matches a pattern segment
+// containing one or more {param} placeholders with optional literal text.
+// Examples: "{Sid}.json" matches "SM123.json", "v{ver}" matches "v2".
+func matchSegmentWithParam(pattern, segment string) bool {
+	// Build a regex from the pattern: replace {param} with (.+) for greedy match
+	regexStr := "^"
+	rest := pattern
+	for {
+		openIdx := strings.Index(rest, "{")
+		if openIdx == -1 {
+			regexStr += regexp.QuoteMeta(rest)
+			break
+		}
+		closeIdx := strings.Index(rest[openIdx:], "}")
+		if closeIdx == -1 {
+			regexStr += regexp.QuoteMeta(rest)
+			break
+		}
+		closeIdx += openIdx
+		regexStr += regexp.QuoteMeta(rest[:openIdx]) + "(.+)"
+		rest = rest[closeIdx+1:]
+	}
+	regexStr += "$"
+
+	re := getCompiledRegex(regexStr)
+	if re == nil {
+		return false
+	}
+	return re.MatchString(segment)
 }
 
 // matchWildcard performs simple wildcard pattern matching.
@@ -226,10 +266,16 @@ func MatchPathVariable(pattern, path string) map[string]string {
 			break
 		}
 
-		// Named parameter: {name}
+		// Full-segment named parameter: {name}
 		if strings.HasPrefix(patternPart, "{") && strings.HasSuffix(patternPart, "}") {
 			paramName := patternPart[1 : len(patternPart)-1]
 			result[paramName] = pathParts[i]
+			continue
+		}
+
+		// Segment containing {param} with literal prefix/suffix: {Sid}.json
+		if strings.Contains(patternPart, "{") && strings.Contains(patternPart, "}") {
+			extractSegmentParams(patternPart, pathParts[i], result)
 			continue
 		}
 
@@ -249,4 +295,44 @@ func MatchPathVariable(pattern, path string) map[string]string {
 	}
 
 	return result
+}
+
+// extractSegmentParams extracts named parameter values from a segment with
+// literal prefix/suffix. Pattern "{Sid}.json" with segment "SM123.json"
+// yields {"Sid": "SM123"}.
+func extractSegmentParams(pattern, segment string, result map[string]string) {
+	// Build a regex with named capture groups
+	regexStr := "^"
+	rest := pattern
+	for {
+		openIdx := strings.Index(rest, "{")
+		if openIdx == -1 {
+			regexStr += regexp.QuoteMeta(rest)
+			break
+		}
+		closeIdx := strings.Index(rest[openIdx:], "}")
+		if closeIdx == -1 {
+			regexStr += regexp.QuoteMeta(rest)
+			break
+		}
+		closeIdx += openIdx
+		paramName := rest[openIdx+1 : closeIdx]
+		regexStr += regexp.QuoteMeta(rest[:openIdx]) + "(?P<" + paramName + ">.+)"
+		rest = rest[closeIdx+1:]
+	}
+	regexStr += "$"
+
+	re := getCompiledRegex(regexStr)
+	if re == nil {
+		return
+	}
+	match := re.FindStringSubmatch(segment)
+	if match == nil {
+		return
+	}
+	for i, name := range re.SubexpNames() {
+		if i > 0 && name != "" && i < len(match) {
+			result[name] = match[i]
+		}
+	}
 }

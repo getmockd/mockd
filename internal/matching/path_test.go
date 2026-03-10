@@ -253,3 +253,125 @@ func TestMatchPathVariable(t *testing.T) {
 		})
 	}
 }
+
+// ── Param with literal suffix/prefix tests ───────────────────────────────────
+
+func TestMatchPath_ParamWithSuffix(t *testing.T) {
+	tests := []struct {
+		name      string
+		pattern   string
+		path      string
+		wantMatch bool
+	}{
+		{
+			name:      "param with .json suffix",
+			pattern:   "/api/users/{id}.json",
+			path:      "/api/users/123.json",
+			wantMatch: true,
+		},
+		{
+			name:      "Twilio-style message fetch",
+			pattern:   "/2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json",
+			path:      "/2010-04-01/Accounts/AC_test/Messages/SM2a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d.json",
+			wantMatch: true,
+		},
+		{
+			name:      "Twilio-style message list",
+			pattern:   "/2010-04-01/Accounts/{AccountSid}/Messages.json",
+			path:      "/2010-04-01/Accounts/AC_test/Messages.json",
+			wantMatch: true,
+		},
+		{
+			name:      "param with .xml suffix",
+			pattern:   "/api/users/{id}.xml",
+			path:      "/api/users/123.xml",
+			wantMatch: true,
+		},
+		{
+			name:      "suffix mismatch",
+			pattern:   "/api/users/{id}.json",
+			path:      "/api/users/123.xml",
+			wantMatch: false,
+		},
+		{
+			name:      "prefix v and param",
+			pattern:   "/api/v{version}/users",
+			path:      "/api/v2/users",
+			wantMatch: true,
+		},
+		{
+			name:      "no suffix in actual path",
+			pattern:   "/api/users/{id}.json",
+			path:      "/api/users/123",
+			wantMatch: false,
+		},
+		{
+			name:      "multiple params with suffix",
+			pattern:   "/api/{org}/{repo}.git",
+			path:      "/api/acme/widget.git",
+			wantMatch: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			score := MatchPath(tt.pattern, tt.path)
+			if tt.wantMatch {
+				assert.Greater(t, score, 0, "expected match")
+			} else {
+				assert.Equal(t, 0, score, "expected no match")
+			}
+		})
+	}
+}
+
+func TestMatchPathVariable_ParamWithSuffix(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		path     string
+		expected map[string]string
+	}{
+		{
+			name:    "extract param before .json suffix",
+			pattern: "/api/users/{id}.json",
+			path:    "/api/users/123.json",
+			expected: map[string]string{
+				"id": "123",
+			},
+		},
+		{
+			name:    "Twilio message fetch — extract AccountSid and Sid",
+			pattern: "/2010-04-01/Accounts/{AccountSid}/Messages/{Sid}.json",
+			path:    "/2010-04-01/Accounts/AC_test/Messages/SM2a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d.json",
+			expected: map[string]string{
+				"AccountSid": "AC_test",
+				"Sid":        "SM2a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d",
+			},
+		},
+		{
+			name:    "version prefix",
+			pattern: "/api/v{version}/users",
+			path:    "/api/v2/users",
+			expected: map[string]string{
+				"version": "2",
+			},
+		},
+		{
+			name:    "param with .git suffix",
+			pattern: "/repos/{org}/{repo}.git",
+			path:    "/repos/acme/widget.git",
+			expected: map[string]string{
+				"org":  "acme",
+				"repo": "widget",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := MatchPathVariable(tt.pattern, tt.path)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

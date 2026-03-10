@@ -2,6 +2,7 @@ package stateful
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -784,4 +785,388 @@ func TestBridge_ExecuteCustom_StepFailure(t *testing.T) {
 	assert.Equal(t, StatusNotFound, result.Status)
 	assert.Error(t, result.Error)
 	assert.Equal(t, int64(1), obs.Snapshot().ErrorCount)
+}
+
+// --- List step tests (via Execute) ---
+
+func TestExecutor_ListStep_Success(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "list-accounts",
+		Steps: []Step{
+			{Type: StepList, Resource: "accounts", As: "items"},
+		},
+		// No Response template — returns full context minus input
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	require.Equal(t, StatusSuccess, result.Status)
+	require.NotNil(t, result.Item)
+
+	items, ok := result.Item.Data["items"].([]map[string]interface{})
+	require.True(t, ok, "items should be []map[string]interface{}")
+	assert.Len(t, items, 2)
+}
+
+func TestExecutor_ListStep_WithFilters(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "list-filtered",
+		Steps: []Step{
+			{Type: StepList, Resource: "accounts", As: "items", Filter: map[string]string{
+				"name": `"Alice"`,
+			}},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	require.Equal(t, StatusSuccess, result.Status)
+	require.NotNil(t, result.Item)
+
+	items, ok := result.Item.Data["items"].([]map[string]interface{})
+	require.True(t, ok, "items should be []map[string]interface{}")
+	require.Len(t, items, 1)
+	assert.Equal(t, "Alice", items[0]["name"])
+}
+
+func TestExecutor_ListStep_EmptyResult(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "list-empty",
+		Steps: []Step{
+			{Type: StepList, Resource: "accounts", As: "items", Filter: map[string]string{
+				"name": `"Nonexistent"`,
+			}},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	require.Equal(t, StatusSuccess, result.Status)
+	require.NotNil(t, result.Item)
+
+	items, ok := result.Item.Data["items"].([]map[string]interface{})
+	require.True(t, ok, "items should be []map[string]interface{}, not nil")
+	assert.Len(t, items, 0)
+}
+
+func TestExecutor_ListStep_MissingResource(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "list-no-resource",
+		Steps: []Step{
+			{Type: StepList, Resource: "", As: "items"},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusError, result.Status)
+	assert.Contains(t, result.Error.Error(), "requires resource")
+}
+
+func TestExecutor_ListStep_MissingAs(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "list-no-as",
+		Steps: []Step{
+			{Type: StepList, Resource: "accounts", As: ""},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusError, result.Status)
+	assert.Contains(t, result.Error.Error(), "'as' variable name")
+}
+
+func TestExecutor_ListStep_ResourceNotFound(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "list-bogus",
+		Steps: []Step{
+			{Type: StepList, Resource: "bogus", As: "items"},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusNotFound, result.Status)
+}
+
+// --- Validate step tests (via Execute) ---
+
+func TestExecutor_ValidateStep_ConditionTrue(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "validate-true",
+		Steps: []Step{
+			{Type: StepValidate, Condition: "1 == 1"},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusSuccess, result.Status)
+}
+
+func TestExecutor_ValidateStep_ConditionFalse(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "validate-false",
+		Steps: []Step{
+			{Type: StepValidate, Condition: "1 == 2"},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusValidationError, result.Status)
+	assert.Error(t, result.Error)
+}
+
+func TestExecutor_ValidateStep_CustomErrorMessage(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "validate-custom-msg",
+		Steps: []Step{
+			{Type: StepValidate, Condition: "false", ErrorMessage: "insufficient funds"},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusValidationError, result.Status)
+	assert.Contains(t, result.Error.Error(), "insufficient funds")
+}
+
+func TestExecutor_ValidateStep_CustomErrorStatus(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "validate-custom-status",
+		Steps: []Step{
+			{Type: StepValidate, Condition: "false", ErrorMessage: "payment required", ErrorStatus: 402},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusValidationError, result.Status)
+	require.Error(t, result.Error)
+
+	// Unwrap through the step wrapper to find the ValidationError
+	var ve *ValidationError
+	require.True(t, errors.As(result.Error, &ve), "error should wrap a ValidationError")
+	assert.Equal(t, 402, ve.Status)
+}
+
+func TestExecutor_ValidateStep_MissingCondition(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "validate-no-condition",
+		Steps: []Step{
+			{Type: StepValidate, Condition: ""},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusError, result.Status)
+	assert.Contains(t, result.Error.Error(), "condition expression")
+}
+
+func TestExecutor_ValidateStep_TruthyNonZeroInt(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "validate-truthy-int",
+		Steps: []Step{
+			{Type: StepValidate, Condition: "42"},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusSuccess, result.Status)
+}
+
+func TestExecutor_ValidateStep_FalsyZero(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "validate-falsy-zero",
+		Steps: []Step{
+			{Type: StepValidate, Condition: "0"},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusValidationError, result.Status)
+}
+
+func TestExecutor_ValidateStep_FalsyEmptyString(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "validate-falsy-empty-string",
+		Steps: []Step{
+			{Type: StepValidate, Condition: `""`},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusValidationError, result.Status)
+}
+
+func TestExecutor_ValidateStep_TruthyString(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "validate-truthy-string",
+		Steps: []Step{
+			{Type: StepValidate, Condition: `"hello"`},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusSuccess, result.Status)
+}
+
+func TestExecutor_ValidateStep_WithContextVariable(t *testing.T) {
+	_, executor := setupExecutorTest(t)
+
+	op := &CustomOperation{
+		Name: "validate-with-context",
+		Steps: []Step{
+			{Type: StepSet, Var: "amount", Value: "100"},
+			{Type: StepValidate, Condition: "amount >= 50"},
+		},
+	}
+
+	result := executor.Execute(context.Background(), op, &OperationRequest{
+		Data: map[string]interface{}{},
+	})
+
+	assert.Equal(t, StatusSuccess, result.Status)
+}
+
+// --- NormalizeCustomOperation tests ---
+
+func TestNormalizeCustomOperation_Nil(t *testing.T) {
+	_, err := NormalizeCustomOperation(nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be nil")
+}
+
+func TestNormalizeCustomOperation_DefaultsToName(t *testing.T) {
+	op := &CustomOperation{
+		Name:  "test-op",
+		Steps: []Step{{Type: StepSet, Var: "x", Value: "1"}},
+	}
+
+	mode, err := NormalizeCustomOperation(op)
+	require.NoError(t, err)
+	assert.Equal(t, ConsistencyBestEffort, mode)
+	assert.Equal(t, ConsistencyBestEffort, op.Consistency, "should mutate op.Consistency to default")
+}
+
+func TestNormalizeCustomOperation_ValidAtomic(t *testing.T) {
+	op := &CustomOperation{
+		Name:        "atomic-op",
+		Consistency: ConsistencyAtomic,
+		Steps:       []Step{{Type: StepSet, Var: "x", Value: "1"}},
+	}
+
+	mode, err := NormalizeCustomOperation(op)
+	require.NoError(t, err)
+	assert.Equal(t, ConsistencyAtomic, mode)
+	assert.Equal(t, ConsistencyAtomic, op.Consistency)
+}
+
+func TestNormalizeCustomOperation_InvalidMode(t *testing.T) {
+	op := &CustomOperation{
+		Name:        "bad-mode",
+		Consistency: ConsistencyMode("sometimes"),
+		Steps:       []Step{{Type: StepSet, Var: "x", Value: "1"}},
+	}
+
+	_, err := NormalizeCustomOperation(op)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported consistency mode")
+}
+
+// --- CustomOperationConsistency tests ---
+
+func TestCustomOperationConsistency_Nil(t *testing.T) {
+	_, err := CustomOperationConsistency(nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be nil")
+}
+
+func TestCustomOperationConsistency_DefaultsToBestEffort(t *testing.T) {
+	op := &CustomOperation{
+		Name:  "default-consistency",
+		Steps: []Step{{Type: StepSet, Var: "x", Value: "1"}},
+	}
+
+	mode, err := CustomOperationConsistency(op)
+	require.NoError(t, err)
+	assert.Equal(t, ConsistencyBestEffort, mode)
+}
+
+func TestCustomOperationConsistency_DoesNotMutate(t *testing.T) {
+	op := &CustomOperation{
+		Name:  "no-mutate",
+		Steps: []Step{{Type: StepSet, Var: "x", Value: "1"}},
+	}
+
+	_, err := CustomOperationConsistency(op)
+	require.NoError(t, err)
+	assert.Equal(t, ConsistencyMode(""), op.Consistency, "should not mutate op.Consistency")
 }
