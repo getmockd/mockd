@@ -25,6 +25,31 @@ type mockAdminClient struct {
 	patchMockFn       func(id string, patch map[string]interface{}) (*config.MockConfiguration, error)
 	deleteMockFn      func(id string) error
 
+	// Import/Export
+	importConfigFn func(collection *config.MockCollection, replace bool) (*cli.ImportResult, error)
+	exportConfigFn func(name string) (*config.MockCollection, error)
+
+	// Logs
+	getLogsFn   func(filter *cli.LogFilter) (*cli.LogResult, error)
+	clearLogsFn func() (int, error)
+
+	// Health/Status
+	healthFn   func() error
+	getStatsFn func() (*cli.StatsResult, error)
+	getPortsFn func() ([]cli.PortInfo, error)
+
+	// Chaos
+	getChaosConfigFn      func() (map[string]interface{}, error)
+	setChaosConfigFn      func(cfg map[string]interface{}) error
+	listChaosProfilesFn   func() ([]cli.ChaosProfileInfo, error)
+	getChaosProfileFn     func(name string) (*cli.ChaosProfileInfo, error)
+	applyChaosProfileFn   func(name string) error
+	getChaosStatsFn       func() (map[string]interface{}, error)
+	resetChaosStatsFn     func() error
+	getStatefulFaultsFn   func() (map[string]interface{}, error)
+	tripCircuitBreakerFn  func(key string) error
+	resetCircuitBreakerFn func(key string) error
+
 	// Stateful
 	getStateOverviewFn       func() (*cli.StateOverviewResult, error)
 	listStatefulItemsFn      func(name string, limit, offset int, sort, order string) (*cli.StatefulItemsResult, error)
@@ -32,6 +57,24 @@ type mockAdminClient struct {
 	createStatefulItemFn     func(name string, data map[string]interface{}) (map[string]interface{}, error)
 	resetStatefulResourceFn  func(name string) error
 	createStatefulResourceFn func(name, idField string) error
+
+	// Custom Operations
+	listCustomOperationsFn func() ([]cli.CustomOperationInfo, error)
+	getCustomOperationFn   func(name string) (*cli.CustomOperationDetail, error)
+	registerCustomOpFn     func(definition map[string]interface{}) error
+	deleteCustomOpFn       func(name string) error
+	executeCustomOpFn      func(name string, input map[string]interface{}) (map[string]interface{}, error)
+
+	// Verification
+	getMockVerificationFn   func(id string) (map[string]interface{}, error)
+	verifyMockFn            func(id string, expected map[string]interface{}) (map[string]interface{}, error)
+	listMockInvocationsFn   func(id string) (map[string]interface{}, error)
+	resetMockVerificationFn func(id string) error
+	resetAllVerificationFn  func() error
+
+	// Workspaces
+	listWorkspacesFn  func() ([]*cli.WorkspaceDTO, error)
+	createWorkspaceFn func(name string) (*cli.WorkspaceResult, error)
 }
 
 // Ensure mockAdminClient implements cli.AdminClient at compile time.
@@ -97,33 +140,56 @@ func (m *mockAdminClient) DeleteMock(id string) error {
 
 // --- Import/Export ---
 
-func (m *mockAdminClient) ImportConfig(_ *config.MockCollection, _ bool) (*cli.ImportResult, error) {
+func (m *mockAdminClient) ImportConfig(collection *config.MockCollection, replace bool) (*cli.ImportResult, error) {
+	if m.importConfigFn != nil {
+		return m.importConfigFn(collection, replace)
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) ExportConfig(_ string) (*config.MockCollection, error) {
+func (m *mockAdminClient) ExportConfig(name string) (*config.MockCollection, error) {
+	if m.exportConfigFn != nil {
+		return m.exportConfigFn(name)
+	}
 	return nil, nil
 }
 
 // --- Logs ---
 
-func (m *mockAdminClient) GetLogs(_ *cli.LogFilter) (*cli.LogResult, error) {
+func (m *mockAdminClient) GetLogs(filter *cli.LogFilter) (*cli.LogResult, error) {
+	if m.getLogsFn != nil {
+		return m.getLogsFn(filter)
+	}
 	return nil, nil
 }
 
 func (m *mockAdminClient) ClearLogs() (int, error) {
+	if m.clearLogsFn != nil {
+		return m.clearLogsFn()
+	}
 	return 0, nil
 }
 
 // --- Health/Status ---
 
-func (m *mockAdminClient) Health() error { return nil }
+func (m *mockAdminClient) Health() error {
+	if m.healthFn != nil {
+		return m.healthFn()
+	}
+	return nil
+}
 
 func (m *mockAdminClient) GetStats() (*cli.StatsResult, error) {
+	if m.getStatsFn != nil {
+		return m.getStatsFn()
+	}
 	return nil, nil
 }
 
 func (m *mockAdminClient) GetPorts() ([]cli.PortInfo, error) {
+	if m.getPortsFn != nil {
+		return m.getPortsFn()
+	}
 	return nil, nil
 }
 
@@ -134,34 +200,74 @@ func (m *mockAdminClient) GetPortsVerbose(_ bool) ([]cli.PortInfo, error) {
 // --- Chaos ---
 
 func (m *mockAdminClient) GetChaosConfig() (map[string]interface{}, error) {
+	if m.getChaosConfigFn != nil {
+		return m.getChaosConfigFn()
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) SetChaosConfig(_ map[string]interface{}) error { return nil }
+func (m *mockAdminClient) SetChaosConfig(cfg map[string]interface{}) error {
+	if m.setChaosConfigFn != nil {
+		return m.setChaosConfigFn(cfg)
+	}
+	return nil
+}
 
 func (m *mockAdminClient) ListChaosProfiles() ([]cli.ChaosProfileInfo, error) {
+	if m.listChaosProfilesFn != nil {
+		return m.listChaosProfilesFn()
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) GetChaosProfile(_ string) (*cli.ChaosProfileInfo, error) {
+func (m *mockAdminClient) GetChaosProfile(name string) (*cli.ChaosProfileInfo, error) {
+	if m.getChaosProfileFn != nil {
+		return m.getChaosProfileFn(name)
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) ApplyChaosProfile(_ string) error { return nil }
+func (m *mockAdminClient) ApplyChaosProfile(name string) error {
+	if m.applyChaosProfileFn != nil {
+		return m.applyChaosProfileFn(name)
+	}
+	return nil
+}
 
 func (m *mockAdminClient) GetChaosStats() (map[string]interface{}, error) {
+	if m.getChaosStatsFn != nil {
+		return m.getChaosStatsFn()
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) ResetChaosStats() error { return nil }
+func (m *mockAdminClient) ResetChaosStats() error {
+	if m.resetChaosStatsFn != nil {
+		return m.resetChaosStatsFn()
+	}
+	return nil
+}
 
 func (m *mockAdminClient) GetStatefulFaultStats() (map[string]interface{}, error) {
+	if m.getStatefulFaultsFn != nil {
+		return m.getStatefulFaultsFn()
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) TripCircuitBreaker(_ string) error { return nil }
+func (m *mockAdminClient) TripCircuitBreaker(key string) error {
+	if m.tripCircuitBreakerFn != nil {
+		return m.tripCircuitBreakerFn(key)
+	}
+	return nil
+}
 
-func (m *mockAdminClient) ResetCircuitBreaker(_ string) error { return nil }
+func (m *mockAdminClient) ResetCircuitBreaker(key string) error {
+	if m.resetCircuitBreakerFn != nil {
+		return m.resetCircuitBreakerFn(key)
+	}
+	return nil
+}
 
 // --- MQTT ---
 
@@ -216,46 +322,90 @@ func (m *mockAdminClient) ResetStatefulResource(name string) error {
 // --- Custom Operations ---
 
 func (m *mockAdminClient) ListCustomOperations() ([]cli.CustomOperationInfo, error) {
+	if m.listCustomOperationsFn != nil {
+		return m.listCustomOperationsFn()
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) GetCustomOperation(_ string) (*cli.CustomOperationDetail, error) {
+func (m *mockAdminClient) GetCustomOperation(name string) (*cli.CustomOperationDetail, error) {
+	if m.getCustomOperationFn != nil {
+		return m.getCustomOperationFn(name)
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) RegisterCustomOperation(_ map[string]interface{}) error { return nil }
+func (m *mockAdminClient) RegisterCustomOperation(definition map[string]interface{}) error {
+	if m.registerCustomOpFn != nil {
+		return m.registerCustomOpFn(definition)
+	}
+	return nil
+}
 
-func (m *mockAdminClient) DeleteCustomOperation(_ string) error { return nil }
+func (m *mockAdminClient) DeleteCustomOperation(name string) error {
+	if m.deleteCustomOpFn != nil {
+		return m.deleteCustomOpFn(name)
+	}
+	return nil
+}
 
-func (m *mockAdminClient) ExecuteCustomOperation(_ string, _ map[string]interface{}) (map[string]interface{}, error) {
+func (m *mockAdminClient) ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error) {
+	if m.executeCustomOpFn != nil {
+		return m.executeCustomOpFn(name, input)
+	}
 	return nil, nil
 }
 
 // --- Verification ---
 
-func (m *mockAdminClient) GetMockVerification(_ string) (map[string]interface{}, error) {
+func (m *mockAdminClient) GetMockVerification(id string) (map[string]interface{}, error) {
+	if m.getMockVerificationFn != nil {
+		return m.getMockVerificationFn(id)
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) VerifyMock(_ string, _ map[string]interface{}) (map[string]interface{}, error) {
+func (m *mockAdminClient) VerifyMock(id string, expected map[string]interface{}) (map[string]interface{}, error) {
+	if m.verifyMockFn != nil {
+		return m.verifyMockFn(id, expected)
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) ListMockInvocations(_ string) (map[string]interface{}, error) {
+func (m *mockAdminClient) ListMockInvocations(id string) (map[string]interface{}, error) {
+	if m.listMockInvocationsFn != nil {
+		return m.listMockInvocationsFn(id)
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) ResetMockVerification(_ string) error { return nil }
+func (m *mockAdminClient) ResetMockVerification(id string) error {
+	if m.resetMockVerificationFn != nil {
+		return m.resetMockVerificationFn(id)
+	}
+	return nil
+}
 
-func (m *mockAdminClient) ResetAllVerification() error { return nil }
+func (m *mockAdminClient) ResetAllVerification() error {
+	if m.resetAllVerificationFn != nil {
+		return m.resetAllVerificationFn()
+	}
+	return nil
+}
 
 // --- Workspaces ---
 
 func (m *mockAdminClient) ListWorkspaces() ([]*cli.WorkspaceDTO, error) {
+	if m.listWorkspacesFn != nil {
+		return m.listWorkspacesFn()
+	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) CreateWorkspace(_ string) (*cli.WorkspaceResult, error) {
+func (m *mockAdminClient) CreateWorkspace(name string) (*cli.WorkspaceResult, error) {
+	if m.createWorkspaceFn != nil {
+		return m.createWorkspaceFn(name)
+	}
 	return nil, nil
 }
 
