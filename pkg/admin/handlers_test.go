@@ -276,7 +276,7 @@ func (mes *mockEngineServer) client() *engineclient.Client {
 // TestHandleHealth tests the GET /health handler.
 func TestHandleHealth(t *testing.T) {
 	t.Run("returns healthy status", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/health", nil)
 		rec := httptest.NewRecorder()
@@ -340,7 +340,7 @@ func TestHandleGetStatus(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/status", nil)
 		rec := httptest.NewRecorder()
@@ -500,7 +500,7 @@ func TestHandleImportConfig(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		// This is the format returned by GET /config (export) — no "config" wrapper.
 		importData := map[string]interface{}{
@@ -530,7 +530,7 @@ func TestHandleImportConfig(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		importData := map[string]interface{}{
 			"replace": false,
@@ -555,7 +555,7 @@ func TestHandleImportConfig(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("POST", "/config", bytes.NewReader([]byte("invalid")))
 		req.Header.Set("Content-Type", "application/json")
@@ -567,7 +567,7 @@ func TestHandleImportConfig(t *testing.T) {
 	})
 
 	t.Run("supports dryRun query bool variants", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		importData := map[string]interface{}{
 			"config": map[string]interface{}{
@@ -599,7 +599,7 @@ func TestHandleImportConfig(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		importData := map[string]interface{}{
 			"config": map[string]interface{}{
@@ -624,7 +624,7 @@ func TestHandleListRequests(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/requests", nil)
 		rec := httptest.NewRecorder()
@@ -635,7 +635,7 @@ func TestHandleListRequests(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/requests", nil)
 		rec := httptest.NewRecorder()
@@ -695,7 +695,7 @@ func TestHandleGetRequest(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/requests/req-123", nil)
 		req.SetPathValue("id", "req-123")
@@ -710,7 +710,7 @@ func TestHandleGetRequest(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/requests/", nil)
 		req.SetPathValue("id", "")
@@ -722,7 +722,7 @@ func TestHandleGetRequest(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/requests/req-123", nil)
 		req.SetPathValue("id", "req-123")
@@ -740,7 +740,7 @@ func TestHandleClearRequests(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("DELETE", "/requests", nil)
 		rec := httptest.NewRecorder()
@@ -751,7 +751,7 @@ func TestHandleClearRequests(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("DELETE", "/requests", nil)
 		rec := httptest.NewRecorder()
@@ -805,7 +805,7 @@ func TestWriteError(t *testing.T) {
 func TestHandleListEngines(t *testing.T) {
 	t.Run("returns empty list when no local engine configured", func(t *testing.T) {
 		// Create API without local engine
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/engines", nil)
 		rec := httptest.NewRecorder()
@@ -826,7 +826,7 @@ func TestHandleListEngines(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/engines", nil)
 		rec := httptest.NewRecorder()
@@ -853,7 +853,7 @@ func TestHandleListEngines(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		// Register a remote engine
 		remoteEngine := &store.Engine{
@@ -887,7 +887,7 @@ func TestHandleListEngines(t *testing.T) {
 	t.Run("returns offline status when local engine is unreachable", func(t *testing.T) {
 		// Create a client that points to a non-existent server
 		client := engineclient.New("http://localhost:99999")
-		api := NewAPI(0, WithLocalEngineClient(client))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(client))
 
 		req := httptest.NewRequest("GET", "/engines", nil)
 		rec := httptest.NewRecorder()

@@ -39,7 +39,7 @@ func TestHandleGenerateCA_EmptyBodyStillReturnsMissingPath(t *testing.T) {
 }
 
 func TestHandleCloseSSEConnection_InvalidJSONReturns400(t *testing.T) {
-	api := NewAPI(0, WithLocalEngineClient(engineclient.New("http://localhost:99999")))
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(engineclient.New("http://localhost:99999")))
 	defer api.Stop()
 
 	req := httptest.NewRequest(http.MethodDelete, "/sse/connections/conn-1", strings.NewReader(`{"graceful":`))
@@ -54,7 +54,7 @@ func TestHandleCloseSSEConnection_InvalidJSONReturns400(t *testing.T) {
 }
 
 func TestHandleCloseSSEConnection_EmptyBodyDoesNotDecodeFail(t *testing.T) {
-	api := NewAPI(0, WithLocalEngineClient(engineclient.New("http://127.0.0.1:1")))
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(engineclient.New("http://127.0.0.1:1")))
 	defer api.Stop()
 
 	req := httptest.NewRequest(http.MethodDelete, "/sse/connections/conn-1", strings.NewReader(""))

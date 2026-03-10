@@ -9,6 +9,7 @@ import (
 func TestTokenExpiration(t *testing.T) {
 	// Create an API with very short expiration for testing
 	api := NewAPI(0,
+		WithDataDir(t.TempDir()),
 		WithRegistrationTokenExpiration(100*time.Millisecond),
 		WithEngineTokenExpiration(100*time.Millisecond),
 	)
@@ -80,6 +81,7 @@ func TestTokenExpiration(t *testing.T) {
 func TestTokenCleanup(t *testing.T) {
 	// Create API with short expiration
 	api := NewAPI(0,
+		WithDataDir(t.TempDir()),
 		WithRegistrationTokenExpiration(50*time.Millisecond),
 		WithEngineTokenExpiration(50*time.Millisecond),
 	)
@@ -143,7 +145,7 @@ func TestTokenCleanupGoroutine(t *testing.T) {
 	// This test verifies the cleanup goroutine starts and stops properly
 	ctx, cancel := context.WithCancel(context.Background())
 
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	api.ctx = ctx
 	api.cancel = cancel
 
@@ -187,6 +189,7 @@ func TestTokenCleanupGoroutine(t *testing.T) {
 
 func TestListRegistrationTokensExcludesExpired(t *testing.T) {
 	api := NewAPI(0,
+		WithDataDir(t.TempDir()),
 		WithRegistrationTokenExpiration(50*time.Millisecond),
 	)
 	defer api.Stop()
@@ -240,7 +243,7 @@ func TestStoredTokenIsExpired(t *testing.T) {
 }
 
 func TestDefaultExpirationValues(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	if api.registrationTokenExpiration != RegistrationTokenExpiration {
@@ -259,6 +262,7 @@ func TestCustomExpirationValues(t *testing.T) {
 	customEngExp := 12 * time.Hour
 
 	api := NewAPI(0,
+		WithDataDir(t.TempDir()),
 		WithRegistrationTokenExpiration(customRegExp),
 		WithEngineTokenExpiration(customEngExp),
 	)
@@ -278,6 +282,7 @@ func TestCustomExpirationValues(t *testing.T) {
 func TestInvalidExpirationValuesIgnored(t *testing.T) {
 	// Zero or negative values should be ignored
 	api := NewAPI(0,
+		WithDataDir(t.TempDir()),
 		WithRegistrationTokenExpiration(0),
 		WithEngineTokenExpiration(-1*time.Hour),
 	)

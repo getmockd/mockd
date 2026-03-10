@@ -60,7 +60,7 @@ func TestHandleGetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -90,7 +90,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -122,7 +122,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -158,7 +158,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -189,7 +189,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -226,7 +226,7 @@ func TestHandleGetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -247,7 +247,7 @@ func TestHandleGetChaos(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAPI(0) // No engine
+		api := NewAPI(0, WithDataDir(t.TempDir())) // No engine
 
 		req := httptest.NewRequest("GET", "/chaos", nil)
 		rec := httptest.NewRecorder()
@@ -269,7 +269,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -302,7 +302,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -332,7 +332,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -376,7 +376,7 @@ func TestHandleSetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: false,
@@ -409,7 +409,7 @@ func TestHandleSetChaos(t *testing.T) {
 			},
 		}
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		// Update to different config
 		newConfig := engineclient.ChaosConfig{
@@ -449,7 +449,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("PUT", "/chaos", bytes.NewReader([]byte("invalid json")))
 		req.Header.Set("Content-Type", "application/json")
@@ -462,7 +462,7 @@ func TestHandleSetChaos(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAPI(0) // No engine
+		api := NewAPI(0, WithDataDir(t.TempDir())) // No engine
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -487,7 +487,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("PUT", "/chaos", bytes.NewReader([]byte("")))
 		req.Header.Set("Content-Type", "application/json")
@@ -503,7 +503,7 @@ func TestHandleSetChaos(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		// Send config with explicit null values
 		body := []byte(`{"enabled": true, "latency": null, "errorRate": null}`)
@@ -527,7 +527,7 @@ func TestChaosConfigValidation(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -553,7 +553,7 @@ func TestChaosConfigValidation(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		chaosConfig := engineclient.ChaosConfig{
 			Enabled: true,
@@ -583,7 +583,7 @@ func TestChaosConfigValidation(t *testing.T) {
 				server := newMockChaosEngineServer()
 				defer server.Close()
 
-				api := NewAPI(0, WithLocalEngineClient(server.client()))
+				api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 				chaosConfig := engineclient.ChaosConfig{
 					Enabled: true,
@@ -613,7 +613,7 @@ func TestChaosHandlerRoundTrip(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		// Get initial config
 		req := httptest.NewRequest("GET", "/chaos", nil)
@@ -673,7 +673,7 @@ func TestChaosHandlerConcurrency(t *testing.T) {
 			},
 		}
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		// Make multiple concurrent GET requests
 		done := make(chan bool, 10)
@@ -699,7 +699,7 @@ func TestChaosHandlerConcurrency(t *testing.T) {
 // TestHandleListChaosProfiles tests the GET /chaos/profiles handler.
 func TestHandleListChaosProfiles(t *testing.T) {
 	t.Run("returns all 10 profiles", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/chaos/profiles", nil)
 		rec := httptest.NewRecorder()
@@ -722,7 +722,7 @@ func TestHandleListChaosProfiles(t *testing.T) {
 	})
 
 	t.Run("all profiles have required fields", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/chaos/profiles", nil)
 		rec := httptest.NewRecorder()
@@ -741,7 +741,7 @@ func TestHandleListChaosProfiles(t *testing.T) {
 	})
 
 	t.Run("does not require engine", func(t *testing.T) {
-		api := NewAPI(0) // No engine — profiles are static data
+		api := NewAPI(0, WithDataDir(t.TempDir())) // No engine — profiles are static data
 
 		req := httptest.NewRequest("GET", "/chaos/profiles", nil)
 		rec := httptest.NewRecorder()
@@ -755,7 +755,7 @@ func TestHandleListChaosProfiles(t *testing.T) {
 // TestHandleGetChaosProfile tests the GET /chaos/profiles/{name} handler.
 func TestHandleGetChaosProfile(t *testing.T) {
 	t.Run("returns specific profile", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/chaos/profiles/slow-api", nil)
 		req.SetPathValue("name", "slow-api")
@@ -778,7 +778,7 @@ func TestHandleGetChaosProfile(t *testing.T) {
 	})
 
 	t.Run("returns profile with error rate", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/chaos/profiles/offline", nil)
 		req.SetPathValue("name", "offline")
@@ -798,7 +798,7 @@ func TestHandleGetChaosProfile(t *testing.T) {
 	})
 
 	t.Run("returns profile with bandwidth", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/chaos/profiles/mobile-3g", nil)
 		req.SetPathValue("name", "mobile-3g")
@@ -819,7 +819,7 @@ func TestHandleGetChaosProfile(t *testing.T) {
 	})
 
 	t.Run("returns 404 for unknown profile", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/chaos/profiles/nonexistent", nil)
 		req.SetPathValue("name", "nonexistent")
@@ -837,7 +837,7 @@ func TestHandleGetChaosProfile(t *testing.T) {
 	})
 
 	t.Run("returns 400 for empty name", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/chaos/profiles/", nil)
 		req.SetPathValue("name", "")
@@ -855,7 +855,7 @@ func TestHandleApplyChaosProfile(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("POST", "/chaos/profiles/slow-api/apply", nil)
 		req.SetPathValue("name", "slow-api")
@@ -882,7 +882,7 @@ func TestHandleApplyChaosProfile(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("POST", "/chaos/profiles/offline/apply", nil)
 		req.SetPathValue("name", "offline")
@@ -902,7 +902,7 @@ func TestHandleApplyChaosProfile(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("POST", "/chaos/profiles/overloaded/apply", nil)
 		req.SetPathValue("name", "overloaded")
@@ -927,7 +927,7 @@ func TestHandleApplyChaosProfile(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("POST", "/chaos/profiles/nonexistent/apply", nil)
 		req.SetPathValue("name", "nonexistent")
@@ -947,7 +947,7 @@ func TestHandleApplyChaosProfile(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		req := httptest.NewRequest("POST", "/chaos/profiles//apply", nil)
 		req.SetPathValue("name", "")
@@ -959,7 +959,7 @@ func TestHandleApplyChaosProfile(t *testing.T) {
 	})
 
 	t.Run("returns error when no engine connected", func(t *testing.T) {
-		api := NewAPI(0) // No engine
+		api := NewAPI(0, WithDataDir(t.TempDir())) // No engine
 
 		req := httptest.NewRequest("POST", "/chaos/profiles/slow-api/apply", nil)
 		req.SetPathValue("name", "slow-api")
@@ -980,7 +980,7 @@ func TestHandleApplyChaosProfile(t *testing.T) {
 // TestChaosConfigToAPI tests the internal conversion from chaos.ChaosConfig to API types.
 func TestChaosConfigToAPI(t *testing.T) {
 	t.Run("converts all 10 profiles without error", func(t *testing.T) {
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 
 		req := httptest.NewRequest("GET", "/chaos/profiles", nil)
 		rec := httptest.NewRecorder()
@@ -1005,7 +1005,7 @@ func TestChaosConfigToAPI(t *testing.T) {
 		server := newMockChaosEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0, WithLocalEngineClient(server.client()))
+		api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 
 		// Apply a profile
 		req := httptest.NewRequest("POST", "/chaos/profiles/degraded/apply", nil)

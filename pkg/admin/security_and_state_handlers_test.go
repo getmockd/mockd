@@ -56,7 +56,7 @@ func TestFolderUpdate_RejectsCrossWorkspaceParent(t *testing.T) {
 }
 
 func TestAPIKeyMiddleware_DoesNotAcceptQueryParam(t *testing.T) {
-	api := NewAPI(0, WithAPIKey("mk_test_key"))
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithAPIKey("mk_test_key"))
 	defer api.Stop()
 
 	req := httptest.NewRequest(http.MethodGet, "/status?api_key=mk_test_key", nil)
@@ -70,7 +70,7 @@ func TestAPIKeyMiddleware_DoesNotAcceptQueryParam(t *testing.T) {
 }
 
 func TestHandleGetAPIKey_ShowKeyBoolParsing(t *testing.T) {
-	api := NewAPI(0, WithAPIKey("mk_test_key"))
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithAPIKey("mk_test_key"))
 	defer api.Stop()
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/api-key?show_key=1", nil)

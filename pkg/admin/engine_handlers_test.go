@@ -17,7 +17,7 @@ import (
 )
 
 func TestHandleAssignWorkspace_ValidatesWorkspaceID(t *testing.T) {
-	api := NewAPI(0, WithAPIKeyDisabled())
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithAPIKeyDisabled())
 	if err := api.engineRegistry.Register(&store.Engine{
 		ID:   "eng-1",
 		Name: "test-engine",
@@ -110,7 +110,7 @@ func TestSyncAdminStoreToEngine(t *testing.T) {
 		server := newMockEngineServer()
 		defer server.Close()
 
-		api := NewAPI(0)
+		api := NewAPI(0, WithDataDir(t.TempDir()))
 		api.dataStore = nil
 
 		// Should not panic.

@@ -13,7 +13,7 @@ import (
 )
 
 func TestHandleGenerateFromTemplate_InvalidJSONReturns400(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	req := httptest.NewRequest(http.MethodPost, "/templates/blank", strings.NewReader(`{"parameters":`))

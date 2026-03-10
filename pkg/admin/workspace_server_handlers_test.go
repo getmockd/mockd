@@ -40,7 +40,7 @@ func (m *stubWorkspaceManager) ListWorkspaces() []workspace.Server              
 func (m *stubWorkspaceManager) GetWorkspaceStatus(_ string) *workspace.StatusInfo { return nil }
 
 func TestHandleStopWorkspaceServer_NotRunningReturns400(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	engine := &store.Engine{ID: "eng-1", Workspaces: []store.EngineWorkspace{{WorkspaceID: "ws-1"}}}
@@ -62,7 +62,7 @@ func TestHandleStopWorkspaceServer_NotRunningReturns400(t *testing.T) {
 }
 
 func TestHandleStartWorkspaceServer_AlreadyRunningReturns409(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	engine := &store.Engine{ID: "eng-1", Workspaces: []store.EngineWorkspace{{WorkspaceID: "ws-1", HTTPPort: 8081}}}
@@ -84,7 +84,7 @@ func TestHandleStartWorkspaceServer_AlreadyRunningReturns409(t *testing.T) {
 }
 
 func TestHandleStopWorkspaceServer_StartingIsStoppable(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	engine := &store.Engine{ID: "eng-1", Workspaces: []store.EngineWorkspace{{WorkspaceID: "ws-1"}}}

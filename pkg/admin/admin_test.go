@@ -129,6 +129,7 @@ func TestIsLocalhost_InvalidIP_ReturnsFalse(t *testing.T) {
 func TestLocalhostBypass_Disabled_RequiresAuth(t *testing.T) {
 	// Create API with localhost bypass DISABLED (default)
 	api := NewAPI(0,
+		WithDataDir(t.TempDir()),
 		WithAPIKey("test-api-key"),
 		WithAllowLocalhostBypass(false),
 	)
@@ -151,6 +152,7 @@ func TestLocalhostBypass_Disabled_RequiresAuth(t *testing.T) {
 func TestLocalhostBypass_Enabled_AllowsLocalhost(t *testing.T) {
 	// Create API with localhost bypass ENABLED
 	api := NewAPI(0,
+		WithDataDir(t.TempDir()),
 		WithAPIKey("test-api-key"),
 		WithAPIKeyAllowLocalhost(true),
 	)
@@ -175,6 +177,7 @@ func TestLocalhostBypass_Enabled_AllowsLocalhost(t *testing.T) {
 func TestLocalhostBypass_Enabled_ExternalStillRequiresAuth(t *testing.T) {
 	// Create API with localhost bypass ENABLED
 	api := NewAPI(0,
+		WithDataDir(t.TempDir()),
 		WithAPIKey("test-api-key"),
 		WithAPIKeyAllowLocalhost(true),
 	)
@@ -553,7 +556,7 @@ func TestStatefulHandler_GetResource_SetsContentType(t *testing.T) {
 	server := newMockEngineServer()
 	defer server.Close()
 
-	api := NewAPI(0, WithLocalEngineClient(server.client()))
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 	defer api.Stop()
 
 	req := httptest.NewRequest("GET", "/state/resources/users", nil)
@@ -572,7 +575,7 @@ func TestStatefulHandler_ClearResource_SetsContentType(t *testing.T) {
 	server := newMockEngineServer()
 	defer server.Close()
 
-	api := NewAPI(0, WithLocalEngineClient(server.client()))
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(server.client()))
 	defer api.Stop()
 
 	req := httptest.NewRequest("DELETE", "/state/resources/users/clear", nil)
@@ -592,7 +595,7 @@ func TestStatefulHandler_ClearResource_SetsContentType(t *testing.T) {
 // ============================================================================
 
 func TestHealthHandler_ReturnsOK(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -610,7 +613,7 @@ func TestHealthHandler_ReturnsOK(t *testing.T) {
 }
 
 func TestHealthHandler_ReturnsUptime(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	api.startTime = time.Now().Add(-10 * time.Second) // Simulate 10 seconds uptime
 	defer api.Stop()
 
@@ -631,7 +634,7 @@ func TestHealthHandler_ReturnsUptime(t *testing.T) {
 // ============================================================================
 
 func TestGenerateToken_ReturnsNonEmpty(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	token, err := api.GenerateRegistrationToken()
@@ -643,7 +646,7 @@ func TestGenerateToken_ReturnsNonEmpty(t *testing.T) {
 }
 
 func TestGenerateToken_ReturnsUnique(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	tokens := make(map[string]bool)
@@ -656,7 +659,7 @@ func TestGenerateToken_ReturnsUnique(t *testing.T) {
 }
 
 func TestValidateToken_ValidToken_ReturnsTrue(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	token, err := api.GenerateRegistrationToken()
@@ -668,7 +671,7 @@ func TestValidateToken_ValidToken_ReturnsTrue(t *testing.T) {
 }
 
 func TestValidateToken_InvalidToken_ReturnsFalse(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	// Try to validate a token that was never generated
@@ -679,6 +682,7 @@ func TestValidateToken_InvalidToken_ReturnsFalse(t *testing.T) {
 func TestValidateToken_ExpiredToken_ReturnsFalse(t *testing.T) {
 	// Create API with very short token expiration
 	api := NewAPI(0,
+		WithDataDir(t.TempDir()),
 		WithRegistrationTokenExpiration(50*time.Millisecond),
 	)
 	defer api.Stop()
@@ -694,7 +698,7 @@ func TestValidateToken_ExpiredToken_ReturnsFalse(t *testing.T) {
 }
 
 func TestValidateToken_ConsumedOnUse(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	token, err := api.GenerateRegistrationToken()
@@ -714,7 +718,7 @@ func TestValidateToken_ConsumedOnUse(t *testing.T) {
 // ============================================================================
 
 func TestEngineToken_ValidToken_ReturnsTrue(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	engineID := "test-engine-1"
@@ -726,7 +730,7 @@ func TestEngineToken_ValidToken_ReturnsTrue(t *testing.T) {
 }
 
 func TestEngineToken_WrongEngineID_ReturnsFalse(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	engineID := "test-engine-1"
@@ -739,7 +743,7 @@ func TestEngineToken_WrongEngineID_ReturnsFalse(t *testing.T) {
 }
 
 func TestEngineToken_WrongToken_ReturnsFalse(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	engineID := "test-engine-1"
@@ -752,7 +756,7 @@ func TestEngineToken_WrongToken_ReturnsFalse(t *testing.T) {
 }
 
 func TestEngineToken_NonExistentEngine_ReturnsFalse(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	isValid := api.ValidateEngineToken("non-existent", "any-token")
@@ -812,7 +816,7 @@ func TestRateLimiter_AllowsBurstRequests(t *testing.T) {
 // ============================================================================
 
 func TestAPISetLogger_NilSafety(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	// Setting a nil logger should not panic and should fall back to nop
@@ -827,7 +831,7 @@ func TestAPISetLogger_NilSafety(t *testing.T) {
 }
 
 func TestAPISetLogger_PropagatesLogger(t *testing.T) {
-	api := NewAPI(0)
+	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer api.Stop()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))

@@ -14,7 +14,7 @@ import (
 // TestVerifyMock_NoEngine tests that handlers properly return errors when no engine is connected.
 func TestVerifyMock_NoEngine(t *testing.T) {
 	// Create admin API without engine client
-	adminAPI := NewAPI(0)
+	adminAPI := NewAPI(0, WithDataDir(t.TempDir()))
 
 	t.Run("handleGetMockVerification returns no_engine error", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/mocks/test-id/verify", nil)
@@ -94,7 +94,7 @@ func TestVerifyMock_NoEngine(t *testing.T) {
 
 // TestEvaluateVerification tests the verification logic without needing an engine.
 func TestEvaluateVerification(t *testing.T) {
-	adminAPI := NewAPI(0)
+	adminAPI := NewAPI(0, WithDataDir(t.TempDir()))
 
 	t.Run("atLeast passes when count meets minimum", func(t *testing.T) {
 		minVal := 3
