@@ -34,7 +34,7 @@ mocks:
 
 serverConfig: { ... }       # Optional server settings
 statefulResources: [ ... ]  # Optional CRUD resources
-tables: { ... }             # Optional named data stores
+tables: [ ... ]             # Optional stateful data tables
 extend: [ ... ]             # Optional mock-to-table bindings
 imports: [ ... ]            # Optional spec imports with namespacing
 customOperations: [ ... ]   # Optional multi-step operations
@@ -679,15 +679,21 @@ customOperations:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `type` | string | Step type: `read`, `create`, `update`, `delete`, `set` |
-| `resource` | string | Stateful resource name (for read/create/update/delete) |
+| `type` | string | Step type: `read`, `create`, `update`, `delete`, `set`, `list`, `validate` |
+| `resource` | string | Stateful resource name (for read/create/update/delete/list) |
 | `id` | string | Expression resolving to item ID (for read/update/delete) |
-| `as` | string | Variable name to store the result (required for `read`, optional for `create`/`update`) |
+| `as` | string | Variable name to store the result (required for `read`/`list`, optional for `create`/`update`) |
 | `set` | map | Field → expression map (for create/update) |
 | `var` | string | Variable name (for set steps) |
 | `value` | string | Expression value (for set steps) |
+| `filter` | map | Field → expression map for filtering items (for list steps) |
+| `condition` | string | Boolean expression (for validate steps — halts operation if false) |
+| `errorMessage` | string | Error message returned when validate fails |
+| `errorStatus` | integer | HTTP status code for validate failures (default: 400) |
 
 Expressions use [expr-lang/expr](https://github.com/expr-lang/expr) syntax. The environment includes `input` (request data) and variables from prior steps (from `as` and `set.var`).
+
+**String literals in expressions:** To set a field to a literal string value, wrap the string in inner quotes: `'"succeeded"'`. Without inner quotes (e.g., `"succeeded"`), expr-lang treats the value as a variable reference. See the [Custom Operations guide](/guides/stateful-mocking/#string-literals-in-expressions) for details and examples.
 
 Use `mockd stateful custom validate --file <op.yaml>` to preflight custom operations before registering them. Add `--strict` to fail on warnings (for example, empty `set` maps). For stronger preflight checks, provide sample input and run `--check-expressions-runtime` with `--fixtures-file` to evaluate expressions without writing state.
 
@@ -929,7 +935,7 @@ Tables are named data stores — pure in-memory collections with no routing or H
 version: "1.0"
 
 tables:
-  users:
+  - name: users
     idField: id
     seedData:
       - id: "1"
@@ -938,7 +944,7 @@ tables:
       - id: "2"
         name: "Bob"
         email: "bob@example.com"
-  products:
+  - name: products
     idField: sku
     seedData:
       - sku: "WIDGET-001"
@@ -953,10 +959,126 @@ mocks: []
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `idField` | string | `"id"` | Field name for resource ID |
+| `idStrategy` | string | `"uuid"` | ID generation strategy: `uuid` (36-char UUID v4), `prefix` (prefix + 16 hex chars), `ulid` (26-char time-sortable), `sequence` (auto-incrementing integer), `short` (16 hex chars) |
+| `idPrefix` | string | `""` | Prefix for generated IDs (when `idStrategy: prefix`, e.g., `"cus_"`) |
+| `parentField` | string | `""` | Foreign key field for sub-resource filtering by parent |
+| `maxItems` | integer | `0` | Max items in the table (0 = unlimited) |
 | `seedData` | array | `[]` | Initial data to load |
 | `validation` | object | | Validation rules ([see Validation](#validation)) |
+| `response` | object | | Response transform config ([see Response Transform](#response-transform)) |
+| `relationships` | map | `{}` | Field-to-table mappings for `?expand[]` support |
 
-Tables are keyed by name (e.g., `users`, `products`). Internally, tables are converted into `statefulResources` entries — but unlike the legacy `statefulResources` + `basePath` pattern, tables never auto-generate HTTP endpoints. All routing is explicit via `extend`.
+Each table has a `name` field (e.g., `users`, `products`). Internally, tables are converted into `statefulResources` entries — but unlike the legacy `statefulResources` + `basePath` pattern, tables never auto-generate HTTP endpoints. All routing is explicit via `extend`.
+
+### Response Transform
+
+Tables and extend bindings support a `response` field that controls how stateful data is shaped before it's returned to clients. Binding-level overrides replace (not merge with) the table default.
+
+```yaml
+tables:
+  - name: customers
+    response:
+      timestamps:
+        format: unix
+        fields:
+          createdAt: created
+          updatedAt: updated
+      fields:
+        inject: { object: customer, livemode: false }
+        hide: [updatedAt]
+        rename: { firstName: first_name }
+        wrapAsList:
+          items:
+            url: "/v1/customers/{{id}}/items"
+      list:
+        dataField: data
+        extraFields: { object: list, has_more: false }
+        metaFields: { total: total_count }
+        hideMeta: true
+      create:
+        status: 200
+      delete:
+        status: 200
+        preserve: true
+        body:
+          id: "{{item.id}}"
+          object: customer
+          deleted: true
+      errors:
+        wrap: error
+        fields: { message: message, type: type, code: code }
+        inject: { doc_url: "https://docs.example.com" }
+        typeMap: { NOT_FOUND: invalid_request_error }
+        codeMap: { NOT_FOUND: resource_missing }
+```
+
+#### ResponseTransform Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamps` | object | Timestamp format and field renaming |
+| `fields` | object | Field injection, hiding, renaming, and array wrapping |
+| `list` | object | List envelope customization (HTTP-specific) |
+| `create` | object | Create verb override (status code) |
+| `delete` | object | Delete verb override (status, body, preserve) |
+| `errors` | object | Error response format customization |
+
+#### Timestamps
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `format` | string | `"rfc3339"` | Output format: `unix` (epoch seconds), `iso8601` (RFC3339 string), `rfc3339` (no-op), `none` (remove timestamps) |
+| `fields` | map | `{}` | Rename timestamp keys. Keys: `createdAt`, `updatedAt`. Values: output names. |
+
+#### Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `inject` | map | `{}` | Static key-value pairs added to every item response |
+| `hide` | array | `[]` | Field names to remove from responses (data still stored) |
+| `rename` | map | `{}` | Key renames applied to responses (key: original, value: output) |
+| `wrapAsList` | map | `{}` | Array fields to wrap in `{object: "list", data: [...], has_more: false}` envelopes. Value is a `ListWrapConfig` with optional `url` template. |
+
+**ListWrapConfig:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `url` | string | URL template for the sub-resource list. Supports `{{fieldName}}` substitution from the parent item. |
+
+#### List
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `dataField` | string | `"data"` | Key for the items array in the list envelope |
+| `extraFields` | map | `{}` | Static fields on the list envelope (including `null` values). All values are passed through as-is except `has_more`, which is dynamically computed from pagination state. |
+| `metaFields` | map | `{}` | Rename pagination meta keys: `total`, `limit`, `offset`, `count` |
+| `hideMeta` | boolean | `false` | Omit pagination metadata entirely |
+
+#### Create (VerbOverride)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `status` | integer | `201` | HTTP status code for create responses |
+
+#### Delete (VerbOverride)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `status` | integer | `204` | HTTP status code for delete responses |
+| `body` | map | `nil` | Response body template. Supports `{{item.fieldName}}` substitution from the deleted item. |
+| `preserve` | boolean | `false` | Soft delete: return the configured response but keep the item in the store |
+
+#### Errors (ErrorTransform)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `wrap` | string | `""` | Nest the error object under this key (e.g., `"error"` produces `{"error":{...}}`) |
+| `fields` | map | `{}` | Map mockd error fields (`message`, `code`, `type`, `resource`, `id`, `field`) to custom names |
+| `inject` | map | `{}` | Static fields on every error response |
+| `typeMap` | map | `{}` | Map error codes (`NOT_FOUND`, `CONFLICT`, `VALIDATION_ERROR`, `CAPACITY_EXCEEDED`, `INTERNAL_ERROR`) to custom type strings |
+| `codeMap` | map | `{}` | Map error codes to custom code strings |
+
+**Transform execution order:** rename > hide > wrapAsList > timestamps > inject. See the [Response Transforms guide](/guides/stateful-mocking/#response-transforms) for detailed examples and the full Stripe digital twin walkthrough.
 
 ---
 
@@ -968,7 +1090,7 @@ Extend bindings wire mock endpoints to tables. Each binding references a mock (b
 version: "1.0"
 
 tables:
-  users:
+  - name: users
     seedData:
       - id: "1"
         name: "Alice"
@@ -1023,6 +1145,7 @@ extend:
 | `table` | string | Yes | Name of the table to operate on |
 | `action` | string | Yes | CRUD action: `list`, `get`, `create`, `update`, `patch`, `delete`, `custom` |
 | `operation` | string | No | Operation name (required when `action: custom`) |
+| `response` | object | No | Response transform override for this binding ([see Response Transform](#response-transform)). Replaces (does not merge with) the table default. |
 
 ### Supported Actions
 
@@ -1031,8 +1154,8 @@ extend:
 | `list` | List all items in the table |
 | `get` | Get a single item by ID (extracted from path parameter) |
 | `create` | Create a new item from the request body |
-| `update` | Replace an item (PUT semantics) |
-| `patch` | Partially update an item (PATCH semantics) |
+| `update` | Fully replace an item (PUT semantics — replaces all fields). Missing fields are removed from the stored item. |
+| `patch` | Partially update an item (PATCH semantics — merges sent fields into existing item). Works with any HTTP method. Use this for POST-as-update endpoints (e.g., Stripe) where only fields present in the body are updated. |
 | `delete` | Delete an item by ID |
 | `custom` | Execute a named custom operation (requires `operation` field) |
 
@@ -1058,18 +1181,18 @@ Imports load external API specifications (OpenAPI, WSDL) and generate mocks with
 version: "1.0"
 
 imports:
-  - spec: ./stripe-openapi.yaml
-    namespace: stripe
+  - path: ./stripe-openapi.yaml
+    as: stripe
     format: openapi
 
 tables:
-  customers:
+  - name: customers
     seedData:
       - id: "cus_001"
         name: "Alice"
 
 extend:
-  - mock: stripe/list-customers
+  - mock: stripe.ListCustomers
     table: customers
     action: list
 ```
@@ -1078,11 +1201,14 @@ extend:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `spec` | string | Yes | Path to the spec file (OpenAPI, WSDL, etc.) |
-| `namespace` | string | Yes | Prefix for generated mock IDs (e.g., `stripe`) |
+| `path` | string | Yes* | Local file path to the spec (resolved relative to the config file). Exactly one of `path` or `url` must be set. |
+| `url` | string | Yes* | Remote URL to fetch the spec from. Exactly one of `path` or `url` must be set. |
+| `as` | string | No | Namespace prefix for generated mock IDs (e.g., `stripe`). Imported mocks get `{as}.{operationId}`. If empty, the raw operationId is used. |
 | `format` | string | No | Spec format (auto-detected if omitted): `openapi`, `wsdl` |
 
-Imported mocks receive IDs prefixed with the namespace (e.g., `stripe/list-customers`). You can then reference these IDs in `extend` bindings to wire them to your tables.
+Imported mocks receive IDs prefixed with the namespace using dot notation (e.g., `stripe.ListCustomers`). You can then reference these IDs in `extend` bindings to wire them to your tables.
+
+Endpoints that are NOT bound via `extend` remain as static schema-generated mocks — they return example responses from the spec without any stateful behavior. Use `mockd list` on a running server to discover all generated mock IDs and their operationIds.
 
 ---
 
@@ -1364,7 +1490,7 @@ mocks:
         statusCode: 200
 
 tables:
-  posts:
+  - name: posts
     seedData:
       - id: "1"
         title: "First Post"

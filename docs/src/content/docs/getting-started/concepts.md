@@ -264,7 +264,7 @@ The stateful architecture uses two concepts:
 
 ```yaml
 tables:
-  users:
+  - name: users
     idField: id
     seedData: []
 

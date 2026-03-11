@@ -975,7 +975,7 @@ Add `statefulResource` and `statefulAction` to any SOAP operation:
 version: "1.0"
 
 tables:
-  users:
+  - name: users
     seedData:
       - { id: "1", name: "Alice", email: "alice@example.com" }
 
@@ -1092,7 +1092,7 @@ With the `--stateful` flag, the importer detects CRUD patterns in operation name
 | `UpdateUser`, `ModifyOrder` | `update` |
 | `DeleteUser`, `RemoveOrder` | `delete` |
 
-The importer generates both the `statefulResources` definitions and the SOAP operations with `statefulResource`/`statefulAction` fields pre-filled.
+The importer generates both the `statefulResources` definitions and the SOAP operations with `statefulResource`/`statefulAction` fields pre-filled. For new projects, consider converting the generated `statefulResources` to [tables and extend bindings](/reference/configuration/#tables) for a cleaner separation of data and routing.
 
 ## Custom Operations
 

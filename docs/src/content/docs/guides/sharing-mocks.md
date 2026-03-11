@@ -36,35 +36,38 @@ mockd includes a built-in QUIC tunnel that exposes your local mocks to the inter
 ### Quick Start
 
 ```bash
-# Start your mock server
-mockd serve --config mocks.yaml
-
-# In another terminal, expose it to the internet
-mockd tunnel-quic --port 4280
+# Start mock server + tunnel in one shot (recommended)
+mockd tunnel --config mocks.yaml
 
 # Output:
+# Connecting to relay at relay.mockd.io:443 (QUIC)...
+# Anonymous token acquired (2h session, 100MB bandwidth)
+#
 # Tunnel connected!
-#   HTTP:  https://a1b2c3d4.tunnel.mockd.io -> http://localhost:4280
-#   Auth:  none (tunnel URL is public)
+# Public URL: https://a1b2c3d4.tunnel.mockd.io
+# Local server: http://localhost:4280
+# Admin API: http://localhost:4290
 ```
 
 Your mocks are now accessible at `https://a1b2c3d4.tunnel.mockd.io`.
 
-### Multi-Protocol Tunneling
-
-All protocols are tunneled automatically. For MQTT, specify the broker port:
+Alternatively, if you already have a running mockd server, enable the tunnel on it:
 
 ```bash
-# Tunnel HTTP + MQTT
-mockd tunnel-quic --port 4280 --mqtt 1883
+# Start your mock server
+mockd serve --config mocks.yaml
 
-# Output:
-# Tunnel connected!
-#   HTTP:  https://a1b2c3d4.tunnel.mockd.io -> http://localhost:4280
-#   MQTT:  mqtts://a1b2c3d4.tunnel.mockd.io:443 -> localhost:1883 (ALPN: mqtt)
+# In another terminal, enable the tunnel
+mockd tunnel enable
+```
 
-# Tunnel a gRPC server directly
-mockd tunnel-quic --port 50051
+### Multi-Protocol Tunneling
+
+All protocols are tunneled automatically through the single QUIC connection:
+
+```bash
+# Start tunnel with a config that includes gRPC, MQTT, etc.
+mockd tunnel --config multi-protocol.yaml
 
 # Test gRPC through the tunnel
 grpcurl -d '{"name": "World"}' a1b2c3d4.tunnel.mockd.io:443 helloworld.Greeter/SayHello
@@ -82,13 +85,13 @@ Use exactly one auth mode per tunnel. `--auth-token`, `--auth-basic`, and `--all
 
 ```bash
 # Require bearer token
-mockd tunnel-quic --port 4280 --auth-token secret123
+mockd tunnel --config mocks.yaml --auth-token secret123
 
 # Require HTTP Basic Auth
-mockd tunnel-quic --port 4280 --auth-basic admin:password
+mockd tunnel --config mocks.yaml --auth-basic admin:password
 
 # Restrict by IP range
-mockd tunnel-quic --port 4280 --allow-ips "10.0.0.0/8,192.168.1.0/24"
+mockd tunnel --config mocks.yaml --allow-ips "10.0.0.0/8,192.168.1.0/24"
 ```
 
 ### Use Cases
@@ -194,7 +197,7 @@ cloudflared tunnel run mockd
 | Pro ($12/mo) | 24 hours | 5 GB/mo | Custom | Yes |
 | Team ($29/mo) | Unlimited | 50 GB/mo | Custom + domain | Yes |
 
-Anonymous tunnels require no signup or token — just run `mockd tunnel-quic --port 4280`.
+Anonymous tunnels require no signup or token — just run `mockd tunnel`.
 
 ## Self-Hosted Relay
 
@@ -256,7 +259,7 @@ mockd tunnel --allow-ips "10.0.0.0/8,192.168.1.0/24"
 
 When you create a tunnel:
 - **Exposed**: The local port you specify with `--port` (HTTP, gRPC, WebSocket, SSE)
-- **Exposed**: MQTT broker ports specified with `--mqtt` on `tunnel-quic` (via TLS ALPN)
+- **Exposed**: MQTT broker ports (via TLS ALPN routing)
 - **NOT exposed**: Admin API (port 4290) — unless explicitly tunneled
 - **NOT exposed**: Other local services
 
@@ -306,7 +309,6 @@ mockd list
 
 ## See Also
 
-- [CLI Reference: tunnel-quic](/reference/cli/#mockd-tunnel-quic)
 - [CLI Reference: tunnel](/reference/cli/#mockd-tunnel)
 - [gRPC Mocking](/protocols/grpc/)
 - [MQTT Mocking](/protocols/mqtt/)

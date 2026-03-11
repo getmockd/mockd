@@ -25,7 +25,7 @@ serverConfig:
   adminPort: 4290
 
 tables:
-  users:
+  - name: users
     seedData:
       - id: "1"
         name: "Alice"
@@ -33,7 +33,7 @@ tables:
       - id: "2"
         name: "Bob"
         email: "bob@example.com"
-  tasks:
+  - name: tasks
     seedData:
       - id: "1"
         title: "Setup project"
@@ -342,6 +342,10 @@ curl -X POST http://localhost:4290/config \
     }
   }'
 ```
+
+:::note
+For new projects, the recommended approach is to use `tables` and `extend` bindings in your config file instead of `statefulResources`. Tables provide a cleaner separation between data and routing. See [Tables and Extend Bindings](/reference/configuration/#tables) for details.
+:::
 
 ## State Lifecycle
 

@@ -1002,7 +1002,7 @@ mockd soap import service.wsdl --stateful -o soap-mocks.yaml
 mockd soap import service.wsdl --format json
 ```
 
-When `--stateful` is enabled, the importer detects CRUD patterns in operation names (Get, List, Create, Update, Delete) and generates both `statefulResources` definitions and SOAP operations pre-wired with `statefulResource`/`statefulAction` fields.
+When `--stateful` is enabled, the importer detects CRUD patterns in operation names (Get, List, Create, Update, Delete) and generates both `statefulResources` definitions and SOAP operations pre-wired with `statefulResource`/`statefulAction` fields. For new projects, consider converting the generated `statefulResources` to [tables and extend bindings](/reference/configuration/#tables) for a cleaner separation of data and routing.
 
 ---
 
@@ -1648,7 +1648,7 @@ See [mockd delete](#mockd-delete) for full documentation.
 
 ### mockd import
 
-Import mocks from various sources and formats. Imported configurations may include `statefulResources` definitions, which are persisted to the admin file store and survive restarts. Runtime data for stateful resources is in-memory only and resets to seed data on restart.
+Import mocks from various sources and formats. Imported configurations may include `statefulResources` definitions (legacy) or `tables` and `extend` bindings (recommended), which are persisted to the admin file store and survive restarts. Runtime data for stateful resources is in-memory only and resets to seed data on restart.
 
 ```bash
 mockd import <source> [flags]
@@ -2748,6 +2748,241 @@ mockd verify reset http_abc123
 # Reset all mocks (useful between test suites)
 mockd verify reset --all
 # All verification data cleared
+```
+
+---
+
+## Tunnel Commands
+
+### mockd tunnel
+
+Start a local mock server + admin API + QUIC tunnel in one shot. This is the easiest way to expose mocks to the internet — everything starts with a single command.
+
+If no `--token` flag or `MOCKD_TOKEN` environment variable is set, an anonymous tunnel token is fetched automatically (2-hour session, 100MB bandwidth).
+
+```bash
+mockd tunnel [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--port` | `-p` | HTTP server port | `4280` |
+| `--admin-port` | | Admin API port | `4290` |
+| `--config` | `-c` | Path to mock configuration file | |
+| `--relay` | | Relay server address (host or host:port) | `relay.mockd.io` |
+| `--token` | | Authentication token (or set `MOCKD_TOKEN` env var) | |
+| `--subdomain` | `-s` | Requested subdomain (auto-assigned if empty) | |
+| `--domain` | | Custom domain (must be verified) | |
+| `--auth-token` | | Require this token for incoming requests | |
+| `--auth-basic` | | Require Basic Auth for incoming requests (format: `user:pass`) | |
+| `--allow-ips` | | Allow only these IPs (comma-separated CIDR or IP) | |
+
+The default relay is `relay.mockd.io` on port 443 (QUIC). If the relay address does not include a port, port 443 is appended automatically.
+
+**Authentication modes** (`--auth-token`, `--auth-basic`, `--allow-ips`) are mutually exclusive — use at most one per tunnel.
+
+**Examples:**
+
+```bash
+# Start mock server + tunnel (anonymous token, zero config)
+mockd tunnel
+
+# Start with a config file
+mockd tunnel --config mocks.yaml
+
+# Request a custom subdomain
+mockd tunnel --config mocks.yaml --subdomain my-api
+
+# Use an authenticated token
+mockd tunnel --token $MOCKD_TOKEN --config mocks.yaml
+
+# Protect the tunnel with a bearer token
+mockd tunnel --config mocks.yaml --auth-token secret123
+
+# Protect with Basic Auth
+mockd tunnel --config mocks.yaml --auth-basic admin:password
+
+# Restrict by IP range
+mockd tunnel --config mocks.yaml --allow-ips "10.0.0.0/8,192.168.1.0/24"
+
+# Use a custom relay and port
+mockd tunnel --relay relay.yourcompany.com:4433 --token $TOKEN
+```
+
+---
+
+### mockd tunnel enable
+
+Enable a tunnel on an already-running engine, making its mocks publicly accessible. The engine must be reachable via the admin API.
+
+```bash
+mockd tunnel enable [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--engine` | Engine ID | `local` |
+| `--mode` | Exposure mode: `all`, `selected`, `none` | `all` |
+| `--subdomain` | Custom subdomain (auto-assigned if empty) | |
+| `--domain` | Custom domain | |
+| `--auth-token` | Require token for incoming requests | |
+| `--auth-basic` | Require Basic Auth (`user:pass`) | |
+| `--allow-ips` | Restrict by IP (comma-separated CIDRs) | |
+| `--workspaces` | Expose only these workspaces (comma-separated) | |
+| `--folders` | Expose only these folders (comma-separated) | |
+| `--mocks` | Expose only these mock IDs (comma-separated) | |
+| `--types` | Expose only these mock types (comma-separated) | |
+| `--exclude-workspaces` | Exclude these workspaces (comma-separated) | |
+| `--exclude-folders` | Exclude these folders (comma-separated) | |
+| `--exclude-mocks` | Exclude these mock IDs (comma-separated) | |
+
+**Examples:**
+
+```bash
+# Enable tunnel on the local engine (all mocks)
+mockd tunnel enable
+
+# Expose only HTTP mocks
+mockd tunnel enable --types http
+
+# Expose only specific workspaces
+mockd tunnel enable --workspaces payments,users
+
+# Expose all except certain folders
+mockd tunnel enable --exclude-folders internal,debug
+
+# Enable with authentication
+mockd tunnel enable --auth-token my-secret-token
+
+# Enable on a specific engine
+mockd tunnel enable --engine my-engine-id
+```
+
+---
+
+### mockd tunnel disable
+
+Disable the tunnel on an engine, removing public access.
+
+```bash
+mockd tunnel disable [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--engine` | Engine ID | `local` |
+
+**Examples:**
+
+```bash
+# Disable tunnel on the local engine
+mockd tunnel disable
+
+# Disable on a specific engine
+mockd tunnel disable --engine my-engine-id
+```
+
+---
+
+### mockd tunnel status
+
+Show detailed tunnel status for an engine, including public URL, transport, session ID, and connection time.
+
+```bash
+mockd tunnel status [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--engine` | Engine ID | `local` |
+
+**Examples:**
+
+```bash
+# Check tunnel status
+mockd tunnel status
+
+# Check status on a specific engine
+mockd tunnel status --engine my-engine-id
+```
+
+---
+
+### mockd tunnel stop
+
+Alias for `mockd tunnel disable`. Disables the tunnel on an engine.
+
+```bash
+mockd tunnel stop [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--engine` | Engine ID | `local` |
+
+---
+
+### mockd tunnel list
+
+List all active tunnels across all engines.
+
+```bash
+mockd tunnel list
+```
+
+Displays a table of active tunnels with engine ID, name, public URL, status, transport, and uptime.
+
+**Examples:**
+
+```bash
+mockd tunnel list
+```
+
+---
+
+### mockd tunnel preview
+
+Preview which mocks would be exposed through a tunnel without actually enabling it. Useful for verifying filter settings before going live.
+
+```bash
+mockd tunnel preview [flags]
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--engine` | Engine ID | `local` |
+| `--mode` | Exposure mode: `all`, `selected`, `none` | `all` |
+| `--workspaces` | Expose only these workspaces (comma-separated) | |
+| `--folders` | Expose only these folders (comma-separated) | |
+| `--mocks` | Expose only these mock IDs (comma-separated) | |
+| `--types` | Expose only these mock types (comma-separated) | |
+| `--exclude-workspaces` | Exclude these workspaces (comma-separated) | |
+| `--exclude-folders` | Exclude these folders (comma-separated) | |
+| `--exclude-mocks` | Exclude these mock IDs (comma-separated) | |
+
+**Examples:**
+
+```bash
+# Preview all mocks that would be exposed
+mockd tunnel preview
+
+# Preview only HTTP mocks
+mockd tunnel preview --types http
+
+# Preview with exclusions
+mockd tunnel preview --exclude-workspaces internal
 ```
 
 ---

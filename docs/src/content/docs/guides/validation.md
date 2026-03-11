@@ -22,7 +22,7 @@ Add a `validation` block to any stateful resource or HTTP mock:
 
 ```yaml
 tables:
-  users:
+  - name: users
     seedData:
       - id: "1"
         email: "alice@example.com"
@@ -47,7 +47,7 @@ Stateful resources support validation on create and update operations. The valid
 
 ```yaml
 tables:
-  products:
+  - name: products
     seedData:
       - id: "1"
         sku: "WIDGET-001"
@@ -385,7 +385,7 @@ When seed data is provided without explicit validation rules, mockd can infer ba
 
 ```yaml
 tables:
-  users:
+  - name: users
     validation:
       auto: true
     seedData:
@@ -403,7 +403,7 @@ This automatically creates validators based on the seed data types. Explicit fie
 
 ```yaml
 tables:
-  orders:
+  - name: orders
     seedData:
       - id: "1"
         customerId: "cust_abc123"

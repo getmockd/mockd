@@ -512,7 +512,7 @@ jobs:
 
 ```yaml
 tables:
-  users:
+  - name: users
     seedData:
       - id: "1"
         name: "Test User"

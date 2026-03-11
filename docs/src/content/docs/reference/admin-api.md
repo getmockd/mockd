@@ -74,20 +74,79 @@ These endpoints work without authentication:
 
 ## Endpoints
 
-### Health
+### Health & Readiness
 
 #### GET /health
 
-Check server health.
+Liveness check. Always returns 200 if the admin server is running. No authentication required.
 
 **Response:**
 
 ```json
 {
   "status": "ok",
-  "uptime": 3600
+  "uptime": 3600,
+  "timestamp": "2024-01-15T10:30:00Z"
 }
 ```
+
+#### GET /ready
+
+Readiness check. Returns 200 when the server has finished loading config and is ready to serve traffic. Returns 503 during initialization (e.g., while importing a large spec). No authentication required.
+
+**Response (ready):**
+
+```json
+{
+  "status": "ready",
+  "uptime": 3600,
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+**Response (initializing):** `503 Service Unavailable`
+
+```json
+{
+  "status": "initializing",
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+#### GET /__mockd/health (Engine Port)
+
+Liveness check on the **mock engine port** (default 4280). This is available even when no mocks are configured and always takes priority over mock matching.
+
+**Response:**
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+#### GET /__mockd/ready (Engine Port)
+
+Readiness check on the **mock engine port** (default 4280). Reports the number of loaded mocks.
+
+**Response:**
+
+```json
+{
+  "status": "ready",
+  "checks": {
+    "mocks": {
+      "count": 12,
+      "status": "ok"
+    }
+  }
+}
+```
+
+:::note
+The engine port also responds to `/health` and `/ready` (without the `/__mockd/` prefix) as fallbacks — but only when no mock is configured to match those paths. The `/__mockd/` prefixed versions always take priority over mock matching.
+:::
 
 ---
 
@@ -412,6 +471,32 @@ Get details for a specific resource (item count, seed count, ID field).
 #### POST /state/resources/{name}/reset
 
 Reset a specific resource to its seed data.
+
+#### POST /reset
+
+**Alias for `POST /state/reset`.** Resets all stateful tables to their seed data. Convenient shorthand for test setup scripts.
+
+**Response:**
+
+```json
+{
+  "status": "reset",
+  "tables": 5
+}
+```
+
+#### POST /reset/{table}
+
+**Alias for `POST /state/resources/{table}/reset`.** Resets a specific table to its seed data.
+
+**Response:**
+
+```json
+{
+  "status": "reset",
+  "table": "customers"
+}
+```
 
 #### DELETE /state/resources/{name}
 

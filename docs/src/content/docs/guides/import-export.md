@@ -104,18 +104,18 @@ For declarative spec loading, use the `imports` field in your config file instea
 version: "1.0"
 
 imports:
-  - spec: ./stripe-openapi.yaml
-    namespace: stripe
+  - path: ./stripe-openapi.yaml
+    as: stripe
     format: openapi
 
 tables:
-  customers:
+  - name: customers
     seedData:
       - id: "cus_001"
         name: "Alice"
 
 extend:
-  - mock: stripe/list-customers
+  - mock: stripe.ListCustomers
     table: customers
     action: list
 ```
