@@ -116,14 +116,14 @@ func TestSoapAddCmdStatefulFlags(t *testing.T) {
 	// Verify the soap add command has stateful flags
 	flags := soapAddCmd.Flags()
 
-	resFlag := flags.Lookup("stateful-resource")
+	resFlag := flags.Lookup("table")
 	if resFlag == nil {
-		t.Error("soap add should have --stateful-resource flag")
+		t.Error("soap add should have --table flag")
 	}
 
-	actionFlag := flags.Lookup("stateful-action")
+	actionFlag := flags.Lookup("bind")
 	if actionFlag == nil {
-		t.Error("soap add should have --stateful-action flag")
+		t.Error("soap add should have --bind flag")
 	}
 }
 

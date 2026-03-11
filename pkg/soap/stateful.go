@@ -82,8 +82,8 @@ type StatefulExecutor interface {
 }
 
 // SetStatefulExecutor configures the stateful executor for this handler.
-// When set, operations with StatefulResource/StatefulAction fields will
-// route through the executor instead of returning canned responses.
+// When set, operations with StatefulBinding will route through the
+// executor instead of returning canned responses.
 func (h *Handler) SetStatefulExecutor(executor StatefulExecutor) {
 	h.statefulExecutor = executor
 }
@@ -97,7 +97,7 @@ func (h *Handler) GetStatefulExecutor() StatefulExecutor {
 // the SOAP response body XML. Returns (nil, nil) if the operation is not stateful.
 // opName is the SOAP operation name (e.g., "TransferFunds"), needed for custom operation lookup.
 func (h *Handler) handleStatefulOperation(opName string, opConfig *OperationConfig, doc *etree.Document) ([]byte, *SOAPFault) {
-	if opConfig.StatefulResource == "" || h.statefulExecutor == nil {
+	if opConfig.StatefulBinding == nil || h.statefulExecutor == nil {
 		return nil, nil
 	}
 
@@ -115,7 +115,7 @@ func (h *Handler) handleStatefulOperation(opName string, opConfig *OperationConf
 	// Build XML response from result.
 	// For custom operations, use the operation name as the response wrapper (e.g., <TransferFundsResponse>).
 	// For CRUD operations, use the resource name (e.g., <userResponse>).
-	responseName := opConfig.StatefulResource
+	responseName := opConfig.StatefulBinding.Table
 	if req.Action == StatefulActionCustom && opName != "" {
 		responseName = opName
 	}
@@ -138,10 +138,10 @@ func (h *Handler) handleStatefulOperation(opName string, opConfig *OperationConf
 // buildStatefulRequest translates SOAP body XML into a StatefulRequest.
 // opName is the SOAP operation name, used as the custom operation lookup key when action is "custom".
 func buildStatefulRequest(opName string, opConfig *OperationConfig, doc *etree.Document) *StatefulRequest {
-	action := StatefulAction(opConfig.StatefulAction)
+	action := StatefulAction(opConfig.StatefulBinding.Action)
 
 	req := &StatefulRequest{
-		Resource:      opConfig.StatefulResource,
+		Resource:      opConfig.StatefulBinding.Table,
 		Action:        action,
 		OperationName: opName,
 	}

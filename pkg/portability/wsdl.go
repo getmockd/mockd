@@ -391,8 +391,10 @@ func (w *WSDLImporter) generateCollection(def *wsdlDefinitions, originalWSDL []b
 				if w.Stateful {
 					resource, action := inferStatefulMapping(op.Name)
 					if resource != "" {
-						opConfig.StatefulResource = resource
-						opConfig.StatefulAction = action
+						opConfig.StatefulBinding = &mock.StatefulBinding{
+							Table:  resource,
+							Action: action,
+						}
 						opConfig.Response = "" // stateful handler generates response
 					}
 				}

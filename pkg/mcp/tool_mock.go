@@ -400,8 +400,11 @@ func applyExtendBinding(args map[string]interface{}, m *config.MockConfiguration
 		// For single-operation SOAP mocks (the common case) this is exactly right.
 		// For multi-operation mocks, use the protocol-specific fields instead.
 		for opName, opCfg := range m.SOAP.Operations {
-			opCfg.StatefulResource = table
-			opCfg.StatefulAction = action
+			opCfg.StatefulBinding = &mock.StatefulBinding{
+				Table:     table,
+				Action:    action,
+				Operation: operation,
+			}
 			m.SOAP.Operations[opName] = opCfg
 		}
 

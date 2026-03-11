@@ -2088,7 +2088,7 @@ func TestMock_Validate_SOAP(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "operation must have either response, fault, or statefulResource",
+			errSubstr: "operation must have either response, fault, or statefulBinding",
 		},
 		{
 			name: "multiple operations mixed valid and invalid",
@@ -2104,7 +2104,7 @@ func TestMock_Validate_SOAP(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "operation must have either response, fault, or statefulResource",
+			errSubstr: "operation must have either response, fault, or statefulBinding",
 		},
 		{
 			name: "stateful operation is valid without response",
@@ -2115,8 +2115,7 @@ func TestMock_Validate_SOAP(t *testing.T) {
 					Path: "/soap/service",
 					Operations: map[string]OperationConfig{
 						"GetUser": {
-							StatefulResource: "users",
-							StatefulAction:   "get",
+							StatefulBinding: &StatefulBinding{Table: "users", Action: "get"},
 						},
 					},
 				},
@@ -2132,13 +2131,13 @@ func TestMock_Validate_SOAP(t *testing.T) {
 					Path: "/soap/service",
 					Operations: map[string]OperationConfig{
 						"GetUser": {
-							StatefulResource: "users",
+							StatefulBinding: &StatefulBinding{Table: "users"},
 						},
 					},
 				},
 			},
 			wantErr:   true,
-			errSubstr: "statefulAction is required when statefulResource is set",
+			errSubstr: "action is required when statefulBinding is set",
 		},
 		{
 			name: "stateful operation invalid action",
@@ -2149,31 +2148,30 @@ func TestMock_Validate_SOAP(t *testing.T) {
 					Path: "/soap/service",
 					Operations: map[string]OperationConfig{
 						"GetUser": {
-							StatefulResource: "users",
-							StatefulAction:   "bogus",
+							StatefulBinding: &StatefulBinding{Table: "users", Action: "bogus"},
 						},
 					},
 				},
 			},
 			wantErr:   true,
-			errSubstr: "statefulAction must be one of",
+			errSubstr: "invalid stateful action",
 		},
 		{
-			name: "stateful action without resource",
+			name: "stateful binding missing table",
 			mock: Mock{
-				ID:   "soap-action-noresource",
+				ID:   "soap-binding-notable",
 				Type: TypeSOAP,
 				SOAP: &SOAPSpec{
 					Path: "/soap/service",
 					Operations: map[string]OperationConfig{
 						"GetUser": {
-							StatefulAction: "get",
+							StatefulBinding: &StatefulBinding{Action: "get"},
 						},
 					},
 				},
 			},
 			wantErr:   true,
-			errSubstr: "statefulAction requires statefulResource",
+			errSubstr: "table is required when statefulBinding is set",
 		},
 	}
 

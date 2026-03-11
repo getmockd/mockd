@@ -23,7 +23,8 @@
     },
     "statefulResources": {
       "type": "array",
-      "description": "Stateful CRUD resources that persist data across requests",
+      "description": "Deprecated: Prefer tables + extend pattern. Legacy stateful CRUD resources that persist data across requests.",
+      "deprecated": true,
       "items": {
         "$ref": "#/definitions/statefulResource"
       }
@@ -422,8 +423,16 @@
               "soapAction": { "type": "string" },
               "response": { "type": "string", "description": "XML response body" },
               "delay": { "type": "string" },
-              "statefulResource": { "type": "string", "description": "Stateful resource to read/write" },
-              "statefulAction": { "type": "string", "enum": ["read", "create", "update", "delete", "list"] },
+              "statefulBinding": {
+                "type": "object",
+                "description": "Bind this operation to a stateful table+action",
+                "properties": {
+                  "table": { "type": "string", "description": "Stateful table name (e.g., users)" },
+                  "action": { "type": "string", "enum": ["get", "list", "create", "update", "patch", "delete", "custom"] },
+                  "operation": { "type": "string", "description": "Custom operation name (required when action is custom)" }
+                },
+                "required": ["table", "action"]
+              },
               "fault": {
                 "type": "object",
                 "properties": {
@@ -551,8 +560,9 @@
       "properties": {
         "name": { "type": "string", "description": "Resource name (used in URLs)" },
         "idField": { "type": "string", "description": "Field to use as item ID", "default": "id" },
-        "idStrategy": { "type": "string", "description": "ID generation strategy", "enum": ["uuid", "prefix", "auto-increment"] },
+        "idStrategy": { "type": "string", "description": "ID generation strategy", "enum": ["uuid", "prefix", "ulid", "sequence", "short"] },
         "idPrefix": { "type": "string", "description": "ID prefix when idStrategy is 'prefix' (e.g., 'cus_')" },
+        "parentField": { "type": "string", "description": "Foreign key field for nested resources (e.g., filter sub-resources by parent ID)" },
         "maxItems": { "type": "integer", "description": "Maximum items in the collection" },
         "seedData": {
           "type": "array",
@@ -570,6 +580,17 @@
               "type": "object",
               "additionalProperties": { "$ref": "#/definitions/fieldValidator" }
             }
+          }
+        },
+        "response": {
+          "$ref": "#/definitions/responseTransform",
+          "description": "Default response transform for all bindings to this resource"
+        },
+        "relationships": {
+          "type": "object",
+          "description": "Maps field names to related tables for ?expand[] support",
+          "additionalProperties": {
+            "$ref": "#/definitions/relationship"
           }
         }
       },
@@ -589,13 +610,17 @@
             "type": "object",
             "required": ["type"],
             "properties": {
-              "type": { "type": "string", "enum": ["read", "update", "delete", "create", "set"] },
+              "type": { "type": "string", "enum": ["read", "update", "delete", "create", "set", "list", "validate"] },
               "resource": { "type": "string" },
               "id": { "type": "string", "description": "Item ID (supports expressions)" },
               "as": { "type": "string", "description": "Variable name to store result" },
               "set": { "type": "object", "additionalProperties": { "type": "string" } },
               "var": { "type": "string" },
-              "value": { "type": "string" }
+              "value": { "type": "string" },
+              "filter": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Field filters for list steps (values can be expr expressions)" },
+              "condition": { "type": "string", "description": "Boolean expr expression for validate steps — halts operation if false" },
+              "errorMessage": { "type": "string", "description": "Error message returned when a validate step's condition is false" },
+              "errorStatus": { "type": "integer", "description": "HTTP status code returned when a validate step fails (default: 400)" }
             }
           }
         },
@@ -770,7 +795,7 @@
       "properties": {
         "name": { "type": "string", "description": "Table name (e.g., 'customers')" },
         "idField": { "type": "string", "description": "Field to use as item ID", "default": "id" },
-        "idStrategy": { "type": "string", "description": "ID generation strategy", "enum": ["uuid", "prefix", "auto-increment"] },
+        "idStrategy": { "type": "string", "description": "ID generation strategy", "enum": ["uuid", "prefix", "ulid", "sequence", "short"] },
         "idPrefix": { "type": "string", "description": "ID prefix when idStrategy is 'prefix' (e.g., 'cus_')" },
         "maxItems": { "type": "integer", "description": "Maximum items in the collection" },
         "parentField": { "type": "string", "description": "Foreign key field for nested resources" },
@@ -840,7 +865,7 @@
         "timestamps": {
           "type": "object",
           "properties": {
-            "format": { "type": "string", "enum": ["iso", "unix", "unix_ms"], "description": "Timestamp format" },
+            "format": { "type": "string", "enum": ["unix", "iso8601", "rfc3339", "none"], "description": "Timestamp format" },
             "fields": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Field rename map (e.g., createdAt → created)" }
           }
         },

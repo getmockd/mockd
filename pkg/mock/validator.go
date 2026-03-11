@@ -609,39 +609,29 @@ func (m *Mock) validateSOAP() error {
 	}
 
 	for name, op := range m.SOAP.Operations {
-		isStateful := op.StatefulResource != ""
-		hasAction := op.StatefulAction != ""
-
-		// Check for orphaned statefulAction (action without resource)
-		if !isStateful && hasAction {
-			return &ValidationError{
-				Field:   "soap.operations." + name + ".statefulAction",
-				Message: "statefulAction requires statefulResource to be set",
-			}
-		}
-
-		// Validate stateful operation fields
-		if isStateful {
-			if !hasAction {
+		if op.StatefulBinding != nil {
+			if op.StatefulBinding.Table == "" {
 				return &ValidationError{
-					Field:   "soap.operations." + name + ".statefulAction",
-					Message: "statefulAction is required when statefulResource is set",
+					Field:   fmt.Sprintf("soap.operations[%s].statefulBinding.table", name),
+					Message: "table is required when statefulBinding is set",
 				}
 			}
-			if !validStatefulActions[op.StatefulAction] {
+			if op.StatefulBinding.Action == "" {
 				return &ValidationError{
-					Field:   "soap.operations." + name + ".statefulAction",
-					Message: "statefulAction must be one of: get, list, create, update, patch, delete, custom",
+					Field:   fmt.Sprintf("soap.operations[%s].statefulBinding.action", name),
+					Message: "action is required when statefulBinding is set",
 				}
 			}
-		}
-
-		// Non-stateful operations must have either a static response or fault.
-		// Stateful operations get their response from the stateful resource.
-		if !isStateful && op.Response == "" && op.Fault == nil {
+			if !validStatefulActions[op.StatefulBinding.Action] {
+				return &ValidationError{
+					Field:   fmt.Sprintf("soap.operations[%s].statefulBinding.action", name),
+					Message: fmt.Sprintf("invalid stateful action %q; valid values: get, list, create, update, patch, delete, custom", op.StatefulBinding.Action),
+				}
+			}
+		} else if op.Response == "" && op.Fault == nil {
 			return &ValidationError{
-				Field:   "soap.operations." + name,
-				Message: "operation must have either response, fault, or statefulResource",
+				Field:   fmt.Sprintf("soap.operations[%s]", name),
+				Message: "operation must have either response, fault, or statefulBinding",
 			}
 		}
 	}

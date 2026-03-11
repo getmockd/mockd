@@ -222,7 +222,7 @@ func runAdd(cmd *cobra.Command, args []string) error { //nolint:gocyclo // CLI d
 		m, err = buildMQTTMock(addName, addTopic, addPayload, addQoS, addMQTTPort)
 	case mock.TypeSOAP:
 		// --table/--bind serve as aliases for SOAP's --stateful-resource/--stateful-action
-		soapRes, soapAct := soapAddStatefulRes, soapAddStatefulAction
+		soapRes, soapAct := soapAddTable, soapAddBindAction
 		if soapRes == "" && addTable != "" {
 			soapRes = addTable
 		}
@@ -881,7 +881,7 @@ Run 'mockd add --help' for more options`)
 }
 
 // buildSOAPMock creates a SOAP mock configuration.
-func buildSOAPMock(name, path, operation, soapAction, response, statefulResource, statefulAction string) (*config.MockConfiguration, error) {
+func buildSOAPMock(name, path, operation, soapAction, response, table, bindAction string) (*config.MockConfiguration, error) {
 	if operation == "" {
 		return nil, errors.New(`--operation is required for SOAP mocks
 
@@ -891,18 +891,18 @@ Run 'mockd add --help' for more options`)
 	}
 
 	// Validate stateful flags: both or neither
-	if (statefulResource != "") != (statefulAction != "") {
-		return nil, errors.New("--stateful-resource and --stateful-action must be used together")
+	if (table != "") != (bindAction != "") {
+		return nil, errors.New("--table and --bind must be used together")
 	}
 
 	// Validate stateful action values
-	if statefulAction != "" {
+	if bindAction != "" {
 		validActions := map[string]bool{
 			"list": true, "get": true, "create": true,
 			"update": true, "delete": true, "custom": true,
 		}
-		if !validActions[statefulAction] {
-			return nil, fmt.Errorf("invalid --stateful-action %q: must be one of list, get, create, update, delete, custom", statefulAction)
+		if !validActions[bindAction] {
+			return nil, fmt.Errorf("invalid --bind %q: must be one of list, get, create, update, delete, custom", bindAction)
 		}
 	}
 
@@ -930,9 +930,11 @@ Run 'mockd add --help' for more options`)
 		opConfig.SOAPAction = soapAction
 	}
 
-	if statefulResource != "" {
-		opConfig.StatefulResource = statefulResource
-		opConfig.StatefulAction = statefulAction
+	if table != "" {
+		opConfig.StatefulBinding = &mock.StatefulBinding{
+			Table:  table,
+			Action: bindAction,
+		}
 	}
 
 	m.SOAP.Operations[operation] = opConfig

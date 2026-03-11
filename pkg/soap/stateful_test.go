@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/beevik/etree"
+	"github.com/getmockd/mockd/pkg/mock"
 )
 
 // mockStatefulExecutor is a test implementation of StatefulExecutor.
@@ -57,8 +58,7 @@ func TestStateful_GetOperation(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"GetUser": {
-				StatefulResource: "users",
-				StatefulAction:   "get",
+				StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "get"},
 			},
 		},
 	})
@@ -137,8 +137,7 @@ func TestStateful_ListOperation(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"ListUsers": {
-				StatefulResource: "users",
-				StatefulAction:   "list",
+				StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "list"},
 			},
 		},
 	})
@@ -202,8 +201,7 @@ func TestStateful_CreateOperation(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"CreateUser": {
-				StatefulResource: "users",
-				StatefulAction:   "create",
+				StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "create"},
 			},
 		},
 	})
@@ -256,8 +254,7 @@ func TestStateful_UpdateOperation(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"UpdateUser": {
-				StatefulResource: "users",
-				StatefulAction:   "update",
+				StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "update"},
 			},
 		},
 	})
@@ -309,8 +306,7 @@ func TestStateful_DeleteOperation(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"DeleteUser": {
-				StatefulResource: "users",
-				StatefulAction:   "delete",
+				StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "delete"},
 			},
 		},
 	})
@@ -364,8 +360,7 @@ func TestStateful_NotFound_Returns_SOAP11_Fault(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"GetUser": {
-				StatefulResource: "users",
-				StatefulAction:   "get",
+				StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "get"},
 			},
 		},
 	})
@@ -415,8 +410,7 @@ func TestStateful_Conflict_Returns_SOAP12_Fault(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"CreateUser": {
-				StatefulResource: "users",
-				StatefulAction:   "create",
+				StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "create"},
 			},
 		},
 	})
@@ -474,8 +468,7 @@ func TestStateful_MixedMode_CannedAndStateful(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"GetUser": {
-				StatefulResource: "users",
-				StatefulAction:   "get",
+				StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "get"},
 			},
 			"GetVersion": {
 				Response: "<Version>1.0.0</Version>",
@@ -523,7 +516,7 @@ func TestStateful_MixedMode_CannedAndStateful(t *testing.T) {
 }
 
 func TestStateful_NoExecutor_FallsThrough(t *testing.T) {
-	// When StatefulResource is set but no executor is configured,
+	// When StatefulBinding is set but no executor is configured,
 	// it should fall through to canned response
 	handler, err := NewHandler(&SOAPConfig{
 		ID:      "test-soap",
@@ -531,9 +524,8 @@ func TestStateful_NoExecutor_FallsThrough(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"GetUser": {
-				StatefulResource: "users",
-				StatefulAction:   "get",
-				Response:         "<User><id>fallback</id></User>",
+				StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "get"},
+				Response:        "<User><id>fallback</id></User>",
 			},
 		},
 	})
@@ -580,9 +572,8 @@ func TestStateful_WithSOAPAction(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"GetOrder": {
-				SOAPAction:       "urn:GetOrder",
-				StatefulResource: "orders",
-				StatefulAction:   "get",
+				SOAPAction:      "urn:GetOrder",
+				StatefulBinding: &mock.StatefulBinding{Table: "orders", Action: "get"},
 			},
 		},
 	})
@@ -631,8 +622,7 @@ func TestStateful_PatchOperation(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"PatchUser": {
-				StatefulResource: "users",
-				StatefulAction:   "patch",
+				StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "patch"},
 			},
 		},
 	})
@@ -835,8 +825,7 @@ func TestBuildStatefulRequest_GetAction(t *testing.T) {
 	}
 
 	opConfig := &OperationConfig{
-		StatefulResource: "users",
-		StatefulAction:   "get",
+		StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "get"},
 	}
 
 	req := buildStatefulRequest("GetUser", opConfig, doc)
@@ -865,8 +854,7 @@ func TestBuildStatefulRequest_CreateAction(t *testing.T) {
 	}
 
 	opConfig := &OperationConfig{
-		StatefulResource: "users",
-		StatefulAction:   "create",
+		StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "create"},
 	}
 
 	req := buildStatefulRequest("CreateUser", opConfig, doc)
@@ -889,8 +877,7 @@ func TestBuildStatefulRequest_ListAction(t *testing.T) {
 	}
 
 	opConfig := &OperationConfig{
-		StatefulResource: "users",
-		StatefulAction:   "list",
+		StatefulBinding: &mock.StatefulBinding{Table: "users", Action: "list"},
 	}
 
 	req := buildStatefulRequest("ListUsers", opConfig, doc)
@@ -913,7 +900,7 @@ func TestBuildStatefulRequest_ListAction(t *testing.T) {
 }
 
 // --- CO-14: SOAP custom operation integration test ---
-// This test verifies that a SOAP operation configured with StatefulAction="custom"
+// This test verifies that a SOAP operation configured with StatefulBinding.Action="custom"
 // correctly extracts the XML body as data and passes it through to the executor,
 // and that the result is rendered back as XML.
 
@@ -935,8 +922,7 @@ func TestStateful_CustomOperation(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"TransferFunds": {
-				StatefulResource: "TransferFunds", // operation name for custom
-				StatefulAction:   "custom",
+				StatefulBinding: &mock.StatefulBinding{Table: "TransferFunds", Action: "custom"},
 			},
 		},
 	})
@@ -1023,8 +1009,7 @@ func TestStateful_CustomOperation_Fault(t *testing.T) {
 		Enabled: true,
 		Operations: map[string]OperationConfig{
 			"TransferFunds": {
-				StatefulResource: "TransferFunds",
-				StatefulAction:   "custom",
+				StatefulBinding: &mock.StatefulBinding{Table: "TransferFunds", Action: "custom"},
 			},
 		},
 	})

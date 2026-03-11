@@ -30,7 +30,7 @@ var soapAddCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Use huh interactive forms if attributes are missing
 		// Skip interactive mode when stateful flags are provided (non-interactive use)
-		if !cmd.Flags().Changed("path") && !cmd.Flags().Changed("stateful-resource") {
+		if !cmd.Flags().Changed("path") && !cmd.Flags().Changed("table") {
 			var formPath, formAction, formResponse string
 
 			form := huh.NewForm(
@@ -74,17 +74,17 @@ var soapAddCmd = &cobra.Command{
 }
 
 var (
-	soapHeaders           string
-	soapPretty            bool
-	soapCallAction        string
-	soapCallSOAP12        bool
-	soapCallTimeout       int
-	soapCallBodyFile      string
-	soapImportStateful    bool
-	soapImportOutput      string
-	soapImportFormat      string
-	soapAddStatefulRes    string
-	soapAddStatefulAction string
+	soapHeaders        string
+	soapPretty         bool
+	soapCallAction     string
+	soapCallSOAP12     bool
+	soapCallTimeout    int
+	soapCallBodyFile   string
+	soapImportStateful bool
+	soapImportOutput   string
+	soapImportFormat   string
+	soapAddTable       string
+	soapAddBindAction  string
 )
 
 var soapImportCmd = &cobra.Command{
@@ -112,8 +112,8 @@ func init() {
 	soapAddCmd.Flags().StringVar(&addPath, "path", "", "URL path to match")
 	soapAddCmd.Flags().StringVar(&addOperation, "action", "", "SOAP action")
 	soapAddCmd.Flags().StringVar(&addResponse, "response", "", "XML response body")
-	soapAddCmd.Flags().StringVar(&soapAddStatefulRes, "stateful-resource", "", "Stateful resource name (e.g., users)")
-	soapAddCmd.Flags().StringVar(&soapAddStatefulAction, "stateful-action", "", "Stateful action (list, get, create, update, delete, custom)")
+	soapAddCmd.Flags().StringVar(&soapAddTable, "table", "", "Bind to a stateful resource table (e.g., users)")
+	soapAddCmd.Flags().StringVar(&soapAddBindAction, "bind", "", "Stateful action: list, get, create, update, delete, custom")
 
 	// Add list/get/delete generic aliases
 	soapCmd.AddCommand(&cobra.Command{

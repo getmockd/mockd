@@ -631,17 +631,17 @@ func TestBuildMQTTMock(t *testing.T) {
 
 func TestBuildSOAPMock(t *testing.T) {
 	tests := []struct {
-		name             string
-		mockName         string
-		path             string
-		operation        string
-		soapAction       string
-		response         string
-		statefulResource string
-		statefulAction   string
-		expectError      bool
-		errorContain     string
-		validate         func(*testing.T, *mock.SOAPSpec)
+		name         string
+		mockName     string
+		path         string
+		operation    string
+		soapAction   string
+		response     string
+		table        string
+		bindAction   string
+		expectError  bool
+		errorContain string
+		validate     func(*testing.T, *mock.SOAPSpec)
 	}{
 		{
 			name:        "operation required",
@@ -691,77 +691,86 @@ func TestBuildSOAPMock(t *testing.T) {
 			},
 		},
 		{
-			name:             "with stateful resource and action",
-			operation:        "GetUsers",
-			statefulResource: "users",
-			statefulAction:   "list",
+			name:       "with stateful table and bind action",
+			operation:  "GetUsers",
+			table:      "users",
+			bindAction: "list",
 			validate: func(t *testing.T, spec *mock.SOAPSpec) {
 				op := spec.Operations["GetUsers"]
-				if op.StatefulResource != "users" {
-					t.Errorf("statefulResource: got %s, want users", op.StatefulResource)
+				if op.StatefulBinding == nil {
+					t.Fatal("expected statefulBinding to be set")
 				}
-				if op.StatefulAction != "list" {
-					t.Errorf("statefulAction: got %s, want list", op.StatefulAction)
+				if op.StatefulBinding.Table != "users" {
+					t.Errorf("table: got %s, want users", op.StatefulBinding.Table)
+				}
+				if op.StatefulBinding.Action != "list" {
+					t.Errorf("action: got %s, want list", op.StatefulBinding.Action)
 				}
 			},
 		},
 		{
-			name:             "stateful get action",
-			operation:        "GetUser",
-			statefulResource: "users",
-			statefulAction:   "get",
+			name:       "stateful get action",
+			operation:  "GetUser",
+			table:      "users",
+			bindAction: "get",
 			validate: func(t *testing.T, spec *mock.SOAPSpec) {
 				op := spec.Operations["GetUser"]
-				if op.StatefulResource != "users" {
-					t.Errorf("statefulResource: got %s, want users", op.StatefulResource)
+				if op.StatefulBinding == nil {
+					t.Fatal("expected statefulBinding to be set")
 				}
-				if op.StatefulAction != "get" {
-					t.Errorf("statefulAction: got %s, want get", op.StatefulAction)
+				if op.StatefulBinding.Table != "users" {
+					t.Errorf("table: got %s, want users", op.StatefulBinding.Table)
+				}
+				if op.StatefulBinding.Action != "get" {
+					t.Errorf("action: got %s, want get", op.StatefulBinding.Action)
 				}
 			},
 		},
 		{
-			name:             "stateful create action",
-			operation:        "CreateUser",
-			statefulResource: "users",
-			statefulAction:   "create",
+			name:       "stateful create action",
+			operation:  "CreateUser",
+			table:      "users",
+			bindAction: "create",
 			validate: func(t *testing.T, spec *mock.SOAPSpec) {
 				op := spec.Operations["CreateUser"]
-				if op.StatefulResource != "users" {
-					t.Errorf("statefulResource: got %s, want users", op.StatefulResource)
+				if op.StatefulBinding == nil {
+					t.Fatal("expected statefulBinding to be set")
 				}
-				if op.StatefulAction != "create" {
-					t.Errorf("statefulAction: got %s, want create", op.StatefulAction)
+				if op.StatefulBinding.Table != "users" {
+					t.Errorf("table: got %s, want users", op.StatefulBinding.Table)
+				}
+				if op.StatefulBinding.Action != "create" {
+					t.Errorf("action: got %s, want create", op.StatefulBinding.Action)
 				}
 			},
 		},
 		{
-			name:             "stateful resource without action is error",
-			operation:        "GetUsers",
-			statefulResource: "users",
-			expectError:      true,
-			errorContain:     "must be used together",
+			name:         "table without bind action is error",
+			operation:    "GetUsers",
+			table:        "users",
+			expectError:  true,
+			errorContain: "must be used together",
 		},
 		{
-			name:           "stateful action without resource is error",
-			operation:      "GetUsers",
-			statefulAction: "list",
-			expectError:    true,
-			errorContain:   "must be used together",
+			name:         "bind action without table is error",
+			operation:    "GetUsers",
+			bindAction:   "list",
+			expectError:  true,
+			errorContain: "must be used together",
 		},
 		{
-			name:             "invalid stateful action",
-			operation:        "GetUsers",
-			statefulResource: "users",
-			statefulAction:   "invalid",
-			expectError:      true,
-			errorContain:     "invalid --stateful-action",
+			name:         "invalid bind action",
+			operation:    "GetUsers",
+			table:        "users",
+			bindAction:   "invalid",
+			expectError:  true,
+			errorContain: "invalid --bind",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := buildSOAPMock(tt.mockName, tt.path, tt.operation, tt.soapAction, tt.response, tt.statefulResource, tt.statefulAction)
+			cfg, err := buildSOAPMock(tt.mockName, tt.path, tt.operation, tt.soapAction, tt.response, tt.table, tt.bindAction)
 
 			if tt.expectError {
 				if err == nil {
@@ -991,8 +1000,8 @@ func TestBuildSOAPMock_MergeFields(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		op := cfg.SOAP.Operations["GetUser"]
-		if op.StatefulResource != "users" {
-			t.Errorf("statefulResource: got %s, want users", op.StatefulResource)
+		if op.StatefulBinding == nil || op.StatefulBinding.Table != "users" {
+			t.Errorf("table: got %v, want users", op.StatefulBinding)
 		}
 		if op.SOAPAction != "http://example.com/GetUser" {
 			t.Errorf("soapAction: got %s, want http://example.com/GetUser", op.SOAPAction)

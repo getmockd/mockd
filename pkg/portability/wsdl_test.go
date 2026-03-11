@@ -228,21 +228,25 @@ func TestWSDLImporter_Stateful_UserService(t *testing.T) {
 	// Operations should have stateful mappings
 	m := collection.Mocks[0]
 	getOp := m.SOAP.Operations["GetUser"]
-	assert.Equal(t, "users", getOp.StatefulResource)
-	assert.Equal(t, "get", getOp.StatefulAction)
+	require.NotNil(t, getOp.StatefulBinding)
+	assert.Equal(t, "users", getOp.StatefulBinding.Table)
+	assert.Equal(t, "get", getOp.StatefulBinding.Action)
 	assert.Empty(t, getOp.Response, "stateful ops should not have canned response")
 
 	createOp := m.SOAP.Operations["CreateUser"]
-	assert.Equal(t, "users", createOp.StatefulResource)
-	assert.Equal(t, "create", createOp.StatefulAction)
+	require.NotNil(t, createOp.StatefulBinding)
+	assert.Equal(t, "users", createOp.StatefulBinding.Table)
+	assert.Equal(t, "create", createOp.StatefulBinding.Action)
 
 	listOp := m.SOAP.Operations["ListUsers"]
-	assert.Equal(t, "users", listOp.StatefulResource)
-	assert.Equal(t, "list", listOp.StatefulAction)
+	require.NotNil(t, listOp.StatefulBinding)
+	assert.Equal(t, "users", listOp.StatefulBinding.Table)
+	assert.Equal(t, "list", listOp.StatefulBinding.Action)
 
 	deleteOp := m.SOAP.Operations["DeleteUser"]
-	assert.Equal(t, "users", deleteOp.StatefulResource)
-	assert.Equal(t, "delete", deleteOp.StatefulAction)
+	require.NotNil(t, deleteOp.StatefulBinding)
+	assert.Equal(t, "users", deleteOp.StatefulBinding.Table)
+	assert.Equal(t, "delete", deleteOp.StatefulBinding.Action)
 }
 
 func TestWSDLImporter_Stateful_Calculator_NoMapping(t *testing.T) {
@@ -258,7 +262,7 @@ func TestWSDLImporter_Stateful_Calculator_NoMapping(t *testing.T) {
 
 	// Operations should still have canned responses
 	addOp := collection.Mocks[0].SOAP.Operations["Add"]
-	assert.Empty(t, addOp.StatefulResource)
+	assert.Nil(t, addOp.StatefulBinding)
 	assert.NotEmpty(t, addOp.Response)
 }
 
@@ -494,11 +498,10 @@ func mockToSOAPConfig(m *mock.Mock) *soap.SOAPConfig {
 		cfg.Operations = make(map[string]soap.OperationConfig)
 		for name, op := range m.SOAP.Operations {
 			soapOp := soap.OperationConfig{
-				SOAPAction:       op.SOAPAction,
-				Response:         op.Response,
-				Delay:            op.Delay,
-				StatefulResource: op.StatefulResource,
-				StatefulAction:   op.StatefulAction,
+				SOAPAction:      op.SOAPAction,
+				Response:        op.Response,
+				Delay:           op.Delay,
+				StatefulBinding: op.StatefulBinding,
 			}
 			if op.Fault != nil {
 				soapOp.Fault = &soap.SOAPFault{
@@ -645,8 +648,9 @@ func TestWSDLIntegration_UserService_StatefulMode(t *testing.T) {
 
 	// Verify stateful config was applied
 	getOp := cfg.Operations["GetUser"]
-	assert.Equal(t, "users", getOp.StatefulResource)
-	assert.Equal(t, "get", getOp.StatefulAction)
+	require.NotNil(t, getOp.StatefulBinding)
+	assert.Equal(t, "users", getOp.StatefulBinding.Table)
+	assert.Equal(t, "get", getOp.StatefulBinding.Action)
 	assert.Empty(t, getOp.Response, "stateful ops should not have canned response")
 
 	handler, err := soap.NewHandler(cfg)

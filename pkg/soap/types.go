@@ -2,6 +2,8 @@ package soap
 
 import (
 	"encoding/xml"
+
+	"github.com/getmockd/mockd/pkg/mock"
 )
 
 // SOAPVersion represents the SOAP protocol version.
@@ -41,15 +43,10 @@ type OperationConfig struct {
 	Fault      *SOAPFault `json:"fault,omitempty" yaml:"fault,omitempty"`
 	Match      *SOAPMatch `json:"match,omitempty" yaml:"match,omitempty"`
 
-	// StatefulResource is the name of the stateful resource this operation reads/writes
-	// (e.g., "users", "orders"). When set, the operation routes through the StatefulBridge
-	// instead of returning a canned/template response.
-	StatefulResource string `json:"statefulResource,omitempty" yaml:"statefulResource,omitempty"`
-
-	// StatefulAction is the CRUD action to perform on the stateful resource.
-	// Valid values: "get", "list", "create", "update", "patch", "delete".
-	// Required when StatefulResource is set.
-	StatefulAction string `json:"statefulAction,omitempty" yaml:"statefulAction,omitempty"`
+	// StatefulBinding binds this operation to a stateful table+action.
+	// When set, the operation routes through the StatefulBridge instead of
+	// returning a canned/template response.
+	StatefulBinding *mock.StatefulBinding `json:"statefulBinding,omitempty" yaml:"statefulBinding,omitempty"`
 }
 
 // SOAPMatch defines XPath-based request matching conditions.
