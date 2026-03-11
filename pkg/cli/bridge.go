@@ -320,7 +320,7 @@ func runImportFromDirectory(dir string) error {
 		}
 
 		client := NewAdminClientWithAuth(adminURL)
-		result, err := client.ImportConfig(collection, false, "") // never replace when importing directories
+		result, err := client.ImportConfig(collection, false, resolvedWorkspace()) // never replace when importing directories
 		if err != nil {
 			importErrors = append(importErrors, fmt.Sprintf("%s: %v", file, FormatConnectionError(err)))
 			continue
@@ -400,7 +400,7 @@ func importData(data []byte, source string, impFormat portability.Format) error 
 	}
 
 	client := NewAdminClientWithAuth(adminURL)
-	result, err := client.ImportConfig(collection, importReplace, "")
+	result, err := client.ImportConfig(collection, importReplace, resolvedWorkspace())
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
@@ -429,7 +429,7 @@ func runExportCobra(cmd *cobra.Command, args []string) error {
 
 	// Create admin client and export config — uses root persistent adminURL
 	client := NewAdminClientWithAuth(adminURL)
-	collection, err := client.ExportConfig(exportName, "")
+	collection, err := client.ExportConfig(exportName, resolvedWorkspace())
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}

@@ -468,10 +468,11 @@ func runRequestLogs(opts runRequestLogsOptions) error {
 
 	// Build filter
 	filter := &LogFilter{
-		Protocol: opts.protocol,
-		Method:   opts.method,
-		Path:     opts.path,
-		Limit:    opts.limit,
+		Protocol:    opts.protocol,
+		Method:      opts.method,
+		Path:        opts.path,
+		Limit:       opts.limit,
+		WorkspaceID: resolvedWorkspace(),
 	}
 
 	// Get logs

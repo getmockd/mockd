@@ -441,7 +441,7 @@ var wsStatusCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Uses root persistent adminURL
 		client := NewAdminClientWithAuth(adminURL)
-		mocks, err := client.ListMocksByType("websocket")
+		mocks, err := client.ListMocksByType("websocket", resolvedWorkspace())
 		if err != nil {
 			return fmt.Errorf("failed to get WebSocket status: %s", FormatConnectionError(err))
 		}

@@ -51,7 +51,7 @@ func handleListMocks(args map[string]interface{}, session *MCPSession, _ *Server
 	var err error
 
 	if typeFilter != "" {
-		mocks, err = client.ListMocksByType(typeFilter)
+		mocks, err = client.ListMocksByType(typeFilter, workspace)
 	} else {
 		mocks, err = client.ListMocks(workspace)
 	}

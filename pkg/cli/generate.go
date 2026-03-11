@@ -327,7 +327,7 @@ Run 'mockd enhance --help' for more options`)
 
 		// Get existing mocks from server
 		client := NewAdminClientWithAuth(adminURL)
-		mocks, err := client.ListMocks("")
+		mocks, err := client.ListMocks(resolvedWorkspace())
 		if err != nil {
 			return fmt.Errorf("%s", FormatConnectionError(err))
 		}

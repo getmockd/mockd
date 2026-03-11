@@ -84,7 +84,7 @@ func deleteByID(client AdminClient, idPrefix string) error {
 
 // deleteByPrefix finds mocks matching a partial ID and deletes if unambiguous.
 func deleteByPrefix(client AdminClient, prefix string) error {
-	mocks, err := client.ListMocks("")
+	mocks, err := client.ListMocks(resolvedWorkspace())
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
@@ -125,7 +125,7 @@ func deleteByPrefix(client AdminClient, prefix string) error {
 
 // deleteByPath finds and deletes mocks matching a path and optional method.
 func deleteByPath(client AdminClient, path, method string, skipConfirm bool) error {
-	mocks, err := client.ListMocks("")
+	mocks, err := client.ListMocks(resolvedWorkspace())
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}

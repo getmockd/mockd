@@ -119,7 +119,7 @@ var oauthStatusCmd = &cobra.Command{
 func runOAuthStatus(_ *cobra.Command, _ []string) error {
 	// Get OAuth status from admin API
 	client := NewAdminClientWithAuth(adminURL)
-	mocks, err := client.ListMocksByType("oauth")
+	mocks, err := client.ListMocksByType("oauth", resolvedWorkspace())
 	if err != nil {
 		return fmt.Errorf("failed to get OAuth status: %s", FormatConnectionError(err))
 	}

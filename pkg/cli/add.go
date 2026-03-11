@@ -285,7 +285,7 @@ func runAdd(cmd *cobra.Command, args []string) error { //nolint:gocyclo // CLI d
 // findExistingHTTPMock looks for an existing mock with the same method+path.
 // Returns the mock ID if found, empty string if not.
 func findExistingHTTPMock(client AdminClient, method, path string) (string, error) {
-	mocks, err := client.ListMocks("")
+	mocks, err := client.ListMocks(resolvedWorkspace())
 	if err != nil {
 		return "", err
 	}
@@ -307,7 +307,7 @@ func findExistingHTTPMock(client AdminClient, method, path string) (string, erro
 // findExistingSOAPMock looks for an existing SOAP mock on the same path.
 // Returns the mock ID if found, empty string if not.
 func findExistingSOAPMock(client AdminClient, path string) (string, error) {
-	mocks, err := client.ListMocks("")
+	mocks, err := client.ListMocks(resolvedWorkspace())
 	if err != nil {
 		return "", err
 	}
@@ -1003,7 +1003,7 @@ func runAddStateful(name string) error {
 	}
 
 	client := NewAdminClientWithAuth(adminURL)
-	_, err := client.ImportConfig(collection, false, "")
+	_, err := client.ImportConfig(collection, false, resolvedWorkspace())
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}

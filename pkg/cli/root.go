@@ -54,7 +54,5 @@ func init() {
 	// Define persistent flags that apply globally to all mockd commands
 	rootCmd.PersistentFlags().StringVar(&adminURL, "admin-url", cliconfig.GetAdminURL(), "Admin API base URL (default: http://localhost:4290)")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output command results in JSON format")
-
-	// Ensure any subcommands we migrate get attached immediately if they exist
-	// (they will add themselves in their own init() functions once migrated)
+	rootCmd.PersistentFlags().StringVar(&workspaceFlag, "workspace", "", "Workspace to operate on (overrides MOCKD_WORKSPACE and context config)")
 }

@@ -27,7 +27,7 @@ type AdminClient interface {
 	// Pass "" for workspaceID to list all mocks (no filter).
 	ListMocks(workspaceID string) ([]*config.MockConfiguration, error)
 	// ListMocksByType returns mocks filtered by type (http, websocket, graphql, etc.)
-	ListMocksByType(mockType string) ([]*config.MockConfiguration, error)
+	ListMocksByType(mockType string, workspaceID string) ([]*config.MockConfiguration, error)
 	// GetMock returns a specific mock by ID.
 	GetMock(id string) (*config.MockConfiguration, error)
 	// CreateMock creates a new mock or merges into existing one.
@@ -376,8 +376,8 @@ func (c *adminClient) ListMocks(workspaceID string) ([]*config.MockConfiguration
 }
 
 // ListMocksByType returns mocks filtered by type.
-func (c *adminClient) ListMocksByType(mockType string) ([]*config.MockConfiguration, error) {
-	mocks, err := c.ListMocks("")
+func (c *adminClient) ListMocksByType(mockType string, workspaceID string) ([]*config.MockConfiguration, error) {
+	mocks, err := c.ListMocks(workspaceID)
 	if err != nil {
 		return nil, err
 	}

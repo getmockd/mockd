@@ -90,7 +90,7 @@ func (m *mockAdminClient) ListMocks(workspaceID string) ([]*config.MockConfigura
 	return nil, nil
 }
 
-func (m *mockAdminClient) ListMocksByType(t string) ([]*config.MockConfiguration, error) {
+func (m *mockAdminClient) ListMocksByType(t string, _ string) ([]*config.MockConfiguration, error) {
 	if m.listMocksByTypeFn != nil {
 		return m.listMocksByTypeFn(t)
 	}

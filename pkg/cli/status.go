@@ -363,7 +363,7 @@ func fetchLiveStats(adminURL string) (*StatusStats, *HealthInfo) {
 
 	// Get mock count from /mocks endpoint
 	adminClient := NewAdminClientWithAuth(adminURL, WithTimeout(2*time.Second))
-	mocks, err := adminClient.ListMocks("")
+	mocks, err := adminClient.ListMocks(resolvedWorkspace())
 	if err == nil {
 		stats.MocksLoaded = len(mocks)
 	}

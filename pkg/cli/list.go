@@ -71,7 +71,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		// Query running server via admin API
 		client := NewAdminClientWithAuth(adminURL)
 		var err error
-		mocks, err = client.ListMocks("")
+		mocks, err = client.ListMocks(resolvedWorkspace())
 		if err != nil {
 			return fmt.Errorf("%s", FormatConnectionError(err))
 		}
