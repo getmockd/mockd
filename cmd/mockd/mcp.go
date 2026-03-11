@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -126,6 +127,8 @@ Flags:
 
 	// No explicit URL: either global daemon or project-scoped daemon.
 	var resolvedURL string
+	var restartFn func() error
+
 	if dataDir != "" {
 		// Project-scoped daemon.
 		url, err := ensureProjectDaemon(log, dataDir, configFile, port, adminPort)
@@ -136,6 +139,10 @@ Flags:
 		}
 		resolvedURL = url
 		contextName = "project"
+		restartFn = func() error {
+			_, err := ensureProjectDaemon(log, dataDir, configFile, port, adminPort)
+			return err
+		}
 	} else {
 		// Global daemon.
 		url, err := ensureGlobalDaemon(log)
@@ -145,6 +152,10 @@ Flags:
 				"hint", "run 'mockd start' to start the server")
 		}
 		resolvedURL = url
+		restartFn = func() error {
+			_, err := ensureGlobalDaemon(log)
+			return err
+		}
 	}
 
 	if resolvedURL == "" {
@@ -154,6 +165,12 @@ Flags:
 	}
 
 	adminClient := cli.NewAdminClientWithAuth(resolvedURL)
+
+	// Start health monitor — restarts the daemon if it dies.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go monitorDaemon(ctx, adminClient, restartFn, log)
+
 	return runMCPSession(log, adminClient, contextName, resolvedURL, workspace)
 }
 
@@ -296,6 +313,41 @@ func startDaemon(log *slog.Logger, pidPath string, extraArgs []string) (string, 
 
 	// Return URL even if health didn't pass yet — it might be slow to start.
 	return adminURL, nil
+}
+
+// monitorDaemon polls the daemon health and restarts it if it goes down.
+// Only used when the MCP session auto-started the daemon.
+func monitorDaemon(ctx context.Context, client cli.AdminClient, restartFn func() error, log *slog.Logger) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	failures := 0
+	const maxFailures = 3
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := client.Health(); err != nil {
+				failures++
+				if failures >= maxFailures {
+					log.Warn("daemon appears down, attempting restart", "failures", failures)
+					if restartErr := restartFn(); restartErr != nil {
+						log.Error("failed to restart daemon", "error", restartErr)
+					} else {
+						log.Info("daemon restarted successfully")
+						failures = 0
+					}
+				}
+			} else {
+				if failures > 0 {
+					log.Info("daemon health restored", "previous_failures", failures)
+				}
+				failures = 0
+			}
+		}
+	}
 }
 
 // runMCPSession creates the MCP server and runs the stdio transport.
