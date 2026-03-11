@@ -29,6 +29,9 @@ type Store interface {
 
 // Filter defines criteria for filtering request logs.
 type Filter struct {
+	// WorkspaceID filters by workspace.
+	WorkspaceID string
+
 	// Protocol filters by protocol (http, grpc, websocket, sse, mqtt, soap, graphql).
 	Protocol string
 

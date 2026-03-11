@@ -680,6 +680,9 @@ func buildRequestFilter(query interface{ Get(string) string }) *requestlog.Filte
 	if v := query.Get("sseConnectionId"); v != "" {
 		clientFilter.SSEConnectionID = v
 	}
+	if wsID := query.Get("workspaceId"); wsID != "" {
+		clientFilter.WorkspaceID = wsID
+	}
 	return clientFilter
 }
 

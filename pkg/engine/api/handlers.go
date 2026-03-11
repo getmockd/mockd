@@ -281,6 +281,11 @@ func (s *Server) handleListRequests(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parse workspace filter
+	if wsID := r.URL.Query().Get("workspaceId"); wsID != "" {
+		filter.WorkspaceID = wsID
+	}
+
 	entries := s.engine.GetRequestLogs(filter)
 	total := s.engine.RequestLogCount()
 
@@ -312,6 +317,7 @@ func (s *Server) handleGetRequest(w http.ResponseWriter, r *http.Request) {
 func entryToAPI(e *requestlog.Entry) *RequestLogEntry {
 	return &RequestLogEntry{
 		ID:            e.ID,
+		WorkspaceID:   e.WorkspaceID,
 		Timestamp:     e.Timestamp,
 		Protocol:      e.Protocol,
 		Method:        e.Method,

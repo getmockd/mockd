@@ -19,6 +19,9 @@ type Entry struct {
 	// ID is a unique identifier for the log entry.
 	ID string `json:"id"`
 
+	// WorkspaceID is the workspace this request was logged in.
+	WorkspaceID string `json:"workspaceId,omitempty"`
+
 	// Timestamp is when the request was received.
 	Timestamp time.Time `json:"timestamp"`
 

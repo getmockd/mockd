@@ -139,6 +139,11 @@ func (l *InMemoryRequestLogger) List(filter *requestlog.Filter) []*requestlog.En
 
 // matchesFilter checks if an entry matches all filter criteria.
 func matchesFilter(entry *requestlog.Entry, filter *requestlog.Filter) bool { //nolint:gocyclo // multi-field filter matching
+	// Workspace filter
+	if filter.WorkspaceID != "" && entry.WorkspaceID != filter.WorkspaceID {
+		return false
+	}
+
 	// Protocol filter
 	if filter.Protocol != "" && entry.Protocol != filter.Protocol {
 		return false

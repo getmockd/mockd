@@ -138,6 +138,7 @@ type DeployResponse struct {
 // visible to consumers of the Admin API and Engine Control API.
 type RequestLogEntry struct {
 	ID            string              `json:"id"`
+	WorkspaceID   string              `json:"workspaceId,omitempty"`
 	Timestamp     time.Time           `json:"timestamp"`
 	Protocol      string              `json:"protocol"`
 	Method        string              `json:"method,omitempty"`

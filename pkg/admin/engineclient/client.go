@@ -240,6 +240,9 @@ func (c *Client) ListRequests(ctx context.Context, filter *requestlog.Filter) (*
 		if filter.SSEConnectionID != "" {
 			q.Set("sseConnectionId", filter.SSEConnectionID)
 		}
+		if filter.WorkspaceID != "" {
+			q.Set("workspaceId", filter.WorkspaceID)
+		}
 		if len(q) > 0 {
 			path += "?" + q.Encode()
 		}
