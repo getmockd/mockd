@@ -279,7 +279,11 @@ func runStatefulAdd(_ *cobra.Command, args []string) error {
 	}
 
 	client := NewAdminClientWithAuth(adminURL)
-	err := client.CreateStatefulResource(name, statefulAddIDField)
+	cfg := &config.StatefulResourceConfig{
+		Name:    name,
+		IDField: statefulAddIDField,
+	}
+	err := client.CreateStatefulResource(cfg)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}

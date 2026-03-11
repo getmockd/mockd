@@ -1,7 +1,10 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
+
+	"github.com/getmockd/mockd/pkg/config"
 )
 
 // =============================================================================
@@ -36,6 +39,7 @@ func handleManageState(args map[string]interface{}, session *MCPSession, server 
 }
 
 // handleAddStatefulResource creates a new stateful resource definition.
+// Accepts the full table config: id strategy, seed data, response transforms, relationships, etc.
 func handleAddStatefulResource(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
@@ -47,9 +51,49 @@ func handleAddStatefulResource(args map[string]interface{}, session *MCPSession,
 		return ToolResultError("resource name is required"), nil
 	}
 
-	idField := getString(args, "id_field", "")
+	cfg := &config.StatefulResourceConfig{
+		Name:        name,
+		IDField:     getString(args, "id_field", ""),
+		IDStrategy:  getString(args, "id_strategy", ""),
+		IDPrefix:    getString(args, "id_prefix", ""),
+		ParentField: getString(args, "parent_field", ""),
+		MaxItems:    getInt(args, "max_items", 0),
+	}
 
-	err := client.CreateStatefulResource(name, idField)
+	// Seed data (array of objects)
+	if seedData, ok := args["seed_data"]; ok {
+		if arr, ok := seedData.([]interface{}); ok {
+			for _, item := range arr {
+				if obj, ok := item.(map[string]interface{}); ok {
+					cfg.SeedData = append(cfg.SeedData, obj)
+				}
+			}
+		}
+	}
+
+	// Response transform (object) — marshal/unmarshal to convert to typed struct
+	if resp, ok := args["response"]; ok {
+		if obj, ok := resp.(map[string]interface{}); ok {
+			data, _ := json.Marshal(obj)
+			var rt config.ResponseTransform
+			if json.Unmarshal(data, &rt) == nil {
+				cfg.Response = &rt
+			}
+		}
+	}
+
+	// Relationships (map of field -> {table, field})
+	if rels, ok := args["relationships"]; ok {
+		if obj, ok := rels.(map[string]interface{}); ok {
+			data, _ := json.Marshal(obj)
+			var relationships map[string]*config.Relationship
+			if json.Unmarshal(data, &relationships) == nil {
+				cfg.Relationships = relationships
+			}
+		}
+	}
+
+	err := client.CreateStatefulResource(cfg)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to create stateful resource: " + adminError(err, session.GetAdminURL())), nil
@@ -58,9 +102,9 @@ func handleAddStatefulResource(args map[string]interface{}, session *MCPSession,
 	result := map[string]interface{}{
 		"created":  true,
 		"resource": name,
-		"idField":  idField,
+		"idField":  cfg.IDField,
 	}
-	if idField == "" {
+	if cfg.IDField == "" {
 		result["idField"] = "id"
 	}
 

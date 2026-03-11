@@ -398,11 +398,12 @@ var defClearRequestLogs = ToolDefinition{
 
 var defManageState = ToolDefinition{
 	Name: "manage_state",
-	Description: `Manage stateful mock resources — CRUD collections that persist data across requests. Use 'overview' to see all resources, 'add_resource' to create a new resource, 'list_items' to browse items in a resource, 'get_item' for a specific item, 'create_item' to add data, 'reset' to restore seed data, or 'delete_resource' to fully unregister a resource.
+	Description: `Manage stateful mock resources — CRUD collections that persist data across requests. Use 'overview' to see all resources, 'add_resource' to create a new resource with full table configuration, 'list_items' to browse items in a resource, 'get_item' for a specific item, 'create_item' to add data, 'reset' to restore seed data, or 'delete_resource' to fully unregister a resource.
 
 Examples:
   Overview:    {"action":"overview"}
   Add resource:{"action":"add_resource","resource":"users"}
+  Add resource:{\"action\":\"add_resource\",\"resource\":\"customers\",\"id_strategy\":\"prefix\",\"id_prefix\":\"cus_\",\"seed_data\":[{\"name\":\"Alice\"}]}
   List items:  {"action":"list_items","resource":"users","limit":10}
   Get item:    {"action":"get_item","resource":"users","item_id":"abc123"}
   Create item: {"action":"create_item","resource":"users","data":{"name":"Alice"}}
@@ -423,6 +424,36 @@ Examples:
 			"id_field": map[string]interface{}{
 				"type":        "string",
 				"description": "Custom ID field name (default: 'id', for add_resource)",
+			},
+			"id_strategy": map[string]interface{}{
+				"type":        "string",
+				"description": "ID generation strategy for new items",
+				"enum":        []string{"uuid", "prefix", "ulid", "sequence", "short"},
+			},
+			"id_prefix": map[string]interface{}{
+				"type":        "string",
+				"description": "Prefix for generated IDs when id_strategy is 'prefix' (e.g., 'cus_' for customer IDs)",
+			},
+			"parent_field": map[string]interface{}{
+				"type":        "string",
+				"description": "Foreign key field name for nested/child resources",
+			},
+			"max_items": map[string]interface{}{
+				"type":        "integer",
+				"description": "Maximum number of items the resource can hold (0 = unlimited)",
+			},
+			"seed_data": map[string]interface{}{
+				"type":        "array",
+				"description": "Initial data items to populate the resource with. Each item is an object.",
+				"items":       map[string]interface{}{"type": "object"},
+			},
+			"response": map[string]interface{}{
+				"type":        "object",
+				"description": "Response transform configuration. Controls how list/get responses are shaped (envelope, pagination, field mapping).",
+			},
+			"relationships": map[string]interface{}{
+				"type":        "object",
+				"description": "Relationship definitions for ?expand[] support. Map of field name to {table, field} objects.",
 			},
 			"item_id": map[string]interface{}{
 				"type":        "string",

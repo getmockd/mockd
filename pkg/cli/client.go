@@ -70,7 +70,7 @@ type AdminClient interface {
 	GetPortsVerbose(verbose bool) ([]PortInfo, error)
 
 	// CreateStatefulResource registers a new stateful resource definition.
-	CreateStatefulResource(name, idField string) error
+	CreateStatefulResource(cfg *config.StatefulResourceConfig) error
 	// DeleteStatefulResource fully unregisters a stateful resource.
 	DeleteStatefulResource(name string) error
 	// GetStateOverview returns an overview of all stateful resources.
@@ -1129,15 +1129,13 @@ func (c *adminClient) GetPortsVerbose(verbose bool) ([]PortInfo, error) {
 }
 
 // CreateStatefulResource registers a new stateful resource definition via POST /state/resources.
-func (c *adminClient) CreateStatefulResource(name, idField string) error {
-	if idField == "" {
-		idField = "id"
+// Accepts a full StatefulResourceConfig so callers can pass all table fields (seed data,
+// ID strategy, response transforms, relationships, etc.) in a single call.
+func (c *adminClient) CreateStatefulResource(cfg *config.StatefulResourceConfig) error {
+	if cfg.IDField == "" {
+		cfg.IDField = "id"
 	}
-	payload := map[string]interface{}{
-		"name":    name,
-		"idField": idField,
-	}
-	body, err := json.Marshal(payload)
+	body, err := json.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to encode request: %w", err)
 	}
@@ -1152,7 +1150,7 @@ func (c *adminClient) CreateStatefulResource(name, idField string) error {
 		return &APIError{
 			StatusCode: resp.StatusCode,
 			ErrorCode:  "conflict",
-			Message:    "resource already exists: " + name,
+			Message:    "resource already exists: " + cfg.Name,
 		}
 	}
 	if resp.StatusCode != http.StatusCreated {

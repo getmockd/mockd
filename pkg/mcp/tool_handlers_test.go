@@ -56,7 +56,7 @@ type mockAdminClient struct {
 	getStatefulItemFn        func(name, id string) (map[string]interface{}, error)
 	createStatefulItemFn     func(name string, data map[string]interface{}) (map[string]interface{}, error)
 	resetStatefulResourceFn  func(name string) error
-	createStatefulResourceFn func(name, idField string) error
+	createStatefulResourceFn func(cfg *config.StatefulResourceConfig) error
 	deleteStatefulResourceFn func(name string) error
 
 	// Custom Operations
@@ -278,9 +278,9 @@ func (m *mockAdminClient) GetMQTTStatus() (map[string]interface{}, error) {
 
 // --- Stateful ---
 
-func (m *mockAdminClient) CreateStatefulResource(name, idField string) error {
+func (m *mockAdminClient) CreateStatefulResource(cfg *config.StatefulResourceConfig) error {
 	if m.createStatefulResourceFn != nil {
-		return m.createStatefulResourceFn(name, idField)
+		return m.createStatefulResourceFn(cfg)
 	}
 	return nil
 }
@@ -1068,12 +1068,10 @@ func TestHandleManageState_CreateItemAction(t *testing.T) {
 func TestHandleManageState_AddResourceAction(t *testing.T) {
 	t.Parallel()
 
-	createdName := ""
-	createdIDField := ""
+	var createdCfg *config.StatefulResourceConfig
 	client := &mockAdminClient{
-		createStatefulResourceFn: func(name, idField string) error {
-			createdName = name
-			createdIDField = idField
+		createStatefulResourceFn: func(cfg *config.StatefulResourceConfig) error {
+			createdCfg = cfg
 			return nil
 		},
 	}
@@ -1094,11 +1092,14 @@ func TestHandleManageState_AddResourceAction(t *testing.T) {
 		t.Fatalf("expected success, got error: %s", resultText(t, result))
 	}
 
-	if createdName != "orders" {
-		t.Errorf("created resource name = %s, want orders", createdName)
+	if createdCfg == nil {
+		t.Fatal("CreateStatefulResource was not called")
 	}
-	if createdIDField != "order_id" {
-		t.Errorf("created idField = %s, want order_id", createdIDField)
+	if createdCfg.Name != "orders" {
+		t.Errorf("created resource name = %s, want orders", createdCfg.Name)
+	}
+	if createdCfg.IDField != "order_id" {
+		t.Errorf("created idField = %s, want order_id", createdCfg.IDField)
 	}
 
 	var parsed map[string]interface{}
