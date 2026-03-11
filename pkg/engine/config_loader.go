@@ -70,17 +70,28 @@ func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store
 	if err != nil {
 		cl.log.Warn("failed to load persisted stateful resources", "error", err)
 	} else {
+		loaded := 0
 		for _, res := range resources {
 			if res == nil {
 				continue
 			}
 			if err := cl.registerStatefulResource(res); err != nil {
-				cl.log.Warn("failed to restore stateful resource",
+				cl.log.Warn("failed to restore stateful resource, removing stale entry from store",
 					"name", res.Name, "error", err)
+				// Remove the stale entry from the persistent store so it
+				// doesn't poison future add_resource calls with a false
+				// "already exists" from the file store while the engine
+				// has no knowledge of it.
+				if delErr := persistentStore.StatefulResources().Delete(ctx, res.Name); delErr != nil {
+					cl.log.Warn("failed to clean up stale stateful resource from store",
+						"name", res.Name, "error", delErr)
+				}
+				continue
 			}
+			loaded++
 		}
-		if len(resources) > 0 {
-			cl.log.Info("restored persisted stateful resources", "count", len(resources))
+		if loaded > 0 {
+			cl.log.Info("restored persisted stateful resources", "count", loaded)
 		}
 	}
 

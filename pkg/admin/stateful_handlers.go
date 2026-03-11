@@ -99,7 +99,8 @@ func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, eng
 }
 
 // handleCreateStateResource registers a new stateful resource definition.
-// It persists the resource to the file store and forwards it to the engine.
+// The engine is authoritative: we register there first, then persist to the
+// file store so the definition survives restarts.
 func (a *API) handleCreateStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 
@@ -119,19 +120,9 @@ func (a *API) handleCreateStateResource(w http.ResponseWriter, r *http.Request, 
 		cfg.IDField = "id"
 	}
 
-	// Persist to the file store so it survives restarts.
-	if a.dataStore != nil {
-		resStore := a.dataStore.StatefulResources()
-		if err := resStore.Create(ctx, &cfg); err != nil {
-			if errors.Is(err, store.ErrAlreadyExists) {
-				writeError(w, http.StatusConflict, "conflict", "resource already exists: "+cfg.Name)
-				return
-			}
-			a.logger().Warn("failed to persist stateful resource", "name", cfg.Name, "error", err)
-		}
-	}
-
-	// Forward to the engine to register the runtime resource.
+	// Register with the engine first — engine is the source of truth for
+	// whether a resource is already active. This prevents state disagreement
+	// where the file store says "already exists" but the engine never loaded it.
 	if err := engine.RegisterStatefulResource(ctx, &cfg); err != nil {
 		if errors.Is(err, engineclient.ErrConflict) {
 			writeError(w, http.StatusConflict, "conflict", "resource already exists: "+cfg.Name)
@@ -140,6 +131,21 @@ func (a *API) handleCreateStateResource(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusBadRequest, "registration_failed",
 			sanitizeError(err, a.logger(), "register stateful resource"))
 		return
+	}
+
+	// Engine accepted the resource — now persist to the file store so it
+	// survives restarts. If persistence fails (e.g., stale duplicate in
+	// data.json), log a warning but don't error — the engine is authoritative.
+	if a.dataStore != nil {
+		resStore := a.dataStore.StatefulResources()
+		if err := resStore.Create(ctx, &cfg); err != nil {
+			if errors.Is(err, store.ErrAlreadyExists) {
+				a.logger().Warn("resource already in file store (stale entry), engine is authoritative",
+					"name", cfg.Name)
+			} else {
+				a.logger().Warn("failed to persist stateful resource", "name", cfg.Name, "error", err)
+			}
+		}
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
