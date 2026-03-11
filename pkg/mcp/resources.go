@@ -360,7 +360,7 @@ func (p *ResourceProvider) readLogsResource() ([]ResourceContent, *JSONRPCError)
 
 	for _, log := range logsResult.Requests {
 		methodCounts[log.Method]++
-		statusCounts[log.ResponseStatus]++
+		statusCounts[log.StatusCode]++
 	}
 
 	content := map[string]interface{}{

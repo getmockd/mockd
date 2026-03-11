@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	apitypes "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/cli"
 	"github.com/getmockd/mockd/pkg/requestlog"
 )
@@ -268,24 +269,24 @@ func TestHandleGetRequestLogs_Success(t *testing.T) {
 	client := &mockAdminClient{
 		getLogsFn: func(filter *cli.LogFilter) (*cli.LogResult, error) {
 			return &cli.LogResult{
-				Requests: []*requestlog.Entry{
+				Requests: []*apitypes.RequestLogEntry{
 					{
-						ID:             "log-1",
-						Method:         "GET",
-						Path:           "/api/users",
-						ResponseStatus: 200,
-						DurationMs:     15,
-						Timestamp:      ts,
-						MatchedMockID:  "http_abc123",
+						ID:            "log-1",
+						Method:        "GET",
+						Path:          "/api/users",
+						StatusCode:    200,
+						DurationMs:    15,
+						Timestamp:     ts,
+						MatchedMockID: "http_abc123",
 					},
 					{
-						ID:             "log-2",
-						Method:         "POST",
-						Path:           "/api/users",
-						ResponseStatus: 201,
-						DurationMs:     32,
-						Timestamp:      ts.Add(time.Second),
-						MatchedMockID:  "http_def456",
+						ID:            "log-2",
+						Method:        "POST",
+						Path:          "/api/users",
+						StatusCode:    201,
+						DurationMs:    32,
+						Timestamp:     ts.Add(time.Second),
+						MatchedMockID: "http_def456",
 					},
 				},
 				Count: 2,
@@ -342,7 +343,7 @@ func TestHandleGetRequestLogs_WithFilters(t *testing.T) {
 		getLogsFn: func(filter *cli.LogFilter) (*cli.LogResult, error) {
 			capturedFilter = filter
 			return &cli.LogResult{
-				Requests: []*requestlog.Entry{},
+				Requests: []*apitypes.RequestLogEntry{},
 				Count:    0,
 			}, nil
 		},
@@ -401,14 +402,14 @@ func TestHandleGetRequestLogs_WithNearMisses(t *testing.T) {
 	client := &mockAdminClient{
 		getLogsFn: func(filter *cli.LogFilter) (*cli.LogResult, error) {
 			return &cli.LogResult{
-				Requests: []*requestlog.Entry{
+				Requests: []*apitypes.RequestLogEntry{
 					{
-						ID:             "log-unmatched",
-						Method:         "GET",
-						Path:           "/api/unknown",
-						ResponseStatus: 404,
-						DurationMs:     2,
-						Timestamp:      ts,
+						ID:         "log-unmatched",
+						Method:     "GET",
+						Path:       "/api/unknown",
+						StatusCode: 404,
+						DurationMs: 2,
+						Timestamp:  ts,
 						NearMisses: []requestlog.NearMissInfo{
 							{
 								MockID:          "http_abc",
@@ -475,7 +476,7 @@ func TestHandleGetRequestLogs_Empty(t *testing.T) {
 	client := &mockAdminClient{
 		getLogsFn: func(filter *cli.LogFilter) (*cli.LogResult, error) {
 			return &cli.LogResult{
-				Requests: []*requestlog.Entry{},
+				Requests: []*apitypes.RequestLogEntry{},
 				Count:    0,
 			}, nil
 		},
@@ -557,7 +558,7 @@ func TestHandleGetRequestLogs_DefaultLimitOffset(t *testing.T) {
 	client := &mockAdminClient{
 		getLogsFn: func(filter *cli.LogFilter) (*cli.LogResult, error) {
 			capturedFilter = filter
-			return &cli.LogResult{Requests: []*requestlog.Entry{}, Count: 0}, nil
+			return &cli.LogResult{Requests: []*apitypes.RequestLogEntry{}, Count: 0}, nil
 		},
 	}
 
@@ -586,14 +587,14 @@ func TestHandleGetRequestLogs_TimestampPreserved(t *testing.T) {
 	client := &mockAdminClient{
 		getLogsFn: func(filter *cli.LogFilter) (*cli.LogResult, error) {
 			return &cli.LogResult{
-				Requests: []*requestlog.Entry{
+				Requests: []*apitypes.RequestLogEntry{
 					{
-						ID:             "log-ts",
-						Method:         "GET",
-						Path:           "/",
-						ResponseStatus: 200,
-						DurationMs:     1,
-						Timestamp:      ts,
+						ID:         "log-ts",
+						Method:     "GET",
+						Path:       "/",
+						StatusCode: 200,
+						DurationMs: 1,
+						Timestamp:  ts,
 					},
 				},
 				Count: 1,

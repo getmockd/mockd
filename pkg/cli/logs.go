@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	apitypes "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/requestlog"
@@ -482,7 +483,7 @@ func runRequestLogs(opts runRequestLogsOptions) error {
 	// Filter matched/unmatched locally
 	requests := result.Requests
 	if opts.matched || opts.unmatched {
-		filtered := make([]*requestlog.Entry, 0)
+		filtered := make([]*apitypes.RequestLogEntry, 0)
 		for _, req := range result.Requests {
 			hasMatch := req.MatchedMockID != ""
 			if (opts.matched && hasMatch) || (opts.unmatched && !hasMatch) {
@@ -512,7 +513,7 @@ func runRequestLogs(opts runRequestLogsOptions) error {
 	return printTableLogs(requests)
 }
 
-func printTableLogs(requests []*requestlog.Entry) error {
+func printTableLogs(requests []*apitypes.RequestLogEntry) error {
 	w := output.Table()
 	_, _ = fmt.Fprintln(w, "TIMESTAMP\tPROTOCOL\tMETHOD\tPATH\tMATCHED\tDURATION")
 
@@ -746,9 +747,95 @@ func printVerboseEntry(req *requestlog.Entry) {
 	fmt.Println()
 }
 
-func printVerboseLogs(requests []*requestlog.Entry) error {
+func printVerboseLogs(requests []*apitypes.RequestLogEntry) error {
 	for _, req := range requests {
-		printVerboseEntry(req)
+		printVerboseAPIEntry(req)
 	}
 	return nil
+}
+
+// printVerboseAPIEntry prints a single API log entry in verbose format.
+// This uses types.RequestLogEntry (the admin API wire type) rather than
+// requestlog.Entry (the engine-internal type used by SSE streaming).
+func printVerboseAPIEntry(req *apitypes.RequestLogEntry) {
+	timestamp := req.Timestamp.Format("2006-01-02 15:04:05")
+	protocol := req.Protocol
+	if protocol == "" {
+		protocol = "http"
+	}
+	matched := req.MatchedMockID
+	if matched == "" {
+		matched = "(none)"
+	}
+
+	fmt.Printf("[%s] [%s] %s %s -> %d (%dms)\n",
+		timestamp, protocol, req.Method, req.Path, req.StatusCode, req.DurationMs)
+	fmt.Printf("  Matched: %s\n", matched)
+
+	// Show protocol-specific metadata
+	switch protocol {
+	case "grpc":
+		if req.GRPC != nil {
+			fmt.Printf("  gRPC Service: %s, Method: %s, Status: %s\n",
+				req.GRPC.Service, req.GRPC.MethodName, req.GRPC.StatusCode)
+		}
+	case "mqtt":
+		if req.MQTT != nil {
+			fmt.Printf("  MQTT Topic: %s, ClientID: %s, QoS: %d\n",
+				req.MQTT.Topic, req.MQTT.ClientID, req.MQTT.QoS)
+		}
+	case "soap":
+		if req.SOAP != nil {
+			fmt.Printf("  SOAP Operation: %s, Version: %s\n",
+				req.SOAP.Operation, req.SOAP.SOAPVersion)
+		}
+	case "graphql":
+		if req.GraphQL != nil {
+			fmt.Printf("  GraphQL Type: %s, Operation: %s\n",
+				req.GraphQL.OperationType, req.GraphQL.OperationName)
+		}
+	case "websocket":
+		if req.WebSocket != nil {
+			fmt.Printf("  WebSocket Connection: %s, Direction: %s\n",
+				req.WebSocket.ConnectionID, req.WebSocket.Direction)
+		}
+	case "sse":
+		if req.SSE != nil {
+			fmt.Printf("  SSE Connection: %s, EventType: %s\n",
+				req.SSE.ConnectionID, req.SSE.EventType)
+		}
+	}
+
+	if len(req.Headers) > 0 {
+		fmt.Println("  Headers:")
+		for key, values := range req.Headers {
+			for _, value := range values {
+				fmt.Printf("    %s: %s\n", key, value)
+			}
+		}
+	}
+
+	if req.Body != "" {
+		body := req.Body
+		if len(body) > 200 {
+			body = body[:200] + "...(truncated)"
+		}
+		fmt.Printf("  Body: %s\n", body)
+	} else {
+		fmt.Println("  Body: (empty)")
+	}
+
+	// Show near-miss data for unmatched requests
+	if len(req.NearMisses) > 0 {
+		fmt.Println("  Near misses:")
+		for _, nm := range req.NearMisses {
+			name := nm.MockID
+			if nm.MockName != "" {
+				name = fmt.Sprintf("%q (%s)", nm.MockName, nm.MockID)
+			}
+			fmt.Printf("    → %s — %d%% match\n", name, nm.MatchPercentage)
+			fmt.Printf("      %s\n", nm.Reason)
+		}
+	}
+	fmt.Println()
 }

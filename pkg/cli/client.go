@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"time"
 
+	apitypes "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
-	"github.com/getmockd/mockd/pkg/requestlog"
 )
 
 const (
@@ -71,6 +71,8 @@ type AdminClient interface {
 
 	// CreateStatefulResource registers a new stateful resource definition.
 	CreateStatefulResource(name, idField string) error
+	// DeleteStatefulResource fully unregisters a stateful resource.
+	DeleteStatefulResource(name string) error
 	// GetStateOverview returns an overview of all stateful resources.
 	GetStateOverview() (*StateOverviewResult, error)
 	// ListStatefulItems returns paginated items for a stateful resource.
@@ -145,7 +147,7 @@ type LogFilter struct {
 
 // LogResult contains request log query results.
 type LogResult struct {
-	Requests []*requestlog.Entry
+	Requests []*apitypes.RequestLogEntry
 	Count    int
 	Total    int
 }
@@ -700,9 +702,9 @@ func (c *adminClient) GetLogs(filter *LogFilter) (*LogResult, error) {
 	}
 
 	var result struct {
-		Requests []*requestlog.Entry `json:"requests"`
-		Count    int                 `json:"count"`
-		Total    int                 `json:"total"`
+		Requests []*apitypes.RequestLogEntry `json:"requests"`
+		Count    int                         `json:"count"`
+		Total    int                         `json:"total"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
@@ -1154,6 +1156,27 @@ func (c *adminClient) CreateStatefulResource(name, idField string) error {
 		}
 	}
 	if resp.StatusCode != http.StatusCreated {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// DeleteStatefulResource fully unregisters a stateful resource via POST /state/resources/{name}/unregister.
+func (c *adminClient) DeleteStatefulResource(name string) error {
+	resp, err := c.post("/state/resources/"+url.PathEscape(name)+"/unregister", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			ErrorCode:  "not_found",
+			Message:    "stateful resource not found: " + name,
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
 	}
 	return nil

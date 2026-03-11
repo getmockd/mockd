@@ -96,7 +96,7 @@ func handleGetRequestLogs(args map[string]interface{}, session *MCPSession, serv
 			ID:        log.ID,
 			Method:    log.Method,
 			Path:      log.Path,
-			Status:    log.ResponseStatus,
+			Status:    log.StatusCode,
 			Duration:  fmt.Sprintf("%dms", log.DurationMs),
 			Timestamp: log.Timestamp,
 			MockID:    log.MatchedMockID,
