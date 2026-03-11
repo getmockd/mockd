@@ -167,7 +167,8 @@ func TestBuildHTTPMock(t *testing.T) {
 				tt.matchQueries,
 				false, nil, 100, "", 1, 0, // SSE defaults: disabled
 				"", "", // bodyContains, pathPattern defaults
-				"", // statefulOperation default
+				"",         // statefulOperation default
+				"", "", "", // table, bindAction, operation defaults
 			)
 
 			if tt.expectError {
@@ -217,7 +218,8 @@ func TestBuildHTTPMock_BodyFile(t *testing.T) {
 		nil, nil, nil,
 		false, nil, 100, "", 1, 0, // SSE defaults
 		"", "", // bodyContains, pathPattern defaults
-		"", // statefulOperation default
+		"",         // statefulOperation default
+		"", "", "", // table, bindAction, operation defaults
 	)
 
 	if err != nil {
@@ -241,7 +243,8 @@ func TestBuildHTTPMock_BodyFileNotFound(t *testing.T) {
 		nil, nil, nil,
 		false, nil, 100, "", 1, 0, // SSE defaults
 		"", "", // bodyContains, pathPattern defaults
-		"", // statefulOperation default
+		"",         // statefulOperation default
+		"", "", "", // table, bindAction, operation defaults
 	)
 
 	if err == nil {
@@ -793,7 +796,7 @@ func TestOutputJSONResult(t *testing.T) {
 	// the JSON encoding doesn't panic
 
 	t.Run("http mock json output", func(t *testing.T) {
-		cfg, _ := buildHTTPMock("test", "/api/test", "GET", 200, "{}", "", 0, 0, nil, nil, nil, false, nil, 100, "", 1, 0, "", "", "")
+		cfg, _ := buildHTTPMock("test", "/api/test", "GET", 200, "{}", "", 0, 0, nil, nil, nil, false, nil, 100, "", 1, 0, "", "", "", "", "", "")
 		cfg.ID = "test-id"
 
 		createResult := &CreateMockResult{
@@ -842,6 +845,7 @@ func TestBuildHTTPMock_StatefulOperation(t *testing.T) {
 			false, nil, 100, "", 1, 0,
 			"", "",
 			"TransferFunds",
+			"", "", "", // table, bindAction, operation defaults
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -865,6 +869,7 @@ func TestBuildHTTPMock_StatefulOperation(t *testing.T) {
 			false, nil, 100, "", 1, 0,
 			"", "",
 			"SomeOperation",
+			"", "", "", // table, bindAction, operation defaults
 		)
 		if err == nil {
 			t.Error("expected error when both --body and --stateful-operation are set")
@@ -882,6 +887,7 @@ func TestBuildHTTPMock_StatefulOperation(t *testing.T) {
 			false, nil, 100, "", 1, 0,
 			"", "",
 			"SomeOperation",
+			"", "", "", // table, bindAction, operation defaults
 		)
 		if err == nil {
 			t.Error("expected error when both --body-file and --stateful-operation are set")
@@ -898,6 +904,7 @@ func TestBuildHTTPMock_StatefulOperation(t *testing.T) {
 			true, nil, 100, "", 1, 0, // sse=true
 			"", "",
 			"SomeOperation",
+			"", "", "", // table, bindAction, operation defaults
 		)
 		if err == nil {
 			t.Error("expected error when both --sse and --stateful-operation are set")
@@ -913,7 +920,8 @@ func TestBuildHTTPMock_StatefulOperation(t *testing.T) {
 			nil, nil, nil,
 			false, nil, 100, "", 1, 0,
 			"", "",
-			"", // empty — normal mock
+			"",         // empty — normal mock
+			"", "", "", // table, bindAction, operation defaults
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -933,6 +941,7 @@ func TestBuildHTTPMock_StatefulOperation(t *testing.T) {
 			false, nil, 100, "", 1, 0,
 			"", "",
 			"TransferFunds",
+			"", "", "", // table, bindAction, operation defaults
 		)
 		cfg.ID = "test-op-id"
 

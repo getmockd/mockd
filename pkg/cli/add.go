@@ -64,6 +64,9 @@ var (
 	addMutation          bool
 	addStatefulOperation string
 
+	addTable      string
+	addBindAction string
+
 	addIssuer        string
 	addClientID      string
 	addClientSecret  string
@@ -138,6 +141,9 @@ func init() {
 
 	addCmd.Flags().StringVar(&addStatefulOperation, "stateful-operation", "", "Wire to a custom stateful operation (e.g., TransferFunds)")
 
+	addCmd.Flags().StringVar(&addTable, "table", "", "Bind to a stateful resource table (e.g., users)")
+	addCmd.Flags().StringVar(&addBindAction, "bind", "", "Stateful action: list, get, create, update, delete, custom")
+
 	addCmd.Flags().StringVar(&addSoapAction, "soap-action", "", "SOAPAction header value")
 
 	addCmd.Flags().StringVar(&addIssuer, "issuer", "", "OAuth issuer URL (default: http://localhost:4280)")
@@ -193,6 +199,11 @@ func runAdd(cmd *cobra.Command, args []string) error { //nolint:gocyclo // CLI d
 		return errors.New("--path and --path-pattern are mutually exclusive")
 	}
 
+	// --table/--bind is only supported for protocols with stateful bindings
+	if addTable != "" && mockTypeEnum != mock.TypeHTTP && mockTypeEnum != mock.TypeSOAP {
+		return fmt.Errorf("--table/--bind is supported for http and soap mocks, not %s", mt)
+	}
+
 	// Build mock configuration based on type
 	var m *config.MockConfiguration
 	var err error
@@ -200,7 +211,7 @@ func runAdd(cmd *cobra.Command, args []string) error { //nolint:gocyclo // CLI d
 	switch mockTypeEnum {
 	case mock.TypeHTTP:
 		m, err = buildHTTPMock(addName, addPath, addMethod, addStatus, addBody, addBodyFile, addPriority, addDelay, addHeaders, addMatchHeaders, addMatchQueries,
-			addSSE, addSSEEvents, addSSEDelay, addSSETemplate, addSSERepeat, addSSEKeepalive, addBodyContains, addPathPattern, addStatefulOperation)
+			addSSE, addSSEEvents, addSSEDelay, addSSETemplate, addSSERepeat, addSSEKeepalive, addBodyContains, addPathPattern, addStatefulOperation, addTable, addBindAction, addOperation)
 	case mock.TypeWebSocket:
 		m, err = buildWebSocketMock(addName, addPath, addMessage, addEcho)
 	case mock.TypeGraphQL:
@@ -210,7 +221,15 @@ func runAdd(cmd *cobra.Command, args []string) error { //nolint:gocyclo // CLI d
 	case mock.TypeMQTT:
 		m, err = buildMQTTMock(addName, addTopic, addPayload, addQoS, addMQTTPort)
 	case mock.TypeSOAP:
-		m, err = buildSOAPMock(addName, addPath, addOperation, addSoapAction, addResponse, soapAddStatefulRes, soapAddStatefulAction)
+		// --table/--bind serve as aliases for SOAP's --stateful-resource/--stateful-action
+		soapRes, soapAct := soapAddStatefulRes, soapAddStatefulAction
+		if soapRes == "" && addTable != "" {
+			soapRes = addTable
+		}
+		if soapAct == "" && addBindAction != "" {
+			soapAct = addBindAction
+		}
+		m, err = buildSOAPMock(addName, addPath, addOperation, addSoapAction, addResponse, soapRes, soapAct)
 	case mock.TypeOAuth:
 		m = buildOAuthMock(addName, addIssuer, addClientID, addClientSecret, addOAuthUser, addOAuthPassword)
 	}
@@ -364,7 +383,7 @@ func mergeSOAPIfExists(client AdminClient, newMock *config.MockConfiguration) (*
 func buildHTTPMock(name, path, method string, status int, body, bodyFile string, priority, delay int,
 	headers, matchHeaders, matchQueries flags.StringSlice,
 	sse bool, sseEvents flags.StringSlice, sseDelay int, sseTemplate string, sseRepeat, sseKeepalive int,
-	bodyContains, pathPattern, statefulOperation string) (*config.MockConfiguration, error) {
+	bodyContains, pathPattern, statefulOperation, table, bindAction, operation string) (*config.MockConfiguration, error) {
 
 	if path == "" && pathPattern == "" {
 		return nil, errors.New(`--path or --path-pattern is required for HTTP mocks
@@ -372,6 +391,32 @@ func buildHTTPMock(name, path, method string, status int, body, bodyFile string,
 Usage: mockd add --path /api/endpoint [flags]
 
 Run 'mockd add --help' for more options`)
+	}
+
+	// Validate --table/--bind: both or neither
+	if (table != "") != (bindAction != "") {
+		return nil, errors.New("--table and --bind must be used together\n\nUsage: mockd add http --path /api/users --table users --bind list")
+	}
+
+	// Validate bind action values
+	if bindAction != "" {
+		validBindActions := map[string]bool{
+			"list": true, "get": true, "create": true,
+			"update": true, "delete": true, "custom": true,
+		}
+		if !validBindActions[bindAction] {
+			return nil, fmt.Errorf("invalid --bind value %q: must be one of list, get, create, update, delete, custom", bindAction)
+		}
+		// --table/--bind is mutually exclusive with --body, --body-file, --sse, --stateful-operation
+		if body != "" || bodyFile != "" {
+			return nil, errors.New("--table/--bind and --body/--body-file are mutually exclusive (the table provides the response)")
+		}
+		if sse || len(sseEvents) > 0 || sseTemplate != "" {
+			return nil, errors.New("--table/--bind and --sse are mutually exclusive")
+		}
+		if statefulOperation != "" {
+			return nil, errors.New("--table/--bind and --stateful-operation are mutually exclusive")
+		}
 	}
 
 	// Validate stateful-operation incompatibilities before touching files.
@@ -441,6 +486,18 @@ Run 'mockd add --help' for more options`)
 
 	// Handle stateful operation: mutually exclusive with response/sse
 	switch {
+	case table != "":
+		binding := &mock.StatefulBinding{
+			Table:  table,
+			Action: bindAction,
+		}
+		if bindAction == "custom" {
+			if operation == "" {
+				return nil, errors.New("--operation is required when using --bind custom\n\nUsage: mockd add http --path /api/users/{id}/verify --table users --bind custom --operation VerifyUser")
+			}
+			binding.Operation = operation
+		}
+		m.HTTP.StatefulBinding = binding
 	case statefulOperation != "":
 		m.HTTP.StatefulOperation = statefulOperation
 	case sse || len(sseEvents) > 0 || sseTemplate != "":
@@ -1050,7 +1107,13 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 				fmt.Printf("  Method: %s\n", created.HTTP.Matcher.Method)
 				fmt.Printf("  Path:   %s\n", created.HTTP.Matcher.Path)
 			}
-			if created.HTTP.StatefulOperation != "" {
+			if created.HTTP.StatefulBinding != nil {
+				fmt.Printf("  Table: %s\n", created.HTTP.StatefulBinding.Table)
+				fmt.Printf("  Bind:  %s\n", created.HTTP.StatefulBinding.Action)
+				if created.HTTP.StatefulBinding.Operation != "" {
+					fmt.Printf("  Operation: %s\n", created.HTTP.StatefulBinding.Operation)
+				}
+			} else if created.HTTP.StatefulOperation != "" {
 				fmt.Printf("  Operation: %s\n", created.HTTP.StatefulOperation)
 			} else if created.HTTP.Response != nil {
 				fmt.Printf("  Status: %d\n", created.HTTP.Response.StatusCode)
@@ -1170,6 +1233,8 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error { //no
 		createdPath := ""
 		createdStatus := 0
 		createdOperation := ""
+		createdTable := ""
+		createdBind := ""
 		if created.HTTP != nil && created.HTTP.Matcher != nil {
 			createdMethod = created.HTTP.Matcher.Method
 			createdPath = created.HTTP.Matcher.Path
@@ -1180,6 +1245,13 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error { //no
 		if created.HTTP != nil {
 			createdOperation = created.HTTP.StatefulOperation
 		}
+		if created.HTTP != nil && created.HTTP.StatefulBinding != nil {
+			createdTable = created.HTTP.StatefulBinding.Table
+			createdBind = created.HTTP.StatefulBinding.Action
+			if created.HTTP.StatefulBinding.Operation != "" {
+				createdOperation = created.HTTP.StatefulBinding.Operation
+			}
+		}
 		return output.JSON(struct {
 			ID                string `json:"id"`
 			Type              string `json:"type"`
@@ -1188,6 +1260,8 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error { //no
 			Path              string `json:"path"`
 			StatusCode        int    `json:"statusCode,omitempty"`
 			StatefulOperation string `json:"statefulOperation,omitempty"`
+			Table             string `json:"table,omitempty"`
+			Bind              string `json:"bind,omitempty"`
 		}{
 			ID:                created.ID,
 			Type:              string(created.Type),
@@ -1196,6 +1270,8 @@ func outputJSONResult(result *CreateMockResult, mockType mock.Type) error { //no
 			Path:              createdPath,
 			StatusCode:        createdStatus,
 			StatefulOperation: createdOperation,
+			Table:             createdTable,
+			Bind:              createdBind,
 		})
 
 	case mock.TypeWebSocket:

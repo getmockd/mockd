@@ -192,6 +192,11 @@ func handleCreateMock(args map[string]interface{}, session *MCPSession, server *
 	enabled := true
 	mockCfg.Enabled = &enabled
 
+	// Handle extend: bind mock to a stateful resource table.
+	if errResult := applyExtendBinding(args, &mockCfg); errResult != nil {
+		return errResult, nil
+	}
+
 	createResult, err := client.CreateMock(&mockCfg)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
@@ -257,6 +262,11 @@ func handleUpdateMock(args map[string]interface{}, session *MCPSession, server *
 			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 			return ToolResultError("failed to merge update: " + err.Error()), nil
 		}
+	}
+
+	// Handle extend: bind mock to a stateful resource table.
+	if errResult := applyExtendBinding(args, existingMock); errResult != nil {
+		return errResult, nil
 	}
 
 	if _, err := client.UpdateMock(id, existingMock); err != nil {
@@ -333,4 +343,71 @@ func handleToggleMock(args map[string]interface{}, session *MCPSession, server *
 		"enabled": enabled,
 	}
 	return ToolResultJSON(result)
+}
+
+// applyExtendBinding reads the top-level "extend" arg and wires the mock to a
+// stateful resource table. The binding is protocol-agnostic at the user level
+// (table + action + operation) — each protocol maps it to its own internal
+// representation.
+//
+// Returns a *ToolResult on validation error, nil on success or no-op.
+func applyExtendBinding(args map[string]interface{}, m *config.MockConfiguration) *ToolResult {
+	extendRaw, ok := args["extend"]
+	if !ok {
+		return nil
+	}
+	extendMap, ok := extendRaw.(map[string]interface{})
+	if !ok {
+		return ToolResultError("extend must be an object with table and action")
+	}
+
+	table := getString(extendMap, "table", "")
+	action := getString(extendMap, "action", "")
+	operation := getString(extendMap, "operation", "")
+
+	if table == "" || action == "" {
+		return ToolResultError("extend requires both 'table' and 'action'")
+	}
+
+	validActions := map[string]bool{
+		"list": true, "get": true, "create": true,
+		"update": true, "delete": true, "custom": true,
+	}
+	if !validActions[action] {
+		return ToolResultError("invalid extend action: " + action + ". Must be: list, get, create, update, delete, custom")
+	}
+	if action == "custom" && operation == "" {
+		return ToolResultError("extend with action 'custom' requires 'operation' name")
+	}
+
+	// Wire the binding into the protocol-specific spec.
+	switch m.Type {
+	case mock.TypeHTTP:
+		if m.HTTP == nil {
+			m.HTTP = &mock.HTTPSpec{}
+		}
+		m.HTTP.StatefulBinding = &mock.StatefulBinding{
+			Table:     table,
+			Action:    action,
+			Operation: operation,
+		}
+
+	case mock.TypeSOAP:
+		if m.SOAP == nil || len(m.SOAP.Operations) == 0 {
+			return ToolResultError("SOAP mock must have at least one operation before adding a binding")
+		}
+		// Apply the binding to every operation in the SOAP mock.
+		// For single-operation SOAP mocks (the common case) this is exactly right.
+		// For multi-operation mocks, use the protocol-specific fields instead.
+		for opName, opCfg := range m.SOAP.Operations {
+			opCfg.StatefulResource = table
+			opCfg.StatefulAction = action
+			m.SOAP.Operations[opName] = opCfg
+		}
+
+	default:
+		return ToolResultError(fmt.Sprintf("extend bindings are supported for http and soap mocks, not %s", m.Type))
+	}
+
+	return nil
 }

@@ -129,18 +129,29 @@ extend:
 - **Custom operations**: Use `action: custom` + `operation: OpName` for non-CRUD actions (e.g., confirm, capture, cancel).
 - The default list response format is `{"data":[...],"meta":{...}}`. Use response transforms to customize the envelope.
 
-### Stateful Bindings via MCP / API
+### Stateful Bindings via MCP / API / CLI
 
-You can also create stateful bindings at runtime without a config file. First create a resource table with `manage_state add_resource`, then create mocks with `statefulBinding` in the HTTP spec:
+You can also create stateful bindings at runtime without a config file:
 
+**MCP** — use `extend` on `manage_mock`:
 ```
 1. manage_state: {"action":"add_resource","resource":"users"}
-2. manage_mock:  {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/users"},"response":{"statusCode":200},"statefulBinding":{"table":"users","action":"list"}}}
-3. manage_mock:  {"action":"create","type":"http","http":{"matcher":{"method":"POST","path":"/api/users"},"response":{"statusCode":201},"statefulBinding":{"table":"users","action":"create"}}}
-4. manage_mock:  {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/users/{id}"},"response":{"statusCode":200},"statefulBinding":{"table":"users","action":"get"}}}
+2. manage_mock:  {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/users"}},"extend":{"table":"users","action":"list"}}
+3. manage_mock:  {"action":"create","type":"http","http":{"matcher":{"method":"POST","path":"/api/users"}},"extend":{"table":"users","action":"create"}}
+4. manage_mock:  {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/users/{id}"}},"extend":{"table":"users","action":"get"}}
 ```
 
-Actions: `list`, `get`, `create`, `update`, `delete`, `custom`. For `custom`, also register the operation with `manage_custom_operation`.
+**CLI** — use `--table` and `--bind`:
+```bash
+mockd add http --path /api/users --table users --bind list
+mockd add http --path /api/users --method POST --table users --bind create
+mockd add http --path /api/users/{id} --table users --bind get
+mockd add http --path /api/users/{id} --method PUT --table users --bind update
+mockd add http --path /api/users/{id} --method DELETE --table users --bind delete
+mockd add http --path /api/users/{id}/verify --method POST --table users --bind custom --operation VerifyUser
+```
+
+Actions: `list`, `get`, `create`, `update`, `delete`, `custom`. For `custom`, also provide `--operation` (CLI) or `"operation"` (MCP).
 
 ## Template Functions
 

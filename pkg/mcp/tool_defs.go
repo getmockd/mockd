@@ -89,12 +89,12 @@ Examples:
   Toggle: {"action":"toggle","id":"http_060bff782a1de15f","enabled":false}
 
 Stateful binding examples (bind mocks to stateful resource tables for automatic CRUD):
-  List:   {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/users"},"response":{"statusCode":200},"statefulBinding":{"table":"users","action":"list"}}}
-  Get:    {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/users/{id}"},"response":{"statusCode":200},"statefulBinding":{"table":"users","action":"get"}}}
-  Create: {"action":"create","type":"http","http":{"matcher":{"method":"POST","path":"/api/users"},"response":{"statusCode":201},"statefulBinding":{"table":"users","action":"create"}}}
-  Update: {"action":"create","type":"http","http":{"matcher":{"method":"PUT","path":"/api/users/{id}"},"response":{"statusCode":200},"statefulBinding":{"table":"users","action":"update"}}}
-  Delete: {"action":"create","type":"http","http":{"matcher":{"method":"DELETE","path":"/api/users/{id}"},"response":{"statusCode":200},"statefulBinding":{"table":"users","action":"delete"}}}
-  Custom: {"action":"create","type":"http","http":{"matcher":{"method":"POST","path":"/api/users/{id}/verify"},"response":{"statusCode":200},"statefulBinding":{"table":"users","action":"custom","operation":"VerifyUser"}}}`,
+  List:   {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/users"}},"extend":{"table":"users","action":"list"}}
+  Create: {"action":"create","type":"http","http":{"matcher":{"method":"POST","path":"/api/users"}},"extend":{"table":"users","action":"create"}}
+  Get:    {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/users/{id}"}},"extend":{"table":"users","action":"get"}}
+  Update: {"action":"create","type":"http","http":{"matcher":{"method":"PUT","path":"/api/users/{id}"}},"extend":{"table":"users","action":"update"}}
+  Delete: {"action":"create","type":"http","http":{"matcher":{"method":"DELETE","path":"/api/users/{id}"}},"extend":{"table":"users","action":"delete"}}
+  Custom: {"action":"create","type":"http","http":{"matcher":{"method":"POST","path":"/api/users/{id}/verify"}},"extend":{"table":"users","action":"custom","operation":"VerifyUser"}}`,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -172,26 +172,6 @@ Stateful binding examples (bind mocks to stateful resource tables for automatic 
 						"description": "Match priority (higher wins)",
 						"default":     0,
 					},
-					"statefulBinding": map[string]interface{}{
-						"type":        "object",
-						"description": "Bind this mock to a stateful resource table for automatic CRUD. The table must exist (create it first with manage_state add_resource). Actions: list, get, create, update, delete, custom. For custom actions, also set 'operation' to the registered custom operation name.",
-						"properties": map[string]interface{}{
-							"table": map[string]interface{}{
-								"type":        "string",
-								"description": "Resource table name (must exist in state store)",
-							},
-							"action": map[string]interface{}{
-								"type":        "string",
-								"description": "CRUD action to perform",
-								"enum":        []string{"list", "get", "create", "update", "delete", "custom"},
-							},
-							"operation": map[string]interface{}{
-								"type":        "string",
-								"description": "Custom operation name (required when action is 'custom')",
-							},
-						},
-						"required": []string{"table", "action"},
-					},
 				},
 			},
 			"websocket": map[string]interface{}{
@@ -217,6 +197,26 @@ Stateful binding examples (bind mocks to stateful resource tables for automatic 
 			"oauth": map[string]interface{}{
 				"type":        "object",
 				"description": "OAuth config (create/update)",
+			},
+			"extend": map[string]interface{}{
+				"type":        "object",
+				"description": "Bind this mock to a stateful resource table for automatic CRUD. Create the table first with manage_state add_resource. Works with HTTP and SOAP mocks.",
+				"properties": map[string]interface{}{
+					"table": map[string]interface{}{
+						"type":        "string",
+						"description": "Resource table name (must exist in state store)",
+					},
+					"action": map[string]interface{}{
+						"type":        "string",
+						"description": "CRUD action to perform",
+						"enum":        []string{"list", "get", "create", "update", "delete", "custom"},
+					},
+					"operation": map[string]interface{}{
+						"type":        "string",
+						"description": "Custom operation name (required when action is 'custom')",
+					},
+				},
+				"required": []string{"table", "action"},
 			},
 		},
 		"required": []string{"action"},
