@@ -313,6 +313,12 @@ func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) 
 			if !replace && store.Exists(cfg.ID) {
 				continue
 			}
+			// Default enabled to true so imported mocks are active (Enabled is
+			// a *bool; nil would be treated as disabled by consumers).
+			if cfg.Enabled == nil {
+				enabled := true
+				cfg.Enabled = &enabled
+			}
 			// Store directly (MockConfiguration is now an alias for mock.Mock)
 			if err := store.Set(cfg); err != nil {
 				return err

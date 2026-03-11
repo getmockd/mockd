@@ -5,6 +5,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/chaos"
 	"github.com/getmockd/mockd/pkg/config"
+	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/oauth"
 	"github.com/getmockd/mockd/pkg/stateful"
 	"github.com/stretchr/testify/assert"
@@ -201,6 +202,99 @@ func TestConfigLoader_LoadFromBytes(t *testing.T) {
 		assert.Equal(t, 2, srv.Store().Count())
 		assert.NotNil(t, srv.getMock("multi-1"))
 		assert.NotNil(t, srv.getMock("multi-2"))
+	})
+}
+
+// ============================================================================
+// ConfigLoader.Import Tests
+// ============================================================================
+
+func TestConfigLoader_Import(t *testing.T) {
+	t.Parallel()
+
+	t.Run("merge mode defaults Enabled to true when nil", func(t *testing.T) {
+		t.Parallel()
+		srv := NewServer(nil)
+		cl := NewConfigLoader(srv)
+
+		collection := &config.MockCollection{
+			Version: "1.0",
+			Mocks: []*config.MockConfiguration{
+				{
+					ID:   "import-merge-1",
+					Type: mock.TypeHTTP,
+					HTTP: &mock.HTTPSpec{
+						Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/merge"},
+						Response: &mock.HTTPResponse{StatusCode: 200, Body: "merge"},
+					},
+					// Enabled deliberately left nil
+				},
+			},
+		}
+
+		require.NoError(t, cl.Import(collection, false))
+
+		m := srv.getMock("import-merge-1")
+		require.NotNil(t, m, "imported mock should exist")
+		require.NotNil(t, m.Enabled, "Enabled should be set")
+		assert.True(t, *m.Enabled, "imported mock should be enabled by default")
+	})
+
+	t.Run("replace mode defaults Enabled to true when nil", func(t *testing.T) {
+		t.Parallel()
+		srv := NewServer(nil)
+		cl := NewConfigLoader(srv)
+
+		collection := &config.MockCollection{
+			Version: "1.0",
+			Mocks: []*config.MockConfiguration{
+				{
+					ID:   "import-replace-1",
+					Type: mock.TypeHTTP,
+					HTTP: &mock.HTTPSpec{
+						Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/replace"},
+						Response: &mock.HTTPResponse{StatusCode: 200, Body: "replace"},
+					},
+					// Enabled deliberately left nil
+				},
+			},
+		}
+
+		require.NoError(t, cl.Import(collection, true))
+
+		m := srv.getMock("import-replace-1")
+		require.NotNil(t, m, "imported mock should exist")
+		require.NotNil(t, m.Enabled, "Enabled should be set")
+		assert.True(t, *m.Enabled, "imported mock should be enabled by default")
+	})
+
+	t.Run("import preserves explicit Enabled=false", func(t *testing.T) {
+		t.Parallel()
+		srv := NewServer(nil)
+		cl := NewConfigLoader(srv)
+
+		disabled := false
+		collection := &config.MockCollection{
+			Version: "1.0",
+			Mocks: []*config.MockConfiguration{
+				{
+					ID:      "import-disabled",
+					Type:    mock.TypeHTTP,
+					Enabled: &disabled,
+					HTTP: &mock.HTTPSpec{
+						Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/disabled"},
+						Response: &mock.HTTPResponse{StatusCode: 200, Body: "disabled"},
+					},
+				},
+			},
+		}
+
+		require.NoError(t, cl.Import(collection, false))
+
+		m := srv.getMock("import-disabled")
+		require.NotNil(t, m, "imported mock should exist")
+		require.NotNil(t, m.Enabled, "Enabled should be set")
+		assert.False(t, *m.Enabled, "explicitly disabled mock should remain disabled")
 	})
 }
 

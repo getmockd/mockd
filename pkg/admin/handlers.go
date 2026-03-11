@@ -362,6 +362,12 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 			m.CreatedAt = now
 		}
 		m.UpdatedAt = now
+		// Default enabled to true so imported mocks are active (Enabled is
+		// a *bool; nil would be treated as disabled by consumers).
+		if m.Enabled == nil {
+			enabled := true
+			m.Enabled = &enabled
+		}
 	}
 
 	// If replacing, clear the file store first so we don't leave stale entries.

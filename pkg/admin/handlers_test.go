@@ -598,6 +598,47 @@ func TestHandleImportConfig(t *testing.T) {
 		assert.Equal(t, true, resp["dryRun"])
 	})
 
+	t.Run("merge mode defaults Enabled to true in admin store", func(t *testing.T) {
+		server := newMockEngineServer()
+		defer server.Close()
+
+		api := NewAPI(0,
+			WithDataDir(t.TempDir()),
+			WithLocalEngineClient(server.client()),
+		)
+
+		// Import a mock WITHOUT an explicit "enabled" field (omitted = nil *bool).
+		importData := map[string]interface{}{
+			"config": map[string]interface{}{
+				"version": "1.0",
+				"mocks": []map[string]interface{}{
+					{
+						"id":   "no-enabled-field",
+						"name": "No Enabled Field",
+						"type": "http",
+						// "enabled" deliberately omitted
+					},
+				},
+			},
+			"replace": false,
+		}
+		body, _ := json.Marshal(importData)
+
+		req := httptest.NewRequest("POST", "/config", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		api.handleImportConfig(rec, req, server.client())
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		// Verify the mock in the admin store has Enabled defaulted to true.
+		ctx := t.Context()
+		stored, err := api.dataStore.Mocks().Get(ctx, "no-enabled-field")
+		require.NoError(t, err)
+		require.NotNil(t, stored.Enabled, "Enabled should be set on stored mock")
+		assert.True(t, *stored.Enabled, "imported mock should default to enabled")
+	})
+
 	t.Run("returns error when no engine connected", func(t *testing.T) {
 		api := NewAPI(0, WithDataDir(t.TempDir()))
 
