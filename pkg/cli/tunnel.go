@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,7 +20,8 @@ import (
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
-	"github.com/getmockd/mockd/pkg/tunnel"
+	"github.com/getmockd/mockd/pkg/tunnel/protocol"
+	quicclient "github.com/getmockd/mockd/pkg/tunnel/quic"
 	"github.com/spf13/cobra"
 )
 
@@ -74,7 +76,7 @@ subcommand starts a local mock server + tunnel in one shot.`,
 		port := &tunnelPort
 		adminPort := &tunnelAdminPort
 		configFile := &tunnelConfig
-		relayURL := &tunnelRelay
+		relayAddr := &tunnelRelay
 
 		// Map MOCKD_TOKEN environment variable correctly directly checking os.Getenv
 		tokenResolved := tunnelToken
@@ -83,16 +85,9 @@ subcommand starts a local mock server + tunnel in one shot.`,
 		}
 		token := &tokenResolved
 
-		subdomain := &tunnelSubdomain
-		domain := &tunnelDomain
 		authToken := &tunnelAuthToken
 		authBasic := &tunnelAuthBasic
 		allowIPs := &tunnelAllowIPs
-
-		// Validate token
-		if *token == "" {
-			return errors.New("authentication token required (use --token or set MOCKD_TOKEN)")
-		}
 
 		// Check for port conflicts
 		if err := ports.Check(*port); err != nil {
@@ -135,35 +130,78 @@ subcommand starts a local mock server + tunnel in one shot.`,
 			return fmt.Errorf("failed to start admin API: %w", err)
 		}
 
-		// Build tunnel configuration
-		tunnelCfg := tunnel.DefaultConfig().
-			WithRelayURL(*relayURL).
-			WithToken(*token).
-			WithSubdomain(*subdomain).
-			WithCustomDomain(*domain)
+		// Auto-fetch anonymous JWT if no token provided
+		if *token == "" {
+			fmt.Println("No token provided, fetching anonymous tunnel token...")
+			anonymousToken, err := fetchAnonymousToken()
+			if err != nil {
+				_ = adminAPI.Stop()
+				_ = server.Stop()
+				return fmt.Errorf("failed to fetch anonymous token: %w", err)
+			}
+			*token = anonymousToken
+			fmt.Println("Anonymous token acquired (2h session, 100MB bandwidth)")
+		}
 
-		// Configure request authentication if specified
+		// Default to port 443 if no port specified in relay address
+		resolvedRelay := *relayAddr
+		if !strings.Contains(resolvedRelay, ":") {
+			resolvedRelay += ":443"
+		}
+
+		// Build tunnel auth config from flags
+		var tunnelAuth *protocol.TunnelAuth
 		switch {
 		case *authToken != "":
-			tunnelCfg.WithTokenAuth(*authToken)
+			tunnelAuth = &protocol.TunnelAuth{
+				Type:  "token",
+				Token: *authToken,
+			}
 			fmt.Println("Request authentication: token required")
 		case *authBasic != "":
 			parts := strings.SplitN(*authBasic, ":", 2)
 			if len(parts) != 2 {
+				_ = adminAPI.Stop()
+				_ = server.Stop()
 				return errors.New("invalid --auth-basic format, expected user:pass")
 			}
-			tunnelCfg.WithBasicAuth(parts[0], parts[1])
+			tunnelAuth = &protocol.TunnelAuth{
+				Type:     "basic",
+				Username: parts[0],
+				Password: parts[1],
+			}
 			fmt.Println("Request authentication: Basic Auth required")
 		case *allowIPs != "":
 			ips := strings.Split(*allowIPs, ",")
 			for i := range ips {
 				ips[i] = strings.TrimSpace(ips[i])
 			}
-			tunnelCfg.WithIPAuth(ips)
+			tunnelAuth = &protocol.TunnelAuth{
+				Type:       "ip",
+				AllowedIPs: ips,
+			}
 			fmt.Printf("Request authentication: IP whitelist (%d entries)\n", len(ips))
 		}
 
-		tunnelCfg.OnConnect = func(publicURL string) {
+		// Setup logger
+		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		}))
+
+		// Create QUIC tunnel client with the mock server's handler
+		client := quicclient.NewClient(&quicclient.ClientConfig{
+			RelayAddr:  resolvedRelay,
+			Token:      *token,
+			LocalPort:  *port,
+			Handler:    server.Handler(),
+			TunnelAuth: tunnelAuth,
+			Protocols: []protocol.ProtocolPort{
+				{Type: "http", Port: *port},
+			},
+			Logger: logger,
+		})
+
+		client.OnConnect = func(publicURL string) {
 			fmt.Printf("\nTunnel connected!\n")
 			fmt.Printf("Public URL: %s\n", publicURL)
 			fmt.Printf("Local server: http://localhost:%d\n", *port)
@@ -171,7 +209,7 @@ subcommand starts a local mock server + tunnel in one shot.`,
 			fmt.Println("\nPress Ctrl+C to stop")
 		}
 
-		tunnelCfg.OnDisconnect = func(err error) {
+		client.OnDisconnect = func(err error) {
 			if err != nil {
 				fmt.Printf("\nTunnel disconnected: %v\n", err)
 			} else {
@@ -179,17 +217,8 @@ subcommand starts a local mock server + tunnel in one shot.`,
 			}
 		}
 
-		tunnelCfg.OnRequest = func(method, path string) {
+		client.OnRequest = func(method, path string) {
 			fmt.Printf("  %s %s\n", method, path)
-		}
-
-		// Create tunnel client with engine handler
-		engineHandler := tunnel.NewEngineHandler(server.Handler(), tunnelCfg.Auth)
-		tunnelClient, err := tunnel.NewClient(tunnelCfg, engineHandler)
-		if err != nil {
-			_ = adminAPI.Stop()
-			_ = server.Stop()
-			return fmt.Errorf("failed to create tunnel client: %w", err)
 		}
 
 		// Set up context with cancellation
@@ -197,33 +226,38 @@ subcommand starts a local mock server + tunnel in one shot.`,
 		defer cancel()
 
 		// Connect tunnel
-		fmt.Printf("Connecting to relay at %s...\n", *relayURL)
-		if err := tunnelClient.Connect(ctx); err != nil {
+		fmt.Printf("Connecting to relay at %s (QUIC)...\n", resolvedRelay)
+		if err := client.Connect(ctx); err != nil {
 			_ = adminAPI.Stop()
 			_ = server.Stop()
 			return fmt.Errorf("failed to connect tunnel: %w", err)
 		}
 
-		// Wait for shutdown signal
+		// Run tunnel in goroutine
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- client.Run(ctx)
+		}()
+
+		// Wait for shutdown signal or error
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-		<-sigChan
-		fmt.Println("\nShutting down...")
+		select {
+		case <-sigChan:
+			fmt.Println("\nShutting down...")
+		case err := <-errCh:
+			if err != nil && err != context.Canceled {
+				fmt.Printf("\nTunnel error: %v\n", err)
+			}
+		}
 
-		// Disconnect tunnel
-		tunnelClient.Disconnect()
+		// Close tunnel client
+		_ = client.Close()
 
 		// Print final stats
-		stats := tunnelClient.Stats()
 		fmt.Printf("\nSession stats:\n")
-		fmt.Printf("  Requests served: %d\n", stats.RequestsServed)
-		fmt.Printf("  Bytes in: %d\n", stats.BytesIn)
-		fmt.Printf("  Bytes out: %d\n", stats.BytesOut)
-		fmt.Printf("  Uptime: %s\n", stats.Uptime())
-		if stats.RequestsServed > 0 {
-			fmt.Printf("  Avg latency: %.2f ms\n", stats.AvgLatencyMs())
-		}
+		fmt.Printf("  Requests served: %d\n", client.RequestCount())
 
 		// Stop admin API
 		if err := adminAPI.Stop(); err != nil {
@@ -732,7 +766,7 @@ func init() {
 	tunnelCmd.Flags().IntVarP(&tunnelPort, "port", "p", cliconfig.DefaultPort, "HTTP server port")
 	tunnelCmd.Flags().IntVar(&tunnelAdminPort, "admin-port", cliconfig.DefaultAdminPort, "Admin API port")
 	tunnelCmd.Flags().StringVarP(&tunnelConfig, "config", "c", "", "Path to mock configuration file")
-	tunnelCmd.Flags().StringVar(&tunnelRelay, "relay", tunnel.DefaultRelayURL, "Relay server URL")
+	tunnelCmd.Flags().StringVar(&tunnelRelay, "relay", "relay.mockd.io", "Relay server address (host or host:port)")
 	tunnelCmd.Flags().StringVar(&tunnelToken, "token", "", "Authentication token (or set MOCKD_TOKEN)")
 	tunnelCmd.Flags().StringVarP(&tunnelSubdomain, "subdomain", "s", "", "Requested subdomain (auto-assigned if empty)")
 	tunnelCmd.Flags().StringVar(&tunnelDomain, "domain", "", "Custom domain (must be verified)")
@@ -777,4 +811,45 @@ func init() {
 	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewExcludeWorkspaces, "exclude-workspaces", "", "Exclude these workspaces (comma-separated)")
 	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewExcludeFolders, "exclude-folders", "", "Exclude these folders (comma-separated)")
 	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewExcludeMocks, "exclude-mocks", "", "Exclude these mock IDs (comma-separated)")
+}
+
+// tokenAPIURL is the endpoint for anonymous tunnel token requests.
+const tokenAPIURL = "https://api.mockd.io/api/v1/tunnels/anonymous"
+
+// tokenResponse matches the JSON response from the tunnel token API.
+type tokenResponse struct {
+	Token     string `json:"token"`
+	ExpiresAt string `json:"expires_at"`
+	Tier      string `json:"tier"`
+}
+
+// fetchAnonymousToken calls the mockd API to get a free anonymous tunnel JWT.
+func fetchAnonymousToken() (string, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	resp, err := client.Post(tokenAPIURL, "application/json", nil)
+	if err != nil {
+		return "", fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024))
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResp tokenResponse
+	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if tokenResp.Token == "" {
+		return "", errors.New("API returned empty token")
+	}
+
+	return tokenResp.Token, nil
 }
