@@ -15,8 +15,9 @@ import (
 // handleStateOverview returns information about all stateful resources.
 func (a *API) handleStateOverview(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
-	overview, err := engine.GetStateOverview(ctx)
+	overview, err := engine.GetStateOverview(ctx, workspaceID)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "get state overview"))
 		return
@@ -28,11 +29,12 @@ func (a *API) handleStateOverview(w http.ResponseWriter, r *http.Request, engine
 // handleStateReset resets stateful resources to their seed data.
 func (a *API) handleStateReset(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
 	// Get optional resource filter from query param
 	resourceName := r.URL.Query().Get("resource")
 
-	if err := engine.ResetState(ctx, resourceName); err != nil {
+	if err := engine.ResetState(ctx, workspaceID, resourceName); err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Resource not found")
 			return
@@ -47,13 +49,14 @@ func (a *API) handleStateReset(w http.ResponseWriter, r *http.Request, engine *e
 // handleResetStateResource resets a specific stateful resource to its seed data.
 func (a *API) handleResetStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
 		return
 	}
 
-	if err := engine.ResetState(ctx, name); err != nil {
+	if err := engine.ResetState(ctx, workspaceID, name); err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Resource not found")
 			return
@@ -68,8 +71,9 @@ func (a *API) handleResetStateResource(w http.ResponseWriter, r *http.Request, e
 // handleListStateResources returns a list of all registered stateful resources.
 func (a *API) handleListStateResources(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
-	overview, err := engine.GetStateOverview(ctx)
+	overview, err := engine.GetStateOverview(ctx, workspaceID)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list state resources"))
 		return
@@ -81,6 +85,7 @@ func (a *API) handleListStateResources(w http.ResponseWriter, r *http.Request, e
 // handleGetStateResource returns details about a specific stateful resource.
 func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
 	name := r.PathValue("name")
 	if name == "" {
@@ -88,7 +93,7 @@ func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, eng
 		return
 	}
 
-	resource, err := engine.GetStateResource(ctx, name)
+	resource, err := engine.GetStateResource(ctx, workspaceID, name)
 	if err != nil {
 		status, code, msg := mapStatefulResourceError(err, a.logger(), "Resource not found", "get state resource")
 		writeError(w, status, code, msg)
@@ -103,6 +108,7 @@ func (a *API) handleGetStateResource(w http.ResponseWriter, r *http.Request, eng
 // file store so the definition survives restarts.
 func (a *API) handleCreateStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
 	var cfg config.StatefulResourceConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
@@ -123,7 +129,7 @@ func (a *API) handleCreateStateResource(w http.ResponseWriter, r *http.Request, 
 	// Register with the engine first — engine is the source of truth for
 	// whether a resource is already active. This prevents state disagreement
 	// where the file store says "already exists" but the engine never loaded it.
-	if err := engine.RegisterStatefulResource(ctx, &cfg); err != nil {
+	if err := engine.RegisterStatefulResource(ctx, workspaceID, &cfg); err != nil {
 		if errors.Is(err, engineclient.ErrConflict) {
 			writeError(w, http.StatusConflict, "conflict", "resource already exists: "+cfg.Name)
 			return
@@ -159,6 +165,7 @@ func (a *API) handleCreateStateResource(w http.ResponseWriter, r *http.Request, 
 // It removes the resource from both the engine (runtime) and the data store (persistence).
 func (a *API) handleDeleteStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
 	name := r.PathValue("name")
 	if name == "" {
@@ -167,7 +174,7 @@ func (a *API) handleDeleteStateResource(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Unregister from the engine (runtime state).
-	if err := engine.DeleteStatefulResource(ctx, name); err != nil {
+	if err := engine.DeleteStatefulResource(ctx, workspaceID, name); err != nil {
 		status, code, msg := mapStatefulResourceError(err, a.logger(), "Resource not found", "delete state resource")
 		writeError(w, status, code, msg)
 		return
@@ -191,6 +198,7 @@ func (a *API) handleDeleteStateResource(w http.ResponseWriter, r *http.Request, 
 // handleClearStateResource clears all items from a specific resource (does not restore seed data).
 func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
 	name := r.PathValue("name")
 	if name == "" {
@@ -198,7 +206,7 @@ func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, e
 		return
 	}
 
-	if err := engine.ClearStateResource(ctx, name); err != nil {
+	if err := engine.ClearStateResource(ctx, workspaceID, name); err != nil {
 		status, code, msg := mapStatefulResourceError(err, a.logger(), "Resource not found", "clear state resource")
 		writeError(w, status, code, msg)
 		return
@@ -210,6 +218,7 @@ func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, e
 // handleListStatefulItems returns paginated items for a stateful resource.
 func (a *API) handleListStatefulItems(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
@@ -239,7 +248,7 @@ func (a *API) handleListStatefulItems(w http.ResponseWriter, r *http.Request, en
 		order = "desc"
 	}
 
-	result, err := engine.ListStatefulItems(ctx, name, limit, offset, sort, order)
+	result, err := engine.ListStatefulItems(ctx, workspaceID, name, limit, offset, sort, order)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Resource not found")
@@ -255,6 +264,7 @@ func (a *API) handleListStatefulItems(w http.ResponseWriter, r *http.Request, en
 // handleGetStatefulItem returns a specific item from a stateful resource.
 func (a *API) handleGetStatefulItem(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
@@ -267,7 +277,7 @@ func (a *API) handleGetStatefulItem(w http.ResponseWriter, r *http.Request, engi
 		return
 	}
 
-	item, err := engine.GetStatefulItem(ctx, name, id)
+	item, err := engine.GetStatefulItem(ctx, workspaceID, name, id)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Item not found")
@@ -283,6 +293,7 @@ func (a *API) handleGetStatefulItem(w http.ResponseWriter, r *http.Request, engi
 // handleCreateStatefulItem creates a new item in a stateful resource.
 func (a *API) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
@@ -295,7 +306,7 @@ func (a *API) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request, e
 		return
 	}
 
-	item, err := engine.CreateStatefulItem(ctx, name, data)
+	item, err := engine.CreateStatefulItem(ctx, workspaceID, name, data)
 	if err != nil {
 		status, code, msg := mapCreateStatefulItemError(err, a.logger())
 		writeError(w, status, code, msg)
@@ -331,8 +342,9 @@ func mapStatefulResourceError(err error, log *slog.Logger, notFoundMsg, operatio
 // POST /reset
 func (a *API) handleResetTables(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
-	resp, err := engine.ResetStateWithResponse(ctx, "")
+	resp, err := engine.ResetStateWithResponse(ctx, workspaceID, "")
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "reset tables"))
 		return
@@ -348,6 +360,7 @@ func (a *API) handleResetTables(w http.ResponseWriter, r *http.Request, engine *
 // POST /reset/{table}
 func (a *API) handleResetTable(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
 	table := r.PathValue("table")
 	if table == "" {
@@ -355,7 +368,7 @@ func (a *API) handleResetTable(w http.ResponseWriter, r *http.Request, engine *e
 		return
 	}
 
-	if err := engine.ResetState(ctx, table); err != nil {
+	if err := engine.ResetState(ctx, workspaceID, table); err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Table not found: "+table)
 			return
@@ -375,8 +388,9 @@ func (a *API) handleResetTable(w http.ResponseWriter, r *http.Request, engine *e
 // handleListCustomOperations returns all registered custom operations.
 func (a *API) handleListCustomOperations(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
-	ops, err := engine.ListCustomOperations(ctx)
+	ops, err := engine.ListCustomOperations(ctx, workspaceID)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list custom operations"))
 		return
@@ -395,13 +409,14 @@ func (a *API) handleListCustomOperations(w http.ResponseWriter, r *http.Request,
 // handleGetCustomOperation returns a specific custom operation.
 func (a *API) handleGetCustomOperation(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "missing_name", "Operation name is required")
 		return
 	}
 
-	op, err := engine.GetCustomOperation(ctx, name)
+	op, err := engine.GetCustomOperation(ctx, workspaceID, name)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Custom operation not found: "+name)
@@ -417,6 +432,7 @@ func (a *API) handleGetCustomOperation(w http.ResponseWriter, r *http.Request, e
 // handleRegisterCustomOperation registers a new custom operation.
 func (a *API) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 
 	var cfg map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
@@ -430,7 +446,7 @@ func (a *API) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := engine.RegisterCustomOperation(ctx, cfg); err != nil {
+	if err := engine.RegisterCustomOperation(ctx, workspaceID, cfg); err != nil {
 		writeError(w, http.StatusBadRequest, "registration_failed", sanitizeError(err, a.logger(), "register custom operation"))
 		return
 	}
@@ -444,13 +460,14 @@ func (a *API) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Reque
 // handleDeleteCustomOperation deletes a custom operation.
 func (a *API) handleDeleteCustomOperation(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "missing_name", "Operation name is required")
 		return
 	}
 
-	if err := engine.DeleteCustomOperation(ctx, name); err != nil {
+	if err := engine.DeleteCustomOperation(ctx, workspaceID, name); err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Custom operation not found: "+name)
 			return
@@ -468,6 +485,7 @@ func (a *API) handleDeleteCustomOperation(w http.ResponseWriter, r *http.Request
 // handleExecuteCustomOperation executes a custom operation with the given input.
 func (a *API) handleExecuteCustomOperation(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "missing_name", "Operation name is required")
@@ -480,7 +498,7 @@ func (a *API) handleExecuteCustomOperation(w http.ResponseWriter, r *http.Reques
 		input = make(map[string]interface{})
 	}
 
-	result, err := engine.ExecuteCustomOperation(ctx, name, input)
+	result, err := engine.ExecuteCustomOperation(ctx, workspaceID, name, input)
 	if err != nil {
 		if errors.Is(err, engineclient.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "Custom operation not found: "+name)

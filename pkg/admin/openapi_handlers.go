@@ -94,7 +94,8 @@ func (a *API) handleGetInsomniaExport(w http.ResponseWriter, r *http.Request) {
 		// Get stateful resources if available
 		var statefulResources []statefulResourceInfo
 		if client := a.localEngine.Load(); client != nil {
-			overview, err := client.GetStateOverview(ctx)
+			workspaceID := r.URL.Query().Get("workspaceId")
+			overview, err := client.GetStateOverview(ctx, workspaceID)
 			if err == nil && overview != nil {
 				for _, res := range overview.Resources {
 					// Generate a sample ID - use singular form of resource name + "-1"

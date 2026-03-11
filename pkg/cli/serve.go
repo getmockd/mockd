@@ -887,7 +887,7 @@ func postStartup(sctx *serveContext) error {
 	if f.pidFile != "" {
 		mocksCount, _ := engClient.ListMocks(sctx.ctx)
 		pidMocksLoaded := len(mocksCount)
-		if stateOverview, err := engClient.GetStateOverview(sctx.ctx); err == nil {
+		if stateOverview, err := engClient.GetStateOverview(sctx.ctx, ""); err == nil {
 			pidMocksLoaded += stateOverview.Total
 		}
 		if err := writePIDFileForServe(f.pidFile, "dev", f.port, f.httpsPort, f.adminPort, f.configFile, pidMocksLoaded); err != nil {
@@ -919,7 +919,7 @@ func postStartup(sctx *serveContext) error {
 	mocks, _ := engClient.ListMocks(sctx.ctx)
 	mocksLoaded := len(mocks)
 	statefulCount := 0
-	if stateOverview, err := engClient.GetStateOverview(sctx.ctx); err == nil {
+	if stateOverview, err := engClient.GetStateOverview(sctx.ctx, ""); err == nil {
 		statefulCount = stateOverview.Total
 	}
 	printServeStartupMessage(f.port, f.adminPort, f.httpsPort, f.mcpEnabled, f.mcpPort, f.register, f.pull, mocksLoaded, statefulCount)

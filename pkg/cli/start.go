@@ -393,7 +393,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if startPidFile != "" {
 		mocksCount, _ := engClient.ListMocks(ctx)
 		pidMocksLoaded := len(mocksCount)
-		if stateOverview, err := engClient.GetStateOverview(ctx); err == nil {
+		if stateOverview, err := engClient.GetStateOverview(ctx, ""); err == nil {
 			pidMocksLoaded += stateOverview.Total
 		}
 		if err := writePIDFileForServe(startPidFile, "dev", sf.Port, sf.HTTPSPort, sf.AdminPort, sf.ConfigFile, pidMocksLoaded); err != nil {

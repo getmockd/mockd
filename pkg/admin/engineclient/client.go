@@ -583,8 +583,12 @@ func (c *Client) ResetCircuitBreaker(ctx context.Context, key string) error {
 }
 
 // GetStateOverview returns overview of all stateful resources.
-func (c *Client) GetStateOverview(ctx context.Context) (*StateOverview, error) {
-	resp, err := c.get(ctx, "/state")
+func (c *Client) GetStateOverview(ctx context.Context, workspaceID string) (*StateOverview, error) {
+	path := "/state"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.get(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -603,20 +607,24 @@ func (c *Client) GetStateOverview(ctx context.Context) (*StateOverview, error) {
 
 // ResetState resets stateful resources to initial state.
 // If resourceName is empty, all resources are reset.
-func (c *Client) ResetState(ctx context.Context, resourceName string) error {
-	_, err := c.ResetStateWithResponse(ctx, resourceName)
+func (c *Client) ResetState(ctx context.Context, workspaceID, resourceName string) error {
+	_, err := c.ResetStateWithResponse(ctx, workspaceID, resourceName)
 	return err
 }
 
 // ResetStateWithResponse resets stateful resources and returns the response
 // containing which resources were reset. If resourceName is empty, all
 // resources are reset.
-func (c *Client) ResetStateWithResponse(ctx context.Context, resourceName string) (*ResetStateResponse, error) {
+func (c *Client) ResetStateWithResponse(ctx context.Context, workspaceID, resourceName string) (*ResetStateResponse, error) {
 	body := map[string]string{}
 	if resourceName != "" {
 		body["resource"] = resourceName
 	}
-	resp, err := c.post(ctx, "/state/reset", body)
+	path := "/state/reset"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.post(ctx, path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -637,8 +645,12 @@ func (c *Client) ResetStateWithResponse(ctx context.Context, resourceName string
 }
 
 // GetStateResource returns a specific stateful resource.
-func (c *Client) GetStateResource(ctx context.Context, name string) (interface{}, error) {
-	resp, err := c.get(ctx, "/state/resources/"+url.PathEscape(name))
+func (c *Client) GetStateResource(ctx context.Context, workspaceID, name string) (interface{}, error) {
+	path := "/state/resources/" + url.PathEscape(name)
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.get(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -659,8 +671,12 @@ func (c *Client) GetStateResource(ctx context.Context, name string) (interface{}
 }
 
 // ClearStateResource clears a specific stateful resource.
-func (c *Client) ClearStateResource(ctx context.Context, name string) error {
-	resp, err := c.delete(ctx, "/state/resources/"+url.PathEscape(name))
+func (c *Client) ClearStateResource(ctx context.Context, workspaceID, name string) error {
+	path := "/state/resources/" + url.PathEscape(name)
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.delete(ctx, path)
 	if err != nil {
 		return err
 	}
@@ -676,7 +692,7 @@ func (c *Client) ClearStateResource(ctx context.Context, name string) error {
 }
 
 // ListStatefulItems returns items in a stateful resource with pagination.
-func (c *Client) ListStatefulItems(ctx context.Context, name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error) {
+func (c *Client) ListStatefulItems(ctx context.Context, workspaceID, name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error) {
 	params := url.Values{}
 	params.Set("limit", strconv.Itoa(limit))
 	params.Set("offset", strconv.Itoa(offset))
@@ -685,6 +701,9 @@ func (c *Client) ListStatefulItems(ctx context.Context, name string, limit, offs
 	}
 	if order != "" {
 		params.Set("order", order)
+	}
+	if workspaceID != "" {
+		params.Set("workspaceId", workspaceID)
 	}
 
 	resp, err := c.get(ctx, "/state/resources/"+url.PathEscape(name)+"/items?"+params.Encode())
@@ -708,8 +727,12 @@ func (c *Client) ListStatefulItems(ctx context.Context, name string, limit, offs
 }
 
 // GetStatefulItem returns a specific item from a stateful resource.
-func (c *Client) GetStatefulItem(ctx context.Context, resourceName, itemID string) (map[string]interface{}, error) {
-	resp, err := c.get(ctx, "/state/resources/"+url.PathEscape(resourceName)+"/items/"+url.PathEscape(itemID))
+func (c *Client) GetStatefulItem(ctx context.Context, workspaceID, resourceName, itemID string) (map[string]interface{}, error) {
+	path := "/state/resources/" + url.PathEscape(resourceName) + "/items/" + url.PathEscape(itemID)
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.get(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -730,8 +753,12 @@ func (c *Client) GetStatefulItem(ctx context.Context, resourceName, itemID strin
 }
 
 // CreateStatefulItem creates a new item in a stateful resource.
-func (c *Client) CreateStatefulItem(ctx context.Context, resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
-	resp, err := c.post(ctx, "/state/resources/"+url.PathEscape(resourceName)+"/items", data)
+func (c *Client) CreateStatefulItem(ctx context.Context, workspaceID, resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
+	path := "/state/resources/" + url.PathEscape(resourceName) + "/items"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.post(ctx, path, data)
 	if err != nil {
 		return nil, err
 	}
@@ -758,8 +785,12 @@ func (c *Client) CreateStatefulItem(ctx context.Context, resourceName string, da
 }
 
 // RegisterStatefulResource registers a new stateful resource definition on the engine.
-func (c *Client) RegisterStatefulResource(ctx context.Context, cfg *config.StatefulResourceConfig) error {
-	resp, err := c.post(ctx, "/state/resources", cfg)
+func (c *Client) RegisterStatefulResource(ctx context.Context, workspaceID string, cfg *config.StatefulResourceConfig) error {
+	path := "/state/resources"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.post(ctx, path, cfg)
 	if err != nil {
 		return err
 	}
@@ -776,8 +807,12 @@ func (c *Client) RegisterStatefulResource(ctx context.Context, cfg *config.State
 }
 
 // DeleteStatefulResource unregisters a stateful resource definition from the engine.
-func (c *Client) DeleteStatefulResource(ctx context.Context, name string) error {
-	resp, err := c.post(ctx, "/state/resources/"+url.PathEscape(name)+"/unregister", nil)
+func (c *Client) DeleteStatefulResource(ctx context.Context, workspaceID, name string) error {
+	path := "/state/resources/" + url.PathEscape(name) + "/unregister"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.post(ctx, path, nil)
 	if err != nil {
 		return err
 	}
@@ -793,8 +828,12 @@ func (c *Client) DeleteStatefulResource(ctx context.Context, name string) error 
 }
 
 // ListCustomOperations returns all registered custom operations.
-func (c *Client) ListCustomOperations(ctx context.Context) ([]CustomOperationInfo, error) {
-	resp, err := c.get(ctx, "/state/operations")
+func (c *Client) ListCustomOperations(ctx context.Context, workspaceID string) ([]CustomOperationInfo, error) {
+	path := "/state/operations"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.get(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -815,8 +854,12 @@ func (c *Client) ListCustomOperations(ctx context.Context) ([]CustomOperationInf
 }
 
 // GetCustomOperation returns a specific custom operation by name.
-func (c *Client) GetCustomOperation(ctx context.Context, name string) (*CustomOperationDetail, error) {
-	resp, err := c.get(ctx, "/state/operations/"+url.PathEscape(name))
+func (c *Client) GetCustomOperation(ctx context.Context, workspaceID, name string) (*CustomOperationDetail, error) {
+	path := "/state/operations/" + url.PathEscape(name)
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.get(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -837,8 +880,12 @@ func (c *Client) GetCustomOperation(ctx context.Context, name string) (*CustomOp
 }
 
 // RegisterCustomOperation registers a new custom operation.
-func (c *Client) RegisterCustomOperation(ctx context.Context, cfg interface{}) error {
-	resp, err := c.post(ctx, "/state/operations", cfg)
+func (c *Client) RegisterCustomOperation(ctx context.Context, workspaceID string, cfg interface{}) error {
+	path := "/state/operations"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.post(ctx, path, cfg)
 	if err != nil {
 		return err
 	}
@@ -851,8 +898,12 @@ func (c *Client) RegisterCustomOperation(ctx context.Context, cfg interface{}) e
 }
 
 // DeleteCustomOperation deletes a custom operation by name.
-func (c *Client) DeleteCustomOperation(ctx context.Context, name string) error {
-	resp, err := c.delete(ctx, "/state/operations/"+url.PathEscape(name))
+func (c *Client) DeleteCustomOperation(ctx context.Context, workspaceID, name string) error {
+	path := "/state/operations/" + url.PathEscape(name)
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.delete(ctx, path)
 	if err != nil {
 		return err
 	}
@@ -868,8 +919,12 @@ func (c *Client) DeleteCustomOperation(ctx context.Context, name string) error {
 }
 
 // ExecuteCustomOperation executes a custom operation with the given input.
-func (c *Client) ExecuteCustomOperation(ctx context.Context, name string, input map[string]interface{}) (map[string]interface{}, error) {
-	resp, err := c.post(ctx, "/state/operations/"+url.PathEscape(name)+"/execute", input)
+func (c *Client) ExecuteCustomOperation(ctx context.Context, workspaceID, name string, input map[string]interface{}) (map[string]interface{}, error) {
+	path := "/state/operations/" + url.PathEscape(name) + "/execute"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.post(ctx, path, input)
 	if err != nil {
 		return nil, err
 	}
