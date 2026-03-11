@@ -414,7 +414,7 @@ func TestGetStateOverview_Success(t *testing.T) {
 	overview := StateOverview{Total: 3, TotalItems: 15}
 	_, c := mockServer(t, jsonHandler(t, 200, overview))
 
-	result, err := c.GetStateOverview(context.Background())
+	result, err := c.GetStateOverview(context.Background(), "")
 	if err != nil {
 		t.Fatalf("GetStateOverview() error = %v", err)
 	}
@@ -428,7 +428,7 @@ func TestGetStateOverview_Success(t *testing.T) {
 
 func TestResetState_Success(t *testing.T) {
 	_, c := mockServer(t, jsonHandler(t, 200, nil))
-	err := c.ResetState(context.Background(), "users")
+	err := c.ResetState(context.Background(), "", "users")
 	if err != nil {
 		t.Errorf("ResetState() error = %v, want nil", err)
 	}
@@ -443,7 +443,7 @@ func TestResetState_AllResources(t *testing.T) {
 	defer ts.Close()
 	c := New(ts.URL)
 
-	_ = c.ResetState(context.Background(), "")
+	_ = c.ResetState(context.Background(), "", "")
 	if _, ok := capturedBody["resource"]; ok {
 		t.Error("ResetState('') should not send resource field")
 	}
@@ -451,7 +451,7 @@ func TestResetState_AllResources(t *testing.T) {
 
 func TestGetStateResource_NotFound(t *testing.T) {
 	_, c := mockServer(t, jsonHandler(t, 404, nil))
-	_, err := c.GetStateResource(context.Background(), "missing")
+	_, err := c.GetStateResource(context.Background(), "", "missing")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetStateResource() error = %v, want ErrNotFound", err)
 	}
@@ -459,7 +459,7 @@ func TestGetStateResource_NotFound(t *testing.T) {
 
 func TestClearStateResource_NotFound(t *testing.T) {
 	_, c := mockServer(t, jsonHandler(t, 404, nil))
-	err := c.ClearStateResource(context.Background(), "missing")
+	err := c.ClearStateResource(context.Background(), "", "missing")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("ClearStateResource() error = %v, want ErrNotFound", err)
 	}
