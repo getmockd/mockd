@@ -91,8 +91,9 @@ func handleImportMocks(args map[string]interface{}, session *MCPSession, server 
 		return ToolResultJSON(result)
 	}
 
-	// Apply the import via admin API
-	importResult, err := client.ImportConfig(collection, replace)
+	// Apply the import via admin API, scoped to the active workspace.
+	workspace := session.GetWorkspace()
+	importResult, err := client.ImportConfig(collection, replace, workspace)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to apply import: " + adminError(err, session.GetAdminURL())), nil
@@ -121,8 +122,9 @@ func handleExportMocks(args map[string]interface{}, session *MCPSession, server 
 
 	format := getString(args, "format", "yaml")
 
-	// Get the collection from admin API
-	collection, err := client.ExportConfig("")
+	// Get the collection from admin API, scoped to the active workspace.
+	workspace := session.GetWorkspace()
+	collection, err := client.ExportConfig("", workspace)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to export mocks: " + adminError(err, session.GetAdminURL())), nil

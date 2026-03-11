@@ -153,7 +153,13 @@ func (a *API) handleExportConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mocks, err := mockStore.List(ctx, nil)
+	// Apply workspace filter if provided.
+	var mockFilter *store.MockFilter
+	if workspaceID := r.URL.Query().Get("workspaceId"); workspaceID != "" {
+		mockFilter = &store.MockFilter{WorkspaceID: workspaceID}
+	}
+
+	mocks, err := mockStore.List(ctx, mockFilter)
 	if err != nil {
 		a.logger().Error("failed to list mocks for export", "error", err)
 		writeError(w, http.StatusInternalServerError, "export_error", ErrMsgInternalError)

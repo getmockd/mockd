@@ -211,7 +211,7 @@ var templatesAddCmd = &cobra.Command{
 
 		// Import to running server
 		client := NewAdminClientWithAuth(adminURL)
-		result, err := client.ImportConfig(collection, false)
+		result, err := client.ImportConfig(collection, false, "")
 		if err != nil {
 			// Check if server is not running
 			if strings.Contains(err.Error(), "connection refused") || strings.Contains(err.Error(), "cannot connect") {

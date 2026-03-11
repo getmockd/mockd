@@ -16,7 +16,7 @@ import (
 
 type mockAdminClient struct {
 	// Mock CRUD
-	listMocksFn       func() ([]*config.MockConfiguration, error)
+	listMocksFn       func(workspaceID string) ([]*config.MockConfiguration, error)
 	listMocksByTypeFn func(string) ([]*config.MockConfiguration, error)
 	getMockFn         func(id string) (*config.MockConfiguration, error)
 	createMockFn      func(m *config.MockConfiguration) (*cli.CreateMockResult, error)
@@ -26,8 +26,8 @@ type mockAdminClient struct {
 	deleteMockFn      func(id string) error
 
 	// Import/Export
-	importConfigFn func(collection *config.MockCollection, replace bool) (*cli.ImportResult, error)
-	exportConfigFn func(name string) (*config.MockCollection, error)
+	importConfigFn func(collection *config.MockCollection, replace bool, workspaceID string) (*cli.ImportResult, error)
+	exportConfigFn func(name string, workspaceID string) (*config.MockCollection, error)
 
 	// Logs
 	getLogsFn   func(filter *cli.LogFilter) (*cli.LogResult, error)
@@ -83,9 +83,9 @@ var _ cli.AdminClient = (*mockAdminClient)(nil)
 
 // --- Mock CRUD ---
 
-func (m *mockAdminClient) ListMocks() ([]*config.MockConfiguration, error) {
+func (m *mockAdminClient) ListMocks(workspaceID string) ([]*config.MockConfiguration, error) {
 	if m.listMocksFn != nil {
-		return m.listMocksFn()
+		return m.listMocksFn(workspaceID)
 	}
 	return nil, nil
 }
@@ -141,16 +141,16 @@ func (m *mockAdminClient) DeleteMock(id string) error {
 
 // --- Import/Export ---
 
-func (m *mockAdminClient) ImportConfig(collection *config.MockCollection, replace bool) (*cli.ImportResult, error) {
+func (m *mockAdminClient) ImportConfig(collection *config.MockCollection, replace bool, workspaceID string) (*cli.ImportResult, error) {
 	if m.importConfigFn != nil {
-		return m.importConfigFn(collection, replace)
+		return m.importConfigFn(collection, replace, workspaceID)
 	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) ExportConfig(name string) (*config.MockCollection, error) {
+func (m *mockAdminClient) ExportConfig(name string, workspaceID string) (*config.MockCollection, error) {
 	if m.exportConfigFn != nil {
-		return m.exportConfigFn(name)
+		return m.exportConfigFn(name, workspaceID)
 	}
 	return nil, nil
 }
@@ -479,7 +479,7 @@ func TestHandleManageMock_ListAction(t *testing.T) {
 
 	enabled := true
 	client := &mockAdminClient{
-		listMocksFn: func() ([]*config.MockConfiguration, error) {
+		listMocksFn: func(_ string) ([]*config.MockConfiguration, error) {
 			return []*config.MockConfiguration{
 				{
 					ID:      "http_abc123",
@@ -1333,5 +1333,277 @@ func TestHandleManageState_DeleteResourceMissingName(t *testing.T) {
 	text := resultText(t, result)
 	if text != "resource is required" {
 		t.Errorf("error text = %q, want %q", text, "resource is required")
+	}
+}
+
+// =============================================================================
+// Workspace-Aware Tests
+// =============================================================================
+
+func TestHandleManageMock_ListPassesWorkspaceFilter(t *testing.T) {
+	t.Parallel()
+
+	var capturedWorkspace string
+	enabled := true
+	client := &mockAdminClient{
+		listMocksFn: func(workspaceID string) ([]*config.MockConfiguration, error) {
+			capturedWorkspace = workspaceID
+			return []*config.MockConfiguration{
+				{
+					ID:      "http_ws1",
+					Type:    mock.TypeHTTP,
+					Enabled: &enabled,
+					HTTP: &mock.HTTPSpec{
+						Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/api/test"},
+					},
+				},
+			}, nil
+		},
+	}
+
+	session := newTestSession(client)
+	session.SetWorkspace("ws-production")
+	server := newTestServer(client)
+
+	args := map[string]interface{}{"action": "list"}
+	result, err := handleManageMock(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageMock() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	if capturedWorkspace != "ws-production" {
+		t.Errorf("workspace = %q, want %q", capturedWorkspace, "ws-production")
+	}
+}
+
+func TestHandleManageMock_ListNoWorkspacePassesEmpty(t *testing.T) {
+	t.Parallel()
+
+	var capturedWorkspace string
+	client := &mockAdminClient{
+		listMocksFn: func(workspaceID string) ([]*config.MockConfiguration, error) {
+			capturedWorkspace = workspaceID
+			return nil, nil
+		},
+	}
+
+	session := newTestSession(client)
+	// No workspace set — default is ""
+	server := newTestServer(client)
+
+	args := map[string]interface{}{"action": "list"}
+	_, err := handleManageMock(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageMock() error = %v", err)
+	}
+
+	if capturedWorkspace != "" {
+		t.Errorf("workspace = %q, want empty string (no filter)", capturedWorkspace)
+	}
+}
+
+func TestHandleManageMock_CreateSetsWorkspaceID(t *testing.T) {
+	t.Parallel()
+
+	var capturedMock *config.MockConfiguration
+	client := &mockAdminClient{
+		createMockFn: func(m *config.MockConfiguration) (*cli.CreateMockResult, error) {
+			capturedMock = m
+			return &cli.CreateMockResult{
+				Mock:   &config.MockConfiguration{ID: "http_new", Type: mock.TypeHTTP},
+				Action: "created",
+			}, nil
+		},
+	}
+
+	session := newTestSession(client)
+	session.SetWorkspace("ws-staging")
+	server := newTestServer(client)
+
+	args := map[string]interface{}{
+		"action": "create",
+		"type":   "http",
+		"http": map[string]interface{}{
+			"matcher": map[string]interface{}{
+				"method": "GET",
+				"path":   "/api/hello",
+			},
+			"response": map[string]interface{}{
+				"statusCode": float64(200),
+			},
+		},
+	}
+
+	result, err := handleManageMock(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageMock() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	if capturedMock == nil {
+		t.Fatal("CreateMock was not called")
+	}
+	if capturedMock.WorkspaceID != "ws-staging" {
+		t.Errorf("WorkspaceID = %q, want %q", capturedMock.WorkspaceID, "ws-staging")
+	}
+}
+
+func TestHandleManageMock_CreateNoWorkspace(t *testing.T) {
+	t.Parallel()
+
+	var capturedMock *config.MockConfiguration
+	client := &mockAdminClient{
+		createMockFn: func(m *config.MockConfiguration) (*cli.CreateMockResult, error) {
+			capturedMock = m
+			return &cli.CreateMockResult{
+				Mock:   &config.MockConfiguration{ID: "http_new", Type: mock.TypeHTTP},
+				Action: "created",
+			}, nil
+		},
+	}
+
+	session := newTestSession(client)
+	// No workspace set
+	server := newTestServer(client)
+
+	args := map[string]interface{}{
+		"action": "create",
+		"type":   "http",
+		"http": map[string]interface{}{
+			"matcher": map[string]interface{}{
+				"method": "GET",
+				"path":   "/api/hello",
+			},
+			"response": map[string]interface{}{
+				"statusCode": float64(200),
+			},
+		},
+	}
+
+	result, err := handleManageMock(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageMock() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	if capturedMock == nil {
+		t.Fatal("CreateMock was not called")
+	}
+	if capturedMock.WorkspaceID != "" {
+		t.Errorf("WorkspaceID = %q, want empty (no workspace set)", capturedMock.WorkspaceID)
+	}
+}
+
+func TestHandleImportMocks_PassesWorkspace(t *testing.T) {
+	t.Parallel()
+
+	var capturedWorkspace string
+	client := &mockAdminClient{
+		importConfigFn: func(collection *config.MockCollection, replace bool, workspaceID string) (*cli.ImportResult, error) {
+			capturedWorkspace = workspaceID
+			return &cli.ImportResult{Imported: len(collection.Mocks)}, nil
+		},
+	}
+
+	session := newTestSession(client)
+	session.SetWorkspace("ws-dev")
+	server := newTestServer(client)
+
+	args := map[string]interface{}{
+		"content": validMockdYAML,
+	}
+	result, err := handleImportMocks(args, session, server)
+	if err != nil {
+		t.Fatalf("handleImportMocks() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	if capturedWorkspace != "ws-dev" {
+		t.Errorf("workspace = %q, want %q", capturedWorkspace, "ws-dev")
+	}
+}
+
+func TestHandleExportMocks_PassesWorkspace(t *testing.T) {
+	t.Parallel()
+
+	var capturedWorkspace string
+	enabled := true
+	client := &mockAdminClient{
+		exportConfigFn: func(name string, workspaceID string) (*config.MockCollection, error) {
+			capturedWorkspace = workspaceID
+			return &config.MockCollection{
+				Mocks: []*mock.Mock{
+					{
+						ID:      "http_abc",
+						Type:    mock.TypeHTTP,
+						Enabled: &enabled,
+						HTTP: &mock.HTTPSpec{
+							Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/test"},
+							Response: &mock.HTTPResponse{StatusCode: 200},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	session := newTestSession(client)
+	session.SetWorkspace("ws-export")
+	server := newTestServer(client)
+
+	args := map[string]interface{}{
+		"format": "yaml",
+	}
+	result, err := handleExportMocks(args, session, server)
+	if err != nil {
+		t.Fatalf("handleExportMocks() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	if capturedWorkspace != "ws-export" {
+		t.Errorf("workspace = %q, want %q", capturedWorkspace, "ws-export")
+	}
+}
+
+func TestHandleGetRequestLogs_SetsWorkspaceInFilter(t *testing.T) {
+	t.Parallel()
+
+	var capturedFilter *cli.LogFilter
+	client := &mockAdminClient{
+		getLogsFn: func(filter *cli.LogFilter) (*cli.LogResult, error) {
+			capturedFilter = filter
+			return &cli.LogResult{}, nil
+		},
+	}
+
+	session := newTestSession(client)
+	session.SetWorkspace("ws-logs")
+	server := newTestServer(client)
+
+	args := map[string]interface{}{}
+	result, err := handleGetRequestLogs(args, session, server)
+	if err != nil {
+		t.Fatalf("handleGetRequestLogs() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	if capturedFilter == nil {
+		t.Fatal("GetLogs was not called")
+	}
+	if capturedFilter.WorkspaceID != "ws-logs" {
+		t.Errorf("WorkspaceID = %q, want %q", capturedFilter.WorkspaceID, "ws-logs")
 	}
 }

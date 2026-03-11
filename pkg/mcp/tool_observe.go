@@ -82,6 +82,7 @@ func handleGetRequestLogs(args map[string]interface{}, session *MCPSession, serv
 		Path:          pathPrefix,
 		MatchedID:     mockID,
 		UnmatchedOnly: unmatchedOnly,
+		WorkspaceID:   session.GetWorkspace(),
 	}
 
 	logsResult, err := client.GetLogs(filter)

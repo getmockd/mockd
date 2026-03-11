@@ -23,8 +23,9 @@ const (
 
 // AdminClient provides methods for communicating with the mockd admin API.
 type AdminClient interface {
-	// ListMocks returns all configured mocks.
-	ListMocks() ([]*config.MockConfiguration, error)
+	// ListMocks returns configured mocks, optionally filtered by workspace.
+	// Pass "" for workspaceID to list all mocks (no filter).
+	ListMocks(workspaceID string) ([]*config.MockConfiguration, error)
 	// ListMocksByType returns mocks filtered by type (http, websocket, graphql, etc.)
 	ListMocksByType(mockType string) ([]*config.MockConfiguration, error)
 	// GetMock returns a specific mock by ID.
@@ -41,9 +42,11 @@ type AdminClient interface {
 	// DeleteMock deletes a mock by ID.
 	DeleteMock(id string) error
 	// ImportConfig imports a mock collection, optionally replacing existing mocks.
-	ImportConfig(collection *config.MockCollection, replace bool) (*ImportResult, error)
-	// ExportConfig exports all mocks as a collection.
-	ExportConfig(name string) (*config.MockCollection, error)
+	// Pass workspaceID to stamp imported mocks with a workspace ("" = default).
+	ImportConfig(collection *config.MockCollection, replace bool, workspaceID string) (*ImportResult, error)
+	// ExportConfig exports mocks as a collection, optionally filtered by workspace.
+	// Pass "" for workspaceID to export all mocks.
+	ExportConfig(name string, workspaceID string) (*config.MockCollection, error)
 	// GetLogs returns request log entries with optional filtering.
 	GetLogs(filter *LogFilter) (*LogResult, error)
 	// ClearLogs deletes all request log entries.
@@ -142,7 +145,8 @@ type LogFilter struct {
 	MatchedID     string
 	Limit         int
 	Offset        int
-	UnmatchedOnly bool // Only return unmatched requests (with near-miss data)
+	UnmatchedOnly bool   // Only return unmatched requests (with near-miss data)
+	WorkspaceID   string // Filter by workspace (not yet supported by admin API, prepared for future use)
 }
 
 // LogResult contains request log query results.
@@ -344,9 +348,14 @@ func NewAdminClientWithAuth(baseURL string, opts ...ClientOption) AdminClient {
 	return NewAdminClient(baseURL, opts...)
 }
 
-// ListMocks returns all configured mocks.
-func (c *adminClient) ListMocks() ([]*config.MockConfiguration, error) {
-	resp, err := c.get("/mocks")
+// ListMocks returns configured mocks, optionally filtered by workspace.
+func (c *adminClient) ListMocks(workspaceID string) ([]*config.MockConfiguration, error) {
+	path := "/mocks"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+
+	resp, err := c.get(path)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +377,7 @@ func (c *adminClient) ListMocks() ([]*config.MockConfiguration, error) {
 
 // ListMocksByType returns mocks filtered by type.
 func (c *adminClient) ListMocksByType(mockType string) ([]*config.MockConfiguration, error) {
-	mocks, err := c.ListMocks()
+	mocks, err := c.ListMocks("")
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +602,7 @@ func (c *adminClient) DeleteMock(id string) error {
 }
 
 // ImportConfig imports a mock collection, optionally replacing existing mocks.
-func (c *adminClient) ImportConfig(collection *config.MockCollection, replace bool) (*ImportResult, error) {
+func (c *adminClient) ImportConfig(collection *config.MockCollection, replace bool, workspaceID string) (*ImportResult, error) {
 	reqBody := struct {
 		Replace bool                   `json:"replace"`
 		Config  *config.MockCollection `json:"config"`
@@ -607,7 +616,12 @@ func (c *adminClient) ImportConfig(collection *config.MockCollection, replace bo
 		return nil, fmt.Errorf("failed to encode config: %w", err)
 	}
 
-	resp, err := c.post("/config", body)
+	path := "/config"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+
+	resp, err := c.post(path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -634,11 +648,19 @@ func (c *adminClient) ImportConfig(collection *config.MockCollection, replace bo
 	}, nil
 }
 
-// ExportConfig exports all mocks as a collection.
-func (c *adminClient) ExportConfig(name string) (*config.MockCollection, error) {
-	path := "/config"
+// ExportConfig exports mocks as a collection, optionally filtered by workspace.
+func (c *adminClient) ExportConfig(name string, workspaceID string) (*config.MockCollection, error) {
+	params := url.Values{}
 	if name != "" {
-		path += "?name=" + url.QueryEscape(name)
+		params.Set("name", name)
+	}
+	if workspaceID != "" {
+		params.Set("workspaceId", workspaceID)
+	}
+
+	path := "/config"
+	if len(params) > 0 {
+		path += "?" + params.Encode()
 	}
 
 	resp, err := c.get(path)

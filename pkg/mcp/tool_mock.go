@@ -45,6 +45,7 @@ func handleListMocks(args map[string]interface{}, session *MCPSession, _ *Server
 
 	typeFilter := getString(args, "type", "")
 	enabledFilter := getBoolPtr(args, "enabled")
+	workspace := session.GetWorkspace()
 
 	var mocks []*config.MockConfiguration
 	var err error
@@ -52,7 +53,7 @@ func handleListMocks(args map[string]interface{}, session *MCPSession, _ *Server
 	if typeFilter != "" {
 		mocks, err = client.ListMocksByType(typeFilter)
 	} else {
-		mocks, err = client.ListMocks()
+		mocks, err = client.ListMocks(workspace)
 	}
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
@@ -191,6 +192,11 @@ func handleCreateMock(args map[string]interface{}, session *MCPSession, server *
 	}
 	enabled := true
 	mockCfg.Enabled = &enabled
+
+	// Stamp workspace from session so the mock belongs to the active workspace.
+	if workspace := session.GetWorkspace(); workspace != "" {
+		mockCfg.WorkspaceID = workspace
+	}
 
 	// Handle extend: bind mock to a stateful resource table.
 	if errResult := applyExtendBinding(args, &mockCfg); errResult != nil {

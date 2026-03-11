@@ -1009,7 +1009,7 @@ func (uctx *upContext) loadAndApplyStatefulResources() error {
 
 	fmt.Printf("Loading %d stateful resources...\n", len(resources))
 
-	result, err := adminClient.ImportConfig(collection, false)
+	result, err := adminClient.ImportConfig(collection, false, "")
 	if err != nil {
 		return fmt.Errorf("importing stateful resources: %w", err)
 	}

@@ -389,7 +389,7 @@ func TestHandleManageMock_ListByEnabled(t *testing.T) {
 	enabledTrue := true
 	enabledFalse := false
 	client := &mockAdminClient{
-		listMocksFn: func() ([]*config.MockConfiguration, error) {
+		listMocksFn: func(_ string) ([]*config.MockConfiguration, error) {
 			return []*config.MockConfiguration{
 				{
 					ID:      "http_1",
@@ -445,7 +445,7 @@ func TestHandleManageMock_ListByDisabled(t *testing.T) {
 	enabledTrue := true
 	enabledFalse := false
 	client := &mockAdminClient{
-		listMocksFn: func() ([]*config.MockConfiguration, error) {
+		listMocksFn: func(_ string) ([]*config.MockConfiguration, error) {
 			return []*config.MockConfiguration{
 				{
 					ID:      "http_1",
@@ -552,7 +552,7 @@ func TestHandleManageMock_ListEmpty(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		listMocksFn: func() ([]*config.MockConfiguration, error) {
+		listMocksFn: func(_ string) ([]*config.MockConfiguration, error) {
 			return []*config.MockConfiguration{}, nil
 		},
 	}
@@ -581,7 +581,7 @@ func TestHandleManageMock_ListError(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		listMocksFn: func() ([]*config.MockConfiguration, error) {
+		listMocksFn: func(_ string) ([]*config.MockConfiguration, error) {
 			return nil, fmt.Errorf("dial tcp: connection refused")
 		},
 	}

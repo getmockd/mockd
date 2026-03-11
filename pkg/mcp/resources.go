@@ -41,7 +41,7 @@ func (p *ResourceProvider) List() []ResourceDefinition {
 
 	// Add mock endpoint resources (all protocol types)
 	if p.adminClient != nil {
-		mocks, err := p.adminClient.ListMocks()
+		mocks, err := p.adminClient.ListMocks("")
 		if err == nil {
 			for _, m := range mocks {
 				uri, name, desc := mockResourceInfo(m)
@@ -199,7 +199,7 @@ func (p *ResourceProvider) readMockResource(requestedURI string) ([]ResourceCont
 		return nil, InternalError(nil)
 	}
 
-	mocks, err := p.adminClient.ListMocks()
+	mocks, err := p.adminClient.ListMocks("")
 	if err != nil {
 		return nil, InternalError(err)
 	}
@@ -393,7 +393,7 @@ func (p *ResourceProvider) readConfigResource() ([]ResourceContent, *JSONRPCErro
 
 	if p.adminClient != nil {
 		// Get mock count from admin API
-		mocks, err := p.adminClient.ListMocks()
+		mocks, err := p.adminClient.ListMocks("")
 		if err == nil {
 			content["mockCount"] = len(mocks)
 		}

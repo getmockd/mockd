@@ -10,8 +10,9 @@ import (
 
 var (
 	// Persistent flags available to all subcommands
-	adminURL   string
-	jsonOutput bool
+	adminURL      string
+	jsonOutput    bool
+	workspaceFlag string
 
 	// Version is injected during build
 	Version = "dev"
@@ -20,6 +21,11 @@ var (
 	// BuildDate is injected during build
 	BuildDate = "unknown"
 )
+
+// resolvedWorkspace returns the active workspace ID, resolved from flag > env > context.
+func resolvedWorkspace() string {
+	return cliconfig.ResolveWorkspace(workspaceFlag)
+}
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{

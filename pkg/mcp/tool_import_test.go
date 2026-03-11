@@ -38,7 +38,7 @@ func TestHandleImportMocks_DryRun(t *testing.T) {
 
 	importCalled := false
 	client := &mockAdminClient{
-		importConfigFn: func(collection *config.MockCollection, replace bool) (*cli.ImportResult, error) {
+		importConfigFn: func(collection *config.MockCollection, replace bool, _ string) (*cli.ImportResult, error) {
 			importCalled = true
 			return nil, nil
 		},
@@ -86,7 +86,7 @@ func TestHandleImportMocks_AutoDetectYAML(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		importConfigFn: func(collection *config.MockCollection, replace bool) (*cli.ImportResult, error) {
+		importConfigFn: func(collection *config.MockCollection, replace bool, _ string) (*cli.ImportResult, error) {
 			return &cli.ImportResult{Imported: len(collection.Mocks)}, nil
 		},
 	}
@@ -121,7 +121,7 @@ func TestHandleImportMocks_SpecificFormat(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		importConfigFn: func(collection *config.MockCollection, replace bool) (*cli.ImportResult, error) {
+		importConfigFn: func(collection *config.MockCollection, replace bool, _ string) (*cli.ImportResult, error) {
 			return &cli.ImportResult{Imported: len(collection.Mocks)}, nil
 		},
 	}
@@ -158,7 +158,7 @@ func TestHandleImportMocks_ImportSuccess(t *testing.T) {
 	var capturedReplace bool
 	var capturedMockCount int
 	client := &mockAdminClient{
-		importConfigFn: func(collection *config.MockCollection, replace bool) (*cli.ImportResult, error) {
+		importConfigFn: func(collection *config.MockCollection, replace bool, _ string) (*cli.ImportResult, error) {
 			capturedReplace = replace
 			capturedMockCount = len(collection.Mocks)
 			return &cli.ImportResult{
@@ -208,7 +208,7 @@ func TestHandleImportMocks_ImportReplace(t *testing.T) {
 
 	var capturedReplace bool
 	client := &mockAdminClient{
-		importConfigFn: func(collection *config.MockCollection, replace bool) (*cli.ImportResult, error) {
+		importConfigFn: func(collection *config.MockCollection, replace bool, _ string) (*cli.ImportResult, error) {
 			capturedReplace = replace
 			return &cli.ImportResult{Imported: len(collection.Mocks)}, nil
 		},
@@ -321,7 +321,7 @@ func TestHandleImportMocks_ImportFailure(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		importConfigFn: func(collection *config.MockCollection, replace bool) (*cli.ImportResult, error) {
+		importConfigFn: func(collection *config.MockCollection, replace bool, _ string) (*cli.ImportResult, error) {
 			return nil, &cli.APIError{StatusCode: 500, Message: "import rejected"}
 		},
 	}
@@ -402,7 +402,7 @@ func TestHandleImportMocks_FromFile(t *testing.T) {
 
 	var capturedMockCount int
 	client := &mockAdminClient{
-		importConfigFn: func(collection *config.MockCollection, replace bool) (*cli.ImportResult, error) {
+		importConfigFn: func(collection *config.MockCollection, replace bool, _ string) (*cli.ImportResult, error) {
 			capturedMockCount = len(collection.Mocks)
 			return &cli.ImportResult{Imported: capturedMockCount}, nil
 		},
@@ -547,7 +547,7 @@ func TestHandleExportMocks_YAML(t *testing.T) {
 
 	enabled := true
 	client := &mockAdminClient{
-		exportConfigFn: func(name string) (*config.MockCollection, error) {
+		exportConfigFn: func(name string, _ string) (*config.MockCollection, error) {
 			return &config.MockCollection{
 				Mocks: []*mock.Mock{
 					{
@@ -604,7 +604,7 @@ func TestHandleExportMocks_JSON(t *testing.T) {
 
 	enabled := true
 	client := &mockAdminClient{
-		exportConfigFn: func(name string) (*config.MockCollection, error) {
+		exportConfigFn: func(name string, _ string) (*config.MockCollection, error) {
 			return &config.MockCollection{
 				Mocks: []*mock.Mock{
 					{
@@ -660,7 +660,7 @@ func TestHandleExportMocks_NilCollection(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		exportConfigFn: func(name string) (*config.MockCollection, error) {
+		exportConfigFn: func(name string, _ string) (*config.MockCollection, error) {
 			return nil, nil
 		},
 	}
@@ -687,7 +687,7 @@ func TestHandleExportMocks_Failure(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		exportConfigFn: func(name string) (*config.MockCollection, error) {
+		exportConfigFn: func(name string, _ string) (*config.MockCollection, error) {
 			return nil, &cli.APIError{StatusCode: 500, Message: "export failed"}
 		},
 	}
@@ -737,7 +737,7 @@ func TestHandleExportMocks_DefaultYAML(t *testing.T) {
 
 	enabled := true
 	client := &mockAdminClient{
-		exportConfigFn: func(name string) (*config.MockCollection, error) {
+		exportConfigFn: func(name string, _ string) (*config.MockCollection, error) {
 			return &config.MockCollection{
 				Mocks: []*mock.Mock{
 					{
