@@ -33,12 +33,15 @@ func (a *soapStatefulAdapter) ExecuteStateful(ctx context.Context, req *soap.Sta
 	}
 
 	// Translate soap.StatefulRequest → stateful.OperationRequest
+	// SOAP operations use the default workspace since the SOAP protocol
+	// does not yet carry workspace context.
 	opReq := &stateful.OperationRequest{
 		Resource:      req.Resource,
 		Action:        stateful.Action(req.Action),
 		OperationName: req.OperationName,
 		ResourceID:    req.ResourceID,
 		Data:          req.Data,
+		WorkspaceID:   "",
 	}
 
 	// Translate filter
@@ -68,7 +71,7 @@ func (a *soapStatefulAdapter) ExecuteStateful(ctx context.Context, req *soap.Sta
 	// Get response transform config (if available)
 	var responseCfg *config.ResponseTransform
 	if req.Resource != "" {
-		responseCfg = a.bridge.GetResponseConfig(req.Resource)
+		responseCfg = a.bridge.GetResponseConfig("", req.Resource)
 	}
 
 	// Single item result — apply protocol-agnostic transforms

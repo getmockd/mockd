@@ -302,13 +302,13 @@ func (a *ControlAPIAdapter) ResetCircuitBreaker(key string) error {
 }
 
 // GetStateOverview implements api.EngineController.
-func (a *ControlAPIAdapter) GetStateOverview() *api.StateOverview {
+func (a *ControlAPIAdapter) GetStateOverview(workspaceID string) *api.StateOverview {
 	store := a.server.StatefulStore()
 	if store == nil {
 		return nil
 	}
 
-	overview := store.Overview()
+	overview := store.Overview(workspaceID)
 	if overview == nil {
 		return nil
 	}
@@ -316,7 +316,7 @@ func (a *ControlAPIAdapter) GetStateOverview() *api.StateOverview {
 	// Get detailed resource info
 	var resources []api.StatefulResource
 	for _, name := range overview.ResourceList {
-		info, err := store.ResourceInfo(name)
+		info, err := store.ResourceInfo(workspaceID, name)
 		if err == nil && info != nil {
 			resources = append(resources, api.StatefulResource{
 				Name:        info.Name,
@@ -337,13 +337,13 @@ func (a *ControlAPIAdapter) GetStateOverview() *api.StateOverview {
 }
 
 // GetStateResource implements api.EngineController.
-func (a *ControlAPIAdapter) GetStateResource(name string) (*api.StatefulResource, error) {
+func (a *ControlAPIAdapter) GetStateResource(workspaceID string, name string) (*api.StatefulResource, error) {
 	store := a.server.StatefulStore()
 	if store == nil {
 		return nil, ErrStatefulStoreNotInitialized
 	}
 
-	info, err := store.ResourceInfo(name)
+	info, err := store.ResourceInfo(workspaceID, name)
 	if err != nil {
 		return nil, err
 	}
@@ -358,23 +358,23 @@ func (a *ControlAPIAdapter) GetStateResource(name string) (*api.StatefulResource
 }
 
 // ClearStateResource implements api.EngineController.
-func (a *ControlAPIAdapter) ClearStateResource(name string) (int, error) {
+func (a *ControlAPIAdapter) ClearStateResource(workspaceID string, name string) (int, error) {
 	store := a.server.StatefulStore()
 	if store == nil {
 		return 0, ErrStatefulStoreNotInitialized
 	}
 
-	return store.ClearResource(name)
+	return store.ClearResource(workspaceID, name)
 }
 
 // ResetState implements api.EngineController.
-func (a *ControlAPIAdapter) ResetState(resourceName string) (*api.ResetStateResponse, error) {
+func (a *ControlAPIAdapter) ResetState(workspaceID string, resourceName string) (*api.ResetStateResponse, error) {
 	store := a.server.StatefulStore()
 	if store == nil {
 		return nil, ErrStatefulStoreNotInitialized
 	}
 
-	resp, err := store.Reset(resourceName)
+	resp, err := store.Reset(workspaceID, resourceName)
 	if err != nil {
 		return nil, err
 	}
@@ -387,30 +387,30 @@ func (a *ControlAPIAdapter) ResetState(resourceName string) (*api.ResetStateResp
 }
 
 // RegisterStatefulResource implements api.EngineController.
-func (a *ControlAPIAdapter) RegisterStatefulResource(cfg *config.StatefulResourceConfig) error {
+func (a *ControlAPIAdapter) RegisterStatefulResource(workspaceID string, cfg *config.StatefulResourceConfig) error {
 	if cfg == nil {
 		return errors.New("config cannot be nil")
 	}
-	return a.server.registerStatefulResource(cfg)
+	return a.server.registerStatefulResource(workspaceID, cfg)
 }
 
 // DeleteStatefulResource implements api.EngineController.
-func (a *ControlAPIAdapter) DeleteStatefulResource(name string) error {
+func (a *ControlAPIAdapter) DeleteStatefulResource(workspaceID string, name string) error {
 	store := a.server.StatefulStore()
 	if store == nil {
 		return ErrStatefulStoreNotInitialized
 	}
-	return store.Unregister(name)
+	return store.Unregister(workspaceID, name)
 }
 
 // ListStatefulItems implements api.EngineController.
-func (a *ControlAPIAdapter) ListStatefulItems(name string, limit, offset int, sort, order string) (*api.StatefulItemsResponse, error) {
+func (a *ControlAPIAdapter) ListStatefulItems(workspaceID string, name string, limit, offset int, sort, order string) (*api.StatefulItemsResponse, error) {
 	store := a.server.StatefulStore()
 	if store == nil {
 		return nil, ErrStatefulStoreNotInitialized
 	}
 
-	resource := store.Get(name)
+	resource := store.Get(workspaceID, name)
 	if resource == nil {
 		return nil, errors.New("stateful resource not found: " + name)
 	}
@@ -437,13 +437,13 @@ func (a *ControlAPIAdapter) ListStatefulItems(name string, limit, offset int, so
 }
 
 // GetStatefulItem implements api.EngineController.
-func (a *ControlAPIAdapter) GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error) {
+func (a *ControlAPIAdapter) GetStatefulItem(workspaceID string, resourceName, itemID string) (map[string]interface{}, error) {
 	store := a.server.StatefulStore()
 	if store == nil {
 		return nil, ErrStatefulStoreNotInitialized
 	}
 
-	resource := store.Get(resourceName)
+	resource := store.Get(workspaceID, resourceName)
 	if resource == nil {
 		return nil, errors.New("stateful resource not found: " + resourceName)
 	}
@@ -457,13 +457,13 @@ func (a *ControlAPIAdapter) GetStatefulItem(resourceName, itemID string) (map[st
 }
 
 // CreateStatefulItem implements api.EngineController.
-func (a *ControlAPIAdapter) CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
+func (a *ControlAPIAdapter) CreateStatefulItem(workspaceID string, resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
 	store := a.server.StatefulStore()
 	if store == nil {
 		return nil, ErrStatefulStoreNotInitialized
 	}
 
-	resource := store.Get(resourceName)
+	resource := store.Get(workspaceID, resourceName)
 	if resource == nil {
 		return nil, errors.New("stateful resource not found: " + resourceName)
 	}
@@ -782,7 +782,7 @@ func (a *ControlAPIAdapter) GetConfig() *api.ConfigResponse {
 }
 
 // ListCustomOperations implements api.EngineController.
-func (a *ControlAPIAdapter) ListCustomOperations() []api.CustomOperationInfo {
+func (a *ControlAPIAdapter) ListCustomOperations(workspaceID string) []api.CustomOperationInfo {
 	bridge := a.server.StatefulBridge()
 	if bridge == nil {
 		return nil
@@ -806,7 +806,7 @@ func (a *ControlAPIAdapter) ListCustomOperations() []api.CustomOperationInfo {
 }
 
 // GetCustomOperation implements api.EngineController.
-func (a *ControlAPIAdapter) GetCustomOperation(name string) (*api.CustomOperationDetail, error) {
+func (a *ControlAPIAdapter) GetCustomOperation(workspaceID string, name string) (*api.CustomOperationDetail, error) {
 	bridge := a.server.StatefulBridge()
 	if bridge == nil {
 		return nil, errors.New("stateful bridge not initialized")
@@ -843,7 +843,7 @@ func (a *ControlAPIAdapter) GetCustomOperation(name string) (*api.CustomOperatio
 }
 
 // RegisterCustomOperation implements api.EngineController.
-func (a *ControlAPIAdapter) RegisterCustomOperation(cfg *config.CustomOperationConfig) error {
+func (a *ControlAPIAdapter) RegisterCustomOperation(workspaceID string, cfg *config.CustomOperationConfig) error {
 	bridge := a.server.StatefulBridge()
 	if bridge == nil {
 		return errors.New("stateful bridge not initialized")
@@ -862,7 +862,7 @@ func (a *ControlAPIAdapter) RegisterCustomOperation(cfg *config.CustomOperationC
 }
 
 // DeleteCustomOperation implements api.EngineController.
-func (a *ControlAPIAdapter) DeleteCustomOperation(name string) error {
+func (a *ControlAPIAdapter) DeleteCustomOperation(workspaceID string, name string) error {
 	bridge := a.server.StatefulBridge()
 	if bridge == nil {
 		return errors.New("stateful bridge not initialized")
@@ -878,7 +878,7 @@ func (a *ControlAPIAdapter) DeleteCustomOperation(name string) error {
 }
 
 // ExecuteCustomOperation implements api.EngineController.
-func (a *ControlAPIAdapter) ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error) {
+func (a *ControlAPIAdapter) ExecuteCustomOperation(workspaceID string, name string, input map[string]interface{}) (map[string]interface{}, error) {
 	bridge := a.server.StatefulBridge()
 	if bridge == nil {
 		return nil, errors.New("stateful bridge not initialized")
@@ -888,6 +888,7 @@ func (a *ControlAPIAdapter) ExecuteCustomOperation(name string, input map[string
 		Action:        stateful.ActionCustom,
 		OperationName: name,
 		Data:          input,
+		WorkspaceID:   workspaceID,
 	})
 
 	if result.Error != nil {

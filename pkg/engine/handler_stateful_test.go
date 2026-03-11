@@ -290,7 +290,7 @@ func TestHandleCustomOperation_BodyTooLarge(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/transfer", bytes.NewReader(largeBody))
 
-	status := h.handleCustomOperation(w, req, "TransferFunds", largeBody)
+	status := h.handleCustomOperation(w, req, "", "TransferFunds", largeBody)
 	if status != http.StatusRequestEntityTooLarge {
 		t.Fatalf("expected %d, got %d", http.StatusRequestEntityTooLarge, status)
 	}
@@ -868,7 +868,7 @@ func TestParseStatefulBody_FormEncodedArrays(t *testing.T) {
 
 func TestHandleBindingDelete_PreserveKeepsItem(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -904,7 +904,7 @@ func TestHandleBindingDelete_PreserveKeepsItem(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/customers/cus_123", nil)
 
-	status := h.handleBindingDelete(w, req, "customers", "cus_123", responseCfg)
+	status := h.handleBindingDelete(w, req, "", "customers", "cus_123", responseCfg)
 
 	// Should return configured status
 	if status != 200 {
@@ -939,7 +939,7 @@ func TestHandleBindingDelete_PreserveKeepsItem(t *testing.T) {
 
 func TestHandleBindingDelete_DefaultRemovesItem(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -965,7 +965,7 @@ func TestHandleBindingDelete_DefaultRemovesItem(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/customers/cus_456", nil)
 
 	// No preserve — default behavior
-	status := h.handleBindingDelete(w, req, "customers", "cus_456", nil)
+	status := h.handleBindingDelete(w, req, "", "customers", "cus_456", nil)
 
 	// Should return default 204
 	if status != 204 {
@@ -1155,7 +1155,7 @@ func TestBridgeStatusToHTTP(t *testing.T) {
 
 func TestHandleStatefulBinding_Dispatch(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{Name: "customers", IDField: "id"})
+	_ = store.Register("", &stateful.ResourceConfig{Name: "customers", IDField: "id"})
 	br := stateful.NewBridge(store)
 
 	// Seed a test item
@@ -1227,7 +1227,7 @@ func TestHandleStatefulBinding_NilBridge(t *testing.T) {
 
 func TestHandleBindingGet_Success(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1251,7 +1251,7 @@ func TestHandleBindingGet_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/customers/cus_1", nil)
 
-	status := h.handleBindingGet(w, req, "customers", "cus_1", nil)
+	status := h.handleBindingGet(w, req, "", "customers", "cus_1", nil)
 
 	if status != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", status)
@@ -1271,7 +1271,7 @@ func TestHandleBindingGet_Success(t *testing.T) {
 
 func TestHandleBindingGet_NotFound(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1286,7 +1286,7 @@ func TestHandleBindingGet_NotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/customers/nonexistent", nil)
 
-	status := h.handleBindingGet(w, req, "customers", "nonexistent", nil)
+	status := h.handleBindingGet(w, req, "", "customers", "nonexistent", nil)
 
 	if status != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", status)
@@ -1295,7 +1295,7 @@ func TestHandleBindingGet_NotFound(t *testing.T) {
 
 func TestHandleBindingGet_WithResponseTransform(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1325,7 +1325,7 @@ func TestHandleBindingGet_WithResponseTransform(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/customers/cus_1", nil)
 
-	status := h.handleBindingGet(w, req, "customers", "cus_1", responseCfg)
+	status := h.handleBindingGet(w, req, "", "customers", "cus_1", responseCfg)
 
 	if status != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", status)
@@ -1350,7 +1350,7 @@ func TestHandleBindingGet_WithResponseTransform(t *testing.T) {
 
 func TestHandleBindingList_Success(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1379,7 +1379,7 @@ func TestHandleBindingList_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/customers", nil)
 
-	status := h.handleBindingList(w, req, "customers", nil, nil)
+	status := h.handleBindingList(w, req, "", "customers", nil, nil)
 
 	if status != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", status)
@@ -1419,7 +1419,7 @@ func TestHandleBindingList_TableNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/bogus", nil)
 
-	status := h.handleBindingList(w, req, "bogus", nil, nil)
+	status := h.handleBindingList(w, req, "", "bogus", nil, nil)
 
 	if status != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", status)
@@ -1428,7 +1428,7 @@ func TestHandleBindingList_TableNotFound(t *testing.T) {
 
 func TestHandleBindingList_WithPagination(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1455,7 +1455,7 @@ func TestHandleBindingList_WithPagination(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/customers?limit=2", nil)
 
-	status := h.handleBindingList(w, req, "customers", nil, nil)
+	status := h.handleBindingList(w, req, "", "customers", nil, nil)
 
 	if status != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", status)
@@ -1479,7 +1479,7 @@ func TestHandleBindingList_WithPagination(t *testing.T) {
 
 func TestHandleBindingCreate_Success(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1496,7 +1496,7 @@ func TestHandleBindingCreate_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/customers", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	status := h.handleBindingCreate(w, req, "customers", nil, bodyBytes, nil)
+	status := h.handleBindingCreate(w, req, "", "customers", nil, bodyBytes, nil)
 
 	if status != http.StatusCreated {
 		t.Fatalf("expected status 201, got %d", status)
@@ -1516,7 +1516,7 @@ func TestHandleBindingCreate_Success(t *testing.T) {
 
 func TestHandleBindingCreate_InvalidBody(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1533,7 +1533,7 @@ func TestHandleBindingCreate_InvalidBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/customers", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	status := h.handleBindingCreate(w, req, "customers", nil, bodyBytes, nil)
+	status := h.handleBindingCreate(w, req, "", "customers", nil, bodyBytes, nil)
 
 	if status != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", status)
@@ -1542,7 +1542,7 @@ func TestHandleBindingCreate_InvalidBody(t *testing.T) {
 
 func TestHandleBindingCreate_BodyTooLarge(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1559,7 +1559,7 @@ func TestHandleBindingCreate_BodyTooLarge(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/customers", bytes.NewReader(largeBody))
 	req.Header.Set("Content-Type", "application/json")
 
-	status := h.handleBindingCreate(w, req, "customers", nil, largeBody, nil)
+	status := h.handleBindingCreate(w, req, "", "customers", nil, largeBody, nil)
 
 	if status != http.StatusRequestEntityTooLarge {
 		t.Fatalf("expected status 413, got %d", status)
@@ -1570,7 +1570,7 @@ func TestHandleBindingCreate_BodyTooLarge(t *testing.T) {
 
 func TestHandleBindingMutate_PatchSuccess(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1596,7 +1596,7 @@ func TestHandleBindingMutate_PatchSuccess(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/customers/cus_1", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	status := h.handleBindingMutate(w, req, "customers", "cus_1", nil, bodyBytes, nil, stateful.ActionPatch)
+	status := h.handleBindingMutate(w, req, "", "customers", "cus_1", nil, bodyBytes, nil, stateful.ActionPatch)
 
 	if status != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", status)
@@ -1616,7 +1616,7 @@ func TestHandleBindingMutate_PatchSuccess(t *testing.T) {
 
 func TestHandleBindingMutate_NotFound(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1633,7 +1633,7 @@ func TestHandleBindingMutate_NotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/customers/nonexistent", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	status := h.handleBindingMutate(w, req, "customers", "nonexistent", nil, bodyBytes, nil, stateful.ActionPatch)
+	status := h.handleBindingMutate(w, req, "", "customers", "nonexistent", nil, bodyBytes, nil, stateful.ActionPatch)
 
 	if status != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", status)
@@ -1642,7 +1642,7 @@ func TestHandleBindingMutate_NotFound(t *testing.T) {
 
 func TestHandleBindingMutate_InvalidBody(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1659,7 +1659,7 @@ func TestHandleBindingMutate_InvalidBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/customers/cus_1", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	status := h.handleBindingMutate(w, req, "customers", "cus_1", nil, bodyBytes, nil, stateful.ActionPatch)
+	status := h.handleBindingMutate(w, req, "", "customers", "cus_1", nil, bodyBytes, nil, stateful.ActionPatch)
 
 	if status != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", status)
@@ -1670,7 +1670,7 @@ func TestHandleBindingMutate_InvalidBody(t *testing.T) {
 
 func TestHandleBindingCustom_Success(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1715,7 +1715,7 @@ func TestHandleBindingCustom_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/customers/double-name", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	status := h.handleBindingCustom(w, req, binding, nil, bodyBytes, nil)
+	status := h.handleBindingCustom(w, req, "", binding, nil, bodyBytes, nil)
 
 	if status != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", status)
@@ -1748,7 +1748,7 @@ func TestHandleBindingCustom_MissingOperation(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/customers/action", nil)
 
-	status := h.handleBindingCustom(w, req, binding, nil, nil, nil)
+	status := h.handleBindingCustom(w, req, "", binding, nil, nil, nil)
 
 	if status != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", status)
@@ -1768,7 +1768,7 @@ func TestHandleBindingCustom_MissingOperation(t *testing.T) {
 
 func TestHandleBindingCustom_EmptyBody(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1813,7 +1813,7 @@ func TestHandleBindingCustom_EmptyBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/customers/cus_1/action", nil)
 	req.Header.Set("Content-Type", "application/json")
 
-	status := h.handleBindingCustom(w, req, binding, pathParams, nil, nil)
+	status := h.handleBindingCustom(w, req, "", binding, pathParams, nil, nil)
 
 	if status != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", status)
@@ -1904,7 +1904,7 @@ func TestHandleCustomOperation_NilBridge(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/operations/test", nil)
 
-	status := h.handleCustomOperation(w, req, "test-op", nil)
+	status := h.handleCustomOperation(w, req, "", "test-op", nil)
 
 	if status != http.StatusServiceUnavailable {
 		t.Fatalf("expected status 503, got %d", status)
@@ -1924,7 +1924,7 @@ func TestHandleCustomOperation_InvalidJSON(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/operations/test", bytes.NewReader(bodyBytes))
 
-	status := h.handleCustomOperation(w, req, "test-op", bodyBytes)
+	status := h.handleCustomOperation(w, req, "", "test-op", bodyBytes)
 
 	if status != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", status)
@@ -1933,7 +1933,7 @@ func TestHandleCustomOperation_InvalidJSON(t *testing.T) {
 
 func TestHandleCustomOperation_Success(t *testing.T) {
 	store := stateful.NewStateStore()
-	_ = store.Register(&stateful.ResourceConfig{
+	_ = store.Register("", &stateful.ResourceConfig{
 		Name:    "customers",
 		IDField: "id",
 	})
@@ -1971,7 +1971,7 @@ func TestHandleCustomOperation_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/operations/greet", bytes.NewReader(bodyBytes))
 
-	status := h.handleCustomOperation(w, req, "greet", bodyBytes)
+	status := h.handleCustomOperation(w, req, "", "greet", bodyBytes)
 
 	if status != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", status)

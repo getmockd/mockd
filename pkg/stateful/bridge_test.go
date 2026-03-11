@@ -15,7 +15,7 @@ func setupBridgeTest(t *testing.T) (*Bridge, *MetricsObserver) {
 	obs := NewMetricsObserver()
 	store.SetObserver(obs)
 
-	err := store.Register(&ResourceConfig{
+	err := store.Register("", &ResourceConfig{
 		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "u1", "name": "Alice", "email": "alice@example.com"},
@@ -488,7 +488,7 @@ func TestErrorCode_String_All(t *testing.T) {
 func TestBridge_Store(t *testing.T) {
 	bridge, _ := setupBridgeTest(t)
 	assert.NotNil(t, bridge.Store())
-	assert.Equal(t, 2, bridge.Store().Get("users").Count())
+	assert.Equal(t, 2, bridge.Store().Get("", "users").Count())
 }
 
 // --- Bridge-only resources (no basePath, no HTTP) ---
@@ -496,7 +496,7 @@ func TestBridge_Store(t *testing.T) {
 func TestBridge_BridgeOnlyResource_CRUD(t *testing.T) {
 	// Resource without basePath — accessible via Bridge but NOT via HTTP path matching
 	store := NewStateStore()
-	err := store.Register(&ResourceConfig{
+	err := store.Register("", &ResourceConfig{
 		Name: "internal-data",
 	})
 	require.NoError(t, err)
@@ -530,7 +530,7 @@ func TestBridge_BridgeOnlyResource_Registration(t *testing.T) {
 	store := NewStateStore()
 
 	// Empty basePath is allowed
-	err := store.Register(&ResourceConfig{
+	err := store.Register("", &ResourceConfig{
 		Name: "bridge-only",
 	})
 	require.NoError(t, err)

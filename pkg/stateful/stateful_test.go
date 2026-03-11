@@ -18,8 +18,8 @@ func TestNewStateStore(t *testing.T) {
 		t.Fatal("NewStateStore returned nil")
 		return
 	}
-	if store.resources == nil {
-		t.Error("resources map not initialized")
+	if store.workspaces == nil {
+		t.Error("workspaces map not initialized")
 	}
 }
 
@@ -86,7 +86,7 @@ func TestStateStore_Register(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := NewStateStore()
-			err := store.Register(tt.config)
+			err := store.Register("", tt.config)
 
 			if tt.wantErr {
 				if err == nil {
@@ -109,11 +109,11 @@ func TestStateStore_RegisterDuplicate(t *testing.T) {
 		Name: "users",
 	}
 
-	if err := store.Register(config); err != nil {
+	if err := store.Register("", config); err != nil {
 		t.Fatalf("first register failed: %v", err)
 	}
 
-	err := store.Register(config)
+	err := store.Register("", config)
 	if err == nil {
 		t.Error("expected error for duplicate registration")
 	}
@@ -124,16 +124,16 @@ func TestStateStore_Get(t *testing.T) {
 	config := &ResourceConfig{
 		Name: "users",
 	}
-	store.Register(config)
+	store.Register("", config)
 
 	// Get existing
-	resource := store.Get("users")
+	resource := store.Get("", "users")
 	if resource == nil {
 		t.Error("expected to find 'users' resource")
 	}
 
 	// Get non-existing
-	resource = store.Get("nonexistent")
+	resource = store.Get("", "nonexistent")
 	if resource != nil {
 		t.Error("expected nil for non-existent resource")
 	}
@@ -143,16 +143,16 @@ func TestStateStore_List(t *testing.T) {
 	store := NewStateStore()
 
 	// Empty store
-	names := store.List()
+	names := store.List("")
 	if len(names) != 0 {
 		t.Errorf("expected 0 names, got %d", len(names))
 	}
 
 	// Add resources
-	store.Register(&ResourceConfig{Name: "users"})
-	store.Register(&ResourceConfig{Name: "products"})
+	store.Register("", &ResourceConfig{Name: "users"})
+	store.Register("", &ResourceConfig{Name: "products"})
 
-	names = store.List()
+	names = store.List("")
 	if len(names) != 2 {
 		t.Errorf("expected 2 names, got %d", len(names))
 	}
@@ -160,7 +160,7 @@ func TestStateStore_List(t *testing.T) {
 
 func TestStateStore_Reset(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "users",
 		SeedData: []map[string]interface{}{
 			{"id": "u1", "name": "User 1"},
@@ -168,7 +168,7 @@ func TestStateStore_Reset(t *testing.T) {
 	})
 
 	// Add an item
-	resource := store.Get("users")
+	resource := store.Get("", "users")
 	resource.Create(map[string]interface{}{"id": "u2", "name": "User 2"}, nil)
 
 	if resource.Count() != 2 {
@@ -176,7 +176,7 @@ func TestStateStore_Reset(t *testing.T) {
 	}
 
 	// Reset specific resource
-	resp, err := store.Reset("users")
+	resp, err := store.Reset("", "users")
 	if err != nil {
 		t.Fatalf("reset failed: %v", err)
 	}
@@ -188,14 +188,14 @@ func TestStateStore_Reset(t *testing.T) {
 	}
 
 	// Reset non-existent
-	_, err = store.Reset("nonexistent")
+	_, err = store.Reset("", "nonexistent")
 	if err == nil {
 		t.Error("expected error for non-existent resource")
 	}
 
 	// Reset all
-	store.Register(&ResourceConfig{Name: "products"})
-	resp, err = store.Reset("")
+	store.Register("", &ResourceConfig{Name: "products"})
+	resp, err = store.Reset("", "")
 	if err != nil {
 		t.Fatalf("reset all failed: %v", err)
 	}
@@ -206,19 +206,19 @@ func TestStateStore_Reset(t *testing.T) {
 
 func TestStateStore_Clear(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{Name: "users"})
-	store.Register(&ResourceConfig{Name: "products"})
+	store.Register("", &ResourceConfig{Name: "users"})
+	store.Register("", &ResourceConfig{Name: "products"})
 
-	store.Clear()
+	store.ClearAll()
 
-	if len(store.List()) != 0 {
-		t.Error("expected empty store after Clear")
+	if len(store.List("")) != 0 {
+		t.Error("expected empty store after ClearAll")
 	}
 }
 
 func TestStateStore_Overview(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "users",
 
 		SeedData: []map[string]interface{}{
@@ -226,7 +226,7 @@ func TestStateStore_Overview(t *testing.T) {
 			{"id": "u2"},
 		},
 	})
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "products",
 
 		SeedData: []map[string]interface{}{
@@ -234,7 +234,7 @@ func TestStateStore_Overview(t *testing.T) {
 		},
 	})
 
-	overview := store.Overview()
+	overview := store.Overview("")
 	if overview.Resources != 2 {
 		t.Errorf("Resources = %d, want 2", overview.Resources)
 	}
@@ -245,7 +245,7 @@ func TestStateStore_Overview(t *testing.T) {
 
 func TestStateStore_ResourceInfo(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "users",
 
 		IDField: "userId",
@@ -254,7 +254,7 @@ func TestStateStore_ResourceInfo(t *testing.T) {
 		},
 	})
 
-	info, err := store.ResourceInfo("users")
+	info, err := store.ResourceInfo("", "users")
 	if err != nil {
 		t.Fatalf("ResourceInfo failed: %v", err)
 	}
@@ -269,7 +269,7 @@ func TestStateStore_ResourceInfo(t *testing.T) {
 	}
 
 	// Non-existent
-	_, err = store.ResourceInfo("nonexistent")
+	_, err = store.ResourceInfo("", "nonexistent")
 	if err == nil {
 		t.Error("expected error for non-existent resource")
 	}
@@ -277,7 +277,7 @@ func TestStateStore_ResourceInfo(t *testing.T) {
 
 func TestStateStore_ClearResource(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "users",
 
 		SeedData: []map[string]interface{}{
@@ -286,7 +286,7 @@ func TestStateStore_ClearResource(t *testing.T) {
 		},
 	})
 
-	count, err := store.ClearResource("users")
+	count, err := store.ClearResource("", "users")
 	if err != nil {
 		t.Fatalf("ClearResource failed: %v", err)
 	}
@@ -294,13 +294,13 @@ func TestStateStore_ClearResource(t *testing.T) {
 		t.Errorf("count = %d, want 2", count)
 	}
 
-	resource := store.Get("users")
+	resource := store.Get("", "users")
 	if resource.Count() != 0 {
 		t.Errorf("resource still has %d items", resource.Count())
 	}
 
 	// Non-existent
-	_, err = store.ClearResource("nonexistent")
+	_, err = store.ClearResource("", "nonexistent")
 	if err == nil {
 		t.Error("expected error for non-existent resource")
 	}
@@ -1153,7 +1153,7 @@ func TestMetricsObserver_ConcurrentResetAndUpdate(t *testing.T) {
 func TestResource_EdgeCase_EmptyResource(t *testing.T) {
 	// Test operations on an empty resource (no seed data)
 	store := NewStateStore()
-	err := store.Register(&ResourceConfig{
+	err := store.Register("", &ResourceConfig{
 		Name: "empty",
 
 		// No seed data
@@ -1162,7 +1162,7 @@ func TestResource_EdgeCase_EmptyResource(t *testing.T) {
 		t.Fatalf("failed to register: %v", err)
 	}
 
-	resource := store.Get("empty")
+	resource := store.Get("", "empty")
 	if resource == nil {
 		t.Fatal("resource should exist")
 	}
@@ -1206,7 +1206,7 @@ func TestResource_EdgeCase_EmptyResource(t *testing.T) {
 
 func TestResource_EdgeCase_NegativeOffset(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "items",
 
 		SeedData: []map[string]interface{}{
@@ -1216,7 +1216,7 @@ func TestResource_EdgeCase_NegativeOffset(t *testing.T) {
 		},
 	})
 
-	resource := store.Get("items")
+	resource := store.Get("", "items")
 
 	// Negative offset should be treated as 0 or handled gracefully
 	filter := &QueryFilter{Offset: -5, Limit: 10}
@@ -1234,7 +1234,7 @@ func TestResource_EdgeCase_NegativeOffset(t *testing.T) {
 
 func TestResource_EdgeCase_ZeroLimit(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "items",
 
 		SeedData: []map[string]interface{}{
@@ -1243,7 +1243,7 @@ func TestResource_EdgeCase_ZeroLimit(t *testing.T) {
 		},
 	})
 
-	resource := store.Get("items")
+	resource := store.Get("", "items")
 
 	// Zero limit - default should be applied
 	filter := &QueryFilter{Offset: 0, Limit: 0}
@@ -1256,7 +1256,7 @@ func TestResource_EdgeCase_ZeroLimit(t *testing.T) {
 
 func TestResource_EdgeCase_LargeOffset(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "items",
 
 		SeedData: []map[string]interface{}{
@@ -1264,7 +1264,7 @@ func TestResource_EdgeCase_LargeOffset(t *testing.T) {
 		},
 	})
 
-	resource := store.Get("items")
+	resource := store.Get("", "items")
 
 	// Offset larger than total items should return empty data
 	filter := &QueryFilter{Offset: 1000, Limit: 10}
@@ -1280,11 +1280,11 @@ func TestResource_EdgeCase_LargeOffset(t *testing.T) {
 
 func TestResource_EdgeCase_SpecialCharactersInID(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "items",
 	})
 
-	resource := store.Get("items")
+	resource := store.Get("", "items")
 
 	// Test IDs with special characters
 	specialIDs := []string{
@@ -1324,7 +1324,7 @@ func TestResource_EdgeCase_SpecialCharactersInID(t *testing.T) {
 
 func TestResource_EdgeCase_EmptyUpdate(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "items",
 
 		SeedData: []map[string]interface{}{
@@ -1332,7 +1332,7 @@ func TestResource_EdgeCase_EmptyUpdate(t *testing.T) {
 		},
 	})
 
-	resource := store.Get("items")
+	resource := store.Get("", "items")
 
 	// Update uses PUT semantics (full replacement), not PATCH (partial update)
 	// Empty data should replace the entire item data (except system fields)
@@ -1369,11 +1369,11 @@ func TestResource_EdgeCase_EmptyUpdate(t *testing.T) {
 
 func TestResource_EdgeCase_NullValues(t *testing.T) {
 	store := NewStateStore()
-	store.Register(&ResourceConfig{
+	store.Register("", &ResourceConfig{
 		Name: "items",
 	})
 
-	resource := store.Get("items")
+	resource := store.Get("", "items")
 
 	// Create with null values
 	data := map[string]interface{}{
@@ -1429,13 +1429,13 @@ func findSubstring(s, substr string) bool {
 func TestResource_MaxItems(t *testing.T) {
 	t.Run("enforces max items on create", func(t *testing.T) {
 		store := NewStateStore()
-		store.Register(&ResourceConfig{
+		store.Register("", &ResourceConfig{
 			Name: "limited",
 
 			MaxItems: 2,
 		})
 
-		resource := store.Get("limited")
+		resource := store.Get("", "limited")
 
 		// Create first item — should succeed
 		_, err := resource.Create(map[string]interface{}{"name": "first"}, nil)
@@ -1472,13 +1472,13 @@ func TestResource_MaxItems(t *testing.T) {
 
 	t.Run("zero maxItems means unlimited", func(t *testing.T) {
 		store := NewStateStore()
-		store.Register(&ResourceConfig{
+		store.Register("", &ResourceConfig{
 			Name: "unlimited",
 
 			MaxItems: 0,
 		})
 
-		resource := store.Get("unlimited")
+		resource := store.Get("", "unlimited")
 
 		// Create many items — all should succeed
 		for i := 0; i < 100; i++ {
@@ -1493,13 +1493,13 @@ func TestResource_MaxItems(t *testing.T) {
 
 	t.Run("reset frees capacity", func(t *testing.T) {
 		store := NewStateStore()
-		store.Register(&ResourceConfig{
+		store.Register("", &ResourceConfig{
 			Name: "resettable",
 
 			MaxItems: 1,
 		})
 
-		resource := store.Get("resettable")
+		resource := store.Get("", "resettable")
 
 		// Fill the resource
 		_, err := resource.Create(map[string]interface{}{"name": "first"}, nil)
@@ -1547,7 +1547,7 @@ func TestStateStore_ResetDoesNotHoldStoreLock(t *testing.T) {
 
 	// Register multiple resources with seed data
 	for _, name := range []string{"users", "products", "orders"} {
-		store.Register(&ResourceConfig{
+		store.Register("", &ResourceConfig{
 			Name: name,
 
 			SeedData: []map[string]interface{}{
@@ -1559,7 +1559,7 @@ func TestStateStore_ResetDoesNotHoldStoreLock(t *testing.T) {
 	// Reset all — should not deadlock even with concurrent reads
 	done := make(chan bool, 1)
 	go func() {
-		resp, err := store.Reset("")
+		resp, err := store.Reset("", "")
 		if err != nil {
 			t.Errorf("reset failed: %v", err)
 		}
@@ -1571,7 +1571,7 @@ func TestStateStore_ResetDoesNotHoldStoreLock(t *testing.T) {
 
 	// Concurrent reads while reset is happening
 	for i := 0; i < 10; i++ {
-		names := store.List()
+		names := store.List("")
 		_ = names
 	}
 

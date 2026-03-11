@@ -202,40 +202,40 @@ func (m *mockEngine) ResetCircuitBreaker(_ string) error {
 	return nil
 }
 
-func (m *mockEngine) GetStateOverview() *StateOverview {
+func (m *mockEngine) GetStateOverview(workspaceID string) *StateOverview {
 	return m.stateOverview
 }
 
-func (m *mockEngine) GetStateResource(name string) (*StatefulResource, error) {
+func (m *mockEngine) GetStateResource(workspaceID string, name string) (*StatefulResource, error) {
 	if m.getStateResourceErr != nil {
 		return nil, m.getStateResourceErr
 	}
 	return nil, errors.New("resource not found")
 }
 
-func (m *mockEngine) ClearStateResource(name string) (int, error) {
+func (m *mockEngine) ClearStateResource(workspaceID string, name string) (int, error) {
 	if m.clearStateResourceErr != nil {
 		return 0, m.clearStateResourceErr
 	}
 	return 0, errors.New("resource not found")
 }
 
-func (m *mockEngine) ResetState(resourceName string) (*ResetStateResponse, error) {
+func (m *mockEngine) ResetState(workspaceID string, resourceName string) (*ResetStateResponse, error) {
 	if m.resetStateErr != nil {
 		return nil, m.resetStateErr
 	}
 	return &ResetStateResponse{Reset: true, Resources: []string{}, Message: "state reset"}, nil
 }
 
-func (m *mockEngine) RegisterStatefulResource(cfg *config.StatefulResourceConfig) error {
+func (m *mockEngine) RegisterStatefulResource(workspaceID string, cfg *config.StatefulResourceConfig) error {
 	return nil // No-op for mock
 }
 
-func (m *mockEngine) DeleteStatefulResource(name string) error {
+func (m *mockEngine) DeleteStatefulResource(workspaceID string, name string) error {
 	return nil // No-op for mock
 }
 
-func (m *mockEngine) ListStatefulItems(name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error) {
+func (m *mockEngine) ListStatefulItems(workspaceID string, name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error) {
 	if m.listStatefulItemsErr != nil {
 		return nil, m.listStatefulItemsErr
 	}
@@ -244,14 +244,14 @@ func (m *mockEngine) ListStatefulItems(name string, limit, offset int, sort, ord
 	}, nil
 }
 
-func (m *mockEngine) GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error) {
+func (m *mockEngine) GetStatefulItem(workspaceID string, resourceName, itemID string) (map[string]interface{}, error) {
 	if m.getStatefulItemErr != nil {
 		return nil, m.getStatefulItemErr
 	}
 	return nil, errors.New("item not found")
 }
 
-func (m *mockEngine) CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
+func (m *mockEngine) CreateStatefulItem(workspaceID string, resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
 	if m.createStatefulItemErr != nil {
 		return nil, m.createStatefulItemErr
 	}
@@ -329,7 +329,7 @@ func (m *mockEngine) GetConfig() *ConfigResponse {
 	return m.configResp
 }
 
-func (m *mockEngine) ListCustomOperations() []CustomOperationInfo {
+func (m *mockEngine) ListCustomOperations(workspaceID string) []CustomOperationInfo {
 	var ops []CustomOperationInfo
 	for _, op := range m.customOps {
 		ops = append(ops, CustomOperationInfo{Name: op.Name, StepCount: len(op.Steps)})
@@ -337,7 +337,7 @@ func (m *mockEngine) ListCustomOperations() []CustomOperationInfo {
 	return ops
 }
 
-func (m *mockEngine) GetCustomOperation(name string) (*CustomOperationDetail, error) {
+func (m *mockEngine) GetCustomOperation(workspaceID string, name string) (*CustomOperationDetail, error) {
 	op, ok := m.customOps[name]
 	if !ok {
 		return nil, errors.New("operation not found: " + name)
@@ -345,7 +345,7 @@ func (m *mockEngine) GetCustomOperation(name string) (*CustomOperationDetail, er
 	return op, nil
 }
 
-func (m *mockEngine) RegisterCustomOperation(cfg *config.CustomOperationConfig) error {
+func (m *mockEngine) RegisterCustomOperation(workspaceID string, cfg *config.CustomOperationConfig) error {
 	steps := make([]CustomOperationStep, len(cfg.Steps))
 	for i, s := range cfg.Steps {
 		steps[i] = CustomOperationStep{
@@ -366,7 +366,7 @@ func (m *mockEngine) RegisterCustomOperation(cfg *config.CustomOperationConfig) 
 	return nil
 }
 
-func (m *mockEngine) DeleteCustomOperation(name string) error {
+func (m *mockEngine) DeleteCustomOperation(workspaceID string, name string) error {
 	if _, ok := m.customOps[name]; !ok {
 		return errors.New("operation not found: " + name)
 	}
@@ -374,7 +374,7 @@ func (m *mockEngine) DeleteCustomOperation(name string) error {
 	return nil
 }
 
-func (m *mockEngine) ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error) {
+func (m *mockEngine) ExecuteCustomOperation(workspaceID string, name string, input map[string]interface{}) (map[string]interface{}, error) {
 	_, ok := m.customOps[name]
 	if !ok {
 		return nil, errors.New("operation not found: " + name)

@@ -57,6 +57,9 @@ const (
 // on a stateful resource. Protocol handlers (SOAP, GraphQL, gRPC, etc.)
 // translate their wire format into this struct before calling Bridge.Execute().
 type OperationRequest struct {
+	// WorkspaceID identifies which workspace's resources to operate on.
+	// Empty string means the default workspace.
+	WorkspaceID string
 	// Resource is the name of the stateful resource (e.g., "users", "orders").
 	Resource string
 	// Action is the CRUD action to perform.
@@ -123,8 +126,8 @@ func NewBridge(store *StateStore) *Bridge {
 // GetResponseConfig returns the response transform config for a named resource.
 // Used by protocol adapters (SOAP, GraphQL) to apply item transforms.
 // Returns nil if the resource doesn't exist or has no transforms configured.
-func (b *Bridge) GetResponseConfig(name string) *config.ResponseTransform {
-	r := b.store.Get(name)
+func (b *Bridge) GetResponseConfig(workspaceID string, name string) *config.ResponseTransform {
+	r := b.store.Get(workspaceID, name)
 	if r == nil {
 		return nil
 	}
@@ -207,7 +210,7 @@ func (b *Bridge) Execute(ctx context.Context, req *OperationRequest) *OperationR
 		return b.executeCustom(ctx, req)
 	}
 
-	resource := b.store.Get(req.Resource)
+	resource := b.store.Get(req.WorkspaceID, req.Resource)
 	if resource == nil {
 		err := &NotFoundError{Resource: req.Resource}
 		b.observer.OnError(req.Resource, string(req.Action), err)

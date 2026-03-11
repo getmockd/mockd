@@ -440,7 +440,8 @@ func (s *Server) handleResetCircuitBreaker(w http.ResponseWriter, r *http.Reques
 // State handlers
 
 func (s *Server) handleGetState(w http.ResponseWriter, r *http.Request) {
-	overview := s.engine.GetStateOverview()
+	workspaceID := r.URL.Query().Get("workspaceId")
+	overview := s.engine.GetStateOverview(workspaceID)
 	if overview == nil {
 		writeJSON(w, http.StatusOK, StateOverview{
 			Resources:    []StatefulResource{},
@@ -453,6 +454,7 @@ func (s *Server) handleGetState(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleResetState(w http.ResponseWriter, r *http.Request) {
 	limitedBody(w, r)
+	workspaceID := r.URL.Query().Get("workspaceId")
 	var req ResetStateRequest
 	// Allow empty body to reset all resources, but reject malformed JSON
 	if err := decodeJSONBody(r, &req, true); err != nil {
@@ -460,7 +462,7 @@ func (s *Server) handleResetState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.engine.ResetState(req.Resource)
+	resp, err := s.engine.ResetState(workspaceID, req.Resource)
 	if err != nil {
 		status, code := mapStatefulLookupError(err)
 		writeError(w, status, code, err.Error())
@@ -470,8 +472,9 @@ func (s *Server) handleResetState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetStateResource(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
-	resource, err := s.engine.GetStateResource(name)
+	resource, err := s.engine.GetStateResource(workspaceID, name)
 	if err != nil {
 		status, code := mapStatefulLookupError(err)
 		writeError(w, status, code, err.Error())
@@ -481,8 +484,9 @@ func (s *Server) handleGetStateResource(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleClearStateResource(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
-	count, err := s.engine.ClearStateResource(name)
+	count, err := s.engine.ClearStateResource(workspaceID, name)
 	if err != nil {
 		status, code := mapStatefulLookupError(err)
 		writeError(w, status, code, err.Error())
@@ -496,8 +500,9 @@ func (s *Server) handleClearStateResource(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleDeleteStateResource(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
-	if err := s.engine.DeleteStatefulResource(name); err != nil {
+	if err := s.engine.DeleteStatefulResource(workspaceID, name); err != nil {
 		status, code := mapStatefulLookupError(err)
 		writeError(w, status, code, err.Error())
 		return
@@ -512,6 +517,7 @@ func (s *Server) handleDeleteStateResource(w http.ResponseWriter, r *http.Reques
 // Stateful item handlers
 
 func (s *Server) handleListStatefulItems(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 
 	limit := 100
@@ -537,7 +543,7 @@ func (s *Server) handleListStatefulItems(w http.ResponseWriter, r *http.Request)
 		order = "desc"
 	}
 
-	resp, err := s.engine.ListStatefulItems(name, limit, offset, sort, order)
+	resp, err := s.engine.ListStatefulItems(workspaceID, name, limit, offset, sort, order)
 	if err != nil {
 		status, code := mapStatefulLookupError(err)
 		writeError(w, status, code, err.Error())
@@ -547,10 +553,11 @@ func (s *Server) handleListStatefulItems(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleGetStatefulItem(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 	id := r.PathValue("id")
 
-	item, err := s.engine.GetStatefulItem(name, id)
+	item, err := s.engine.GetStatefulItem(workspaceID, name, id)
 	if err != nil {
 		status, code := mapStatefulLookupError(err)
 		writeError(w, status, code, err.Error())
@@ -560,6 +567,7 @@ func (s *Server) handleGetStatefulItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 	limitedBody(w, r)
 
@@ -569,7 +577,7 @@ func (s *Server) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	item, err := s.engine.CreateStatefulItem(name, data)
+	item, err := s.engine.CreateStatefulItem(workspaceID, name, data)
 	if err != nil {
 		status, code := mapCreateStatefulItemError(err)
 		writeError(w, status, code, err.Error())
@@ -581,6 +589,7 @@ func (s *Server) handleCreateStatefulItem(w http.ResponseWriter, r *http.Request
 // handleRegisterStatefulResource registers a new stateful resource definition.
 func (s *Server) handleRegisterStatefulResource(w http.ResponseWriter, r *http.Request) {
 	limitedBody(w, r)
+	workspaceID := r.URL.Query().Get("workspaceId")
 
 	var cfg config.StatefulResourceConfig
 	if err := decodeJSONBody(r, &cfg, false); err != nil {
@@ -593,7 +602,7 @@ func (s *Server) handleRegisterStatefulResource(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err := s.engine.RegisterStatefulResource(&cfg); err != nil {
+	if err := s.engine.RegisterStatefulResource(workspaceID, &cfg); err != nil {
 		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "already registered") {
 			writeError(w, http.StatusConflict, "conflict", err.Error())
 			return
@@ -612,7 +621,8 @@ func (s *Server) handleRegisterStatefulResource(w http.ResponseWriter, r *http.R
 // Custom operation handlers
 
 func (s *Server) handleListCustomOperations(w http.ResponseWriter, r *http.Request) {
-	ops := s.engine.ListCustomOperations()
+	workspaceID := r.URL.Query().Get("workspaceId")
+	ops := s.engine.ListCustomOperations(workspaceID)
 	if ops == nil {
 		ops = []CustomOperationInfo{}
 	}
@@ -623,8 +633,9 @@ func (s *Server) handleListCustomOperations(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) handleGetCustomOperation(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
-	op, err := s.engine.GetCustomOperation(name)
+	op, err := s.engine.GetCustomOperation(workspaceID, name)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", err.Error())
 		return
@@ -634,6 +645,7 @@ func (s *Server) handleGetCustomOperation(w http.ResponseWriter, r *http.Request
 
 func (s *Server) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Request) {
 	limitedBody(w, r)
+	workspaceID := r.URL.Query().Get("workspaceId")
 	var cfg config.CustomOperationConfig
 	if err := decodeJSONBody(r, &cfg, false); err != nil {
 		writeDecodeError(w, err)
@@ -649,7 +661,7 @@ func (s *Server) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err := s.engine.RegisterCustomOperation(&cfg); err != nil {
+	if err := s.engine.RegisterCustomOperation(workspaceID, &cfg); err != nil {
 		status, code := mapStatefulLookupError(err)
 		writeError(w, status, code, err.Error())
 		return
@@ -661,8 +673,9 @@ func (s *Server) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) handleDeleteCustomOperation(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
-	if err := s.engine.DeleteCustomOperation(name); err != nil {
+	if err := s.engine.DeleteCustomOperation(workspaceID, name); err != nil {
 		writeError(w, http.StatusNotFound, "not_found", err.Error())
 		return
 	}
@@ -673,6 +686,7 @@ func (s *Server) handleDeleteCustomOperation(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) handleExecuteCustomOperation(w http.ResponseWriter, r *http.Request) {
+	workspaceID := r.URL.Query().Get("workspaceId")
 	name := r.PathValue("name")
 	limitedBody(w, r)
 
@@ -685,7 +699,7 @@ func (s *Server) handleExecuteCustomOperation(w http.ResponseWriter, r *http.Req
 		input = make(map[string]interface{})
 	}
 
-	result, err := s.engine.ExecuteCustomOperation(name, input)
+	result, err := s.engine.ExecuteCustomOperation(workspaceID, name, input)
 	if err != nil {
 		status, code := mapStatefulLookupError(err)
 		writeError(w, status, code, err.Error())
@@ -826,6 +840,7 @@ func (s *Server) handleExportMocks(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	limitedBody(w, r)
+	workspaceID := r.URL.Query().Get("workspaceId")
 	var req ImportConfigRequest
 	if err := decodeJSONBody(r, &req, false); err != nil {
 		writeDecodeError(w, err)
@@ -863,7 +878,7 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	statefulCount := 0
 	for _, res := range req.Config.StatefulResources {
 		if res != nil {
-			if err := s.engine.RegisterStatefulResource(res); err != nil {
+			if err := s.engine.RegisterStatefulResource(workspaceID, res); err != nil {
 				s.log.Warn("failed to import stateful resource", "name", res.Name, "error", err)
 				continue
 			}
@@ -877,7 +892,7 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 		if opCfg == nil {
 			continue
 		}
-		if err := s.engine.RegisterCustomOperation(opCfg); err != nil {
+		if err := s.engine.RegisterCustomOperation(workspaceID, opCfg); err != nil {
 			s.log.Warn("failed to import custom operation", "name", opCfg.Name, "error", err)
 			continue
 		}

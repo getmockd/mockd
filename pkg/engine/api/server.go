@@ -57,22 +57,22 @@ type EngineController interface {
 	ResetCircuitBreaker(key string) error
 
 	// Stateful resources
-	GetStateOverview() *StateOverview
-	GetStateResource(name string) (*StatefulResource, error)
-	ClearStateResource(name string) (int, error)
-	ResetState(resourceName string) (*ResetStateResponse, error)
-	RegisterStatefulResource(cfg *config.StatefulResourceConfig) error
-	DeleteStatefulResource(name string) error
-	ListStatefulItems(name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error)
-	GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error)
-	CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error)
+	GetStateOverview(workspaceID string) *StateOverview
+	GetStateResource(workspaceID string, name string) (*StatefulResource, error)
+	ClearStateResource(workspaceID string, name string) (int, error)
+	ResetState(workspaceID string, resourceName string) (*ResetStateResponse, error)
+	RegisterStatefulResource(workspaceID string, cfg *config.StatefulResourceConfig) error
+	DeleteStatefulResource(workspaceID string, name string) error
+	ListStatefulItems(workspaceID string, name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error)
+	GetStatefulItem(workspaceID string, resourceName, itemID string) (map[string]interface{}, error)
+	CreateStatefulItem(workspaceID string, resourceName string, data map[string]interface{}) (map[string]interface{}, error)
 
 	// Custom operations
-	ListCustomOperations() []CustomOperationInfo
-	GetCustomOperation(name string) (*CustomOperationDetail, error)
-	RegisterCustomOperation(cfg *config.CustomOperationConfig) error
-	DeleteCustomOperation(name string) error
-	ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error)
+	ListCustomOperations(workspaceID string) []CustomOperationInfo
+	GetCustomOperation(workspaceID string, name string) (*CustomOperationDetail, error)
+	RegisterCustomOperation(workspaceID string, cfg *config.CustomOperationConfig) error
+	DeleteCustomOperation(workspaceID string, name string) error
+	ExecuteCustomOperation(workspaceID string, name string, input map[string]interface{}) (map[string]interface{}, error)
 
 	// Protocol handlers
 	ListProtocolHandlers() []*ProtocolHandler

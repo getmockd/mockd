@@ -193,7 +193,7 @@ func (e *OperationExecutor) Execute(ctx context.Context, op *CustomOperation, re
 
 	// Execute each step
 	for i, step := range op.Steps {
-		if err := e.executeStep(ctx, i, step, exprCtx, tx); err != nil {
+		if err := e.executeStep(ctx, i, step, exprCtx, tx, req.WorkspaceID); err != nil {
 			if tx != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {
 					err = fmt.Errorf("%w (rollback failed: %v)", err, rbErr)
@@ -265,7 +265,7 @@ func (e *OperationExecutor) Execute(ctx context.Context, op *CustomOperation, re
 }
 
 // executeStep executes a single step, updating the expression context.
-func (e *OperationExecutor) executeStep(ctx context.Context, stepIndex int, step Step, exprCtx map[string]interface{}, tx *rollbackJournal) error {
+func (e *OperationExecutor) executeStep(ctx context.Context, stepIndex int, step Step, exprCtx map[string]interface{}, tx *rollbackJournal, workspaceID string) error {
 	var stepSpan *tracing.Span
 	if e.tracer != nil {
 		_, stepSpan = e.tracer.Start(ctx, "stateful.custom_operation.step")
@@ -281,17 +281,17 @@ func (e *OperationExecutor) executeStep(ctx context.Context, stepIndex int, step
 	var err error
 	switch step.Type {
 	case StepRead:
-		err = e.stepRead(step, exprCtx)
+		err = e.stepRead(step, exprCtx, workspaceID)
 	case StepUpdate:
-		err = e.stepUpdate(step, exprCtx, tx)
+		err = e.stepUpdate(step, exprCtx, tx, workspaceID)
 	case StepDelete:
-		err = e.stepDelete(step, exprCtx, tx)
+		err = e.stepDelete(step, exprCtx, tx, workspaceID)
 	case StepCreate:
-		err = e.stepCreate(step, exprCtx, tx)
+		err = e.stepCreate(step, exprCtx, tx, workspaceID)
 	case StepSet:
 		err = e.stepSet(step, exprCtx)
 	case StepList:
-		err = e.stepList(step, exprCtx)
+		err = e.stepList(step, exprCtx, workspaceID)
 	case StepValidate:
 		err = e.stepValidate(step, exprCtx)
 	default:
@@ -310,7 +310,7 @@ func (e *OperationExecutor) executeStep(ctx context.Context, stepIndex int, step
 }
 
 // stepRead reads an item from a resource and stores it in the context.
-func (e *OperationExecutor) stepRead(step Step, exprCtx map[string]interface{}) error {
+func (e *OperationExecutor) stepRead(step Step, exprCtx map[string]interface{}, workspaceID string) error {
 	if step.Resource == "" {
 		return errors.New("read step requires resource")
 	}
@@ -329,7 +329,7 @@ func (e *OperationExecutor) stepRead(step Step, exprCtx map[string]interface{}) 
 	itemID := fmt.Sprintf("%v", idVal)
 
 	// Look up resource
-	resource := e.store.Get(step.Resource)
+	resource := e.store.Get(workspaceID, step.Resource)
 	if resource == nil {
 		return &NotFoundError{Resource: step.Resource}
 	}
@@ -346,7 +346,7 @@ func (e *OperationExecutor) stepRead(step Step, exprCtx map[string]interface{}) 
 }
 
 // stepUpdate updates a resource item with expression-evaluated field values.
-func (e *OperationExecutor) stepUpdate(step Step, exprCtx map[string]interface{}, tx *rollbackJournal) error {
+func (e *OperationExecutor) stepUpdate(step Step, exprCtx map[string]interface{}, tx *rollbackJournal, workspaceID string) error {
 	if step.Resource == "" {
 		return errors.New("update step requires resource")
 	}
@@ -362,7 +362,7 @@ func (e *OperationExecutor) stepUpdate(step Step, exprCtx map[string]interface{}
 	itemID := fmt.Sprintf("%v", idVal)
 
 	// Look up resource
-	resource := e.store.Get(step.Resource)
+	resource := e.store.Get(workspaceID, step.Resource)
 	if resource == nil {
 		return &NotFoundError{Resource: step.Resource}
 	}
@@ -398,7 +398,7 @@ func (e *OperationExecutor) stepUpdate(step Step, exprCtx map[string]interface{}
 }
 
 // stepDelete deletes a resource item.
-func (e *OperationExecutor) stepDelete(step Step, exprCtx map[string]interface{}, tx *rollbackJournal) error {
+func (e *OperationExecutor) stepDelete(step Step, exprCtx map[string]interface{}, tx *rollbackJournal, workspaceID string) error {
 	if step.Resource == "" {
 		return errors.New("delete step requires resource")
 	}
@@ -414,7 +414,7 @@ func (e *OperationExecutor) stepDelete(step Step, exprCtx map[string]interface{}
 	itemID := fmt.Sprintf("%v", idVal)
 
 	// Look up resource
-	resource := e.store.Get(step.Resource)
+	resource := e.store.Get(workspaceID, step.Resource)
 	if resource == nil {
 		return &NotFoundError{Resource: step.Resource}
 	}
@@ -427,13 +427,13 @@ func (e *OperationExecutor) stepDelete(step Step, exprCtx map[string]interface{}
 }
 
 // stepCreate creates a new resource item with expression-evaluated field values.
-func (e *OperationExecutor) stepCreate(step Step, exprCtx map[string]interface{}, tx *rollbackJournal) error {
+func (e *OperationExecutor) stepCreate(step Step, exprCtx map[string]interface{}, tx *rollbackJournal, workspaceID string) error {
 	if step.Resource == "" {
 		return errors.New("create step requires resource")
 	}
 
 	// Look up resource
-	resource := e.store.Get(step.Resource)
+	resource := e.store.Get(workspaceID, step.Resource)
 	if resource == nil {
 		return &NotFoundError{Resource: step.Resource}
 	}
@@ -485,7 +485,7 @@ func (e *OperationExecutor) stepSet(step Step, exprCtx map[string]interface{}) e
 
 // stepList queries a resource with filters and stores the result array in a context variable.
 // This enables aggregation via expr builtins: sum(items, .amount), filter(items, .status == "pending"), etc.
-func (e *OperationExecutor) stepList(step Step, exprCtx map[string]interface{}) error {
+func (e *OperationExecutor) stepList(step Step, exprCtx map[string]interface{}, workspaceID string) error {
 	if step.Resource == "" {
 		return errors.New("list step requires resource")
 	}
@@ -493,7 +493,7 @@ func (e *OperationExecutor) stepList(step Step, exprCtx map[string]interface{}) 
 		return errors.New("list step requires 'as' variable name")
 	}
 
-	resource := e.store.Get(step.Resource)
+	resource := e.store.Get(workspaceID, step.Resource)
 	if resource == nil {
 		return &NotFoundError{Resource: step.Resource}
 	}

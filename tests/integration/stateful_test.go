@@ -42,7 +42,7 @@ func createTestResource(store *stateful.StateStore, name string, seedData []map[
 		Name:     name,
 		SeedData: seedData,
 	}
-	return store.Register(cfg)
+	return store.Register("", cfg)
 }
 
 //nolint:unused // kept for future tests

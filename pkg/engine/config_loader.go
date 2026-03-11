@@ -75,7 +75,8 @@ func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store
 			if res == nil {
 				continue
 			}
-			if err := cl.registerStatefulResource(res); err != nil {
+			workspaceID := res.Workspace
+			if err := cl.registerStatefulResource(workspaceID, res); err != nil {
 				cl.log.Warn("failed to restore stateful resource, removing stale entry from store",
 					"name", res.Name, "error", err)
 				// Remove the stale entry from the persistent store so it
@@ -154,7 +155,8 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 	// Load stateful resources
 	for _, res := range collection.StatefulResources {
 		if res != nil {
-			if err := cl.server.registerStatefulResource(res); err != nil {
+			workspaceID := res.Workspace
+			if err := cl.server.registerStatefulResource(workspaceID, res); err != nil {
 				return fmt.Errorf("failed to register stateful resource %s: %w", res.Name, err)
 			}
 		}
@@ -261,9 +263,9 @@ func (cl *ConfigLoader) Export(name string) *config.MockCollection {
 		Mocks:   mocks,
 	}
 
-	// Include stateful resource definitions
+	// Include stateful resource definitions (export default workspace)
 	if cl.server.statefulStore != nil {
-		resources := cl.server.statefulStore.ListConfigs()
+		resources := cl.server.statefulStore.ListConfigs("")
 		if len(resources) > 0 {
 			collection.StatefulResources = resources
 		}
@@ -342,7 +344,8 @@ func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) 
 	// Import stateful resources
 	for _, res := range collection.StatefulResources {
 		if res != nil {
-			if err := cl.registerStatefulResource(res); err != nil {
+			workspaceID := res.Workspace
+			if err := cl.registerStatefulResource(workspaceID, res); err != nil {
 				// Skip if resource already exists (similar to mocks)
 				if !replace {
 					cl.log.Warn("skipping stateful resource (already registered)",
@@ -439,8 +442,8 @@ func (cl *ConfigLoader) mergeServerConfig(src *config.ServerConfiguration) {
 }
 
 // registerStatefulResource registers a stateful resource from config.
-func (cl *ConfigLoader) registerStatefulResource(cfg *config.StatefulResourceConfig) error {
-	return cl.server.statefulStore.Register(cfg)
+func (cl *ConfigLoader) registerStatefulResource(workspaceID string, cfg *config.StatefulResourceConfig) error {
+	return cl.server.statefulStore.Register(workspaceID, cfg)
 }
 
 // convertCustomOperation converts a config.CustomOperationConfig to a stateful.CustomOperation.

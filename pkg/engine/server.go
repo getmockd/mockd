@@ -656,8 +656,8 @@ func (s *Server) StatefulStore() *stateful.StateStore {
 
 // registerStatefulResource registers a stateful resource from config.
 // This is an internal method - external callers should use the HTTP API.
-func (s *Server) registerStatefulResource(cfg *config.StatefulResourceConfig) error {
-	return s.statefulStore.Register(cfg)
+func (s *Server) registerStatefulResource(workspaceID string, cfg *config.StatefulResourceConfig) error {
+	return s.statefulStore.Register(workspaceID, cfg)
 }
 
 // Handler returns the request handler (for admin API use).

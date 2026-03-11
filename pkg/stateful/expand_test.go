@@ -11,7 +11,7 @@ import (
 func TestExpandRelationships_Basic(t *testing.T) {
 	// Set up a "customers" resource with one item
 	store := NewStateStore()
-	_ = store.Register(&ResourceConfig{
+	_ = store.Register("", &ResourceConfig{
 		Name: "customers",
 		SeedData: []map[string]interface{}{
 			{"id": "cus_123", "name": "Alice", "email": "alice@example.com"},
@@ -23,7 +23,7 @@ func TestExpandRelationships_Basic(t *testing.T) {
 	}
 
 	resolver := func(tableName string) *StatefulResource {
-		return store.Get(tableName)
+		return store.Get("", tableName)
 	}
 
 	item := map[string]interface{}{
@@ -60,13 +60,13 @@ func TestExpandRelationships_Basic(t *testing.T) {
 
 func TestExpandRelationships_Multiple(t *testing.T) {
 	store := NewStateStore()
-	_ = store.Register(&ResourceConfig{
+	_ = store.Register("", &ResourceConfig{
 		Name: "customers",
 		SeedData: []map[string]interface{}{
 			{"id": "cus_1", "name": "Alice"},
 		},
 	})
-	_ = store.Register(&ResourceConfig{
+	_ = store.Register("", &ResourceConfig{
 		Name: "invoices",
 		SeedData: []map[string]interface{}{
 			{"id": "inv_1", "amount": 5000},
@@ -79,7 +79,7 @@ func TestExpandRelationships_Multiple(t *testing.T) {
 	}
 
 	resolver := func(tableName string) *StatefulResource {
-		return store.Get(tableName)
+		return store.Get("", tableName)
 	}
 
 	item := map[string]interface{}{
@@ -110,7 +110,7 @@ func TestExpandRelationships_Multiple(t *testing.T) {
 
 func TestExpandRelationships_MissingRelationship(t *testing.T) {
 	store := NewStateStore()
-	_ = store.Register(&ResourceConfig{
+	_ = store.Register("", &ResourceConfig{
 		Name: "customers",
 		SeedData: []map[string]interface{}{
 			{"id": "cus_1", "name": "Alice"},
@@ -122,7 +122,7 @@ func TestExpandRelationships_MissingRelationship(t *testing.T) {
 	}
 
 	resolver := func(tableName string) *StatefulResource {
-		return store.Get(tableName)
+		return store.Get("", tableName)
 	}
 
 	item := map[string]interface{}{
@@ -147,7 +147,7 @@ func TestExpandRelationships_MissingRelationship(t *testing.T) {
 
 func TestExpandRelationships_MissingRelatedItem(t *testing.T) {
 	store := NewStateStore()
-	_ = store.Register(&ResourceConfig{
+	_ = store.Register("", &ResourceConfig{
 		Name: "customers",
 		SeedData: []map[string]interface{}{
 			{"id": "cus_1", "name": "Alice"},
@@ -159,7 +159,7 @@ func TestExpandRelationships_MissingRelatedItem(t *testing.T) {
 	}
 
 	resolver := func(tableName string) *StatefulResource {
-		return store.Get(tableName)
+		return store.Get("", tableName)
 	}
 
 	item := map[string]interface{}{
@@ -231,7 +231,7 @@ func TestExpandRelationships_MissingTargetResource(t *testing.T) {
 	}
 
 	resolver := func(tableName string) *StatefulResource {
-		return store.Get(tableName)
+		return store.Get("", tableName)
 	}
 
 	item := map[string]interface{}{
@@ -249,7 +249,7 @@ func TestExpandRelationships_MissingTargetResource(t *testing.T) {
 
 func TestExpandRelationships_NilFieldValue(t *testing.T) {
 	store := NewStateStore()
-	_ = store.Register(&ResourceConfig{
+	_ = store.Register("", &ResourceConfig{
 		Name: "customers",
 		SeedData: []map[string]interface{}{
 			{"id": "cus_1", "name": "Alice"},
@@ -261,7 +261,7 @@ func TestExpandRelationships_NilFieldValue(t *testing.T) {
 	}
 
 	resolver := func(tableName string) *StatefulResource {
-		return store.Get(tableName)
+		return store.Get("", tableName)
 	}
 
 	item := map[string]interface{}{

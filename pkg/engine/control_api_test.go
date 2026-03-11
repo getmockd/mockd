@@ -113,7 +113,7 @@ func TestControlAPIAdapter_StatefulOverview_Empty(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	overview := adapter.GetStateOverview()
+	overview := adapter.GetStateOverview("")
 	require.NotNil(t, overview, "GetStateOverview should not be nil with initialized server")
 	assert.Equal(t, 0, overview.Total, "Total resources should be 0 when none registered")
 	assert.Equal(t, 0, overview.TotalItems, "TotalItems should be 0 when none registered")
@@ -133,11 +133,11 @@ func TestControlAPIAdapter_StatefulResource_Lifecycle(t *testing.T) {
 			{"id": "u1", "name": "Alice"},
 		},
 	}
-	err := adapter.RegisterStatefulResource(res)
+	err := adapter.RegisterStatefulResource("", res)
 	require.NoError(t, err, "RegisterStatefulResource should succeed")
 
 	// Overview shows it
-	overview := adapter.GetStateOverview()
+	overview := adapter.GetStateOverview("")
 	require.NotNil(t, overview)
 	assert.Equal(t, 1, overview.Total, "Total resources should be 1 after registration")
 	assert.Equal(t, 1, overview.TotalItems, "TotalItems should be 1 (seed data)")
@@ -147,7 +147,7 @@ func TestControlAPIAdapter_StatefulResource_Lifecycle(t *testing.T) {
 	assert.Equal(t, 1, overview.Resources[0].ItemCount)
 
 	// List items
-	itemsResp, err := adapter.ListStatefulItems("users", 10, 0, "createdAt", "desc")
+	itemsResp, err := adapter.ListStatefulItems("", "users", 10, 0, "createdAt", "desc")
 	require.NoError(t, err, "ListStatefulItems should succeed")
 	require.NotNil(t, itemsResp)
 	require.Len(t, itemsResp.Data, 1, "should have 1 seed item")
@@ -155,7 +155,7 @@ func TestControlAPIAdapter_StatefulResource_Lifecycle(t *testing.T) {
 	assert.Equal(t, "Alice", itemsResp.Data[0]["name"])
 
 	// Create item
-	created, err := adapter.CreateStatefulItem("users", map[string]interface{}{
+	created, err := adapter.CreateStatefulItem("", "users", map[string]interface{}{
 		"id":   "u2",
 		"name": "Bob",
 	})
@@ -165,7 +165,7 @@ func TestControlAPIAdapter_StatefulResource_Lifecycle(t *testing.T) {
 	assert.Equal(t, "Bob", created["name"])
 
 	// List items again — should have 2
-	itemsResp, err = adapter.ListStatefulItems("users", 10, 0, "createdAt", "desc")
+	itemsResp, err = adapter.ListStatefulItems("", "users", 10, 0, "createdAt", "desc")
 	require.NoError(t, err)
 	assert.Len(t, itemsResp.Data, 2, "should have 2 items after create")
 }
@@ -174,7 +174,7 @@ func TestControlAPIAdapter_ListStatefulItems_NotFound(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	_, err := adapter.ListStatefulItems("nonexistent", 10, 0, "", "")
+	_, err := adapter.ListStatefulItems("", "nonexistent", 10, 0, "", "")
 	assert.Error(t, err, "ListStatefulItems on nonexistent resource should error")
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -183,7 +183,7 @@ func TestControlAPIAdapter_CreateStatefulItem_NotFound(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	_, err := adapter.CreateStatefulItem("nonexistent", map[string]interface{}{"id": "x"})
+	_, err := adapter.CreateStatefulItem("", "nonexistent", map[string]interface{}{"id": "x"})
 	assert.Error(t, err, "CreateStatefulItem on nonexistent resource should error")
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -394,7 +394,7 @@ func TestControlAPIAdapter_ListCustomOperations_Fresh(t *testing.T) {
 	adapter := newTestAdapter()
 
 	// StatefulBridge is initialized by NewServer, but no custom ops are registered.
-	ops := adapter.ListCustomOperations()
+	ops := adapter.ListCustomOperations("")
 	assert.Nil(t, ops, "ListCustomOperations should be nil when no ops are registered")
 }
 
@@ -402,7 +402,7 @@ func TestControlAPIAdapter_GetCustomOperation_NotFound(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	detail, err := adapter.GetCustomOperation("nonexistent")
+	detail, err := adapter.GetCustomOperation("", "nonexistent")
 	assert.Error(t, err, "GetCustomOperation should error for nonexistent operation")
 	assert.Nil(t, detail)
 	assert.Contains(t, err.Error(), "not found")
@@ -412,7 +412,7 @@ func TestControlAPIAdapter_RegisterCustomOperation_NilConfig(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	err := adapter.RegisterCustomOperation(nil)
+	err := adapter.RegisterCustomOperation("", nil)
 	assert.Error(t, err, "RegisterCustomOperation with nil config should error")
 	assert.Contains(t, err.Error(), "name")
 }
@@ -421,7 +421,7 @@ func TestControlAPIAdapter_RegisterCustomOperation_EmptyName(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	err := adapter.RegisterCustomOperation(&config.CustomOperationConfig{
+	err := adapter.RegisterCustomOperation("", &config.CustomOperationConfig{
 		Name: "",
 		Steps: []config.CustomStepConfig{
 			{Type: "set", Var: "x", Value: "1"},
@@ -435,7 +435,7 @@ func TestControlAPIAdapter_CustomOperation_Lifecycle(t *testing.T) {
 	adapter := newTestAdapter()
 
 	// First, register a stateful resource that the custom op can reference.
-	err := adapter.RegisterStatefulResource(&config.StatefulResourceConfig{
+	err := adapter.RegisterStatefulResource("", &config.StatefulResourceConfig{
 		Name:    "orders",
 		IDField: "id",
 		SeedData: []map[string]interface{}{
@@ -458,17 +458,17 @@ func TestControlAPIAdapter_CustomOperation_Lifecycle(t *testing.T) {
 			"status":   `"confirmed"`,
 		},
 	}
-	err = adapter.RegisterCustomOperation(opCfg)
+	err = adapter.RegisterCustomOperation("", opCfg)
 	require.NoError(t, err, "RegisterCustomOperation should succeed")
 
 	// List should now contain the operation.
-	ops := adapter.ListCustomOperations()
+	ops := adapter.ListCustomOperations("")
 	require.Len(t, ops, 1, "ListCustomOperations should return 1 operation")
 	assert.Equal(t, "confirm-order", ops[0].Name)
 	assert.Equal(t, 2, ops[0].StepCount)
 
 	// Get should return details.
-	detail, err := adapter.GetCustomOperation("confirm-order")
+	detail, err := adapter.GetCustomOperation("", "confirm-order")
 	require.NoError(t, err)
 	require.NotNil(t, detail)
 	assert.Equal(t, "confirm-order", detail.Name)
@@ -478,24 +478,24 @@ func TestControlAPIAdapter_CustomOperation_Lifecycle(t *testing.T) {
 	assert.Contains(t, detail.Response, "order_id")
 
 	// Execute the operation.
-	result, err := adapter.ExecuteCustomOperation("confirm-order", map[string]interface{}{
+	result, err := adapter.ExecuteCustomOperation("", "confirm-order", map[string]interface{}{
 		"order_id": "o1",
 	})
 	require.NoError(t, err, "ExecuteCustomOperation should succeed")
 	require.NotNil(t, result)
 
 	// Verify the order was updated in the store.
-	items, err := adapter.ListStatefulItems("orders", 10, 0, "createdAt", "desc")
+	items, err := adapter.ListStatefulItems("", "orders", 10, 0, "createdAt", "desc")
 	require.NoError(t, err)
 	require.Len(t, items.Data, 1)
 	assert.Equal(t, "confirmed", items.Data[0]["status"])
 
 	// Delete the custom operation.
-	err = adapter.DeleteCustomOperation("confirm-order")
+	err = adapter.DeleteCustomOperation("", "confirm-order")
 	require.NoError(t, err, "DeleteCustomOperation should succeed")
 
 	// List should be empty again.
-	ops = adapter.ListCustomOperations()
+	ops = adapter.ListCustomOperations("")
 	assert.Nil(t, ops, "ListCustomOperations should be nil after deleting the only operation")
 }
 
@@ -503,7 +503,7 @@ func TestControlAPIAdapter_DeleteCustomOperation_NotFound(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	err := adapter.DeleteCustomOperation("nonexistent")
+	err := adapter.DeleteCustomOperation("", "nonexistent")
 	assert.Error(t, err, "DeleteCustomOperation should error for nonexistent operation")
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -512,7 +512,7 @@ func TestControlAPIAdapter_ExecuteCustomOperation_NotFound(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	result, err := adapter.ExecuteCustomOperation("nonexistent", map[string]interface{}{})
+	result, err := adapter.ExecuteCustomOperation("", "nonexistent", map[string]interface{}{})
 	assert.Error(t, err, "ExecuteCustomOperation should error for nonexistent operation")
 	assert.Nil(t, result)
 }
@@ -554,7 +554,7 @@ func TestControlAPIAdapter_GetStateResource_NotFound(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	res, err := adapter.GetStateResource("nonexistent")
+	res, err := adapter.GetStateResource("", "nonexistent")
 	assert.Error(t, err, "GetStateResource should error for nonexistent resource")
 	assert.Nil(t, res)
 }
@@ -563,7 +563,7 @@ func TestControlAPIAdapter_GetStateResource_Found(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	err := adapter.RegisterStatefulResource(&config.StatefulResourceConfig{
+	err := adapter.RegisterStatefulResource("", &config.StatefulResourceConfig{
 		Name:    "products",
 		IDField: "sku",
 		SeedData: []map[string]interface{}{
@@ -573,7 +573,7 @@ func TestControlAPIAdapter_GetStateResource_Found(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	res, err := adapter.GetStateResource("products")
+	res, err := adapter.GetStateResource("", "products")
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	assert.Equal(t, "products", res.Name)
@@ -586,7 +586,7 @@ func TestControlAPIAdapter_ClearStateResource_NotFound(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	count, err := adapter.ClearStateResource("nonexistent")
+	count, err := adapter.ClearStateResource("", "nonexistent")
 	assert.Error(t, err, "ClearStateResource should error for nonexistent resource")
 	assert.Equal(t, 0, count)
 }
@@ -596,7 +596,7 @@ func TestControlAPIAdapter_ResetState(t *testing.T) {
 	adapter := newTestAdapter()
 
 	// Register a resource with seed data.
-	err := adapter.RegisterStatefulResource(&config.StatefulResourceConfig{
+	err := adapter.RegisterStatefulResource("", &config.StatefulResourceConfig{
 		Name:    "carts",
 		IDField: "id",
 		SeedData: []map[string]interface{}{
@@ -606,24 +606,24 @@ func TestControlAPIAdapter_ResetState(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add an extra item.
-	_, err = adapter.CreateStatefulItem("carts", map[string]interface{}{
+	_, err = adapter.CreateStatefulItem("", "carts", map[string]interface{}{
 		"id": "c2", "items": 5,
 	})
 	require.NoError(t, err)
 
 	// Verify 2 items.
-	items, err := adapter.ListStatefulItems("carts", 10, 0, "", "")
+	items, err := adapter.ListStatefulItems("", "carts", 10, 0, "", "")
 	require.NoError(t, err)
 	assert.Len(t, items.Data, 2)
 
 	// Reset to seed data.
-	resp, err := adapter.ResetState("carts")
+	resp, err := adapter.ResetState("", "carts")
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.True(t, resp.Reset)
 
 	// Verify only seed data remains.
-	items, err = adapter.ListStatefulItems("carts", 10, 0, "", "")
+	items, err = adapter.ListStatefulItems("", "carts", 10, 0, "", "")
 	require.NoError(t, err)
 	assert.Len(t, items.Data, 1, "should only have seed data after reset")
 }
@@ -632,7 +632,7 @@ func TestControlAPIAdapter_GetStatefulItem_NotFoundResource(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	item, err := adapter.GetStatefulItem("nonexistent", "id1")
+	item, err := adapter.GetStatefulItem("", "nonexistent", "id1")
 	assert.Error(t, err)
 	assert.Nil(t, item)
 	assert.Contains(t, err.Error(), "not found")
@@ -642,13 +642,13 @@ func TestControlAPIAdapter_GetStatefulItem_NotFoundItem(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	err := adapter.RegisterStatefulResource(&config.StatefulResourceConfig{
+	err := adapter.RegisterStatefulResource("", &config.StatefulResourceConfig{
 		Name:    "items",
 		IDField: "id",
 	})
 	require.NoError(t, err)
 
-	item, err := adapter.GetStatefulItem("items", "nonexistent")
+	item, err := adapter.GetStatefulItem("", "items", "nonexistent")
 	assert.Error(t, err)
 	assert.Nil(t, item)
 	assert.Contains(t, err.Error(), "not found")
@@ -658,7 +658,7 @@ func TestControlAPIAdapter_GetStatefulItem_Found(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	err := adapter.RegisterStatefulResource(&config.StatefulResourceConfig{
+	err := adapter.RegisterStatefulResource("", &config.StatefulResourceConfig{
 		Name:    "books",
 		IDField: "isbn",
 		SeedData: []map[string]interface{}{
@@ -667,7 +667,7 @@ func TestControlAPIAdapter_GetStatefulItem_Found(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	item, err := adapter.GetStatefulItem("books", "978-1")
+	item, err := adapter.GetStatefulItem("", "books", "978-1")
 	require.NoError(t, err)
 	require.NotNil(t, item)
 	// ToJSON() maps the ID field to "id" regardless of the resource's idField name.
@@ -737,6 +737,6 @@ func TestControlAPIAdapter_RegisterStatefulResource_NilConfig(t *testing.T) {
 	t.Parallel()
 	adapter := newTestAdapter()
 
-	err := adapter.RegisterStatefulResource(nil)
+	err := adapter.RegisterStatefulResource("", nil)
 	assert.Error(t, err, "RegisterStatefulResource with nil config should error")
 }

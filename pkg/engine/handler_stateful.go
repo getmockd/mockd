@@ -37,6 +37,7 @@ func (h *Handler) handleStatefulBinding(w http.ResponseWriter, r *http.Request, 
 		return h.writeStatefulError(w, http.StatusServiceUnavailable, "stateful bridge not configured", binding.Table, "")
 	}
 
+	workspaceID := matched.WorkspaceID
 	action := stateful.Action(binding.Action)
 
 	// Resolve response transform config: binding override > table default.
@@ -49,7 +50,7 @@ func (h *Handler) handleStatefulBinding(w http.ResponseWriter, r *http.Request, 
 	}
 	// Fall back to the table's configured response transform
 	if responseCfg == nil {
-		responseCfg = h.statefulBridge.GetResponseConfig(binding.Table)
+		responseCfg = h.statefulBridge.GetResponseConfig(workspaceID, binding.Table)
 	}
 
 	// Extract item ID from path params. Convention: last path param value
@@ -66,30 +67,31 @@ func (h *Handler) handleStatefulBinding(w http.ResponseWriter, r *http.Request, 
 	// Dispatch by action
 	switch action {
 	case stateful.ActionList:
-		return h.handleBindingList(w, r, binding.Table, pathParams, responseCfg)
+		return h.handleBindingList(w, r, workspaceID, binding.Table, pathParams, responseCfg)
 	case stateful.ActionGet:
-		return h.handleBindingGet(w, r, binding.Table, itemID, responseCfg)
+		return h.handleBindingGet(w, r, workspaceID, binding.Table, itemID, responseCfg)
 	case stateful.ActionCreate:
-		return h.handleBindingCreate(w, r, binding.Table, pathParams, bodyBytes, responseCfg)
+		return h.handleBindingCreate(w, r, workspaceID, binding.Table, pathParams, bodyBytes, responseCfg)
 	case stateful.ActionUpdate:
-		return h.handleBindingMutate(w, r, binding.Table, itemID, pathParams, bodyBytes, responseCfg, stateful.ActionUpdate)
+		return h.handleBindingMutate(w, r, workspaceID, binding.Table, itemID, pathParams, bodyBytes, responseCfg, stateful.ActionUpdate)
 	case stateful.ActionPatch:
-		return h.handleBindingMutate(w, r, binding.Table, itemID, pathParams, bodyBytes, responseCfg, stateful.ActionPatch)
+		return h.handleBindingMutate(w, r, workspaceID, binding.Table, itemID, pathParams, bodyBytes, responseCfg, stateful.ActionPatch)
 	case stateful.ActionDelete:
-		return h.handleBindingDelete(w, r, binding.Table, itemID, responseCfg)
+		return h.handleBindingDelete(w, r, workspaceID, binding.Table, itemID, responseCfg)
 	case stateful.ActionCustom:
-		return h.handleBindingCustom(w, r, binding, pathParams, bodyBytes, responseCfg)
+		return h.handleBindingCustom(w, r, workspaceID, binding, pathParams, bodyBytes, responseCfg)
 	default:
 		return h.writeStatefulError(w, http.StatusBadRequest, "unsupported action: "+binding.Action, binding.Table, "")
 	}
 }
 
 // handleBindingGet retrieves a single item via Bridge.
-func (h *Handler) handleBindingGet(w http.ResponseWriter, r *http.Request, table, itemID string, responseCfg *config.ResponseTransform) int {
+func (h *Handler) handleBindingGet(w http.ResponseWriter, r *http.Request, workspaceID string, table, itemID string, responseCfg *config.ResponseTransform) int {
 	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
-		Resource:   table,
-		Action:     stateful.ActionGet,
-		ResourceID: itemID,
+		Resource:    table,
+		Action:      stateful.ActionGet,
+		ResourceID:  itemID,
+		WorkspaceID: workspaceID,
 	})
 	if result.Error != nil {
 		return h.writeBindingError(w, result, table, itemID, responseCfg)
@@ -100,11 +102,11 @@ func (h *Handler) handleBindingGet(w http.ResponseWriter, r *http.Request, table
 	// Apply ?expand[] if requested
 	expandFields := parseExpandFields(r)
 	if len(expandFields) > 0 {
-		resource := h.statefulBridge.Store().Get(table)
+		resource := h.statefulBridge.Store().Get(workspaceID, table)
 		if resource != nil {
 			if rels := resource.Relationships(); len(rels) > 0 {
 				resolver := func(tableName string) *stateful.StatefulResource {
-					return h.statefulBridge.Store().Get(tableName)
+					return h.statefulBridge.Store().Get(workspaceID, tableName)
 				}
 				data = stateful.ExpandRelationships(data, expandFields, rels, resolver)
 			}
@@ -117,18 +119,19 @@ func (h *Handler) handleBindingGet(w http.ResponseWriter, r *http.Request, table
 }
 
 // handleBindingList returns a paginated collection via Bridge.
-func (h *Handler) handleBindingList(w http.ResponseWriter, r *http.Request, table string, pathParams map[string]string, responseCfg *config.ResponseTransform) int {
+func (h *Handler) handleBindingList(w http.ResponseWriter, r *http.Request, workspaceID string, table string, pathParams map[string]string, responseCfg *config.ResponseTransform) int {
 	// Get the resource to reuse parseQueryFilter (it needs the resource for parentField)
-	resource := h.statefulBridge.Store().Get(table)
+	resource := h.statefulBridge.Store().Get(workspaceID, table)
 	if resource == nil {
 		return h.writeStatefulError(w, http.StatusNotFound, "table not found", table, "")
 	}
 
 	filter := h.parseQueryFilter(r, resource, pathParams)
 	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
-		Resource: table,
-		Action:   stateful.ActionList,
-		Filter:   filter,
+		Resource:    table,
+		Action:      stateful.ActionList,
+		Filter:      filter,
+		WorkspaceID: workspaceID,
 	})
 	if result.Error != nil {
 		return h.writeBindingError(w, result, table, "", responseCfg)
@@ -139,7 +142,7 @@ func (h *Handler) handleBindingList(w http.ResponseWriter, r *http.Request, tabl
 	if len(expandFields) > 0 {
 		if rels := resource.Relationships(); len(rels) > 0 {
 			resolver := func(tableName string) *stateful.StatefulResource {
-				return h.statefulBridge.Store().Get(tableName)
+				return h.statefulBridge.Store().Get(workspaceID, tableName)
 			}
 			for i, item := range result.List.Data {
 				result.List.Data[i] = stateful.ExpandRelationships(item, expandFields, rels, resolver)
@@ -154,7 +157,7 @@ func (h *Handler) handleBindingList(w http.ResponseWriter, r *http.Request, tabl
 }
 
 // handleBindingCreate creates a new item via Bridge.
-func (h *Handler) handleBindingCreate(w http.ResponseWriter, r *http.Request, table string, pathParams map[string]string, bodyBytes []byte, responseCfg *config.ResponseTransform) int {
+func (h *Handler) handleBindingCreate(w http.ResponseWriter, r *http.Request, workspaceID string, table string, pathParams map[string]string, bodyBytes []byte, responseCfg *config.ResponseTransform) int {
 	if len(bodyBytes) > MaxStatefulBodySize {
 		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", table, "", "Reduce request body size to under 1MB")
 	}
@@ -165,10 +168,11 @@ func (h *Handler) handleBindingCreate(w http.ResponseWriter, r *http.Request, ta
 	}
 
 	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
-		Resource: table,
-		Action:   stateful.ActionCreate,
-		Data:     data,
-		Params:   pathParams,
+		Resource:    table,
+		Action:      stateful.ActionCreate,
+		Data:        data,
+		Params:      pathParams,
+		WorkspaceID: workspaceID,
 	})
 	if result.Error != nil {
 		return h.writeBindingError(w, result, table, "", responseCfg)
@@ -182,7 +186,7 @@ func (h *Handler) handleBindingCreate(w http.ResponseWriter, r *http.Request, ta
 }
 
 // handleBindingMutate handles update/patch via Bridge.
-func (h *Handler) handleBindingMutate(w http.ResponseWriter, r *http.Request, table, itemID string, pathParams map[string]string, bodyBytes []byte, responseCfg *config.ResponseTransform, action stateful.Action) int {
+func (h *Handler) handleBindingMutate(w http.ResponseWriter, r *http.Request, workspaceID string, table, itemID string, pathParams map[string]string, bodyBytes []byte, responseCfg *config.ResponseTransform, action stateful.Action) int {
 	if len(bodyBytes) > MaxStatefulBodySize {
 		return h.writeStatefulErrorWithHint(w, http.StatusRequestEntityTooLarge, "request body too large", table, itemID, "Reduce request body size to under 1MB")
 	}
@@ -193,11 +197,12 @@ func (h *Handler) handleBindingMutate(w http.ResponseWriter, r *http.Request, ta
 	}
 
 	result := h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
-		Resource:   table,
-		Action:     action,
-		ResourceID: itemID,
-		Data:       data,
-		Params:     pathParams,
+		Resource:    table,
+		Action:      action,
+		ResourceID:  itemID,
+		Data:        data,
+		Params:      pathParams,
+		WorkspaceID: workspaceID,
 	})
 	if result.Error != nil {
 		return h.writeBindingError(w, result, table, itemID, responseCfg)
@@ -211,20 +216,22 @@ func (h *Handler) handleBindingMutate(w http.ResponseWriter, r *http.Request, ta
 
 // handleBindingDelete removes an item via Bridge.
 // If the delete override has Preserve set, the item is read but not removed (soft-delete).
-func (h *Handler) handleBindingDelete(w http.ResponseWriter, r *http.Request, table, itemID string, responseCfg *config.ResponseTransform) int {
+func (h *Handler) handleBindingDelete(w http.ResponseWriter, r *http.Request, workspaceID string, table, itemID string, responseCfg *config.ResponseTransform) int {
 	// If preserve mode, read the item instead of deleting it
 	var result *stateful.OperationResult
 	if responseCfg != nil && responseCfg.Delete != nil && responseCfg.Delete.Preserve {
 		result = h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
-			Resource:   table,
-			Action:     stateful.ActionGet,
-			ResourceID: itemID,
+			Resource:    table,
+			Action:      stateful.ActionGet,
+			ResourceID:  itemID,
+			WorkspaceID: workspaceID,
 		})
 	} else {
 		result = h.statefulBridge.Execute(r.Context(), &stateful.OperationRequest{
-			Resource:   table,
-			Action:     stateful.ActionDelete,
-			ResourceID: itemID,
+			Resource:    table,
+			Action:      stateful.ActionDelete,
+			ResourceID:  itemID,
+			WorkspaceID: workspaceID,
 		})
 	}
 	if result.Error != nil {
@@ -314,7 +321,7 @@ func extractLastPathParam(m *mock.Mock, pathParams map[string]string) string {
 // It delegates to Bridge.Execute() with ActionCustom, passing the operation name
 // from the binding and the parsed request body as input. Path params are merged
 // into the input so custom operations can access resource IDs.
-func (h *Handler) handleBindingCustom(w http.ResponseWriter, r *http.Request, binding *mock.StatefulBinding, pathParams map[string]string, bodyBytes []byte, responseCfg *config.ResponseTransform) int {
+func (h *Handler) handleBindingCustom(w http.ResponseWriter, r *http.Request, workspaceID string, binding *mock.StatefulBinding, pathParams map[string]string, bodyBytes []byte, responseCfg *config.ResponseTransform) int {
 	if binding.Operation == "" {
 		return h.writeStatefulError(w, http.StatusBadRequest, "extend binding with action: custom requires an operation name", binding.Table, "")
 	}
@@ -341,6 +348,7 @@ func (h *Handler) handleBindingCustom(w http.ResponseWriter, r *http.Request, bi
 		Action:        stateful.ActionCustom,
 		OperationName: binding.Operation,
 		Data:          input,
+		WorkspaceID:   workspaceID,
 	})
 
 	if result.Error != nil {
@@ -362,7 +370,7 @@ func (h *Handler) handleBindingCustom(w http.ResponseWriter, r *http.Request, bi
 
 // handleCustomOperation executes a registered custom operation via the Bridge.
 // The JSON request body becomes the operation input, and the result is returned as JSON.
-func (h *Handler) handleCustomOperation(w http.ResponseWriter, r *http.Request, operationName string, bodyBytes []byte) int {
+func (h *Handler) handleCustomOperation(w http.ResponseWriter, r *http.Request, workspaceID string, operationName string, bodyBytes []byte) int {
 	w.Header().Set("Content-Type", "application/json")
 
 	if h.statefulBridge == nil {
@@ -388,6 +396,7 @@ func (h *Handler) handleCustomOperation(w http.ResponseWriter, r *http.Request, 
 		Action:        stateful.ActionCustom,
 		OperationName: operationName,
 		Data:          input,
+		WorkspaceID:   workspaceID,
 	})
 
 	if result.Error != nil {

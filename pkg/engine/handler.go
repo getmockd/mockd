@@ -297,7 +297,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { //nolint:g
 
 		// Check for stateful custom operation
 		if match.HTTP != nil && match.HTTP.StatefulOperation != "" {
-			statusCode = h.handleCustomOperation(w, r, match.HTTP.StatefulOperation, bodyBytes)
+			statusCode = h.handleCustomOperation(w, r, match.WorkspaceID, match.HTTP.StatefulOperation, bodyBytes)
 			h.logRequest(startTime, r, headers, bodyBytes, matchedID, statusCode, nil)
 			return
 		}

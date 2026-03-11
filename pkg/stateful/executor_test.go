@@ -19,7 +19,7 @@ func setupExecutorTest(t *testing.T) (*StateStore, *OperationExecutor) {
 	obs := NewMetricsObserver()
 	store.SetObserver(obs)
 
-	err := store.Register(&ResourceConfig{
+	err := store.Register("", &ResourceConfig{
 		Name: "accounts",
 		SeedData: []map[string]interface{}{
 			{"id": "acc-1", "name": "Alice", "balance": float64(1000)},
@@ -28,7 +28,7 @@ func setupExecutorTest(t *testing.T) (*StateStore, *OperationExecutor) {
 	})
 	require.NoError(t, err)
 
-	err = store.Register(&ResourceConfig{
+	err = store.Register("", &ResourceConfig{
 		Name: "logs",
 	})
 	require.NoError(t, err)
@@ -269,7 +269,7 @@ func TestExecutor_UpdateStep_Success(t *testing.T) {
 	assert.Equal(t, float64(1000), result.Item.Data["previousBalance"])
 
 	// Verify the actual resource was updated
-	resource := store.Get("accounts")
+	resource := store.Get("", "accounts")
 	item := resource.Get("acc-1")
 	require.NotNil(t, item)
 	assert.Equal(t, float64(800), item.Data["balance"])
@@ -379,16 +379,16 @@ func TestExecutor_TransferFunds_Success(t *testing.T) {
 	assert.NotEmpty(t, result.Item.Data["transferId"])
 
 	// Verify actual resource state
-	source := store.Get("accounts").Get("acc-1")
+	source := store.Get("", "accounts").Get("acc-1")
 	require.NotNil(t, source)
 	assert.Equal(t, float64(700), source.Data["balance"])
 
-	dest := store.Get("accounts").Get("acc-2")
+	dest := store.Get("", "accounts").Get("acc-2")
 	require.NotNil(t, dest)
 	assert.Equal(t, float64(800), dest.Data["balance"])
 
 	// Verify the log entry was created
-	logs := store.Get("logs")
+	logs := store.Get("", "logs")
 	logList := logs.List(DefaultQueryFilter())
 	assert.Equal(t, 1, logList.Meta.Total)
 }
@@ -448,7 +448,7 @@ func TestExecutor_CreateStep_Success(t *testing.T) {
 	assert.NotEmpty(t, result.Item.Data["accountId"])
 
 	// Verify in store
-	accounts := store.Get("accounts")
+	accounts := store.Get("", "accounts")
 	assert.Equal(t, 3, accounts.Count()) // 2 seed + 1 created
 }
 
@@ -476,7 +476,7 @@ func TestExecutor_DeleteStep_Success(t *testing.T) {
 	assert.Equal(t, "Bob", result.Item.Data["deletedName"])
 
 	// Verify deleted
-	accounts := store.Get("accounts")
+	accounts := store.Get("", "accounts")
 	assert.Equal(t, 1, accounts.Count()) // only acc-1 remains
 	assert.Nil(t, accounts.Get("acc-2"))
 }
@@ -609,7 +609,7 @@ func TestExecutor_BestEffort_PreservesPartialWrites_OnFailure(t *testing.T) {
 	require.Equal(t, StatusNotFound, result.Status)
 	require.Equal(t, ErrCodeNotFound, GetErrorCode(result.Error))
 
-	acc1 := store.Get("accounts").Get("acc-1")
+	acc1 := store.Get("", "accounts").Get("acc-1")
 	require.NotNil(t, acc1)
 	assert.Equal(t, 111, acc1.Data["balance"])
 }
@@ -633,7 +633,7 @@ func TestExecutor_Atomic_RollsBackPartialWrites_OnFailure(t *testing.T) {
 	require.Error(t, result.Error)
 	require.Equal(t, ErrCodeNotFound, GetErrorCode(result.Error))
 
-	acc1 := store.Get("accounts").Get("acc-1")
+	acc1 := store.Get("", "accounts").Get("acc-1")
 	require.NotNil(t, acc1)
 	assert.Equal(t, float64(1000), acc1.Data["balance"], "atomic mode should restore pre-operation state")
 }
