@@ -129,6 +129,19 @@ extend:
 - **Custom operations**: Use `action: custom` + `operation: OpName` for non-CRUD actions (e.g., confirm, capture, cancel).
 - The default list response format is `{"data":[...],"meta":{...}}`. Use response transforms to customize the envelope.
 
+### Stateful Bindings via MCP / API
+
+You can also create stateful bindings at runtime without a config file. First create a resource table with `manage_state add_resource`, then create mocks with `statefulBinding` in the HTTP spec:
+
+```
+1. manage_state: {"action":"add_resource","resource":"users"}
+2. manage_mock:  {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/users"},"response":{"statusCode":200},"statefulBinding":{"table":"users","action":"list"}}}
+3. manage_mock:  {"action":"create","type":"http","http":{"matcher":{"method":"POST","path":"/api/users"},"response":{"statusCode":201},"statefulBinding":{"table":"users","action":"create"}}}
+4. manage_mock:  {"action":"create","type":"http","http":{"matcher":{"method":"GET","path":"/api/users/{id}"},"response":{"statusCode":200},"statefulBinding":{"table":"users","action":"get"}}}
+```
+
+Actions: `list`, `get`, `create`, `update`, `delete`, `custom`. For `custom`, also register the operation with `manage_custom_operation`.
+
 ## Template Functions
 
 Use `{{...}}` in response bodies:
