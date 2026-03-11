@@ -394,6 +394,15 @@ func (a *ControlAPIAdapter) RegisterStatefulResource(cfg *config.StatefulResourc
 	return a.server.registerStatefulResource(cfg)
 }
 
+// DeleteStatefulResource implements api.EngineController.
+func (a *ControlAPIAdapter) DeleteStatefulResource(name string) error {
+	store := a.server.StatefulStore()
+	if store == nil {
+		return ErrStatefulStoreNotInitialized
+	}
+	return store.Unregister(name)
+}
+
 // ListStatefulItems implements api.EngineController.
 func (a *ControlAPIAdapter) ListStatefulItems(name string, limit, offset int, sort, order string) (*api.StatefulItemsResponse, error) {
 	store := a.server.StatefulStore()

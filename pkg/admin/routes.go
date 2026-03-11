@@ -105,6 +105,7 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /state/resources/{name}", a.requireEngine(a.handleGetStateResource))
 	mux.HandleFunc("POST /state/resources/{name}/reset", a.requireEngine(a.handleResetStateResource))
 	mux.HandleFunc("DELETE /state/resources/{name}", a.requireEngine(a.handleClearStateResource))
+	mux.HandleFunc("POST /state/resources/{name}/unregister", a.requireEngine(a.handleDeleteStateResource))
 	mux.HandleFunc("GET /state/resources/{name}/items", a.requireEngine(a.handleListStatefulItems))
 	mux.HandleFunc("GET /state/resources/{name}/items/{id}", a.requireEngine(a.handleGetStatefulItem))
 	mux.HandleFunc("POST /state/resources/{name}/items", a.requireEngine(a.handleCreateStatefulItem))

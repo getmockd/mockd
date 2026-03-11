@@ -231,6 +231,10 @@ func (m *mockEngine) RegisterStatefulResource(cfg *config.StatefulResourceConfig
 	return nil // No-op for mock
 }
 
+func (m *mockEngine) DeleteStatefulResource(name string) error {
+	return nil // No-op for mock
+}
+
 func (m *mockEngine) ListStatefulItems(name string, limit, offset int, sort, order string) (*StatefulItemsResponse, error) {
 	if m.listStatefulItemsErr != nil {
 		return nil, m.listStatefulItemsErr

@@ -149,6 +149,39 @@ func (a *API) handleCreateStateResource(w http.ResponseWriter, r *http.Request, 
 	})
 }
 
+// handleDeleteStateResource fully unregisters a stateful resource definition.
+// It removes the resource from both the engine (runtime) and the data store (persistence).
+func (a *API) handleDeleteStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing_name", "Resource name is required")
+		return
+	}
+
+	// Unregister from the engine (runtime state).
+	if err := engine.DeleteStatefulResource(ctx, name); err != nil {
+		status, code, msg := mapStatefulResourceError(err, a.logger(), "Resource not found", "delete state resource")
+		writeError(w, status, code, msg)
+		return
+	}
+
+	// Remove from the file store so it doesn't reload on restart.
+	if a.dataStore != nil {
+		resStore := a.dataStore.StatefulResources()
+		if err := resStore.Delete(ctx, name); err != nil {
+			a.logger().Warn("failed to delete stateful resource from store", "name", name, "error", err)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"deleted":  true,
+		"resource": name,
+		"message":  "Stateful resource deleted",
+	})
+}
+
 // handleClearStateResource clears all items from a specific resource (does not restore seed data).
 func (a *API) handleClearStateResource(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()

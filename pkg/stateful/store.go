@@ -207,3 +207,15 @@ func (s *StateStore) ClearResource(name string) (int, error) {
 
 	return resource.Clear(), nil
 }
+
+// Unregister removes a stateful resource definition from the store entirely.
+// Unlike ClearResource (which only empties items), this fully removes the resource.
+func (s *StateStore) Unregister(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.resources[name]; !exists {
+		return fmt.Errorf("resource %q not found", name)
+	}
+	delete(s.resources, name)
+	return nil
+}

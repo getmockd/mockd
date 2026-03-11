@@ -775,6 +775,23 @@ func (c *Client) RegisterStatefulResource(ctx context.Context, cfg *config.State
 	}
 }
 
+// DeleteStatefulResource unregisters a stateful resource definition from the engine.
+func (c *Client) DeleteStatefulResource(ctx context.Context, name string) error {
+	resp, err := c.post(ctx, "/state/resources/"+url.PathEscape(name)+"/unregister", nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
 // ListCustomOperations returns all registered custom operations.
 func (c *Client) ListCustomOperations(ctx context.Context) ([]CustomOperationInfo, error) {
 	resp, err := c.get(ctx, "/state/operations")

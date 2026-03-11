@@ -495,6 +495,20 @@ func (s *Server) handleClearStateResource(w http.ResponseWriter, r *http.Request
 	})
 }
 
+func (s *Server) handleDeleteStateResource(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := s.engine.DeleteStatefulResource(name); err != nil {
+		status, code := mapStatefulLookupError(err)
+		writeError(w, status, code, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"deleted":  true,
+		"resource": name,
+		"message":  "resource unregistered",
+	})
+}
+
 // Stateful item handlers
 
 func (s *Server) handleListStatefulItems(w http.ResponseWriter, r *http.Request) {

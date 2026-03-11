@@ -28,8 +28,10 @@ func handleManageState(args map[string]interface{}, session *MCPSession, server 
 		return handleCreateStatefulItem(args, session, server)
 	case "reset":
 		return handleResetStatefulData(args, session, server)
+	case "delete_resource":
+		return handleDeleteStatefulResource(args, session, server)
 	default:
-		return ToolResultError("invalid action: " + action + ". Use: overview, add_resource, list_items, get_item, create_item, reset"), nil
+		return ToolResultError("invalid action: " + action + ". Use: overview, add_resource, list_items, get_item, create_item, reset, delete_resource"), nil
 	}
 }
 
@@ -172,6 +174,31 @@ func handleGetStateOverview(_ map[string]interface{}, session *MCPSession, _ *Se
 	}
 
 	return ToolResultJSON(overview)
+}
+
+// handleDeleteStatefulResource fully unregisters a stateful resource definition.
+func handleDeleteStatefulResource(args map[string]interface{}, session *MCPSession, _ *Server) (*ToolResult, error) {
+	client := session.GetAdminClient()
+	if client == nil {
+		return ToolResultError("admin client not available"), nil
+	}
+
+	name := getString(args, "resource", "")
+	if name == "" {
+		return ToolResultError("resource is required"), nil
+	}
+
+	err := client.DeleteStatefulResource(name)
+	if err != nil {
+		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+		return ToolResultError(fmt.Sprintf("failed to delete resource: %s", adminError(err, session.GetAdminURL()))), nil
+	}
+
+	return ToolResultJSON(map[string]interface{}{
+		"deleted":  true,
+		"resource": name,
+		"message":  "resource fully unregistered",
+	})
 }
 
 // handleResetStatefulData resets a stateful resource to its seed data.

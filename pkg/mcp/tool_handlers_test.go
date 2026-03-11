@@ -57,6 +57,7 @@ type mockAdminClient struct {
 	createStatefulItemFn     func(name string, data map[string]interface{}) (map[string]interface{}, error)
 	resetStatefulResourceFn  func(name string) error
 	createStatefulResourceFn func(name, idField string) error
+	deleteStatefulResourceFn func(name string) error
 
 	// Custom Operations
 	listCustomOperationsFn func() ([]cli.CustomOperationInfo, error)
@@ -315,6 +316,13 @@ func (m *mockAdminClient) CreateStatefulItem(name string, data map[string]interf
 func (m *mockAdminClient) ResetStatefulResource(name string) error {
 	if m.resetStatefulResourceFn != nil {
 		return m.resetStatefulResourceFn(name)
+	}
+	return nil
+}
+
+func (m *mockAdminClient) DeleteStatefulResource(name string) error {
+	if m.deleteStatefulResourceFn != nil {
+		return m.deleteStatefulResourceFn(name)
 	}
 	return nil
 }
@@ -1184,7 +1192,7 @@ func TestHandleManageState_UnknownAction(t *testing.T) {
 	}
 
 	text := resultText(t, result)
-	if text != "invalid action: nuke. Use: overview, add_resource, list_items, get_item, create_item, reset" {
+	if text != "invalid action: nuke. Use: overview, add_resource, list_items, get_item, create_item, reset, delete_resource" {
 		t.Errorf("error text = %q, want explicit invalid action message", text)
 	}
 }
@@ -1231,5 +1239,98 @@ func TestHandleManageState_ResetMissingResource(t *testing.T) {
 	text := resultText(t, result)
 	if text == "" {
 		t.Error("expected non-empty error message for missing resource")
+	}
+}
+
+func TestHandleManageState_DeleteResourceAction(t *testing.T) {
+	t.Parallel()
+
+	deletedName := ""
+	client := &mockAdminClient{
+		deleteStatefulResourceFn: func(name string) error {
+			deletedName = name
+			return nil
+		},
+	}
+
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	args := map[string]interface{}{
+		"action":   "delete_resource",
+		"resource": "users",
+	}
+	result, err := handleManageState(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageState() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	if deletedName != "users" {
+		t.Errorf("deleted resource = %s, want users", deletedName)
+	}
+
+	var parsed map[string]interface{}
+	resultJSON(t, result, &parsed)
+
+	if parsed["deleted"] != true {
+		t.Errorf("deleted = %v, want true", parsed["deleted"])
+	}
+	if parsed["resource"] != "users" {
+		t.Errorf("resource = %v, want users", parsed["resource"])
+	}
+}
+
+func TestHandleManageState_DeleteResourceNotFound(t *testing.T) {
+	t.Parallel()
+
+	client := &mockAdminClient{
+		deleteStatefulResourceFn: func(name string) error {
+			return &cli.APIError{StatusCode: 404, ErrorCode: "not_found", Message: "stateful resource not found: " + name}
+		},
+	}
+
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	args := map[string]interface{}{
+		"action":   "delete_resource",
+		"resource": "nonexistent",
+	}
+	result, err := handleManageState(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageState() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for deleting non-existent resource")
+	}
+
+	text := resultText(t, result)
+	if text == "" {
+		t.Error("expected non-empty error text")
+	}
+}
+
+func TestHandleManageState_DeleteResourceMissingName(t *testing.T) {
+	t.Parallel()
+
+	client := &mockAdminClient{}
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	args := map[string]interface{}{"action": "delete_resource"}
+	result, err := handleManageState(args, session, server)
+	if err != nil {
+		t.Fatalf("handleManageState() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for delete_resource without resource name")
+	}
+
+	text := resultText(t, result)
+	if text != "resource is required" {
+		t.Errorf("error text = %q, want %q", text, "resource is required")
 	}
 }
