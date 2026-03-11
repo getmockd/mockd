@@ -1,6 +1,10 @@
 package mcp
 
 import (
+	"errors"
+	"io/fs"
+	"os"
+
 	"github.com/getmockd/mockd/pkg/portability"
 )
 
@@ -8,7 +12,7 @@ import (
 // Import / Export Handlers
 // =============================================================================
 
-// handleImportMocks imports mocks from inline content.
+// handleImportMocks imports mocks from inline content or a file path.
 func handleImportMocks(args map[string]interface{}, session *MCPSession, server *Server) (*ToolResult, error) {
 	client := session.GetAdminClient()
 	if client == nil {
@@ -16,8 +20,27 @@ func handleImportMocks(args map[string]interface{}, session *MCPSession, server 
 	}
 
 	content := getString(args, "content", "")
-	if content == "" {
-		return ToolResultError("content is required"), nil
+	filePath := getString(args, "file", "")
+
+	// Validate: exactly one of content or file must be provided.
+	if content != "" && filePath != "" {
+		return ToolResultError("content and file are mutually exclusive — provide one or the other, not both"), nil
+	}
+	if content == "" && filePath == "" {
+		return ToolResultError("either content or file is required"), nil
+	}
+
+	// If file path is provided, read the file from the server's filesystem.
+	if filePath != "" {
+		fileData, err := os.ReadFile(filePath)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return ToolResultError("file not found: " + filePath), nil
+			}
+			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
+			return ToolResultError("failed to read file: " + err.Error()), nil
+		}
+		content = string(fileData)
 	}
 
 	formatHint := getString(args, "format", "auto")

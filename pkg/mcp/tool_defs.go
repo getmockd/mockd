@@ -277,13 +277,17 @@ var defManageWorkspace = ToolDefinition{
 
 var defImportMocks = ToolDefinition{
 	Name:        "import_mocks",
-	Description: "Import mocks from inline content. Supports OpenAPI, Postman, HAR, WireMock, cURL, and mockd YAML/JSON formats. Format is auto-detected if not specified. Use dryRun=true to preview without applying.",
+	Description: "Import mocks from inline content or a file on the mockd server's filesystem. Supports OpenAPI, Postman, HAR, WireMock, cURL, and mockd YAML/JSON formats. Format is auto-detected if not specified. Use dryRun=true to preview without applying. Use the file parameter for large specs that are too large for inline content.",
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
 			"content": map[string]interface{}{
 				"type":        "string",
 				"description": "Mock definition content (YAML, JSON, OpenAPI spec, Postman collection, HAR, WireMock, or cURL)",
+			},
+			"file": map[string]interface{}{
+				"type":        "string",
+				"description": "Path to a file on the mockd server's filesystem to import. Use this for large specs (OpenAPI, Postman, etc.) that are too large for inline content. Mutually exclusive with content.",
 			},
 			"format": map[string]interface{}{
 				"type":        "string",
@@ -302,7 +306,6 @@ var defImportMocks = ToolDefinition{
 				"default":     false,
 			},
 		},
-		"required": []string{"content"},
 	},
 }
 
@@ -395,7 +398,7 @@ var defClearRequestLogs = ToolDefinition{
 
 var defManageState = ToolDefinition{
 	Name: "manage_state",
-	Description: `Manage stateful mock resources — CRUD collections that persist data across requests. Use 'overview' to see all resources, 'add_resource' to create a new resource, 'list_items' to browse items in a resource, 'get_item' for a specific item, 'create_item' to add data, or 'reset' to restore seed data.
+	Description: `Manage stateful mock resources — CRUD collections that persist data across requests. Use 'overview' to see all resources, 'add_resource' to create a new resource, 'list_items' to browse items in a resource, 'get_item' for a specific item, 'create_item' to add data, 'reset' to restore seed data, or 'delete_resource' to fully unregister a resource.
 
 Examples:
   Overview:    {"action":"overview"}
@@ -403,18 +406,19 @@ Examples:
   List items:  {"action":"list_items","resource":"users","limit":10}
   Get item:    {"action":"get_item","resource":"users","item_id":"abc123"}
   Create item: {"action":"create_item","resource":"users","data":{"name":"Alice"}}
-  Reset:       {"action":"reset","resource":"users"}`,
+  Reset:       {"action":"reset","resource":"users"}
+  Delete resource: {"action":"delete_resource","resource":"users"}`,
 	InputSchema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
 			"action": map[string]interface{}{
 				"type":        "string",
 				"description": "Operation to perform",
-				"enum":        []string{"overview", "add_resource", "list_items", "get_item", "create_item", "reset"},
+				"enum":        []string{"overview", "add_resource", "list_items", "get_item", "create_item", "reset", "delete_resource"},
 			},
 			"resource": map[string]interface{}{
 				"type":        "string",
-				"description": "Resource name (required for add_resource/list_items/get_item/create_item/reset)",
+				"description": "Resource name (required for add_resource/list_items/get_item/create_item/reset/delete_resource)",
 			},
 			"id_field": map[string]interface{}{
 				"type":        "string",

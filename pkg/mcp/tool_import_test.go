@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -258,8 +260,8 @@ func TestHandleImportMocks_EmptyContent(t *testing.T) {
 	}
 
 	text := resultText(t, result)
-	if text != "content is required" {
-		t.Errorf("error text = %q, want %q", text, "content is required")
+	if text != "either content or file is required" {
+		t.Errorf("error text = %q, want %q", text, "either content or file is required")
 	}
 }
 
@@ -375,7 +377,7 @@ func TestHandleImportMocks_MissingContentArg(t *testing.T) {
 	session := newTestSession(client)
 	server := newTestServer(client)
 
-	// No "content" key at all
+	// No "content" key at all — now expects the new "either content or file" error
 	args := map[string]interface{}{}
 	result, err := handleImportMocks(args, session, server)
 	if err != nil {
@@ -386,8 +388,153 @@ func TestHandleImportMocks_MissingContentArg(t *testing.T) {
 	}
 
 	text := resultText(t, result)
-	if text != "content is required" {
-		t.Errorf("error text = %q, want %q", text, "content is required")
+	if text != "either content or file is required" {
+		t.Errorf("error text = %q, want %q", text, "either content or file is required")
+	}
+}
+
+// =============================================================================
+// File-based Import Tests
+// =============================================================================
+
+func TestHandleImportMocks_FromFile(t *testing.T) {
+	t.Parallel()
+
+	var capturedMockCount int
+	client := &mockAdminClient{
+		importConfigFn: func(collection *config.MockCollection, replace bool) (*cli.ImportResult, error) {
+			capturedMockCount = len(collection.Mocks)
+			return &cli.ImportResult{Imported: capturedMockCount}, nil
+		},
+	}
+
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	// Write a temp file with valid mockd YAML
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "mocks.yaml")
+	if err := os.WriteFile(filePath, []byte(validMockdYAML), 0o644); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+
+	args := map[string]interface{}{
+		"file": filePath,
+	}
+	result, err := handleImportMocks(args, session, server)
+	if err != nil {
+		t.Fatalf("handleImportMocks() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", resultText(t, result))
+	}
+
+	if capturedMockCount != 1 {
+		t.Errorf("capturedMockCount = %d, want 1", capturedMockCount)
+	}
+
+	var parsed map[string]interface{}
+	resultJSON(t, result, &parsed)
+
+	if parsed["imported"] != float64(1) {
+		t.Errorf("imported = %v, want 1", parsed["imported"])
+	}
+}
+
+func TestHandleImportMocks_FileNotFound(t *testing.T) {
+	t.Parallel()
+
+	client := &mockAdminClient{}
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	args := map[string]interface{}{
+		"file": "/nonexistent/path/to/mocks.yaml",
+	}
+	result, err := handleImportMocks(args, session, server)
+	if err != nil {
+		t.Fatalf("handleImportMocks() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for non-existent file")
+	}
+
+	text := resultText(t, result)
+	if !strings.Contains(text, "file not found:") {
+		t.Errorf("error text = %q, want to contain 'file not found:'", text)
+	}
+}
+
+func TestHandleImportMocks_FileReadError(t *testing.T) {
+	t.Parallel()
+
+	client := &mockAdminClient{}
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	// Use a directory path instead of a file — os.ReadFile on a directory returns an error
+	dir := t.TempDir()
+	args := map[string]interface{}{
+		"file": dir,
+	}
+	result, err := handleImportMocks(args, session, server)
+	if err != nil {
+		t.Fatalf("handleImportMocks() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result for directory-as-file")
+	}
+
+	text := resultText(t, result)
+	if !strings.Contains(text, "failed to read file:") {
+		t.Errorf("error text = %q, want to contain 'failed to read file:'", text)
+	}
+}
+
+func TestHandleImportMocks_BothContentAndFile(t *testing.T) {
+	t.Parallel()
+
+	client := &mockAdminClient{}
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	args := map[string]interface{}{
+		"content": validMockdYAML,
+		"file":    "/some/path.yaml",
+	}
+	result, err := handleImportMocks(args, session, server)
+	if err != nil {
+		t.Fatalf("handleImportMocks() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result when both content and file are provided")
+	}
+
+	text := resultText(t, result)
+	if !strings.Contains(text, "mutually exclusive") {
+		t.Errorf("error text = %q, want to contain 'mutually exclusive'", text)
+	}
+}
+
+func TestHandleImportMocks_NeitherContentNorFile(t *testing.T) {
+	t.Parallel()
+
+	client := &mockAdminClient{}
+	session := newTestSession(client)
+	server := newTestServer(client)
+
+	args := map[string]interface{}{}
+	result, err := handleImportMocks(args, session, server)
+	if err != nil {
+		t.Fatalf("handleImportMocks() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error result when neither content nor file is provided")
+	}
+
+	text := resultText(t, result)
+	if text != "either content or file is required" {
+		t.Errorf("error text = %q, want %q", text, "either content or file is required")
 	}
 }
 
