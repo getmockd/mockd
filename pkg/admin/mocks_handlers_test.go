@@ -9,7 +9,9 @@ import (
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/getmockd/mockd/pkg/mock"
+	"github.com/getmockd/mockd/pkg/store"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ============================================================================
@@ -328,6 +330,103 @@ func TestApplyMockPatch(t *testing.T) {
 		assert.Equal(t, "/original", m.HTTP.Matcher.Path, "HTTP spec should be unchanged when not in patch")
 		assert.Equal(t, "Updated Name", m.Name)
 	})
+
+	// Merge behavior tests — patching partial protocol specs preserves
+	// existing fields not included in the patch.
+
+	t.Run("patch statefulBinding preserves matcher", func(t *testing.T) {
+		// This is the exact bug scenario: `mockd update <id> --table X --bind Y`
+		// sends only statefulBinding inside the http block. Before the fix,
+		// this wiped the matcher entirely.
+		m := &mock.Mock{
+			ID:   "http-1",
+			Type: mock.TypeHTTP,
+			HTTP: &mock.HTTPSpec{
+				Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/api/users"},
+				Response: &mock.HTTPResponse{StatusCode: 200, Body: `{"users":[]}`},
+			},
+		}
+		patch := map[string]interface{}{
+			"http": map[string]interface{}{
+				"statefulBinding": map[string]interface{}{
+					"table":  "users",
+					"action": "list",
+				},
+				"response":          nil, // CLI clears response when setting binding
+				"sse":               nil,
+				"statefulOperation": nil,
+			},
+		}
+		applyMockPatch(m, patch)
+		require.NotNil(t, m.HTTP, "HTTP spec must not be nil")
+		require.NotNil(t, m.HTTP.Matcher, "matcher must be preserved")
+		assert.Equal(t, "GET", m.HTTP.Matcher.Method)
+		assert.Equal(t, "/api/users", m.HTTP.Matcher.Path)
+		require.NotNil(t, m.HTTP.StatefulBinding, "statefulBinding must be set")
+		assert.Equal(t, "users", m.HTTP.StatefulBinding.Table)
+		assert.Equal(t, "list", m.HTTP.StatefulBinding.Action)
+		assert.Nil(t, m.HTTP.Response, "response must be cleared")
+	})
+
+	t.Run("patch response preserves matcher and binding", func(t *testing.T) {
+		m := &mock.Mock{
+			ID:   "http-1",
+			Type: mock.TypeHTTP,
+			HTTP: &mock.HTTPSpec{
+				Matcher: &mock.HTTPMatcher{Method: "POST", Path: "/api/users"},
+				StatefulBinding: &mock.StatefulBinding{
+					Table: "users", Action: "create",
+				},
+			},
+		}
+		patch := map[string]interface{}{
+			"http": map[string]interface{}{
+				"priority": float64(10),
+			},
+		}
+		applyMockPatch(m, patch)
+		require.NotNil(t, m.HTTP.Matcher, "matcher must be preserved")
+		assert.Equal(t, "POST", m.HTTP.Matcher.Method)
+		assert.Equal(t, "/api/users", m.HTTP.Matcher.Path)
+		require.NotNil(t, m.HTTP.StatefulBinding, "binding must be preserved")
+		assert.Equal(t, "users", m.HTTP.StatefulBinding.Table)
+		assert.Equal(t, 10, m.HTTP.Priority)
+	})
+
+	t.Run("patch mqtt port preserves other mqtt fields", func(t *testing.T) {
+		m := &mock.Mock{
+			ID:   "mqtt-1",
+			Type: mock.TypeMQTT,
+			MQTT: &mock.MQTTSpec{
+				Port: 1883,
+				Auth: &mock.MQTTAuthConfig{Enabled: true},
+			},
+		}
+		patch := map[string]interface{}{
+			"mqtt": map[string]interface{}{
+				"port": float64(9999),
+			},
+		}
+		applyMockPatch(m, patch)
+		assert.Equal(t, 9999, m.MQTT.Port)
+		require.NotNil(t, m.MQTT.Auth, "auth config must be preserved")
+		assert.True(t, m.MQTT.Auth.Enabled, "auth enabled must be preserved")
+	})
+
+	t.Run("patch creates http spec when none exists", func(t *testing.T) {
+		m := &mock.Mock{ID: "test", Type: mock.TypeHTTP}
+		patch := map[string]interface{}{
+			"http": map[string]interface{}{
+				"matcher":  map[string]interface{}{"method": "GET", "path": "/new"},
+				"response": map[string]interface{}{"statusCode": float64(201)},
+			},
+		}
+		applyMockPatch(m, patch)
+		require.NotNil(t, m.HTTP)
+		require.NotNil(t, m.HTTP.Matcher)
+		assert.Equal(t, "/new", m.HTTP.Matcher.Path)
+		assert.Equal(t, 201, m.HTTP.Response.StatusCode)
+	})
 }
 
 func TestParseOptionalBool(t *testing.T) {
@@ -562,7 +661,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			mock: &mock.Mock{
 				ID:          "http-1",
 				Type:        mock.TypeHTTP,
-				WorkspaceID: "local",
+				WorkspaceID: store.DefaultWorkspaceID,
 				HTTP: &mock.HTTPSpec{
 					Matcher: &mock.HTTPMatcher{Path: "/api"},
 				},
@@ -573,7 +672,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			mock: &mock.Mock{
 				ID:          "ws-1",
 				Type:        mock.TypeWebSocket,
-				WorkspaceID: "local",
+				WorkspaceID: store.DefaultWorkspaceID,
 			},
 		},
 		{
@@ -581,7 +680,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			mock: &mock.Mock{
 				ID:          "graphql-1",
 				Type:        mock.TypeGraphQL,
-				WorkspaceID: "local",
+				WorkspaceID: store.DefaultWorkspaceID,
 			},
 		},
 		{
@@ -589,7 +688,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			mock: &mock.Mock{
 				ID:          "soap-1",
 				Type:        mock.TypeSOAP,
-				WorkspaceID: "local",
+				WorkspaceID: store.DefaultWorkspaceID,
 			},
 		},
 		{
@@ -597,7 +696,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			mock: &mock.Mock{
 				ID:          "mqtt-nil",
 				Type:        mock.TypeMQTT,
-				WorkspaceID: "local",
+				WorkspaceID: store.DefaultWorkspaceID,
 				MQTT:        nil,
 			},
 		},
@@ -606,7 +705,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			mock: &mock.Mock{
 				ID:          "grpc-nil",
 				Type:        mock.TypeGRPC,
-				WorkspaceID: "local",
+				WorkspaceID: store.DefaultWorkspaceID,
 				GRPC:        nil,
 			},
 		},
@@ -615,7 +714,7 @@ func TestCheckPortConflict_NoPort(t *testing.T) {
 			mock: &mock.Mock{
 				ID:          "mqtt-zero",
 				Type:        mock.TypeMQTT,
-				WorkspaceID: "local",
+				WorkspaceID: store.DefaultWorkspaceID,
 				MQTT:        &mock.MQTTSpec{Port: 0},
 			},
 		},
@@ -637,7 +736,7 @@ func TestCheckPortAvailability_NoBackend(t *testing.T) {
 	mqttMock := &mock.Mock{
 		ID:          "mqtt-1",
 		Type:        mock.TypeMQTT,
-		WorkspaceID: "local",
+		WorkspaceID: store.DefaultWorkspaceID,
 		MQTT:        &mock.MQTTSpec{Port: 1883},
 	}
 
@@ -654,13 +753,13 @@ func TestCheckPortConflict_ExcludeID(t *testing.T) {
 		{
 			ID:          "mqtt-1",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		},
 		{
 			ID:          "mqtt-2",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT:        &mock.MQTTSpec{Port: 1884},
 		},
 	}
@@ -671,7 +770,7 @@ func TestCheckPortConflict_ExcludeID(t *testing.T) {
 		newMock := &mock.Mock{
 			ID:          "mqtt-1",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT:        &mock.MQTTSpec{Port: 1883}, // Same port
 		}
 		excludeID := "mqtt-1"
@@ -680,7 +779,7 @@ func TestCheckPortConflict_ExcludeID(t *testing.T) {
 		assert.Equal(t, 1883, port)
 
 		// Filter to same workspace
-		filtered := applyMockFilter(existingMocks, &MockFilter{WorkspaceID: "local"})
+		filtered := applyMockFilter(existingMocks, &MockFilter{WorkspaceID: store.DefaultWorkspaceID})
 		assert.Len(t, filtered, 2)
 
 		// Check for conflict excluding mqtt-1
@@ -708,7 +807,7 @@ func TestCheckPortConflict_ExcludeID(t *testing.T) {
 		newMock := &mock.Mock{
 			ID:          "mqtt-2",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT:        &mock.MQTTSpec{Port: 1883}, // Port used by mqtt-1
 		}
 		excludeID := "mqtt-2"
@@ -717,7 +816,7 @@ func TestCheckPortConflict_ExcludeID(t *testing.T) {
 		assert.Equal(t, 1883, port)
 
 		// Filter to same workspace
-		filtered := applyMockFilter(existingMocks, &MockFilter{WorkspaceID: "local"})
+		filtered := applyMockFilter(existingMocks, &MockFilter{WorkspaceID: store.DefaultWorkspaceID})
 
 		// Check for conflict excluding mqtt-2
 		var conflict *PortConflict
@@ -819,7 +918,7 @@ func TestCheckPortConflict_MQTTSharing(t *testing.T) {
 		{
 			ID:          "mqtt-1",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		},
 	}
@@ -829,14 +928,14 @@ func TestCheckPortConflict_MQTTSharing(t *testing.T) {
 		newMQTT := &mock.Mock{
 			ID:          "mqtt-2",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		}
 
 		port := getMockPort(newMQTT)
 		assert.Equal(t, 1883, port)
 
-		filtered := applyMockFilter(existingMocks, &MockFilter{WorkspaceID: "local"})
+		filtered := applyMockFilter(existingMocks, &MockFilter{WorkspaceID: store.DefaultWorkspaceID})
 
 		// Simulate the checkPortConflict logic with MQTT sharing
 		var conflict *PortConflict
@@ -863,12 +962,12 @@ func TestCheckPortConflict_MQTTSharing(t *testing.T) {
 		grpcMock := &mock.Mock{
 			ID:          "grpc-1",
 			Type:        mock.TypeGRPC,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			GRPC:        &mock.GRPCSpec{Port: 1883},
 		}
 
 		port := getMockPort(grpcMock)
-		filtered := applyMockFilter(existingMocks, &MockFilter{WorkspaceID: "local"})
+		filtered := applyMockFilter(existingMocks, &MockFilter{WorkspaceID: store.DefaultWorkspaceID})
 
 		var conflict *PortConflict
 		for _, existing := range filtered {
@@ -897,7 +996,7 @@ func TestCheckPortConflict_CrossProtocol(t *testing.T) {
 		{
 			ID:          "mqtt-1",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT:        &mock.MQTTSpec{Port: 5000},
 		},
 	}
@@ -906,14 +1005,14 @@ func TestCheckPortConflict_CrossProtocol(t *testing.T) {
 		grpcMock := &mock.Mock{
 			ID:          "grpc-1",
 			Type:        mock.TypeGRPC,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			GRPC:        &mock.GRPCSpec{Port: 5000},
 		}
 
 		port := getMockPort(grpcMock)
 		assert.Equal(t, 5000, port)
 
-		filtered := applyMockFilter(existingMocks, &MockFilter{WorkspaceID: "local"})
+		filtered := applyMockFilter(existingMocks, &MockFilter{WorkspaceID: store.DefaultWorkspaceID})
 
 		var conflict *PortConflict
 		for _, existing := range filtered {
@@ -941,7 +1040,7 @@ func TestMergeGRPCMock(t *testing.T) {
 		existing := &mock.Mock{
 			ID:          "grpc-1",
 			Type:        mock.TypeGRPC,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
 				Services: map[string]mock.ServiceConfig{
@@ -957,7 +1056,7 @@ func TestMergeGRPCMock(t *testing.T) {
 		newMock := &mock.Mock{
 			ID:          "grpc-2",
 			Type:        mock.TypeGRPC,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
 				Services: map[string]mock.ServiceConfig{
@@ -985,7 +1084,7 @@ func TestMergeGRPCMock(t *testing.T) {
 		existing := &mock.Mock{
 			ID:          "grpc-1",
 			Type:        mock.TypeGRPC,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
 				Services: map[string]mock.ServiceConfig{
@@ -1001,7 +1100,7 @@ func TestMergeGRPCMock(t *testing.T) {
 		newMock := &mock.Mock{
 			ID:          "grpc-2",
 			Type:        mock.TypeGRPC,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
 				Services: map[string]mock.ServiceConfig{
@@ -1026,7 +1125,7 @@ func TestMergeGRPCMock(t *testing.T) {
 		existing := &mock.Mock{
 			ID:          "grpc-1",
 			Type:        mock.TypeGRPC,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
 				Services: map[string]mock.ServiceConfig{
@@ -1042,7 +1141,7 @@ func TestMergeGRPCMock(t *testing.T) {
 		newMock := &mock.Mock{
 			ID:          "grpc-2",
 			Type:        mock.TypeGRPC,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			GRPC: &mock.GRPCSpec{
 				Port: 50051,
 				Services: map[string]mock.ServiceConfig{
@@ -1070,7 +1169,7 @@ func TestMergeMQTTMock(t *testing.T) {
 		existing := &mock.Mock{
 			ID:          "mqtt-1",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT: &mock.MQTTSpec{
 				Port: 1883,
 				Topics: []mock.TopicConfig{
@@ -1082,7 +1181,7 @@ func TestMergeMQTTMock(t *testing.T) {
 		newMock := &mock.Mock{
 			ID:          "mqtt-2",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT: &mock.MQTTSpec{
 				Port: 1883,
 				Topics: []mock.TopicConfig{
@@ -1104,7 +1203,7 @@ func TestMergeMQTTMock(t *testing.T) {
 		existing := &mock.Mock{
 			ID:          "mqtt-1",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT: &mock.MQTTSpec{
 				Port: 1883,
 				Topics: []mock.TopicConfig{
@@ -1116,7 +1215,7 @@ func TestMergeMQTTMock(t *testing.T) {
 		newMock := &mock.Mock{
 			ID:          "mqtt-2",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT: &mock.MQTTSpec{
 				Port: 1883,
 				Topics: []mock.TopicConfig{

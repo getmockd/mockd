@@ -552,46 +552,46 @@ func applyMockPatch(m *mock.Mock, patch map[string]interface{}) {
 		m.MetaSortKey = metaSortKey
 	}
 
-	// Apply protocol-specific spec patches. When the client sends a full
-	// protocol block (e.g. "http": {...}), re-marshal it from the patch map
-	// and unmarshal into the typed spec, replacing the existing one entirely.
-	applyProtocolPatch(patch, "http", func(data []byte) {
+	// Apply protocol-specific spec patches. Merge patch fields into the
+	// existing spec so that unspecified fields (e.g. matcher) are preserved.
+	// If no existing spec exists, the patch becomes the full spec.
+	mergeProtocolPatch(patch, "http", m.HTTP, func(data []byte) {
 		var s mock.HTTPSpec
 		if json.Unmarshal(data, &s) == nil {
 			m.HTTP = &s
 		}
 	})
-	applyProtocolPatch(patch, "websocket", func(data []byte) {
+	mergeProtocolPatch(patch, "websocket", m.WebSocket, func(data []byte) {
 		var s mock.WebSocketSpec
 		if json.Unmarshal(data, &s) == nil {
 			m.WebSocket = &s
 		}
 	})
-	applyProtocolPatch(patch, "graphql", func(data []byte) {
+	mergeProtocolPatch(patch, "graphql", m.GraphQL, func(data []byte) {
 		var s mock.GraphQLSpec
 		if json.Unmarshal(data, &s) == nil {
 			m.GraphQL = &s
 		}
 	})
-	applyProtocolPatch(patch, "grpc", func(data []byte) {
+	mergeProtocolPatch(patch, "grpc", m.GRPC, func(data []byte) {
 		var s mock.GRPCSpec
 		if json.Unmarshal(data, &s) == nil {
 			m.GRPC = &s
 		}
 	})
-	applyProtocolPatch(patch, "soap", func(data []byte) {
+	mergeProtocolPatch(patch, "soap", m.SOAP, func(data []byte) {
 		var s mock.SOAPSpec
 		if json.Unmarshal(data, &s) == nil {
 			m.SOAP = &s
 		}
 	})
-	applyProtocolPatch(patch, "mqtt", func(data []byte) {
+	mergeProtocolPatch(patch, "mqtt", m.MQTT, func(data []byte) {
 		var s mock.MQTTSpec
 		if json.Unmarshal(data, &s) == nil {
 			m.MQTT = &s
 		}
 	})
-	applyProtocolPatch(patch, "oauth", func(data []byte) {
+	mergeProtocolPatch(patch, "oauth", m.OAuth, func(data []byte) {
 		var s mock.OAuthSpec
 		if json.Unmarshal(data, &s) == nil {
 			m.OAuth = &s
@@ -601,14 +601,49 @@ func applyMockPatch(m *mock.Mock, patch map[string]interface{}) {
 	m.UpdatedAt = time.Now()
 }
 
-// applyProtocolPatch re-marshals a protocol section from the patch map and
-// calls apply if the key is present. This avoids hand-writing deep-merge logic
-// for each protocol — the client sends the full spec and we replace it.
-func applyProtocolPatch(patch map[string]interface{}, key string, apply func([]byte)) {
-	if specMap, ok := patch[key]; ok && specMap != nil {
-		if data, err := json.Marshal(specMap); err == nil {
-			apply(data)
+// mergeProtocolPatch merges patch fields into an existing protocol spec.
+// It serializes the existing spec to a map, overlays the patch keys on top,
+// then re-serializes and calls apply. This preserves fields the client did
+// not include in the patch (e.g., updating statefulBinding without losing the
+// matcher). If existing is nil, the patch is used as-is (new spec creation).
+// Patch values that are explicitly null remove the corresponding field.
+func mergeProtocolPatch(patch map[string]interface{}, key string, existing interface{}, apply func([]byte)) {
+	patchSpec, ok := patch[key]
+	if !ok {
+		return // key not in patch at all — nothing to do
+	}
+
+	patchMap, _ := patchSpec.(map[string]interface{})
+	if patchMap == nil {
+		// Patch value is null — clear the spec entirely.
+		apply([]byte("null"))
+		return
+	}
+
+	// Build the base map from the existing spec (if any).
+	var base map[string]interface{}
+	if existing != nil {
+		if data, err := json.Marshal(existing); err == nil {
+			_ = json.Unmarshal(data, &base)
 		}
+	}
+	if base == nil {
+		base = make(map[string]interface{})
+	}
+
+	// Overlay patch fields onto the base. Explicit null values in the patch
+	// remove the field from the base (e.g., "response": null clears the
+	// response while preserving the matcher).
+	for k, v := range patchMap {
+		if v == nil {
+			delete(base, k)
+		} else {
+			base[k] = v
+		}
+	}
+
+	if data, err := json.Marshal(base); err == nil {
+		apply(data)
 	}
 }
 
