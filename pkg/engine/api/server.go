@@ -41,6 +41,7 @@ type EngineController interface {
 	GetRequestLogs(filter *requestlog.Filter) []*requestlog.Entry
 	GetRequestLog(id string) *requestlog.Entry
 	RequestLogCount() int
+	RequestLogCountFiltered(filter *requestlog.Filter) int
 	ClearRequestLogs()
 	ClearRequestLogsByMockID(mockID string) int
 

@@ -18,12 +18,18 @@ import (
 )
 
 var (
-	statefulAddPath    string
-	statefulAddIDField string
-	statefulListLimit  int
-	statefulListOffset int
-	statefulListSort   string
-	statefulListOrder  string
+	statefulAddPath         string
+	statefulAddIDField      string
+	statefulAddIDStrategy   string
+	statefulAddIDPrefix     string
+	statefulAddSeedData     string // JSON string or @file path
+	statefulAddMaxItems     int
+	statefulAddParentField  string
+	statefulAddResponseFile string
+	statefulListLimit       int
+	statefulListOffset      int
+	statefulListSort        string
+	statefulListOrder       string
 
 	// Custom operation flags
 	customAddFile                string
@@ -105,6 +111,35 @@ Examples:
   mockd stateful reset products --json`,
 	Args: cobra.ExactArgs(1),
 	RunE: runStatefulReset,
+}
+
+var statefulDeleteCmd = &cobra.Command{
+	Use:   "delete <name>",
+	Short: "Delete a stateful resource and all its data",
+	Long: `Delete a stateful resource and all its data.
+
+This permanently removes the resource from both runtime and persistent storage.
+All items in the resource are lost.
+
+Examples:
+  mockd stateful delete users
+  mockd stateful delete products --json`,
+	Args: cobra.ExactArgs(1),
+	RunE: runStatefulDelete,
+}
+
+var statefulItemsCmd = &cobra.Command{
+	Use:   "items <name>",
+	Short: "List items in a stateful resource",
+	Long: `List paginated items in a stateful resource.
+
+Examples:
+  mockd stateful items users
+  mockd stateful items users --limit 10 --offset 20
+  mockd stateful items users --sort name --order asc
+  mockd stateful items users --json`,
+	Args: cobra.ExactArgs(1),
+	RunE: runStatefulItems,
 }
 
 // --- Custom operation commands ---
@@ -216,6 +251,12 @@ func init() {
 	statefulCmd.AddCommand(statefulAddCmd)
 	statefulAddCmd.Flags().StringVar(&statefulAddPath, "path", "", "URL base path for HTTP REST endpoints (omit for bridge-only)")
 	statefulAddCmd.Flags().StringVar(&statefulAddIDField, "id-field", "", "Custom ID field name (default: id)")
+	statefulAddCmd.Flags().StringVar(&statefulAddIDStrategy, "id-strategy", "", "ID generation strategy: uuid (default), prefix, ulid, sequence, short")
+	statefulAddCmd.Flags().StringVar(&statefulAddIDPrefix, "id-prefix", "", "Prefix for generated IDs (e.g., cus_) when --id-strategy=prefix")
+	statefulAddCmd.Flags().StringVar(&statefulAddSeedData, "seed-data", "", "Initial seed data as JSON array, or @filepath to read from file")
+	statefulAddCmd.Flags().IntVar(&statefulAddMaxItems, "max-items", 0, "Maximum number of items (0 = unlimited)")
+	statefulAddCmd.Flags().StringVar(&statefulAddParentField, "parent-field", "", "Foreign key field name for nested resources")
+	statefulAddCmd.Flags().StringVar(&statefulAddResponseFile, "response-file", "", "Path to JSON/YAML file with response transform config")
 
 	statefulCmd.AddCommand(statefulListCmd)
 	statefulListCmd.Flags().IntVar(&statefulListLimit, "limit", 100, "Maximum items to show per resource")
@@ -224,6 +265,14 @@ func init() {
 	statefulListCmd.Flags().StringVar(&statefulListOrder, "order", "", "Sort order (asc or desc)")
 
 	statefulCmd.AddCommand(statefulResetCmd)
+
+	statefulCmd.AddCommand(statefulDeleteCmd)
+
+	statefulCmd.AddCommand(statefulItemsCmd)
+	statefulItemsCmd.Flags().IntVar(&statefulListLimit, "limit", 100, "Maximum items to show")
+	statefulItemsCmd.Flags().IntVar(&statefulListOffset, "offset", 0, "Skip this many items")
+	statefulItemsCmd.Flags().StringVar(&statefulListSort, "sort", "", "Sort field")
+	statefulItemsCmd.Flags().StringVar(&statefulListOrder, "order", "", "Sort order (asc or desc)")
 
 	// Custom operation subcommands
 	statefulCmd.AddCommand(customCmd)
@@ -280,10 +329,33 @@ func runStatefulAdd(_ *cobra.Command, args []string) error {
 
 	client := NewAdminClientWithAuth(adminURL)
 	cfg := &config.StatefulResourceConfig{
-		Name:    name,
-		IDField: statefulAddIDField,
+		Name:        name,
+		IDField:     statefulAddIDField,
+		IDStrategy:  statefulAddIDStrategy,
+		IDPrefix:    statefulAddIDPrefix,
+		MaxItems:    statefulAddMaxItems,
+		ParentField: statefulAddParentField,
 	}
-	err := client.CreateStatefulResource(cfg)
+
+	// Parse seed data
+	if statefulAddSeedData != "" {
+		seedData, err := parseSeedData(statefulAddSeedData)
+		if err != nil {
+			return fmt.Errorf("invalid --seed-data: %w", err)
+		}
+		cfg.SeedData = seedData
+	}
+
+	// Parse response transform file
+	if statefulAddResponseFile != "" {
+		rt, err := parseResponseTransformFile(statefulAddResponseFile)
+		if err != nil {
+			return fmt.Errorf("invalid --response-file: %w", err)
+		}
+		cfg.Response = rt
+	}
+
+	err := client.CreateStatefulResource(resolvedWorkspace(), cfg)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
@@ -318,7 +390,7 @@ func runStatefulAdd(_ *cobra.Command, args []string) error {
 // runStatefulList lists all stateful resources.
 func runStatefulList(_ *cobra.Command, _ []string) error {
 	client := NewAdminClientWithAuth(adminURL)
-	overview, err := client.GetStateOverview()
+	overview, err := client.GetStateOverview(resolvedWorkspace())
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
@@ -363,7 +435,7 @@ func runStatefulReset(_ *cobra.Command, args []string) error {
 	name := args[0]
 
 	client := NewAdminClientWithAuth(adminURL)
-	err := client.ResetStatefulResource(name)
+	err := client.ResetStatefulResource(resolvedWorkspace(), name)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
@@ -382,12 +454,69 @@ func runStatefulReset(_ *cobra.Command, args []string) error {
 	return nil
 }
 
+// runStatefulDelete deletes a stateful resource and all its data.
+func runStatefulDelete(_ *cobra.Command, args []string) error {
+	name := args[0]
+
+	client := NewAdminClientWithAuth(adminURL)
+	err := client.DeleteStatefulResource(resolvedWorkspace(), name)
+	if err != nil {
+		return fmt.Errorf("%s", FormatConnectionError(err))
+	}
+
+	printResult(struct {
+		Resource string `json:"resource"`
+		Action   string `json:"action"`
+	}{
+		Resource: name,
+		Action:   "deleted",
+	}, func() {
+		fmt.Printf("Deleted stateful resource: %s\n", name)
+		fmt.Println("  All items and configuration removed.")
+	})
+
+	return nil
+}
+
+// runStatefulItems lists paginated items in a stateful resource.
+func runStatefulItems(_ *cobra.Command, args []string) error {
+	name := args[0]
+
+	client := NewAdminClientWithAuth(adminURL)
+	result, err := client.ListStatefulItems(resolvedWorkspace(), name, statefulListLimit, statefulListOffset, statefulListSort, statefulListOrder)
+	if err != nil {
+		return fmt.Errorf("%s", FormatConnectionError(err))
+	}
+
+	if jsonOutput {
+		return output.JSON(result)
+	}
+
+	fmt.Printf("Items in %s (%d total, showing %d):\n\n", name, result.Meta.Total, result.Meta.Count)
+	if len(result.Data) == 0 {
+		fmt.Println("  (no items)")
+		return nil
+	}
+
+	// Print each item as compact JSON
+	for _, item := range result.Data {
+		data, _ := json.MarshalIndent(item, "  ", "  ")
+		fmt.Printf("  %s\n", data)
+	}
+
+	if result.Meta.Total > result.Meta.Offset+result.Meta.Count {
+		fmt.Printf("\n  Use --offset %d to see more\n", result.Meta.Offset+result.Meta.Count)
+	}
+
+	return nil
+}
+
 // --- Custom operation command implementations ---
 
 // runCustomList lists all registered custom operations.
 func runCustomList(_ *cobra.Command, _ []string) error {
 	client := NewAdminClientWithAuth(adminURL)
-	ops, err := client.ListCustomOperations()
+	ops, err := client.ListCustomOperations(resolvedWorkspace())
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
@@ -435,7 +564,7 @@ func runCustomGet(_ *cobra.Command, args []string) error {
 	name := args[0]
 
 	client := NewAdminClientWithAuth(adminURL)
-	op, err := client.GetCustomOperation(name)
+	op, err := client.GetCustomOperation(resolvedWorkspace(), name)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
@@ -501,7 +630,7 @@ func runCustomAdd(_ *cobra.Command, _ []string) error {
 	}
 
 	client := NewAdminClientWithAuth(adminURL)
-	if err := client.RegisterCustomOperation(definition); err != nil {
+	if err := client.RegisterCustomOperation(resolvedWorkspace(), definition); err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
 
@@ -553,7 +682,7 @@ func runCustomValidate(_ *cobra.Command, _ []string) error {
 
 	if customValidateCheckResources {
 		client := NewAdminClientWithAuth(adminURL)
-		overview, err := client.GetStateOverview()
+		overview, err := client.GetStateOverview(resolvedWorkspace())
 		if err != nil {
 			return fmt.Errorf("%s", FormatConnectionError(err))
 		}
@@ -611,7 +740,7 @@ func runCustomRun(_ *cobra.Command, args []string) error {
 	}
 
 	client := NewAdminClientWithAuth(adminURL)
-	result, err := client.ExecuteCustomOperation(name, input)
+	result, err := client.ExecuteCustomOperation(resolvedWorkspace(), name, input)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
@@ -636,7 +765,7 @@ func runCustomDelete(_ *cobra.Command, args []string) error {
 	name := args[0]
 
 	client := NewAdminClientWithAuth(adminURL)
-	if err := client.DeleteCustomOperation(name); err != nil {
+	if err := client.DeleteCustomOperation(resolvedWorkspace(), name); err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}
 
@@ -1123,4 +1252,44 @@ func validateExprCompile(expression string, env map[string]interface{}) error {
 		return fmt.Errorf("invalid expression %q: %w", expression, err)
 	}
 	return nil
+}
+
+// parseSeedData parses seed data from inline JSON or an @file path.
+func parseSeedData(input string) ([]map[string]interface{}, error) {
+	var data []byte
+	if strings.HasPrefix(input, "@") {
+		var err error
+		data, err = os.ReadFile(strings.TrimPrefix(input, "@"))
+		if err != nil {
+			return nil, fmt.Errorf("failed to read seed data file: %w", err)
+		}
+	} else {
+		data = []byte(input)
+	}
+	var seedData []map[string]interface{}
+	if err := json.Unmarshal(data, &seedData); err != nil {
+		return nil, fmt.Errorf("seed data must be a JSON array of objects: %w", err)
+	}
+	return seedData, nil
+}
+
+// parseResponseTransformFile reads a response transform config from a JSON or YAML file.
+func parseResponseTransformFile(filePath string) (*config.ResponseTransform, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response transform file: %w", err)
+	}
+	var rt config.ResponseTransform
+	ext := strings.ToLower(filepath.Ext(filePath))
+	switch ext {
+	case ".yaml", ".yml":
+		if err := yaml.Unmarshal(data, &rt); err != nil {
+			return nil, fmt.Errorf("failed to parse YAML: %w", err)
+		}
+	default:
+		if err := json.Unmarshal(data, &rt); err != nil {
+			return nil, fmt.Errorf("failed to parse JSON: %w", err)
+		}
+	}
+	return &rt, nil
 }

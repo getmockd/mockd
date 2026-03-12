@@ -1042,6 +1042,12 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Validate the full mock configuration before persisting
+	if err := m.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
 	// Check for route collisions across workspaces (after base path prefixing).
 	// The mock's ID is set, so checkRouteCollision will skip self.
 	if collision := a.checkMockRouteCollision(r.Context(), &m); collision != nil {
@@ -1072,15 +1078,15 @@ func (a *API) handleUpdateUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		if rollbackErr := mockStore.Update(r.Context(), existing); rollbackErr != nil {
 			a.logger().Warn("failed to rollback mock update after engine error", "id", m.ID, "error", rollbackErr)
 		}
-		// Check if this is a port-related error
-		if isPortError(errMsg) {
+		switch {
+		case isPortError(errMsg):
 			writeError(w, http.StatusConflict, "port_unavailable",
 				"Failed to update mock: the port may be in use by another process")
-			return
+		case isValidationError(errMsg):
+			writeError(w, http.StatusBadRequest, "validation_error", errMsg)
+		default:
+			writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
 		}
-		// For other engine errors, also fail — store and engine must stay in sync
-		writeError(w, http.StatusServiceUnavailable, "engine_error",
-			sanitizeEngineError(err, a.logger(), "update mock in engine"))
 		return
 	}
 
@@ -1149,6 +1155,12 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Validate the patched mock configuration before persisting
+	if err := existing.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+
 	// Check for route collisions across workspaces (after base path prefixing).
 	// The mock's ID is preserved, so checkRouteCollision will skip self.
 	if collision := a.checkMockRouteCollision(r.Context(), existing); collision != nil {
@@ -1174,12 +1186,20 @@ func (a *API) handlePatchUnifiedMock(w http.ResponseWriter, r *http.Request) {
 	// Push patch update to all engines via fan-out
 	if _, err := a.pushUpdateToEngines(r.Context(), id, existing); err != nil {
 		a.logger().Error("failed to apply mock patch in engine(s)", "id", existing.ID, "error", err)
+		errMsg := err.Error()
 		// Rollback the store to pre-patch state
 		if rollbackErr := mockStore.Update(r.Context(), &prePatch); rollbackErr != nil {
 			a.logger().Warn("failed to rollback mock patch after engine error", "id", id, "error", rollbackErr)
 		}
-		writeError(w, http.StatusServiceUnavailable, "engine_error",
-			sanitizeEngineError(err, a.logger(), "apply mock patch in engine"))
+		switch {
+		case isPortError(errMsg):
+			writeError(w, http.StatusConflict, "port_unavailable",
+				"Failed to update mock: the port may be in use by another process")
+		case isValidationError(errMsg):
+			writeError(w, http.StatusBadRequest, "validation_error", errMsg)
+		default:
+			writeError(w, http.StatusServiceUnavailable, "engine_error", ErrMsgEngineUnavailable)
+		}
 		return
 	}
 

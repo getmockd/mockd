@@ -628,6 +628,15 @@ func (s *Server) RequestLogCount() int {
 	return s.requestLogger.Count()
 }
 
+// RequestLogCountFiltered returns the count of request logs matching the filter,
+// ignoring Limit and Offset. Used for accurate Total in paginated responses.
+func (s *Server) RequestLogCountFiltered(filter *requestlog.Filter) int {
+	if s.requestLogger == nil {
+		return 0
+	}
+	return s.requestLogger.CountFiltered(filter)
+}
+
 // Logger returns the request logger (for admin API use).
 func (s *Server) Logger() RequestLogger {
 	return s.requestLogger

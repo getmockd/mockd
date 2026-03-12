@@ -285,6 +285,20 @@ For quick prototyping, the CLI shortcut `mockd http add --path /api/users --stat
 
 See [Stateful Mocking Guide](/guides/stateful-mocking/).
 
+## Workspaces
+
+Workspaces provide isolated environments within a single mockd instance. Each workspace has its own:
+- **Mocks** — route definitions scoped to the workspace
+- **Stateful resources** — independent data stores per workspace  
+- **Request logs** — traffic filtered by workspace
+
+The default workspace (empty string) contains everything not assigned to a specific workspace. Use `mockd workspace create` to create isolated environments, or pass `--workspace <id>` to scope any CLI command.
+
+Workspaces are useful for:
+- Running multiple API environments side-by-side (e.g., Stripe + Twilio)
+- Test isolation (each test suite gets its own workspace)
+- Team separation on shared instances
+
 ## Proxy Recording
 
 mockd can act as a proxy to record real API traffic:

@@ -1688,7 +1688,7 @@ func TestHandleBindingCustom_Success(t *testing.T) {
 	}
 
 	// Register a custom operation on the bridge
-	br.RegisterCustomOperation("double-name", &stateful.CustomOperation{
+	br.RegisterCustomOperation("", "double-name", &stateful.CustomOperation{
 		Name: "double-name",
 		Steps: []stateful.Step{
 			{Type: stateful.StepRead, Resource: "customers", ID: `input.userId`, As: "user"},
@@ -1786,7 +1786,7 @@ func TestHandleBindingCustom_EmptyBody(t *testing.T) {
 	}
 
 	// Register a custom operation that uses a path param instead of body input
-	br.RegisterCustomOperation("get-by-path", &stateful.CustomOperation{
+	br.RegisterCustomOperation("", "get-by-path", &stateful.CustomOperation{
 		Name: "get-by-path",
 		Steps: []stateful.Step{
 			{Type: stateful.StepRead, Resource: "customers", ID: `input.customerId`, As: "user"},
@@ -1951,7 +1951,7 @@ func TestHandleCustomOperation_Success(t *testing.T) {
 	}
 
 	// Register a custom operation
-	br.RegisterCustomOperation("greet", &stateful.CustomOperation{
+	br.RegisterCustomOperation("", "greet", &stateful.CustomOperation{
 		Name: "greet",
 		Steps: []stateful.Step{
 			{Type: stateful.StepRead, Resource: "customers", ID: `input.userId`, As: "user"},

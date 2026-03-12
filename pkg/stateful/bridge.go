@@ -106,7 +106,7 @@ type Bridge struct {
 	executor  *OperationExecutor
 	tracer    *tracing.Tracer
 	customMu  sync.RWMutex
-	customOps map[string]*CustomOperation // name → custom operation definition
+	customOps map[string]map[string]*CustomOperation // workspaceID → name → op
 }
 
 // NewBridge creates a new Bridge backed by the given StateStore.
@@ -119,7 +119,7 @@ func NewBridge(store *StateStore) *Bridge {
 		store:     store,
 		observer:  store.GetObserver(),
 		executor:  NewOperationExecutor(store),
-		customOps: make(map[string]*CustomOperation),
+		customOps: make(map[string]map[string]*CustomOperation),
 	}
 }
 
@@ -142,47 +142,89 @@ func (b *Bridge) SetTracer(t *tracing.Tracer) {
 	}
 }
 
-// RegisterCustomOperation registers a named custom operation.
+// RegisterCustomOperation registers a named custom operation in a workspace.
 // Operations are referenced by name in OperationRequest.Resource when Action is "custom".
-func (b *Bridge) RegisterCustomOperation(name string, op *CustomOperation) {
+func (b *Bridge) RegisterCustomOperation(workspaceID string, name string, op *CustomOperation) {
 	b.customMu.Lock()
 	defer b.customMu.Unlock()
-	b.customOps[name] = op
+	ws := b.customOps[workspaceID]
+	if ws == nil {
+		ws = make(map[string]*CustomOperation)
+		b.customOps[workspaceID] = ws
+	}
+	ws[name] = op
 }
 
-// GetCustomOperation returns a registered custom operation by name.
-func (b *Bridge) GetCustomOperation(name string) *CustomOperation {
+// GetCustomOperation returns a registered custom operation by workspace and name.
+func (b *Bridge) GetCustomOperation(workspaceID string, name string) *CustomOperation {
 	b.customMu.RLock()
 	defer b.customMu.RUnlock()
-	return b.customOps[name]
+	ws := b.customOps[workspaceID]
+	if ws == nil {
+		return nil
+	}
+	return ws[name]
 }
 
-// DeleteCustomOperation removes a registered custom operation by name.
-func (b *Bridge) DeleteCustomOperation(name string) {
+// DeleteCustomOperation removes a registered custom operation by workspace and name.
+func (b *Bridge) DeleteCustomOperation(workspaceID string, name string) {
 	b.customMu.Lock()
 	defer b.customMu.Unlock()
-	delete(b.customOps, name)
+	ws := b.customOps[workspaceID]
+	if ws == nil {
+		return
+	}
+	delete(ws, name)
+	if len(ws) == 0 {
+		delete(b.customOps, workspaceID)
+	}
 }
 
-// ClearCustomOperations removes all registered custom operations.
-func (b *Bridge) ClearCustomOperations() {
+// ClearCustomOperations removes all registered custom operations for a workspace.
+func (b *Bridge) ClearCustomOperations(workspaceID string) {
 	b.customMu.Lock()
 	defer b.customMu.Unlock()
-	clear(b.customOps)
+	delete(b.customOps, workspaceID)
 }
 
-// ListCustomOperations returns all registered custom operations as a name→operation map.
-// Used by Export to serialize custom operation definitions back to config format.
-func (b *Bridge) ListCustomOperations() map[string]*CustomOperation {
+// ClearAllCustomOperations removes all registered custom operations across all workspaces.
+// Used when replacing the entire configuration (replace=true).
+func (b *Bridge) ClearAllCustomOperations() {
+	b.customMu.Lock()
+	defer b.customMu.Unlock()
+	b.customOps = make(map[string]map[string]*CustomOperation)
+}
+
+// ListCustomOperations returns all registered custom operations for a workspace as a name→operation map.
+func (b *Bridge) ListCustomOperations(workspaceID string) map[string]*CustomOperation {
 	b.customMu.RLock()
 	defer b.customMu.RUnlock()
-	if len(b.customOps) == 0 {
+	ws := b.customOps[workspaceID]
+	if len(ws) == 0 {
 		return nil
 	}
 	// Return a copy to prevent external mutation
-	result := make(map[string]*CustomOperation, len(b.customOps))
-	for name, op := range b.customOps {
+	result := make(map[string]*CustomOperation, len(ws))
+	for name, op := range ws {
 		result[name] = op
+	}
+	return result
+}
+
+// ListAllCustomOperations returns all registered custom operations across all workspaces,
+// merged into a single name→operation map. Used by Export to serialize all custom
+// operation definitions back to config format.
+func (b *Bridge) ListAllCustomOperations() map[string]*CustomOperation {
+	b.customMu.RLock()
+	defer b.customMu.RUnlock()
+	var result map[string]*CustomOperation
+	for _, ws := range b.customOps {
+		for name, op := range ws {
+			if result == nil {
+				result = make(map[string]*CustomOperation)
+			}
+			result[name] = op
+		}
 	}
 	return result
 }
@@ -392,7 +434,10 @@ func (b *Bridge) executeCustom(ctx context.Context, req *OperationRequest) *Oper
 		defer span.End()
 	}
 	b.customMu.RLock()
-	op := b.customOps[opName]
+	var op *CustomOperation
+	if ws := b.customOps[req.WorkspaceID]; ws != nil {
+		op = ws[opName]
+	}
 	b.customMu.RUnlock()
 	if op == nil {
 		err := &NotFoundError{Resource: "custom operation: " + opName}

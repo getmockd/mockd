@@ -356,7 +356,7 @@ Run 'mockd enhance --help' for more options`)
 				output.Warn("failed to update %s: %v", mock.Name, err)
 				continue
 			}
-			if _, err := client.CreateMock(mock); err != nil {
+			if _, err := client.CreateMock("", mock); err != nil {
 				output.Warn("failed to recreate %s: %v", mock.Name, err)
 				continue
 			}

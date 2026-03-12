@@ -332,7 +332,7 @@ func TestSOAPStatefulAdapter_CustomOperation_FullStack(t *testing.T) {
 	bridge := stateful.NewBridge(store)
 
 	// Register the TransferFunds custom operation
-	bridge.RegisterCustomOperation("TransferFunds", &stateful.CustomOperation{
+	bridge.RegisterCustomOperation("", "TransferFunds", &stateful.CustomOperation{
 		Name: "TransferFunds",
 		Steps: []stateful.Step{
 			{Type: stateful.StepRead, Resource: "accounts", ID: `input.sourceId`, As: "source"},

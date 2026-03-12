@@ -12,6 +12,8 @@ func handleManageCustomOperation(args map[string]interface{}, session *MCPSessio
 		return ToolResultError("admin client not available"), nil
 	}
 
+	workspace := session.GetWorkspace()
+
 	action := getString(args, "action", "")
 	if action == "" {
 		return ToolResultError("action is required (list, get, register, delete, execute)"), nil
@@ -19,7 +21,7 @@ func handleManageCustomOperation(args map[string]interface{}, session *MCPSessio
 
 	switch action {
 	case "list":
-		ops, err := client.ListCustomOperations()
+		ops, err := client.ListCustomOperations(workspace)
 		if err != nil {
 			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 			return ToolResultError("failed to list operations: " + adminError(err, session.GetAdminURL())), nil
@@ -34,7 +36,7 @@ func handleManageCustomOperation(args map[string]interface{}, session *MCPSessio
 		if name == "" {
 			return ToolResultError("name is required for action=get"), nil
 		}
-		op, err := client.GetCustomOperation(name)
+		op, err := client.GetCustomOperation(workspace, name)
 		if err != nil {
 			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 			if isConnectionError(err) {
@@ -49,7 +51,7 @@ func handleManageCustomOperation(args map[string]interface{}, session *MCPSessio
 		if definition == nil {
 			return ToolResultError("definition is required for action=register"), nil
 		}
-		if err := client.RegisterCustomOperation(definition); err != nil {
+		if err := client.RegisterCustomOperation(workspace, definition); err != nil {
 			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 			return ToolResultError("failed to register operation: " + adminError(err, session.GetAdminURL())), nil
 		}
@@ -62,7 +64,7 @@ func handleManageCustomOperation(args map[string]interface{}, session *MCPSessio
 		if name == "" {
 			return ToolResultError("name is required for action=delete"), nil
 		}
-		if err := client.DeleteCustomOperation(name); err != nil {
+		if err := client.DeleteCustomOperation(workspace, name); err != nil {
 			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 			if isConnectionError(err) {
 				return ToolResultError("failed to delete operation: " + adminError(err, session.GetAdminURL())), nil
@@ -83,7 +85,7 @@ func handleManageCustomOperation(args map[string]interface{}, session *MCPSessio
 		if input == nil {
 			input = make(map[string]interface{})
 		}
-		result, err := client.ExecuteCustomOperation(name, input)
+		result, err := client.ExecuteCustomOperation(workspace, name, input)
 		if err != nil {
 			//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 			if isConnectionError(err) {

@@ -175,7 +175,7 @@ mockd's MCP server exposes 18 tools organized by function:
 | Tool | Actions | Description |
 |------|---------|-------------|
 | `manage_context` | get, switch | Switch between mockd server contexts (multi-environment) |
-| `manage_workspace` | list, switch | Switch between isolated workspace configurations |
+| `manage_workspace` | list, switch, create | Manage isolated workspace configurations |
 
 ## Example: Creating a Mock via MCP
 

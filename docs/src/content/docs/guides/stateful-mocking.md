@@ -5,6 +5,10 @@ description: Simulate real CRUD APIs where resources persist across requests wit
 
 Stateful mocking allows mockd to simulate real CRUD APIs where resources persist across requests. Create, update, and delete operations modify state that subsequent requests can observe.
 
+:::note[Workspace Isolation]
+Stateful resources are scoped to workspaces. Resources created in one workspace are independent from resources in other workspaces. Use `--workspace` to target a specific workspace.
+:::
+
 ## Overview
 
 Traditional mocks return static responses. Stateful mocking maintains an in-memory store that:

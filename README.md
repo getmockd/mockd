@@ -179,6 +179,17 @@ mocks:
 
 For quick CLI prototyping, `mockd add http --path /api/users --stateful` still works to auto-create CRUD endpoints.
 
+### Workspaces
+
+Isolated environments for mocks, stateful resources, and request logs. Run multiple API environments from a single mockd instance with `--workspace` scoping:
+
+```bash
+mockd workspace create -n "Payment API" --use
+mockd import stripe-openapi.yaml
+mockd workspace create -n "Comms API" --use
+mockd import twilio-openapi.yaml
+```
+
 ### Proxy Recording
 
 Record real API traffic and replay it as mocks:

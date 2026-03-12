@@ -134,7 +134,7 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 	if replace {
 		store.Clear()
 		if cl.server.statefulBridge != nil {
-			cl.server.statefulBridge.ClearCustomOperations()
+			cl.server.statefulBridge.ClearAllCustomOperations()
 		}
 	}
 
@@ -174,7 +174,7 @@ func (cl *ConfigLoader) loadCollection(collection *config.MockCollection, replac
 			if err != nil {
 				return fmt.Errorf("invalid custom operation %s: %w", opCfg.Name, err)
 			}
-			cl.server.statefulBridge.RegisterCustomOperation(opCfg.Name, customOp)
+			cl.server.statefulBridge.RegisterCustomOperation("", opCfg.Name, customOp)
 			cl.log.Info("registered custom operation", "name", opCfg.Name, "steps", len(opCfg.Steps))
 		}
 	}
@@ -273,7 +273,7 @@ func (cl *ConfigLoader) Export(name string) *config.MockCollection {
 
 	// Include custom operation definitions
 	if cl.server.statefulBridge != nil {
-		customOps := cl.server.statefulBridge.ListCustomOperations()
+		customOps := cl.server.statefulBridge.ListAllCustomOperations()
 		if len(customOps) > 0 {
 			configs := make([]*config.CustomOperationConfig, 0, len(customOps))
 			for name, op := range customOps {
@@ -316,7 +316,7 @@ func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) 
 	if replace {
 		store.Clear()
 		if cl.server.statefulBridge != nil {
-			cl.server.statefulBridge.ClearCustomOperations()
+			cl.server.statefulBridge.ClearAllCustomOperations()
 		}
 	}
 
@@ -367,7 +367,7 @@ func (cl *ConfigLoader) Import(collection *config.MockCollection, replace bool) 
 			if err != nil {
 				return fmt.Errorf("invalid custom operation %s: %w", opCfg.Name, err)
 			}
-			cl.server.statefulBridge.RegisterCustomOperation(opCfg.Name, customOp)
+			cl.server.statefulBridge.RegisterCustomOperation("", opCfg.Name, customOp)
 		}
 	}
 

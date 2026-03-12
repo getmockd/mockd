@@ -1,0 +1,69 @@
+Workspace Commands
+==================
+
+Workspaces provide isolated environments for mocks, stateful resources,
+request logs, and configuration within a single mockd instance.
+
+Commands
+--------
+
+  mockd workspace             Show current workspace
+  mockd workspace list        List all workspaces
+  mockd workspace create      Create a new workspace
+  mockd workspace use <id>    Switch to a workspace
+  mockd workspace delete <id> Delete a workspace
+  mockd workspace clear       Clear workspace selection (use default)
+
+Global Flag
+-----------
+
+All commands accept --workspace <id> to scope a single operation:
+
+  mockd list --workspace ws_abc123
+  mockd logs --workspace ws_abc123
+  mockd import spec.yaml --workspace ws_abc123
+  mockd export --workspace ws_abc123
+
+Resolution Order
+----------------
+
+Workspace is resolved in this order (first match wins):
+
+  1. --workspace flag
+  2. MOCKD_WORKSPACE environment variable
+  3. Current context workspace (set via 'mockd workspace use')
+  4. Default (empty) workspace
+
+Scoping
+-------
+
+The following are workspace-scoped:
+  - Mocks (mock.WorkspaceID field)
+  - Stateful resources (tables, seed data)
+  - Custom operations
+  - Request logs (entry.WorkspaceID field)
+  - Import/export
+
+The following are global (NOT workspace-scoped):
+  - Chaos configuration
+  - Server settings (ports, TLS, etc.)
+  - Verification data (per-mock-ID, inherently scoped)
+
+API
+---
+
+All admin API endpoints accept ?workspaceId=<id> query parameter:
+
+  GET  /mocks?workspaceId=ws-1        List mocks in workspace
+  GET  /requests?workspaceId=ws-1     List logs in workspace
+  GET  /state?workspaceId=ws-1        State overview for workspace
+  POST /import?workspaceId=ws-1       Import into workspace
+  GET  /export?workspaceId=ws-1       Export from workspace
+
+Workspace CRUD endpoints:
+
+  GET    /workspaces           List all workspaces
+  POST   /workspaces           Create a workspace
+  GET    /workspaces/{id}      Get workspace details
+  PUT    /workspaces/{id}      Update a workspace
+  DELETE /workspaces/{id}      Delete a workspace

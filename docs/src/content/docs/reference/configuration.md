@@ -51,6 +51,10 @@ customOperations: [ ... ]   # Optional multi-step operations
 | `imports` | array | No | Import external specs (OpenAPI, WSDL) with namespace prefixes |
 | `customOperations` | array | No | Multi-step custom operations with expression evaluation |
 
+:::note[Project Configuration Format]
+For multi-workspace setups using `mockd up`, see the project configuration format which adds `admins`, `engines`, and `workspaces` top-level sections. Run `mockd help config` for the full reference.
+:::
+
 ---
 
 ## Mock Definition
@@ -80,6 +84,7 @@ mocks:
 | `enabled` | boolean | No | `true` | Whether mock is active |
 | `parentId` | string | No | | Folder ID for organization |
 | `metaSortKey` | number | No | | Manual ordering within folder |
+| `workspaceId` | string | No | | Workspace this mock belongs to (set automatically by workspace context) |
 
 ---
 

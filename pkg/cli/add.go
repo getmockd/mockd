@@ -273,7 +273,7 @@ func runAdd(cmd *cobra.Command, args []string) error { //nolint:gocyclo // CLI d
 	}
 
 	// Create new mock
-	result, err := client.CreateMock(m)
+	result, err := client.CreateMock(resolvedWorkspace(), m)
 	if err != nil {
 		return fmt.Errorf("%s", FormatConnectionError(err))
 	}

@@ -300,6 +300,16 @@ type StatefulBindingResponse struct {
 	Transform interface{} `json:"-" yaml:"-"` // *config.ResponseTransform — avoid import cycle
 }
 
+// ClearConflictingResponseTypes nils out all response-type fields on an HTTPSpec
+// so that a StatefulBinding can be set without violating the validator's
+// exclusivity rule. Call this before setting StatefulBinding.
+func (h *HTTPSpec) ClearConflictingResponseTypes() {
+	h.Response = nil
+	h.SSE = nil
+	h.Chunked = nil
+	h.StatefulOperation = ""
+}
+
 // HTTPMatcher defines criteria used to match incoming HTTP requests.
 type HTTPMatcher struct {
 	Method       string                 `json:"method,omitempty" yaml:"method,omitempty"`

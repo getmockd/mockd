@@ -14,6 +14,7 @@ These flags apply to all commands:
 | `-h, --help` | Show help message |
 | `-v, --version` | Show version information |
 | `--admin-url` | Admin API base URL (default: http://localhost:4290) |
+| `--workspace` | Workspace to scope operations to (overrides MOCKD_WORKSPACE env and context config) |
 | `--json` | Output command results in JSON format |
 
 ---
@@ -1537,6 +1538,9 @@ mockd list --json
 
 # List from remote server
 mockd list --admin-url http://remote:4290
+
+# List mocks in a specific workspace
+mockd list --workspace ws_abc123
 ```
 
 ---
@@ -1644,6 +1648,132 @@ See [mockd delete](#mockd-delete) for full documentation.
 
 ---
 
+## Workspace Commands
+
+### mockd workspace
+
+Manage workspaces within the current context. Workspaces provide isolated environments for mocks, stateful resources, request logs, and configuration.
+
+```bash
+mockd workspace [command]
+```
+
+Running `mockd workspace` without a subcommand shows the current workspace.
+
+**Subcommands:**
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `show` | | Show current workspace (default) |
+| `list` | `ls` | List all workspaces on the server |
+| `create` | | Create a new workspace |
+| `use <id>` | | Switch to a different workspace |
+| `delete <id>` | `rm`, `remove` | Delete a workspace |
+| `clear` | | Clear workspace selection (use default) |
+
+---
+
+### mockd workspace show
+
+Show the current workspace and context information.
+
+```bash
+mockd workspace show
+```
+
+---
+
+### mockd workspace list
+
+List all workspaces on the server.
+
+```bash
+mockd workspace list [flags]
+```
+
+**Example output:**
+
+```
+CURRENT  ID                  NAME            TYPE    DESCRIPTION
+*        ws_abc123           Payment API     local   Stripe mock environment
+         ws_def456           Comms API       local   Twilio mock environment
+```
+
+---
+
+### mockd workspace create
+
+Create a new workspace.
+
+```bash
+mockd workspace create [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--name` | `-n` | Workspace name (required) | |
+| `--description` | `-d` | Workspace description | |
+| `--type` | | Workspace type | `local` |
+| `--use` | | Switch to this workspace after creating | `false` |
+
+**Examples:**
+
+```bash
+# Create a workspace
+mockd workspace create -n "Payment API" -d "Stripe mock environment"
+
+# Create and switch to it
+mockd workspace create -n "Payment API" --use
+```
+
+---
+
+### mockd workspace use
+
+Switch to a different workspace. All subsequent commands will be scoped to this workspace.
+
+```bash
+mockd workspace use <id>
+```
+
+**Examples:**
+
+```bash
+mockd workspace use ws_abc123
+```
+
+> **Tip:** You can also use `--workspace <id>` on any command to scope a single operation without switching the persistent context.
+
+---
+
+### mockd workspace delete
+
+Delete a workspace. Prompts for confirmation unless `--force` is given.
+
+```bash
+mockd workspace delete <id> [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--force` | `-f` | Skip confirmation | `false` |
+
+---
+
+### mockd workspace clear
+
+Clear the current workspace selection, reverting to the default workspace.
+
+```bash
+mockd workspace clear
+```
+
+---
+
 ## Import/Export Commands
 
 ### mockd import
@@ -1706,6 +1836,9 @@ mockd import openapi.yaml --dry-run
 
 # Replace all mocks with imported ones
 mockd import mocks.yaml --replace
+
+# Import into a specific workspace
+mockd import openapi.yaml --workspace ws_abc123
 ```
 
 ---
@@ -1752,6 +1885,9 @@ mockd export -f openapi -o api.yaml
 
 # Export with custom name
 mockd export -n "My API Mocks" -o mocks.yaml
+
+# Export mocks from a specific workspace
+mockd export --workspace ws_abc123 -o mocks.yaml
 ```
 
 ---
@@ -1852,6 +1988,9 @@ mockd logs --follow
 
 # Clear logs
 mockd logs --clear
+
+# Show logs for a specific workspace
+mockd logs --workspace ws_abc123
 ```
 
 ---

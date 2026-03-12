@@ -19,7 +19,7 @@ type mockAdminClient struct {
 	listMocksFn       func(workspaceID string) ([]*config.MockConfiguration, error)
 	listMocksByTypeFn func(string) ([]*config.MockConfiguration, error)
 	getMockFn         func(id string) (*config.MockConfiguration, error)
-	createMockFn      func(m *config.MockConfiguration) (*cli.CreateMockResult, error)
+	createMockFn      func(workspaceID string, m *config.MockConfiguration) (*cli.CreateMockResult, error)
 	updateMockFn      func(id string, m *config.MockConfiguration) (*config.MockConfiguration, error)
 	toggleMockFn      func(id string) (*config.MockConfiguration, error)
 	patchMockFn       func(id string, patch map[string]interface{}) (*config.MockConfiguration, error)
@@ -51,20 +51,20 @@ type mockAdminClient struct {
 	resetCircuitBreakerFn func(key string) error
 
 	// Stateful
-	getStateOverviewFn       func() (*cli.StateOverviewResult, error)
-	listStatefulItemsFn      func(name string, limit, offset int, sort, order string) (*cli.StatefulItemsResult, error)
-	getStatefulItemFn        func(name, id string) (map[string]interface{}, error)
-	createStatefulItemFn     func(name string, data map[string]interface{}) (map[string]interface{}, error)
-	resetStatefulResourceFn  func(name string) error
-	createStatefulResourceFn func(cfg *config.StatefulResourceConfig) error
-	deleteStatefulResourceFn func(name string) error
+	getStateOverviewFn       func(workspaceID string) (*cli.StateOverviewResult, error)
+	listStatefulItemsFn      func(workspaceID string, name string, limit, offset int, sort, order string) (*cli.StatefulItemsResult, error)
+	getStatefulItemFn        func(workspaceID string, name, id string) (map[string]interface{}, error)
+	createStatefulItemFn     func(workspaceID string, name string, data map[string]interface{}) (map[string]interface{}, error)
+	resetStatefulResourceFn  func(workspaceID string, name string) error
+	createStatefulResourceFn func(workspaceID string, cfg *config.StatefulResourceConfig) error
+	deleteStatefulResourceFn func(workspaceID string, name string) error
 
 	// Custom Operations
-	listCustomOperationsFn func() ([]cli.CustomOperationInfo, error)
-	getCustomOperationFn   func(name string) (*cli.CustomOperationDetail, error)
-	registerCustomOpFn     func(definition map[string]interface{}) error
-	deleteCustomOpFn       func(name string) error
-	executeCustomOpFn      func(name string, input map[string]interface{}) (map[string]interface{}, error)
+	listCustomOperationsFn func(workspaceID string) ([]cli.CustomOperationInfo, error)
+	getCustomOperationFn   func(workspaceID string, name string) (*cli.CustomOperationDetail, error)
+	registerCustomOpFn     func(workspaceID string, definition map[string]interface{}) error
+	deleteCustomOpFn       func(workspaceID string, name string) error
+	executeCustomOpFn      func(workspaceID string, name string, input map[string]interface{}) (map[string]interface{}, error)
 
 	// Verification
 	getMockVerificationFn   func(id string) (map[string]interface{}, error)
@@ -104,9 +104,9 @@ func (m *mockAdminClient) GetMock(id string) (*config.MockConfiguration, error) 
 	return nil, nil
 }
 
-func (m *mockAdminClient) CreateMock(mc *config.MockConfiguration) (*cli.CreateMockResult, error) {
+func (m *mockAdminClient) CreateMock(workspaceID string, mc *config.MockConfiguration) (*cli.CreateMockResult, error) {
 	if m.createMockFn != nil {
-		return m.createMockFn(mc)
+		return m.createMockFn(workspaceID, mc)
 	}
 	return nil, nil
 }
@@ -278,88 +278,88 @@ func (m *mockAdminClient) GetMQTTStatus() (map[string]interface{}, error) {
 
 // --- Stateful ---
 
-func (m *mockAdminClient) CreateStatefulResource(cfg *config.StatefulResourceConfig) error {
+func (m *mockAdminClient) CreateStatefulResource(workspaceID string, cfg *config.StatefulResourceConfig) error {
 	if m.createStatefulResourceFn != nil {
-		return m.createStatefulResourceFn(cfg)
+		return m.createStatefulResourceFn(workspaceID, cfg)
 	}
 	return nil
 }
 
-func (m *mockAdminClient) GetStateOverview() (*cli.StateOverviewResult, error) {
+func (m *mockAdminClient) GetStateOverview(workspaceID string) (*cli.StateOverviewResult, error) {
 	if m.getStateOverviewFn != nil {
-		return m.getStateOverviewFn()
+		return m.getStateOverviewFn(workspaceID)
 	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) ListStatefulItems(name string, limit, offset int, sort, order string) (*cli.StatefulItemsResult, error) {
+func (m *mockAdminClient) ListStatefulItems(workspaceID string, name string, limit, offset int, sort, order string) (*cli.StatefulItemsResult, error) {
 	if m.listStatefulItemsFn != nil {
-		return m.listStatefulItemsFn(name, limit, offset, sort, order)
+		return m.listStatefulItemsFn(workspaceID, name, limit, offset, sort, order)
 	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) GetStatefulItem(name, id string) (map[string]interface{}, error) {
+func (m *mockAdminClient) GetStatefulItem(workspaceID string, name, id string) (map[string]interface{}, error) {
 	if m.getStatefulItemFn != nil {
-		return m.getStatefulItemFn(name, id)
+		return m.getStatefulItemFn(workspaceID, name, id)
 	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) CreateStatefulItem(name string, data map[string]interface{}) (map[string]interface{}, error) {
+func (m *mockAdminClient) CreateStatefulItem(workspaceID string, name string, data map[string]interface{}) (map[string]interface{}, error) {
 	if m.createStatefulItemFn != nil {
-		return m.createStatefulItemFn(name, data)
+		return m.createStatefulItemFn(workspaceID, name, data)
 	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) ResetStatefulResource(name string) error {
+func (m *mockAdminClient) ResetStatefulResource(workspaceID string, name string) error {
 	if m.resetStatefulResourceFn != nil {
-		return m.resetStatefulResourceFn(name)
+		return m.resetStatefulResourceFn(workspaceID, name)
 	}
 	return nil
 }
 
-func (m *mockAdminClient) DeleteStatefulResource(name string) error {
+func (m *mockAdminClient) DeleteStatefulResource(workspaceID string, name string) error {
 	if m.deleteStatefulResourceFn != nil {
-		return m.deleteStatefulResourceFn(name)
+		return m.deleteStatefulResourceFn(workspaceID, name)
 	}
 	return nil
 }
 
 // --- Custom Operations ---
 
-func (m *mockAdminClient) ListCustomOperations() ([]cli.CustomOperationInfo, error) {
+func (m *mockAdminClient) ListCustomOperations(workspaceID string) ([]cli.CustomOperationInfo, error) {
 	if m.listCustomOperationsFn != nil {
-		return m.listCustomOperationsFn()
+		return m.listCustomOperationsFn(workspaceID)
 	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) GetCustomOperation(name string) (*cli.CustomOperationDetail, error) {
+func (m *mockAdminClient) GetCustomOperation(workspaceID string, name string) (*cli.CustomOperationDetail, error) {
 	if m.getCustomOperationFn != nil {
-		return m.getCustomOperationFn(name)
+		return m.getCustomOperationFn(workspaceID, name)
 	}
 	return nil, nil
 }
 
-func (m *mockAdminClient) RegisterCustomOperation(definition map[string]interface{}) error {
+func (m *mockAdminClient) RegisterCustomOperation(workspaceID string, definition map[string]interface{}) error {
 	if m.registerCustomOpFn != nil {
-		return m.registerCustomOpFn(definition)
+		return m.registerCustomOpFn(workspaceID, definition)
 	}
 	return nil
 }
 
-func (m *mockAdminClient) DeleteCustomOperation(name string) error {
+func (m *mockAdminClient) DeleteCustomOperation(workspaceID string, name string) error {
 	if m.deleteCustomOpFn != nil {
-		return m.deleteCustomOpFn(name)
+		return m.deleteCustomOpFn(workspaceID, name)
 	}
 	return nil
 }
 
-func (m *mockAdminClient) ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error) {
+func (m *mockAdminClient) ExecuteCustomOperation(workspaceID string, name string, input map[string]interface{}) (map[string]interface{}, error) {
 	if m.executeCustomOpFn != nil {
-		return m.executeCustomOpFn(name, input)
+		return m.executeCustomOpFn(workspaceID, name, input)
 	}
 	return nil, nil
 }
@@ -619,7 +619,7 @@ func TestHandleManageMock_CreateAction(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		createMockFn: func(m *config.MockConfiguration) (*cli.CreateMockResult, error) {
+		createMockFn: func(_ string, m *config.MockConfiguration) (*cli.CreateMockResult, error) {
 			return &cli.CreateMockResult{
 				Mock:   &config.MockConfiguration{ID: "http_new789", Type: mock.TypeHTTP},
 				Action: "created",
@@ -848,7 +848,7 @@ func TestHandleManageState_OverviewAction(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		getStateOverviewFn: func() (*cli.StateOverviewResult, error) {
+		getStateOverviewFn: func(_ string) (*cli.StateOverviewResult, error) {
 			return &cli.StateOverviewResult{
 				Resources: []cli.StatefulResourceInfo{
 					{Name: "users", ItemCount: 5, IDField: "id"},
@@ -893,7 +893,7 @@ func TestHandleManageState_ListItemsAction(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		listStatefulItemsFn: func(name string, limit, offset int, sort, order string) (*cli.StatefulItemsResult, error) {
+		listStatefulItemsFn: func(_ string, name string, limit, offset int, sort, order string) (*cli.StatefulItemsResult, error) {
 			if name != "users" {
 				return nil, fmt.Errorf("unexpected resource: %s", name)
 			}
@@ -947,7 +947,7 @@ func TestHandleManageState_GetItemAction(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		getStatefulItemFn: func(name, id string) (map[string]interface{}, error) {
+		getStatefulItemFn: func(_ string, name, id string) (map[string]interface{}, error) {
 			if name == "users" && id == "u1" {
 				return map[string]interface{}{
 					"id":    "u1",
@@ -990,7 +990,7 @@ func TestHandleManageState_GetItemNotFound(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		getStatefulItemFn: func(name, id string) (map[string]interface{}, error) {
+		getStatefulItemFn: func(_ string, name, id string) (map[string]interface{}, error) {
 			return nil, &cli.APIError{StatusCode: 404, ErrorCode: "not_found", Message: "item not found"}
 		},
 	}
@@ -1021,7 +1021,7 @@ func TestHandleManageState_CreateItemAction(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		createStatefulItemFn: func(name string, data map[string]interface{}) (map[string]interface{}, error) {
+		createStatefulItemFn: func(_ string, name string, data map[string]interface{}) (map[string]interface{}, error) {
 			if name != "users" {
 				return nil, fmt.Errorf("unexpected resource: %s", name)
 			}
@@ -1070,7 +1070,7 @@ func TestHandleManageState_AddResourceAction(t *testing.T) {
 
 	var createdCfg *config.StatefulResourceConfig
 	client := &mockAdminClient{
-		createStatefulResourceFn: func(cfg *config.StatefulResourceConfig) error {
+		createStatefulResourceFn: func(_ string, cfg *config.StatefulResourceConfig) error {
 			createdCfg = cfg
 			return nil
 		},
@@ -1118,7 +1118,7 @@ func TestHandleManageState_ResetAction(t *testing.T) {
 
 	resetName := ""
 	client := &mockAdminClient{
-		resetStatefulResourceFn: func(name string) error {
+		resetStatefulResourceFn: func(_ string, name string) error {
 			resetName = name
 			return nil
 		},
@@ -1248,7 +1248,7 @@ func TestHandleManageState_DeleteResourceAction(t *testing.T) {
 
 	deletedName := ""
 	client := &mockAdminClient{
-		deleteStatefulResourceFn: func(name string) error {
+		deleteStatefulResourceFn: func(_ string, name string) error {
 			deletedName = name
 			return nil
 		},
@@ -1288,7 +1288,7 @@ func TestHandleManageState_DeleteResourceNotFound(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		deleteStatefulResourceFn: func(name string) error {
+		deleteStatefulResourceFn: func(_ string, name string) error {
 			return &cli.APIError{StatusCode: 404, ErrorCode: "not_found", Message: "stateful resource not found: " + name}
 		},
 	}
@@ -1410,7 +1410,7 @@ func TestHandleManageMock_CreateSetsWorkspaceID(t *testing.T) {
 
 	var capturedMock *config.MockConfiguration
 	client := &mockAdminClient{
-		createMockFn: func(m *config.MockConfiguration) (*cli.CreateMockResult, error) {
+		createMockFn: func(_ string, m *config.MockConfiguration) (*cli.CreateMockResult, error) {
 			capturedMock = m
 			return &cli.CreateMockResult{
 				Mock:   &config.MockConfiguration{ID: "http_new", Type: mock.TypeHTTP},
@@ -1458,7 +1458,7 @@ func TestHandleManageMock_CreateNoWorkspace(t *testing.T) {
 
 	var capturedMock *config.MockConfiguration
 	client := &mockAdminClient{
-		createMockFn: func(m *config.MockConfiguration) (*cli.CreateMockResult, error) {
+		createMockFn: func(_ string, m *config.MockConfiguration) (*cli.CreateMockResult, error) {
 			capturedMock = m
 			return &cli.CreateMockResult{
 				Mock:   &config.MockConfiguration{ID: "http_new", Type: mock.TypeHTTP},

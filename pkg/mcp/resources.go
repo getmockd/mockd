@@ -60,7 +60,7 @@ func (p *ResourceProvider) List() []ResourceDefinition {
 
 	// Add stateful resources (via admin API so it works in all modes)
 	if p.adminClient != nil {
-		overview, err := p.adminClient.GetStateOverview()
+		overview, err := p.adminClient.GetStateOverview("")
 		if err == nil && overview != nil {
 			for _, res := range overview.Resources {
 				uri := "mock://stateful/" + res.Name
@@ -230,7 +230,7 @@ func (p *ResourceProvider) readStatefulResource(name string) ([]ResourceContent,
 		return nil, InternalError(nil)
 	}
 
-	overview, err := p.adminClient.GetStateOverview()
+	overview, err := p.adminClient.GetStateOverview("")
 	if err != nil {
 		return nil, InternalError(err)
 	}
@@ -407,7 +407,7 @@ func (p *ResourceProvider) readConfigResource() ([]ResourceContent, *JSONRPCErro
 	}
 
 	if p.adminClient != nil {
-		overview, err := p.adminClient.GetStateOverview()
+		overview, err := p.adminClient.GetStateOverview("")
 		if err == nil && overview != nil {
 			content["statefulResourceCount"] = overview.Total
 		}

@@ -11,7 +11,7 @@ import (
 var Topics embed.FS
 
 // AvailableTopics lists all available help topics.
-var AvailableTopics = []string{"templating", "matching", "config", "formats", "websocket", "graphql", "grpc", "mqtt", "soap", "sse"}
+var AvailableTopics = []string{"templating", "matching", "config", "formats", "websocket", "graphql", "grpc", "mqtt", "soap", "sse", "workspace"}
 
 // TopicDescriptions provides short descriptions for each topic.
 var TopicDescriptions = map[string]string{
@@ -25,6 +25,7 @@ var TopicDescriptions = map[string]string{
 	"mqtt":       "MQTT broker configuration",
 	"soap":       "SOAP mock configuration",
 	"sse":        "Server-Sent Events configuration",
+	"workspace":  "Workspace isolation and scoping",
 }
 
 // GetTopic retrieves the content of a help topic by name.

@@ -414,7 +414,7 @@ func TestMCP_GetMock(t *testing.T) {
 			},
 		},
 	}
-	created, err := mcpServer.AdminClient().CreateMock(testMock)
+	created, err := mcpServer.AdminClient().CreateMock("", testMock)
 	if err != nil {
 		t.Fatalf("failed to add mock: %v", err)
 	}
@@ -482,8 +482,8 @@ func TestMCP_ListMocks(t *testing.T) {
 			},
 		},
 	}
-	mcpServer.AdminClient().CreateMock(getMock)
-	mcpServer.AdminClient().CreateMock(postMock)
+	mcpServer.AdminClient().CreateMock("", getMock)
+	mcpServer.AdminClient().CreateMock("", postMock)
 
 	sessionID := initializeSession(t, handler)
 
@@ -611,7 +611,7 @@ func TestMCP_ResourcesList(t *testing.T) {
 				},
 			},
 		}
-		mcpServer.AdminClient().CreateMock(testMock)
+		mcpServer.AdminClient().CreateMock("", testMock)
 	}
 
 	sessionID := initializeSession(t, handler)
@@ -651,7 +651,7 @@ func TestMCP_ResourcesList_MockURIs(t *testing.T) {
 			},
 		},
 	}
-	mcpServer.AdminClient().CreateMock(testMock)
+	mcpServer.AdminClient().CreateMock("", testMock)
 
 	sessionID := initializeSession(t, handler)
 
@@ -698,7 +698,7 @@ func TestMCP_ResourcesRead(t *testing.T) {
 			},
 		},
 	}
-	mcpServer.AdminClient().CreateMock(testMock)
+	mcpServer.AdminClient().CreateMock("", testMock)
 
 	sessionID := initializeSession(t, handler)
 
@@ -756,7 +756,7 @@ func TestMCP_ResourcesRead_DynamicUpdates(t *testing.T) {
 			},
 		},
 	}
-	mcpServer.AdminClient().CreateMock(testMock)
+	mcpServer.AdminClient().CreateMock("", testMock)
 
 	// List again - should include new mock
 	resp2 := sendJSONRPC(t, handler, "resources/list", nil, sessionID)

@@ -87,6 +87,11 @@ func (a *ControlAPIAdapter) RequestLogCount() int {
 	return a.server.RequestLogCount()
 }
 
+// RequestLogCountFiltered implements api.EngineController.
+func (a *ControlAPIAdapter) RequestLogCountFiltered(filter *requestlog.Filter) int {
+	return a.server.RequestLogCountFiltered(filter)
+}
+
 // ClearRequestLogs implements api.EngineController.
 func (a *ControlAPIAdapter) ClearRequestLogs() {
 	a.server.ClearRequestLogs()
@@ -788,7 +793,7 @@ func (a *ControlAPIAdapter) ListCustomOperations(workspaceID string) []api.Custo
 		return nil
 	}
 
-	ops := bridge.ListCustomOperations()
+	ops := bridge.ListCustomOperations(workspaceID)
 	if len(ops) == 0 {
 		return nil
 	}
@@ -812,7 +817,7 @@ func (a *ControlAPIAdapter) GetCustomOperation(workspaceID string, name string) 
 		return nil, errors.New("stateful bridge not initialized")
 	}
 
-	op := bridge.GetCustomOperation(name)
+	op := bridge.GetCustomOperation(workspaceID, name)
 	if op == nil {
 		return nil, errors.New("custom operation not found: " + name)
 	}
@@ -857,7 +862,7 @@ func (a *ControlAPIAdapter) RegisterCustomOperation(workspaceID string, cfg *con
 	if err != nil {
 		return err
 	}
-	bridge.RegisterCustomOperation(cfg.Name, customOp)
+	bridge.RegisterCustomOperation(workspaceID, cfg.Name, customOp)
 	return nil
 }
 
@@ -868,12 +873,12 @@ func (a *ControlAPIAdapter) DeleteCustomOperation(workspaceID string, name strin
 		return errors.New("stateful bridge not initialized")
 	}
 
-	op := bridge.GetCustomOperation(name)
+	op := bridge.GetCustomOperation(workspaceID, name)
 	if op == nil {
 		return errors.New("custom operation not found: " + name)
 	}
 
-	bridge.DeleteCustomOperation(name)
+	bridge.DeleteCustomOperation(workspaceID, name)
 	return nil
 }
 

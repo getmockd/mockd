@@ -72,9 +72,15 @@ func sanitizeError(err error, log *slog.Logger, operation string, details ...any
 }
 
 // sanitizeEngineError returns a safe error message for engine-related errors.
+// Validation and port errors are surfaced to the client; all other errors are
+// hidden behind a generic message to prevent information leakage.
 func sanitizeEngineError(err error, log *slog.Logger, operation string) string {
 	if log != nil {
 		log.Error("engine operation failed", "operation", operation, "error", err)
+	}
+	errMsg := err.Error()
+	if isValidationError(errMsg) {
+		return errMsg
 	}
 	return ErrMsgEngineUnavailable
 }

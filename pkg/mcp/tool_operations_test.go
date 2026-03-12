@@ -16,7 +16,7 @@ func TestHandleManageCustomOperation_List(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		listCustomOperationsFn: func() ([]cli.CustomOperationInfo, error) {
+		listCustomOperationsFn: func(_ string) ([]cli.CustomOperationInfo, error) {
 			return []cli.CustomOperationInfo{
 				{Name: "TransferFunds", StepCount: 3, Consistency: "atomic"},
 				{Name: "CancelOrder", StepCount: 2},
@@ -57,7 +57,7 @@ func TestHandleManageCustomOperation_ListEmpty(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		listCustomOperationsFn: func() ([]cli.CustomOperationInfo, error) {
+		listCustomOperationsFn: func(_ string) ([]cli.CustomOperationInfo, error) {
 			return []cli.CustomOperationInfo{}, nil
 		},
 	}
@@ -87,7 +87,7 @@ func TestHandleManageCustomOperation_ListFailure(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		listCustomOperationsFn: func() ([]cli.CustomOperationInfo, error) {
+		listCustomOperationsFn: func(_ string) ([]cli.CustomOperationInfo, error) {
 			return nil, fmt.Errorf("dial tcp: connection refused")
 		},
 	}
@@ -114,7 +114,7 @@ func TestHandleManageCustomOperation_Get(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		getCustomOperationFn: func(name string) (*cli.CustomOperationDetail, error) {
+		getCustomOperationFn: func(_ string, name string) (*cli.CustomOperationDetail, error) {
 			if name == "TransferFunds" {
 				return &cli.CustomOperationDetail{
 					Name:        "TransferFunds",
@@ -179,7 +179,7 @@ func TestHandleManageCustomOperation_GetNotFound(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		getCustomOperationFn: func(name string) (*cli.CustomOperationDetail, error) {
+		getCustomOperationFn: func(_ string, name string) (*cli.CustomOperationDetail, error) {
 			return nil, &cli.APIError{StatusCode: 404, Message: "operation not found: " + name}
 		},
 	}
@@ -207,7 +207,7 @@ func TestHandleManageCustomOperation_Register(t *testing.T) {
 
 	var registeredDef map[string]interface{}
 	client := &mockAdminClient{
-		registerCustomOpFn: func(definition map[string]interface{}) error {
+		registerCustomOpFn: func(_ string, definition map[string]interface{}) error {
 			registeredDef = definition
 			return nil
 		},
@@ -273,7 +273,7 @@ func TestHandleManageCustomOperation_RegisterFailure(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		registerCustomOpFn: func(definition map[string]interface{}) error {
+		registerCustomOpFn: func(_ string, definition map[string]interface{}) error {
 			return fmt.Errorf("dial tcp: connection refused")
 		},
 	}
@@ -305,7 +305,7 @@ func TestHandleManageCustomOperation_Delete(t *testing.T) {
 
 	deletedName := ""
 	client := &mockAdminClient{
-		deleteCustomOpFn: func(name string) error {
+		deleteCustomOpFn: func(_ string, name string) error {
 			deletedName = name
 			return nil
 		},
@@ -363,7 +363,7 @@ func TestHandleManageCustomOperation_DeleteNotFound(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		deleteCustomOpFn: func(name string) error {
+		deleteCustomOpFn: func(_ string, name string) error {
 			return &cli.APIError{StatusCode: 404, Message: "operation not found: " + name}
 		},
 	}
@@ -390,7 +390,7 @@ func TestHandleManageCustomOperation_Execute(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		executeCustomOpFn: func(name string, input map[string]interface{}) (map[string]interface{}, error) {
+		executeCustomOpFn: func(_ string, name string, input map[string]interface{}) (map[string]interface{}, error) {
 			return map[string]interface{}{
 				"success":       true,
 				"operationName": name,
@@ -426,7 +426,7 @@ func TestHandleManageCustomOperation_ExecuteWithInput(t *testing.T) {
 
 	var capturedInput map[string]interface{}
 	client := &mockAdminClient{
-		executeCustomOpFn: func(name string, input map[string]interface{}) (map[string]interface{}, error) {
+		executeCustomOpFn: func(_ string, name string, input map[string]interface{}) (map[string]interface{}, error) {
 			capturedInput = input
 			return map[string]interface{}{
 				"success": true,
@@ -489,7 +489,7 @@ func TestHandleManageCustomOperation_ExecuteNotFound(t *testing.T) {
 	t.Parallel()
 
 	client := &mockAdminClient{
-		executeCustomOpFn: func(name string, input map[string]interface{}) (map[string]interface{}, error) {
+		executeCustomOpFn: func(_ string, name string, input map[string]interface{}) (map[string]interface{}, error) {
 			return nil, &cli.APIError{StatusCode: 404, Message: "operation not found: " + name}
 		},
 	}

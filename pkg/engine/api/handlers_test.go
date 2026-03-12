@@ -161,6 +161,39 @@ func (m *mockEngine) RequestLogCount() int {
 	return len(m.requestLogs)
 }
 
+func (m *mockEngine) RequestLogCountFiltered(filter *requestlog.Filter) int {
+	if filter == nil {
+		return len(m.requestLogs)
+	}
+	count := 0
+	for _, entry := range m.requestLogs {
+		// Apply the same filters as GetRequestLogs
+		if filter.MatchedID != "" && entry.MatchedMockID != filter.MatchedID {
+			continue
+		}
+		if filter.Method != "" && entry.Method != filter.Method {
+			continue
+		}
+		if filter.Path != "" && !strings.Contains(entry.Path, filter.Path) {
+			continue
+		}
+		if filter.HasError != nil {
+			hasErr := entry.Error != ""
+			if hasErr != *filter.HasError {
+				continue
+			}
+		}
+		if filter.WorkspaceID != "" && entry.WorkspaceID != filter.WorkspaceID {
+			continue
+		}
+		if filter.Protocol != "" && entry.Protocol != filter.Protocol {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
 func (m *mockEngine) ClearRequestLogs() {
 	m.requestLogs = make(map[string]*requestlog.Entry)
 }
@@ -1398,7 +1431,7 @@ func TestHandleListRequests_MatchedFilter(t *testing.T) {
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.Equal(t, 2, resp.Count)
-		assert.Equal(t, 3, resp.Total)
+		assert.Equal(t, 2, resp.Total) // Total reflects filtered count, not global
 		for _, r := range resp.Requests {
 			assert.Equal(t, "mock-1", r.MatchedMockID)
 		}
@@ -1423,7 +1456,7 @@ func TestHandleListRequests_MatchedFilter(t *testing.T) {
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.Equal(t, 0, resp.Count)
-		assert.Equal(t, 1, resp.Total)
+		assert.Equal(t, 0, resp.Total) // Total reflects filtered count, not global
 		assert.Empty(t, resp.Requests)
 	})
 

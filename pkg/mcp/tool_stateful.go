@@ -93,7 +93,7 @@ func handleAddStatefulResource(args map[string]interface{}, session *MCPSession,
 		}
 	}
 
-	err := client.CreateStatefulResource(cfg)
+	err := client.CreateStatefulResource(session.GetWorkspace(), cfg)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to create stateful resource: " + adminError(err, session.GetAdminURL())), nil
@@ -128,7 +128,7 @@ func handleListStatefulItems(args map[string]interface{}, session *MCPSession, _
 	sort := getString(args, "sort", "createdAt")
 	order := getString(args, "order", "desc")
 
-	result, err := client.ListStatefulItems(resourceName, limit, offset, sort, order)
+	result, err := client.ListStatefulItems(session.GetWorkspace(), resourceName, limit, offset, sort, order)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to list stateful items: " + adminError(err, session.GetAdminURL())), nil
@@ -169,7 +169,7 @@ func handleGetStatefulItem(args map[string]interface{}, session *MCPSession, _ *
 		return ToolResultError("item_id is required"), nil
 	}
 
-	item, err := client.GetStatefulItem(resourceName, id)
+	item, err := client.GetStatefulItem(session.GetWorkspace(), resourceName, id)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError(fmt.Sprintf("item not found: %s in resource %s", id, resourceName)), nil
@@ -195,7 +195,7 @@ func handleCreateStatefulItem(args map[string]interface{}, session *MCPSession, 
 		return ToolResultError("data is required"), nil
 	}
 
-	item, err := client.CreateStatefulItem(resourceName, data)
+	item, err := client.CreateStatefulItem(session.GetWorkspace(), resourceName, data)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to create item: " + adminError(err, session.GetAdminURL())), nil
@@ -211,7 +211,7 @@ func handleGetStateOverview(_ map[string]interface{}, session *MCPSession, _ *Se
 		return ToolResultError("admin client not available"), nil
 	}
 
-	overview, err := client.GetStateOverview()
+	overview, err := client.GetStateOverview(session.GetWorkspace())
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to get state overview: " + adminError(err, session.GetAdminURL())), nil
@@ -232,7 +232,7 @@ func handleDeleteStatefulResource(args map[string]interface{}, session *MCPSessi
 		return ToolResultError("resource is required"), nil
 	}
 
-	err := client.DeleteStatefulResource(name)
+	err := client.DeleteStatefulResource(session.GetWorkspace(), name)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError(fmt.Sprintf("failed to delete resource: %s", adminError(err, session.GetAdminURL()))), nil
@@ -258,7 +258,7 @@ func handleResetStatefulData(args map[string]interface{}, session *MCPSession, _
 		return ToolResultError("resource is required — specify which resource to reset"), nil
 	}
 
-	err := client.ResetStatefulResource(resourceName)
+	err := client.ResetStatefulResource(session.GetWorkspace(), resourceName)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to reset: " + adminError(err, session.GetAdminURL())), nil

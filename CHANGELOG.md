@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Workspace-scoped stateful resources** — stateful resources, custom operations, and request logs are now isolated per workspace
+- **`--workspace` persistent CLI flag** — scope any CLI command to a specific workspace without switching context
+- **`?workspaceId=` API parameter** — all admin API endpoints now accept workspace filtering
+- **MCP workspace filtering** — MCP tools automatically scope to the session's active workspace
+- **`manage_workspace create` MCP action** — create workspaces directly from AI agents
+
 ## [0.5.1] - 2026-03-07
 
 ### Security

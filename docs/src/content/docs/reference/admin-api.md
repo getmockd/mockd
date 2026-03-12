@@ -148,6 +148,17 @@ Readiness check on the **mock engine port** (default 4280). Reports the number o
 The engine port also responds to `/health` and `/ready` (without the `/__mockd/` prefix) as fallbacks — but only when no mock is configured to match those paths. The `/__mockd/` prefixed versions always take priority over mock matching.
 :::
 
+:::tip[Workspace Filtering]
+Most endpoints accept a `?workspaceId=<id>` query parameter to scope operations to a specific workspace. When set:
+- `GET /mocks` returns only mocks in that workspace
+- `GET /requests` returns only request logs from that workspace  
+- `GET /state/*` returns only stateful resources in that workspace
+- `POST /import` imports into that workspace
+- `GET /export` exports from that workspace
+
+If `workspaceId` is omitted, the default (empty) workspace is used, which includes all mocks not assigned to a specific workspace.
+:::
+
 ---
 
 ### Metrics
@@ -1363,6 +1374,54 @@ Reset a circuit breaker back to the closed state.
 | Parameter | Description |
 |-----------|-------------|
 | `key` | Circuit breaker key in `ruleIdx:faultIdx` format (e.g., `0:0`) |
+
+---
+
+### Workspaces
+
+#### GET /workspaces
+
+List all workspaces.
+
+**Response:**
+```json
+{
+  "workspaces": [
+    {
+      "id": "ws_abc123",
+      "name": "Payment API",
+      "type": "local",
+      "description": "Stripe mock environment"
+    }
+  ],
+  "count": 1
+}
+```
+
+#### POST /workspaces
+
+Create a new workspace.
+
+**Request:**
+```json
+{
+  "name": "Payment API",
+  "type": "local",
+  "description": "Stripe mock environment"
+}
+```
+
+#### GET /workspaces/{id}
+
+Get workspace details.
+
+#### PUT /workspaces/{id}
+
+Update a workspace.
+
+#### DELETE /workspaces/{id}
+
+Delete a workspace.
 
 ---
 

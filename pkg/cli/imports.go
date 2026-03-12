@@ -196,6 +196,11 @@ func processTablesAndExtend(collection *config.MockCollection) error {
 					return fmt.Errorf("extend %q: action 'custom' requires an operation name", binding.Mock)
 				}
 
+				// Clear conflicting response types — the mock may have a static
+				// Response from an OpenAPI import, but extend replaces it with
+				// a stateful binding.
+				target.HTTP.ClearConflictingResponseTypes()
+
 				// Set StatefulBinding on the mock
 				target.HTTP.StatefulBinding = &mock.StatefulBinding{
 					Table:     binding.Table,

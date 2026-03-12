@@ -731,7 +731,7 @@ func TestBridge_ExecuteCustom_Success(t *testing.T) {
 	bridge, _ := setupBridgeTest(t)
 
 	// Register a custom operation on the bridge
-	bridge.RegisterCustomOperation("double-name", &CustomOperation{
+	bridge.RegisterCustomOperation("", "double-name", &CustomOperation{
 		Name: "double-name",
 		Steps: []Step{
 			{Type: StepRead, Resource: "users", ID: `input.userId`, As: "user"},
@@ -769,7 +769,7 @@ func TestBridge_ExecuteCustom_OperationNotRegistered(t *testing.T) {
 func TestBridge_ExecuteCustom_StepFailure(t *testing.T) {
 	bridge, obs := setupBridgeTest(t)
 
-	bridge.RegisterCustomOperation("fail-op", &CustomOperation{
+	bridge.RegisterCustomOperation("", "fail-op", &CustomOperation{
 		Name: "fail-op",
 		Steps: []Step{
 			{Type: StepRead, Resource: "users", ID: `"nonexistent"`, As: "user"},

@@ -31,8 +31,9 @@ type AdminClient interface {
 	// GetMock returns a specific mock by ID.
 	GetMock(id string) (*config.MockConfiguration, error)
 	// CreateMock creates a new mock or merges into existing one.
+	// Pass workspaceID to scope the mock to a workspace ("" = default).
 	// Returns a CreateMockResult with the mock and action taken.
-	CreateMock(mock *config.MockConfiguration) (*CreateMockResult, error)
+	CreateMock(workspaceID string, mock *config.MockConfiguration) (*CreateMockResult, error)
 	// UpdateMock updates an existing mock by ID.
 	UpdateMock(id string, mock *config.MockConfiguration) (*config.MockConfiguration, error)
 	// ToggleMock atomically toggles a mock's enabled state via POST /mocks/{id}/toggle.
@@ -73,30 +74,37 @@ type AdminClient interface {
 	GetPortsVerbose(verbose bool) ([]PortInfo, error)
 
 	// CreateStatefulResource registers a new stateful resource definition.
-	CreateStatefulResource(cfg *config.StatefulResourceConfig) error
+	// Pass workspaceID to scope to a workspace ("" = default).
+	CreateStatefulResource(workspaceID string, cfg *config.StatefulResourceConfig) error
 	// DeleteStatefulResource fully unregisters a stateful resource.
-	DeleteStatefulResource(name string) error
+	// Pass workspaceID to scope to a workspace ("" = default).
+	DeleteStatefulResource(workspaceID string, name string) error
 	// GetStateOverview returns an overview of all stateful resources.
-	GetStateOverview() (*StateOverviewResult, error)
+	// Pass workspaceID to scope to a workspace ("" = default).
+	GetStateOverview(workspaceID string) (*StateOverviewResult, error)
 	// ListStatefulItems returns paginated items for a stateful resource.
-	ListStatefulItems(resourceName string, limit, offset int, sort, order string) (*StatefulItemsResult, error)
+	// Pass workspaceID to scope to a workspace ("" = default).
+	ListStatefulItems(workspaceID string, resourceName string, limit, offset int, sort, order string) (*StatefulItemsResult, error)
 	// GetStatefulItem returns a specific item from a stateful resource.
-	GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error)
+	// Pass workspaceID to scope to a workspace ("" = default).
+	GetStatefulItem(workspaceID string, resourceName, itemID string) (map[string]interface{}, error)
 	// CreateStatefulItem creates a new item in a stateful resource.
-	CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error)
+	// Pass workspaceID to scope to a workspace ("" = default).
+	CreateStatefulItem(workspaceID string, resourceName string, data map[string]interface{}) (map[string]interface{}, error)
 	// ResetStatefulResource resets a stateful resource to seed data.
-	ResetStatefulResource(resourceName string) error
+	// Pass workspaceID to scope to a workspace ("" = default).
+	ResetStatefulResource(workspaceID string, resourceName string) error
 
 	// ListCustomOperations returns all registered custom operations.
-	ListCustomOperations() ([]CustomOperationInfo, error)
+	ListCustomOperations(workspaceID string) ([]CustomOperationInfo, error)
 	// GetCustomOperation returns a specific custom operation by name.
-	GetCustomOperation(name string) (*CustomOperationDetail, error)
+	GetCustomOperation(workspaceID string, name string) (*CustomOperationDetail, error)
 	// RegisterCustomOperation registers a new custom operation.
-	RegisterCustomOperation(definition map[string]interface{}) error
+	RegisterCustomOperation(workspaceID string, definition map[string]interface{}) error
 	// DeleteCustomOperation deletes a custom operation by name.
-	DeleteCustomOperation(name string) error
+	DeleteCustomOperation(workspaceID string, name string) error
 	// ExecuteCustomOperation executes a custom operation with the given input.
-	ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error)
+	ExecuteCustomOperation(workspaceID string, name string, input map[string]interface{}) (map[string]interface{}, error)
 
 	// Chaos stats
 	// GetChaosStats returns chaos injection statistics.
@@ -418,13 +426,17 @@ func (c *adminClient) GetMock(id string) (*config.MockConfiguration, error) {
 }
 
 // CreateMock creates a new mock or merges into an existing one.
-func (c *adminClient) CreateMock(mock *config.MockConfiguration) (*CreateMockResult, error) {
+func (c *adminClient) CreateMock(workspaceID string, mock *config.MockConfiguration) (*CreateMockResult, error) {
 	body, err := json.Marshal(mock)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode mock: %w", err)
 	}
 
-	resp, err := c.post("/mocks", body)
+	path := "/mocks"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.post(path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1153,7 +1165,7 @@ func (c *adminClient) GetPortsVerbose(verbose bool) ([]PortInfo, error) {
 // CreateStatefulResource registers a new stateful resource definition via POST /state/resources.
 // Accepts a full StatefulResourceConfig so callers can pass all table fields (seed data,
 // ID strategy, response transforms, relationships, etc.) in a single call.
-func (c *adminClient) CreateStatefulResource(cfg *config.StatefulResourceConfig) error {
+func (c *adminClient) CreateStatefulResource(workspaceID string, cfg *config.StatefulResourceConfig) error {
 	if cfg.IDField == "" {
 		cfg.IDField = "id"
 	}
@@ -1162,7 +1174,12 @@ func (c *adminClient) CreateStatefulResource(cfg *config.StatefulResourceConfig)
 		return fmt.Errorf("failed to encode request: %w", err)
 	}
 
-	resp, err := c.post("/state/resources", body)
+	path := "/state/resources"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+
+	resp, err := c.post(path, body)
 	if err != nil {
 		return err
 	}
@@ -1182,8 +1199,13 @@ func (c *adminClient) CreateStatefulResource(cfg *config.StatefulResourceConfig)
 }
 
 // DeleteStatefulResource fully unregisters a stateful resource via POST /state/resources/{name}/unregister.
-func (c *adminClient) DeleteStatefulResource(name string) error {
-	resp, err := c.post("/state/resources/"+url.PathEscape(name)+"/unregister", nil)
+func (c *adminClient) DeleteStatefulResource(workspaceID string, name string) error {
+	path := "/state/resources/" + url.PathEscape(name) + "/unregister"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+
+	resp, err := c.post(path, nil)
 	if err != nil {
 		return err
 	}
@@ -1203,8 +1225,13 @@ func (c *adminClient) DeleteStatefulResource(name string) error {
 }
 
 // GetStateOverview returns an overview of all stateful resources.
-func (c *adminClient) GetStateOverview() (*StateOverviewResult, error) {
-	resp, err := c.get("/state")
+func (c *adminClient) GetStateOverview(workspaceID string) (*StateOverviewResult, error) {
+	path := "/state"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+
+	resp, err := c.get(path)
 	if err != nil {
 		return nil, err
 	}
@@ -1222,7 +1249,7 @@ func (c *adminClient) GetStateOverview() (*StateOverviewResult, error) {
 }
 
 // ListStatefulItems returns paginated items for a stateful resource.
-func (c *adminClient) ListStatefulItems(resourceName string, limit, offset int, sort, order string) (*StatefulItemsResult, error) {
+func (c *adminClient) ListStatefulItems(workspaceID string, resourceName string, limit, offset int, sort, order string) (*StatefulItemsResult, error) {
 	params := url.Values{}
 	params.Set("limit", strconv.Itoa(limit))
 	params.Set("offset", strconv.Itoa(offset))
@@ -1231,6 +1258,9 @@ func (c *adminClient) ListStatefulItems(resourceName string, limit, offset int, 
 	}
 	if order != "" {
 		params.Set("order", order)
+	}
+	if workspaceID != "" {
+		params.Set("workspaceId", workspaceID)
 	}
 
 	resp, err := c.get("/state/resources/" + url.PathEscape(resourceName) + "/items?" + params.Encode())
@@ -1258,8 +1288,13 @@ func (c *adminClient) ListStatefulItems(resourceName string, limit, offset int, 
 }
 
 // GetStatefulItem returns a specific item from a stateful resource.
-func (c *adminClient) GetStatefulItem(resourceName, itemID string) (map[string]interface{}, error) {
-	resp, err := c.get("/state/resources/" + url.PathEscape(resourceName) + "/items/" + url.PathEscape(itemID))
+func (c *adminClient) GetStatefulItem(workspaceID string, resourceName, itemID string) (map[string]interface{}, error) {
+	path := "/state/resources/" + url.PathEscape(resourceName) + "/items/" + url.PathEscape(itemID)
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+
+	resp, err := c.get(path)
 	if err != nil {
 		return nil, err
 	}
@@ -1284,13 +1319,18 @@ func (c *adminClient) GetStatefulItem(resourceName, itemID string) (map[string]i
 }
 
 // CreateStatefulItem creates a new item in a stateful resource.
-func (c *adminClient) CreateStatefulItem(resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
+func (c *adminClient) CreateStatefulItem(workspaceID string, resourceName string, data map[string]interface{}) (map[string]interface{}, error) {
 	body, err := json.Marshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode item data: %w", err)
 	}
 
-	resp, err := c.post("/state/resources/"+url.PathEscape(resourceName)+"/items", body)
+	path := "/state/resources/" + url.PathEscape(resourceName) + "/items"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+
+	resp, err := c.post(path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1315,8 +1355,13 @@ func (c *adminClient) CreateStatefulItem(resourceName string, data map[string]in
 }
 
 // ResetStatefulResource resets a stateful resource to seed data.
-func (c *adminClient) ResetStatefulResource(resourceName string) error {
-	resp, err := c.post("/state/resources/"+url.PathEscape(resourceName)+"/reset", nil)
+func (c *adminClient) ResetStatefulResource(workspaceID string, resourceName string) error {
+	path := "/state/resources/" + url.PathEscape(resourceName) + "/reset"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+
+	resp, err := c.post(path, nil)
 	if err != nil {
 		return err
 	}
@@ -1336,8 +1381,12 @@ func (c *adminClient) ResetStatefulResource(resourceName string) error {
 }
 
 // ListCustomOperations returns all registered custom operations.
-func (c *adminClient) ListCustomOperations() ([]CustomOperationInfo, error) {
-	resp, err := c.doRequest("GET", "/state/operations", nil)
+func (c *adminClient) ListCustomOperations(workspaceID string) ([]CustomOperationInfo, error) {
+	path := "/state/operations"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.doRequest("GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1358,8 +1407,12 @@ func (c *adminClient) ListCustomOperations() ([]CustomOperationInfo, error) {
 }
 
 // GetCustomOperation returns a specific custom operation by name.
-func (c *adminClient) GetCustomOperation(name string) (*CustomOperationDetail, error) {
-	resp, err := c.doRequest("GET", "/state/operations/"+url.PathEscape(name), nil)
+func (c *adminClient) GetCustomOperation(workspaceID string, name string) (*CustomOperationDetail, error) {
+	path := "/state/operations/" + url.PathEscape(name)
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.doRequest("GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1384,13 +1437,18 @@ func (c *adminClient) GetCustomOperation(name string) (*CustomOperationDetail, e
 }
 
 // RegisterCustomOperation registers a new custom operation.
-func (c *adminClient) RegisterCustomOperation(definition map[string]interface{}) error {
+func (c *adminClient) RegisterCustomOperation(workspaceID string, definition map[string]interface{}) error {
 	body, err := json.Marshal(definition)
 	if err != nil {
 		return fmt.Errorf("failed to encode request: %w", err)
 	}
 
-	resp, err := c.post("/state/operations", body)
+	path := "/state/operations"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+
+	resp, err := c.post(path, body)
 	if err != nil {
 		return err
 	}
@@ -1403,8 +1461,12 @@ func (c *adminClient) RegisterCustomOperation(definition map[string]interface{})
 }
 
 // DeleteCustomOperation deletes a custom operation by name.
-func (c *adminClient) DeleteCustomOperation(name string) error {
-	resp, err := c.doRequest("DELETE", "/state/operations/"+url.PathEscape(name), nil)
+func (c *adminClient) DeleteCustomOperation(workspaceID string, name string) error {
+	path := "/state/operations/" + url.PathEscape(name)
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.doRequest("DELETE", path, nil)
 	if err != nil {
 		return err
 	}
@@ -1424,8 +1486,12 @@ func (c *adminClient) DeleteCustomOperation(name string) error {
 }
 
 // ExecuteCustomOperation executes a custom operation with the given input.
-func (c *adminClient) ExecuteCustomOperation(name string, input map[string]interface{}) (map[string]interface{}, error) {
-	return c.postJSONMap("/state/operations/"+url.PathEscape(name)+"/execute", input, "custom operation not found: "+name)
+func (c *adminClient) ExecuteCustomOperation(workspaceID string, name string, input map[string]interface{}) (map[string]interface{}, error) {
+	path := "/state/operations/" + url.PathEscape(name) + "/execute"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	return c.postJSONMap(path, input, "custom operation not found: "+name)
 }
 
 // ListWorkspaces lists all workspaces on the admin.

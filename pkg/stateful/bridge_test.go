@@ -457,14 +457,14 @@ func TestGetErrorCode_WithWrappedErrorCodeError(t *testing.T) {
 
 func TestBridge_ClearCustomOperations(t *testing.T) {
 	bridge, _ := setupBridgeTest(t)
-	bridge.RegisterCustomOperation("A", &CustomOperation{Name: "A"})
-	bridge.RegisterCustomOperation("B", &CustomOperation{Name: "B"})
+	bridge.RegisterCustomOperation("", "A", &CustomOperation{Name: "A"})
+	bridge.RegisterCustomOperation("", "B", &CustomOperation{Name: "B"})
 
-	bridge.ClearCustomOperations()
+	bridge.ClearCustomOperations("")
 
-	assert.Nil(t, bridge.GetCustomOperation("A"))
-	assert.Nil(t, bridge.GetCustomOperation("B"))
-	assert.Nil(t, bridge.ListCustomOperations())
+	assert.Nil(t, bridge.GetCustomOperation("", "A"))
+	assert.Nil(t, bridge.GetCustomOperation("", "B"))
+	assert.Nil(t, bridge.ListCustomOperations(""))
 }
 
 func TestErrorCode_String_All(t *testing.T) {

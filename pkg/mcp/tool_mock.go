@@ -203,7 +203,7 @@ func handleCreateMock(args map[string]interface{}, session *MCPSession, server *
 		return errResult, nil
 	}
 
-	createResult, err := client.CreateMock(&mockCfg)
+	createResult, err := client.CreateMock(session.GetWorkspace(), &mockCfg)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
 		return ToolResultError("failed to create mock: " + adminError(err, session.GetAdminURL())), nil
@@ -377,10 +377,10 @@ func applyExtendBinding(args map[string]interface{}, m *config.MockConfiguration
 
 	validActions := map[string]bool{
 		"list": true, "get": true, "create": true,
-		"update": true, "delete": true, "custom": true,
+		"update": true, "patch": true, "delete": true, "custom": true,
 	}
 	if !validActions[action] {
-		return ToolResultError("invalid extend action: " + action + ". Must be: list, get, create, update, delete, custom")
+		return ToolResultError("invalid extend action: " + action + ". Must be: list, get, create, update, patch, delete, custom")
 	}
 	if action == "custom" && operation == "" {
 		return ToolResultError("extend with action 'custom' requires 'operation' name")
@@ -392,6 +392,8 @@ func applyExtendBinding(args map[string]interface{}, m *config.MockConfiguration
 		if m.HTTP == nil {
 			m.HTTP = &mock.HTTPSpec{}
 		}
+		// Clear conflicting response types so the validator accepts the mock.
+		m.HTTP.ClearConflictingResponseTypes()
 		m.HTTP.StatefulBinding = &mock.StatefulBinding{
 			Table:     table,
 			Action:    action,

@@ -19,6 +19,7 @@ mockd has an MCP server. If it's configured in your MCP settings, use the MCP to
 - `manage_circuit_breaker` — Trip or reset circuit breakers manually
 - `get_request_logs` — See all captured traffic
 - `manage_state` — CRUD stateful resources
+- `manage_workspace` — List, switch, or create workspaces (action parameter)
 - `import_mocks` — Import from OpenAPI, Postman, HAR, WireMock, cURL, WSDL, Mockoon, or YAML
 - `export_mocks` — Export all mocks as YAML/JSON
 
@@ -70,7 +71,24 @@ mockd import openapi.yaml
 mockd import postman-collection.json
 cat mocks.yaml | mockd import
 mockd export --format yaml > backup.yaml
+
+# Workspaces
+mockd workspace list              # List all workspaces
+mockd workspace create -n "Name"  # Create a workspace
+mockd workspace use <id>          # Switch to a workspace
+mockd workspace delete <id>       # Delete a workspace
+mockd workspace clear             # Clear workspace selection
 ```
+
+All CLI commands accept `--workspace <id>` as a global flag to scope operations to a specific workspace.
+
+## Workspaces
+
+All CLI commands accept `--workspace <id>` to scope operations to a specific workspace.
+Environment variable: `MOCKD_WORKSPACE`. Resolution order: flag > env > context config > default.
+
+Stateful resources, request logs, and import/export are all workspace-scoped.
+Chaos config is global (not workspace-scoped).
 
 ## Config File Format (YAML)
 

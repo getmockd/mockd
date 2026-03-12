@@ -309,6 +309,15 @@ curl -X POST http://localhost:4280/graphql \
 If you're using a release build, open [http://localhost:4290](http://localhost:4290) in your browser to manage mocks visually. See the [Dashboard Guide](/guides/dashboard/) for details.
 :::
 
+:::tip[Workspace Isolation]
+By default, all mocks live in the default workspace. To isolate mocks per project or team, use the `--workspace` flag:
+```bash
+mockd workspace create -n "Payment API" --use
+mockd http add --path /api/charges --status 200 --body '{"id": "ch_1"}'
+# These mocks are only visible in the "Payment API" workspace
+```
+:::
+
 ## What's Next?
 
 - **[Core Concepts](/getting-started/concepts/)** - Understand mocks, matching, and responses

@@ -16,6 +16,10 @@ import (
 // requestlog.ExtendedStore.
 type RequestLogger interface {
 	requestlog.Store
+
+	// CountFiltered returns the number of entries matching the filter criteria,
+	// ignoring Limit and Offset. Used for accurate Total in paginated responses.
+	CountFiltered(filter *requestlog.Filter) int
 }
 
 // InMemoryRequestLogger implements RequestLogger (and by extension
@@ -270,6 +274,26 @@ func (l *InMemoryRequestLogger) Count() int {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	return len(l.entries)
+}
+
+// CountFiltered returns the number of log entries matching the filter criteria,
+// ignoring Limit and Offset. This is used to provide accurate Total counts
+// in paginated, filtered responses.
+func (l *InMemoryRequestLogger) CountFiltered(filter *requestlog.Filter) int {
+	if filter == nil {
+		return l.Count()
+	}
+
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	count := 0
+	for _, entry := range l.entries {
+		if matchesFilter(entry, filter) {
+			count++
+		}
+	}
+	return count
 }
 
 // ClearByMockID removes all log entries matching the given mock ID.

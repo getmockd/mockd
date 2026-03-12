@@ -287,7 +287,7 @@ func (s *Server) handleListRequests(w http.ResponseWriter, r *http.Request) {
 	}
 
 	entries := s.engine.GetRequestLogs(filter)
-	total := s.engine.RequestLogCount()
+	total := s.engine.RequestLogCountFiltered(filter)
 
 	// Convert to response type — preserve all fields including protocol metadata
 	requests := make([]*RequestLogEntry, len(entries))
