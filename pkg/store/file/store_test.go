@@ -1170,15 +1170,16 @@ func TestFolderStore_List_FilterByWorkspaceID(t *testing.T) {
 		// Empty WorkspaceID — treated as "local" for backward compat
 	})
 
-	result, _ := fld.List(ctx, &store.FolderFilter{WorkspaceID: "ws-a"})
+	result, _ := fld.List(ctx, &store.FolderFilter{WorkspaceID: strPtr("ws-a")})
 	if len(result) != 1 {
 		t.Errorf("expected 1 folder for ws-a, got %d", len(result))
 	}
 
-	// Empty workspace ID treated as "local"
-	result, _ = fld.List(ctx, &store.FolderFilter{WorkspaceID: store.DefaultWorkspaceID})
+	// Empty workspace ID matches folders with no workspace set (default workspace)
+	defaultWsID := store.DefaultWorkspaceID
+	result, _ = fld.List(ctx, &store.FolderFilter{WorkspaceID: &defaultWsID})
 	if len(result) != 1 || result[0].ID != "f3" {
-		t.Errorf("expected f3 (empty wsID mapped to 'local'), got %+v", result)
+		t.Errorf("expected f3 (default workspace), got %+v", result)
 	}
 }
 
@@ -1637,6 +1638,116 @@ func TestStatefulResourceStore_ReadOnly(t *testing.T) {
 }
 
 // ============================================================================
+// Custom Operation Store Tests
+// ============================================================================
+
+func TestCustomOperationStore_CRUD(t *testing.T) {
+	fs := newTestStore(t)
+	ctx := context.Background()
+	cos := fs.CustomOperations()
+
+	op := &config.CustomOperationConfig{
+		Name: "TransferFunds",
+		Steps: []config.CustomStepConfig{
+			{Type: "read", Resource: "accounts", ID: "input.sourceId", As: "source"},
+		},
+		Response: map[string]string{"status": `"completed"`},
+	}
+	if err := cos.Create(ctx, op); err != nil {
+		t.Fatalf("Create() failed: %v", err)
+	}
+
+	list, _ := cos.List(ctx)
+	if len(list) != 1 {
+		t.Errorf("expected 1, got %d", len(list))
+	}
+	if list[0].Name != "TransferFunds" {
+		t.Errorf("expected 'TransferFunds', got %q", list[0].Name)
+	}
+	if len(list[0].Steps) != 1 {
+		t.Errorf("expected 1 step, got %d", len(list[0].Steps))
+	}
+
+	// Delete by name
+	if err := cos.Delete(ctx, "TransferFunds"); err != nil {
+		t.Fatalf("Delete() failed: %v", err)
+	}
+	list, _ = cos.List(ctx)
+	if len(list) != 0 {
+		t.Errorf("expected 0 after delete, got %d", len(list))
+	}
+}
+
+func TestCustomOperationStore_Create_DuplicateName(t *testing.T) {
+	fs := newTestStore(t)
+	ctx := context.Background()
+	cos := fs.CustomOperations()
+
+	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "MyOp"})
+	err := cos.Create(ctx, &config.CustomOperationConfig{Name: "MyOp"})
+	if !errors.Is(err, store.ErrAlreadyExists) {
+		t.Errorf("expected ErrAlreadyExists, got %v", err)
+	}
+}
+
+func TestCustomOperationStore_Delete_NotFound(t *testing.T) {
+	fs := newTestStore(t)
+	ctx := context.Background()
+	err := fs.CustomOperations().Delete(ctx, "nonexistent")
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestCustomOperationStore_DeleteAll(t *testing.T) {
+	fs := newTestStore(t)
+	ctx := context.Background()
+	cos := fs.CustomOperations()
+
+	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "Op1"})
+	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "Op2"})
+
+	if err := cos.DeleteAll(ctx); err != nil {
+		t.Fatalf("DeleteAll() failed: %v", err)
+	}
+	list, _ := cos.List(ctx)
+	if len(list) != 0 {
+		t.Errorf("expected 0, got %d", len(list))
+	}
+}
+
+func TestCustomOperationStore_List_EmptyReturnsEmptySlice(t *testing.T) {
+	fs := newTestStore(t)
+	ctx := context.Background()
+	list, err := fs.CustomOperations().List(ctx)
+	if err != nil {
+		t.Fatalf("List() failed: %v", err)
+	}
+	if list == nil {
+		t.Error("List() should return empty slice, not nil")
+	}
+	if len(list) != 0 {
+		t.Errorf("expected 0, got %d", len(list))
+	}
+}
+
+func TestCustomOperationStore_ReadOnly(t *testing.T) {
+	fs := newReadOnlyStore(t)
+	ctx := context.Background()
+	cos := fs.CustomOperations()
+
+	if err := cos.Create(ctx, &config.CustomOperationConfig{Name: "x"}); !errors.Is(err, store.ErrReadOnly) {
+		t.Errorf("Create: expected ErrReadOnly, got %v", err)
+	}
+	if err := cos.Delete(ctx, "x"); !errors.Is(err, store.ErrReadOnly) {
+		t.Errorf("Delete: expected ErrReadOnly, got %v", err)
+	}
+	if err := cos.DeleteAll(ctx); !errors.Is(err, store.ErrReadOnly) {
+		t.Errorf("DeleteAll: expected ErrReadOnly, got %v", err)
+	}
+}
+
+// ============================================================================
 // Persistence Round-Trip Tests (Save + Load)
 // ============================================================================
 
@@ -1659,6 +1770,10 @@ func TestFileStore_Persistence_RoundTrip(t *testing.T) {
 	_ = fs1.Recordings().Create(ctx, &store.Recording{ID: "rec-persist", Protocol: "http"})
 	_ = fs1.RequestLog().Append(ctx, &store.RequestLogEntry{ID: "log-persist", Method: "GET"})
 	_ = fs1.StatefulResources().Create(ctx, &config.StatefulResourceConfig{Name: "persist-res"})
+	_ = fs1.CustomOperations().Create(ctx, &config.CustomOperationConfig{
+		Name:  "persist-op",
+		Steps: []config.CustomStepConfig{{Type: "read", Resource: "users", ID: "input.id", As: "user"}},
+	})
 	_ = fs1.Preferences().Set(ctx, &store.Preferences{Theme: "dark", DefaultMockPort: 4280})
 	_ = fs1.Close()
 
@@ -1713,6 +1828,15 @@ func TestFileStore_Persistence_RoundTrip(t *testing.T) {
 	srs, _ := fs2.StatefulResources().List(ctx)
 	if len(srs) != 1 || srs[0].Name != "persist-res" {
 		t.Errorf("stateful resources not persisted correctly: %+v", srs)
+	}
+
+	// Custom operations
+	cos, _ := fs2.CustomOperations().List(ctx)
+	if len(cos) != 1 || cos[0].Name != "persist-op" {
+		t.Errorf("custom operations not persisted correctly: %+v", cos)
+	}
+	if len(cos) == 1 && len(cos[0].Steps) != 1 {
+		t.Errorf("custom operation steps not persisted correctly: %+v", cos[0].Steps)
 	}
 
 	// Preferences

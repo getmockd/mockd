@@ -273,14 +273,14 @@ func TestBulkCreate_PortConflictWithinBatch_ReturnsError(t *testing.T) {
 			ID:          "mqtt-1",
 			Name:        "MQTT Mock 1",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT:        &mock.MQTTSpec{Port: 1883},
 		},
 		{
 			ID:          "mqtt-2",
 			Name:        "MQTT Mock 2",
 			Type:        mock.TypeMQTT,
-			WorkspaceID: "local",
+			WorkspaceID: store.DefaultWorkspaceID,
 			MQTT:        &mock.MQTTSpec{Port: 1883}, // Same port - conflict
 		},
 	}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1252,4 +1253,82 @@ func TestStateful_CrossProtocol_Bridge_Creates_REST_Retrieves(t *testing.T) {
 	var listResult stateful.PaginatedResponse
 	require.NoError(t, json.NewDecoder(listResp.Body).Decode(&listResult))
 	assert.Equal(t, 1, listResult.Meta.Total)
+}
+
+// TestConcurrentResourceRegistration verifies that many concurrent resource
+// registration requests through the admin HTTP API don't crash the server.
+// This reproduces the race condition observed when 9 MCP add_resource calls
+// hit simultaneously — the default http.Transport had MaxIdleConnsPerHost: 2.
+func TestConcurrentResourceRegistration(t *testing.T) {
+	// Start a server with no initial resources
+	bundle := createStatefulServerWithAdmin(t)
+	defer bundle.Stop()
+
+	if err := bundle.Server.Start(); err != nil {
+		t.Fatalf("Server failed to start: %v", err)
+	}
+	bundle.AdminAPI.Start()
+
+	// Wait for server to be ready
+	if !waitForServer(fmt.Sprintf("http://localhost:%d/health", bundle.AdminPort), 5*time.Second) {
+		t.Fatal("server did not become ready in time")
+	}
+
+	adminURL := fmt.Sprintf("http://localhost:%d", bundle.AdminPort)
+
+	const n = 15 // Number of concurrent resource registrations
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+
+			name := fmt.Sprintf("resource_%03d", idx)
+			body := fmt.Sprintf(`{"name":%q,"idField":"id","idStrategy":"prefix","idPrefix":"r%d_"}`, name, idx)
+			resp, err := http.Post(
+				adminURL+"/state/resources",
+				"application/json",
+				strings.NewReader(body),
+			)
+			if err != nil {
+				errs[idx] = fmt.Errorf("request error for %s: %w", name, err)
+				return
+			}
+			defer resp.Body.Close()
+
+			respBody, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode != http.StatusCreated {
+				errs[idx] = fmt.Errorf("unexpected status %d for %s: %s", resp.StatusCode, name, string(respBody))
+				return
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Check for any errors
+	var failed int
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("Goroutine %d failed: %v", i, err)
+			failed++
+		}
+	}
+	if failed > 0 {
+		t.Fatalf("%d/%d concurrent registrations failed", failed, n)
+	}
+
+	// Verify all resources exist by listing them
+	resp, err := http.Get(adminURL + "/state")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var overview map[string]interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&overview))
+
+	resources, ok := overview["resources"].([]interface{})
+	require.True(t, ok, "expected resources array, got %T", overview["resources"])
+	assert.Equal(t, n, len(resources), "expected all %d resources to be registered", n)
 }

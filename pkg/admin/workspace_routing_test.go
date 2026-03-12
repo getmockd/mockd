@@ -63,7 +63,7 @@ func TestWorkspaceBasePath(t *testing.T) {
 }
 
 func TestEffectiveMockPath(t *testing.T) {
-	rootWS := &store.Workspace{ID: "local", BasePath: ""}
+	rootWS := &store.Workspace{ID: store.DefaultWorkspaceID, BasePath: ""}
 	paymentWS := &store.Workspace{ID: "ws_pay", BasePath: "/payment-api"}
 	usersWS := &store.Workspace{ID: "ws_usr", BasePath: "users"} // no leading slash
 
@@ -75,11 +75,11 @@ func TestEffectiveMockPath(t *testing.T) {
 		rootWorkspaceID string
 		expected        string
 	}{
-		{"root workspace - no prefix", "/payments/charge", "local", rootWS, "local", "/payments/charge"},
-		{"non-root - gets prefix", "/payments/charge", "ws_pay", paymentWS, "local", "/payment-api/payments/charge"},
+		{"root workspace - no prefix", "/payments/charge", store.DefaultWorkspaceID, rootWS, store.DefaultWorkspaceID, "/payments/charge"},
+		{"non-root - gets prefix", "/payments/charge", "ws_pay", paymentWS, store.DefaultWorkspaceID, "/payment-api/payments/charge"},
 		{"non-root is root on this engine", "/payments/charge", "ws_pay", paymentWS, "ws_pay", "/payments/charge"},
-		{"no leading slash on basePath", "/api/users", "ws_usr", usersWS, "local", "/users/api/users"},
-		{"root path", "/", "ws_pay", paymentWS, "local", "/payment-api/"},
+		{"no leading slash on basePath", "/api/users", "ws_usr", usersWS, store.DefaultWorkspaceID, "/users/api/users"},
+		{"root path", "/", "ws_pay", paymentWS, store.DefaultWorkspaceID, "/payment-api/"},
 	}
 
 	for _, tt := range tests {
@@ -109,7 +109,7 @@ func TestPrefixMockForEngine_HTTP(t *testing.T) {
 	}
 
 	// Non-root workspace → should prefix
-	result := prefixMockForEngine(original, paymentWS, "local")
+	result := prefixMockForEngine(original, paymentWS, store.DefaultWorkspaceID)
 
 	if result.HTTP.Matcher.Path != "/payment-api/payments/charge" {
 		t.Errorf("expected prefixed path, got %q", result.HTTP.Matcher.Path)
@@ -125,12 +125,12 @@ func TestPrefixMockForEngine_HTTP(t *testing.T) {
 }
 
 func TestPrefixMockForEngine_RootWorkspace(t *testing.T) {
-	rootWS := &store.Workspace{ID: "local", BasePath: ""}
+	rootWS := &store.Workspace{ID: store.DefaultWorkspaceID, BasePath: ""}
 
 	original := &mock.Mock{
 		ID:          "mock_1",
 		Type:        mock.TypeHTTP,
-		WorkspaceID: "local",
+		WorkspaceID: store.DefaultWorkspaceID,
 		HTTP: &mock.HTTPSpec{
 			Matcher: &mock.HTTPMatcher{
 				Method: "GET",
@@ -140,7 +140,7 @@ func TestPrefixMockForEngine_RootWorkspace(t *testing.T) {
 	}
 
 	// Root workspace → no prefix
-	result := prefixMockForEngine(original, rootWS, "local")
+	result := prefixMockForEngine(original, rootWS, store.DefaultWorkspaceID)
 
 	if result.HTTP.Matcher.Path != "/api/users" {
 		t.Errorf("root workspace mock should not be prefixed, got %q", result.HTTP.Matcher.Path)
@@ -186,7 +186,7 @@ func TestPrefixMockForEngine_WebSocket(t *testing.T) {
 		},
 	}
 
-	result := prefixMockForEngine(original, paymentWS, "local")
+	result := prefixMockForEngine(original, paymentWS, store.DefaultWorkspaceID)
 
 	if result.WebSocket.Path != "/payment-api/ws/events" {
 		t.Errorf("WebSocket path should be prefixed, got %q", result.WebSocket.Path)
@@ -206,7 +206,7 @@ func TestPrefixMockForEngine_GRPC_NoPrefix(t *testing.T) {
 	}
 
 	// gRPC is port-based, should not be modified
-	result := prefixMockForEngine(original, paymentWS, "local")
+	result := prefixMockForEngine(original, paymentWS, store.DefaultWorkspaceID)
 
 	if result != original {
 		t.Errorf("gRPC mock should not be cloned/modified")
@@ -225,7 +225,7 @@ func TestPrefixMockForEngine_MQTT_NoPrefix(t *testing.T) {
 		},
 	}
 
-	result := prefixMockForEngine(original, paymentWS, "local")
+	result := prefixMockForEngine(original, paymentWS, store.DefaultWorkspaceID)
 
 	if result != original {
 		t.Errorf("MQTT mock should not be cloned/modified")
@@ -246,7 +246,7 @@ func TestPrefixMockForEngine_PathPattern(t *testing.T) {
 		},
 	}
 
-	result := prefixMockForEngine(original, paymentWS, "local")
+	result := prefixMockForEngine(original, paymentWS, store.DefaultWorkspaceID)
 
 	expected := "^/payment-api/payments/.*"
 	if result.HTTP.Matcher.PathPattern != expected {
@@ -256,13 +256,13 @@ func TestPrefixMockForEngine_PathPattern(t *testing.T) {
 
 func TestPrefixMocksForEngine(t *testing.T) {
 	wsMap := map[string]*store.Workspace{
-		"local":  {ID: "local", BasePath: ""},
-		"ws_pay": {ID: "ws_pay", BasePath: "/payment-api"},
+		store.DefaultWorkspaceID: {ID: store.DefaultWorkspaceID, BasePath: ""},
+		"ws_pay":                 {ID: "ws_pay", BasePath: "/payment-api"},
 	}
 
 	mocks := []*mock.Mock{
 		{
-			ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+			ID: "m1", Type: mock.TypeHTTP, WorkspaceID: store.DefaultWorkspaceID,
 			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Path: "/health"}},
 		},
 		{
@@ -271,7 +271,7 @@ func TestPrefixMocksForEngine(t *testing.T) {
 		},
 	}
 
-	result := prefixMocksForEngine(mocks, wsMap, "local")
+	result := prefixMocksForEngine(mocks, wsMap, store.DefaultWorkspaceID)
 
 	if len(result) != 2 {
 		t.Fatalf("expected 2 mocks, got %d", len(result))
@@ -290,8 +290,8 @@ func TestPrefixMocksForEngine(t *testing.T) {
 
 func TestCheckRouteCollision(t *testing.T) {
 	wsMap := map[string]*store.Workspace{
-		"local":  {ID: "local", Name: "Default", BasePath: ""},
-		"ws_pay": {ID: "ws_pay", Name: "Payment API", BasePath: "/payment-api"},
+		store.DefaultWorkspaceID: {ID: store.DefaultWorkspaceID, Name: "Default", BasePath: ""},
+		"ws_pay":                 {ID: "ws_pay", Name: "Payment API", BasePath: "/payment-api"},
 	}
 
 	t.Run("exact collision: same effective path across workspaces", func(t *testing.T) {
@@ -300,9 +300,9 @@ func TestCheckRouteCollision(t *testing.T) {
 		// both resolve to /payment-api/status.
 		// Use mocks within the same workspace to test pure exact collision.
 		sameWsMap := map[string]*store.Workspace{
-			"local": {ID: "local", Name: "Default", BasePath: ""},
-			"ws_a":  {ID: "ws_a", Name: "Service A", BasePath: "/svc-a"},
-			"ws_b":  {ID: "ws_b", Name: "Service B", BasePath: "/svc-b"},
+			store.DefaultWorkspaceID: {ID: store.DefaultWorkspaceID, Name: "Default", BasePath: ""},
+			"ws_a":                   {ID: "ws_a", Name: "Service A", BasePath: "/svc-a"},
+			"ws_b":                   {ID: "ws_b", Name: "Service B", BasePath: "/svc-b"},
 		}
 		existing := []*mock.Mock{
 			{
@@ -315,7 +315,7 @@ func TestCheckRouteCollision(t *testing.T) {
 			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "ws_b",
 			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/status"}},
 		}
-		collision := checkRouteCollision(newMock, sameWsMap["ws_b"], existing, sameWsMap, "local")
+		collision := checkRouteCollision(newMock, sameWsMap["ws_b"], existing, sameWsMap, store.DefaultWorkspaceID)
 		if collision != nil {
 			t.Errorf("different basePaths should not collide, got %+v", collision)
 		}
@@ -324,20 +324,20 @@ func TestCheckRouteCollision(t *testing.T) {
 	t.Run("no collision: different methods", func(t *testing.T) {
 		// Two non-root workspaces with identical paths but different methods
 		sameWsMap := map[string]*store.Workspace{
-			"local": {ID: "local", Name: "Default", BasePath: ""},
-			"ws_a":  {ID: "ws_a", Name: "Service A", BasePath: "/svc-a"},
+			store.DefaultWorkspaceID: {ID: store.DefaultWorkspaceID, Name: "Default", BasePath: ""},
+			"ws_a":                   {ID: "ws_a", Name: "Service A", BasePath: "/svc-a"},
 		}
 		existing := []*mock.Mock{
 			{
-				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: store.DefaultWorkspaceID,
 				HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/health"}},
 			},
 		}
 		newMock := &mock.Mock{
-			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "local",
+			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: store.DefaultWorkspaceID,
 			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "POST", Path: "/health"}},
 		}
-		collision := checkRouteCollision(newMock, sameWsMap["local"], existing, sameWsMap, "local")
+		collision := checkRouteCollision(newMock, sameWsMap[store.DefaultWorkspaceID], existing, sameWsMap, store.DefaultWorkspaceID)
 		if collision != nil {
 			t.Errorf("expected no collision (different methods), got %+v", collision)
 		}
@@ -346,15 +346,15 @@ func TestCheckRouteCollision(t *testing.T) {
 	t.Run("no collision: different effective paths", func(t *testing.T) {
 		existing := []*mock.Mock{
 			{
-				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: store.DefaultWorkspaceID,
 				HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/health"}},
 			},
 		}
 		newMock := &mock.Mock{
-			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "local",
+			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: store.DefaultWorkspaceID,
 			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/ready"}},
 		}
-		collision := checkRouteCollision(newMock, wsMap["local"], existing, wsMap, "local")
+		collision := checkRouteCollision(newMock, wsMap[store.DefaultWorkspaceID], existing, wsMap, store.DefaultWorkspaceID)
 		if collision != nil {
 			t.Errorf("expected no collision, got %+v", collision)
 		}
@@ -364,15 +364,15 @@ func TestCheckRouteCollision(t *testing.T) {
 		// Simulating an update: same ID as existing mock, path unchanged
 		existing := []*mock.Mock{
 			{
-				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: store.DefaultWorkspaceID,
 				HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/health"}},
 			},
 		}
 		newMock := &mock.Mock{
-			ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+			ID: "m1", Type: mock.TypeHTTP, WorkspaceID: store.DefaultWorkspaceID,
 			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "GET", Path: "/health"}},
 		}
-		collision := checkRouteCollision(newMock, wsMap["local"], existing, wsMap, "local")
+		collision := checkRouteCollision(newMock, wsMap[store.DefaultWorkspaceID], existing, wsMap, store.DefaultWorkspaceID)
 		if collision != nil {
 			t.Errorf("should skip self, got collision with %s", collision.ExistingMockID)
 		}
@@ -383,7 +383,7 @@ func TestCheckRouteCollision(t *testing.T) {
 		// The matching engine uses priority to pick the winner.
 		existing := []*mock.Mock{
 			{
-				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: store.DefaultWorkspaceID,
 				HTTP: &mock.HTTPSpec{
 					Priority: 10,
 					Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/api/users"},
@@ -391,13 +391,13 @@ func TestCheckRouteCollision(t *testing.T) {
 			},
 		}
 		newMock := &mock.Mock{
-			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "local",
+			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: store.DefaultWorkspaceID,
 			HTTP: &mock.HTTPSpec{
 				Priority: 100,
 				Matcher:  &mock.HTTPMatcher{Method: "GET", Path: "/api/users"},
 			},
 		}
-		collision := checkRouteCollision(newMock, wsMap["local"], existing, wsMap, "local")
+		collision := checkRouteCollision(newMock, wsMap[store.DefaultWorkspaceID], existing, wsMap, store.DefaultWorkspaceID)
 		if collision != nil {
 			t.Errorf("same-workspace duplicate paths should not collide (priority matching), got %+v", collision)
 		}
@@ -408,7 +408,7 @@ func TestCheckRouteCollision(t *testing.T) {
 		// This IS a collision because they're in different workspaces.
 		existing := []*mock.Mock{
 			{
-				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: "local",
+				ID: "m1", Type: mock.TypeHTTP, WorkspaceID: store.DefaultWorkspaceID,
 				HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "POST", Path: "/payment-api/charge"}},
 			},
 		}
@@ -416,7 +416,7 @@ func TestCheckRouteCollision(t *testing.T) {
 			ID: "m_new", Type: mock.TypeHTTP, WorkspaceID: "ws_pay",
 			HTTP: &mock.HTTPSpec{Matcher: &mock.HTTPMatcher{Method: "POST", Path: "/charge"}},
 		}
-		collision := checkRouteCollision(newMock, wsMap["ws_pay"], existing, wsMap, "local")
+		collision := checkRouteCollision(newMock, wsMap["ws_pay"], existing, wsMap, store.DefaultWorkspaceID)
 		if collision == nil {
 			t.Error("expected cross-workspace collision when effective paths match")
 		}
@@ -428,7 +428,7 @@ func TestCheckRouteCollision(t *testing.T) {
 			ID: "m_grpc", Type: mock.TypeGRPC, WorkspaceID: "ws_pay",
 			GRPC: &mock.GRPCSpec{Port: 50051},
 		}
-		collision := checkRouteCollision(newMock, wsMap["ws_pay"], existing, wsMap, "local")
+		collision := checkRouteCollision(newMock, wsMap["ws_pay"], existing, wsMap, store.DefaultWorkspaceID)
 		if collision != nil {
 			t.Errorf("gRPC should never collide on path, got %+v", collision)
 		}
@@ -463,7 +463,7 @@ func TestBasePathsOverlap(t *testing.T) {
 
 func TestCheckBasePathConflict(t *testing.T) {
 	peers := []*store.Workspace{
-		{ID: "local", Name: "Default", BasePath: ""},
+		{ID: store.DefaultWorkspaceID, Name: "Default", BasePath: ""},
 		{ID: "ws_pay", Name: "Payment API", BasePath: "/payment-api"},
 		{ID: "ws_usr", Name: "Users", BasePath: "/users"},
 	}
