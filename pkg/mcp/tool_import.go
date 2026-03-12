@@ -110,6 +110,21 @@ func handleImportMocks(args map[string]interface{}, session *MCPSession, server 
 		result["message"] = importResult.Message
 	}
 
+	// Surface workspace base path so users know where mocks are served.
+	if workspace != "" {
+		result["workspace"] = workspace
+		workspaces, err := client.ListWorkspaces()
+		if err == nil {
+			for _, ws := range workspaces {
+				if ws.ID == workspace && ws.BasePath != "" {
+					result["basePath"] = ws.BasePath
+					result["hint"] = "Mocks are served under " + ws.BasePath + " (e.g., " + ws.BasePath + "/v1/resource)"
+					break
+				}
+			}
+		}
+	}
+
 	return ToolResultJSON(result)
 }
 

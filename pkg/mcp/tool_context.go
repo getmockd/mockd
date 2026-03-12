@@ -145,6 +145,7 @@ func handleListWorkspaces(_ map[string]interface{}, session *MCPSession, _ *Serv
 		Name        string `json:"name"`
 		Type        string `json:"type,omitempty"`
 		Description string `json:"description,omitempty"`
+		BasePath    string `json:"basePath"`
 		Active      bool   `json:"active"`
 	}
 
@@ -155,6 +156,7 @@ func handleListWorkspaces(_ map[string]interface{}, session *MCPSession, _ *Serv
 			Name:        ws.Name,
 			Type:        ws.Type,
 			Description: ws.Description,
+			BasePath:    ws.BasePath,
 			Active:      ws.ID == currentWS,
 		})
 	}
@@ -174,7 +176,8 @@ func handleSwitchWorkspace(args map[string]interface{}, session *MCPSession, _ *
 		return ToolResultError("id is required"), nil
 	}
 
-	// Validate the workspace exists before switching
+	// Validate the workspace exists before switching and capture details
+	var wsName, wsBasePath string
 	client := session.GetAdminClient()
 	if client != nil {
 		workspaces, err := client.ListWorkspaces()
@@ -183,6 +186,8 @@ func handleSwitchWorkspace(args map[string]interface{}, session *MCPSession, _ *
 			for _, ws := range workspaces {
 				if ws.ID == id {
 					found = true
+					wsName = ws.Name
+					wsBasePath = ws.BasePath
 					break
 				}
 			}
@@ -199,6 +204,13 @@ func handleSwitchWorkspace(args map[string]interface{}, session *MCPSession, _ *
 	result := map[string]interface{}{
 		"switched":  true,
 		"workspace": id,
+	}
+	if wsName != "" {
+		result["name"] = wsName
+	}
+	if wsBasePath != "" {
+		result["basePath"] = wsBasePath
+		result["hint"] = "Mocks in this workspace are served under " + wsBasePath + " (e.g., " + wsBasePath + "/v1/resource)"
 	}
 
 	return ToolResultJSON(result)
@@ -229,6 +241,10 @@ func handleCreateWorkspace(args map[string]interface{}, session *MCPSession, _ *
 	}
 	if ws.Type != "" {
 		result["type"] = ws.Type
+	}
+	if ws.BasePath != "" {
+		result["basePath"] = ws.BasePath
+		result["hint"] = "Mocks in this workspace are served under the base path " + ws.BasePath + " (e.g., " + ws.BasePath + "/v1/resource). Use 'manage_workspace switch' to route subsequent MCP operations to this workspace."
 	}
 
 	return ToolResultJSON(result)

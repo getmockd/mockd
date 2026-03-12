@@ -24,6 +24,7 @@ type WorkspaceDTO struct {
 	Name         string `json:"name"`
 	Type         string `json:"type"`
 	Description  string `json:"description,omitempty"`
+	BasePath     string `json:"basePath"`
 	Path         string `json:"path,omitempty"`
 	URL          string `json:"url,omitempty"`
 	Branch       string `json:"branch,omitempty"`
@@ -93,6 +94,9 @@ func runWorkspaceShow() error {
 			if ws.Description != "" {
 				result["workspaceDescription"] = ws.Description
 			}
+			if ws.BasePath != "" {
+				result["basePath"] = ws.BasePath
+			}
 		}
 	}
 
@@ -109,6 +113,10 @@ func runWorkspaceShow() error {
 		}
 		if desc, ok := result["workspaceDescription"].(string); ok {
 			fmt.Printf("    Description: %s\n", desc)
+		}
+		if bp, ok := result["basePath"].(string); ok {
+			fmt.Printf("    Base path: %s\n", bp)
+			fmt.Printf("    Mocks served under: %s\n", bp)
 		}
 	})
 	return nil
@@ -210,7 +218,7 @@ var workspaceListCmd = &cobra.Command{
 			}
 
 			w := output.Table()
-			_, _ = fmt.Fprintln(w, "CURRENT\tID\tNAME\tTYPE\tDESCRIPTION")
+			_, _ = fmt.Fprintln(w, "CURRENT\tID\tNAME\tBASE PATH\tTYPE\tDESCRIPTION")
 
 			for _, ws := range workspaces {
 				current := ""
@@ -231,7 +239,12 @@ var workspaceListCmd = &cobra.Command{
 					id = id[:17] + "..."
 				}
 
-				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, id, ws.Name, ws.Type, description)
+				basePath := ws.BasePath
+				if basePath == "" {
+					basePath = "/"
+				}
+
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", current, id, ws.Name, basePath, ws.Type, description)
 			}
 
 			_ = w.Flush()
@@ -292,6 +305,10 @@ var workspaceCreateCmd = &cobra.Command{
 
 		printResult(ws, func() {
 			fmt.Printf("Created workspace %q (ID: %s)\n", ws.Name, ws.ID)
+			if ws.BasePath != "" {
+				fmt.Printf("  Base path: %s\n", ws.BasePath)
+				fmt.Printf("  Mocks in this workspace are served under %s (e.g., %s/v1/resource)\n", ws.BasePath, ws.BasePath)
+			}
 			if workspaceCreateUseCurrent {
 				fmt.Printf("Switched to workspace %q\n", ws.ID)
 			}

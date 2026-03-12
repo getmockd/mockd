@@ -169,7 +169,7 @@ mockd add http --path /api/users/{id} --method DELETE --table users --bind delet
 mockd add http --path /api/users/{id}/verify --method POST --table users --bind custom --operation VerifyUser
 ```
 
-Actions: `list`, `get`, `create`, `update`, `delete`, `custom`. For `custom`, also provide `--operation` (CLI) or `"operation"` (MCP).
+Actions: `list`, `get`, `create`, `update`, `patch`, `delete`, `custom`. For `custom`, also provide `--operation` (CLI) or `"operation"` (MCP).
 
 ## Template Functions
 

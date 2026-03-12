@@ -113,7 +113,7 @@ func init() {
 	soapAddCmd.Flags().StringVar(&addOperation, "action", "", "SOAP action")
 	soapAddCmd.Flags().StringVar(&addResponse, "response", "", "XML response body")
 	soapAddCmd.Flags().StringVar(&soapAddTable, "table", "", "Bind to a stateful resource table (e.g., users)")
-	soapAddCmd.Flags().StringVar(&soapAddBindAction, "bind", "", "Stateful action: list, get, create, update, delete, custom")
+	soapAddCmd.Flags().StringVar(&soapAddBindAction, "bind", "", "Stateful action: list, get, create, update, patch, delete, custom")
 
 	// Add list/get/delete generic aliases
 	soapCmd.AddCommand(&cobra.Command{

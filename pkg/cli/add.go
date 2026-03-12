@@ -142,7 +142,7 @@ func init() {
 	addCmd.Flags().StringVar(&addStatefulOperation, "stateful-operation", "", "Wire to a custom stateful operation (e.g., TransferFunds)")
 
 	addCmd.Flags().StringVar(&addTable, "table", "", "Bind to a stateful resource table (e.g., users)")
-	addCmd.Flags().StringVar(&addBindAction, "bind", "", "Stateful action: list, get, create, update, delete, custom")
+	addCmd.Flags().StringVar(&addBindAction, "bind", "", "Stateful action: list, get, create, update, patch, delete, custom")
 
 	addCmd.Flags().StringVar(&addSoapAction, "soap-action", "", "SOAPAction header value")
 
@@ -402,10 +402,10 @@ Run 'mockd add --help' for more options`)
 	if bindAction != "" {
 		validBindActions := map[string]bool{
 			"list": true, "get": true, "create": true,
-			"update": true, "delete": true, "custom": true,
+			"update": true, "patch": true, "delete": true, "custom": true,
 		}
 		if !validBindActions[bindAction] {
-			return nil, fmt.Errorf("invalid --bind value %q: must be one of list, get, create, update, delete, custom", bindAction)
+			return nil, fmt.Errorf("invalid --bind value %q: must be one of list, get, create, update, patch, delete, custom", bindAction)
 		}
 		// --table/--bind is mutually exclusive with --body, --body-file, --sse, --stateful-operation
 		if body != "" || bodyFile != "" {
@@ -899,10 +899,10 @@ Run 'mockd add --help' for more options`)
 	if bindAction != "" {
 		validActions := map[string]bool{
 			"list": true, "get": true, "create": true,
-			"update": true, "delete": true, "custom": true,
+			"update": true, "patch": true, "delete": true, "custom": true,
 		}
 		if !validActions[bindAction] {
-			return nil, fmt.Errorf("invalid --bind %q: must be one of list, get, create, update, delete, custom", bindAction)
+			return nil, fmt.Errorf("invalid --bind %q: must be one of list, get, create, update, patch, delete, custom", bindAction)
 		}
 	}
 

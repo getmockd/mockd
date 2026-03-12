@@ -49,7 +49,7 @@ func init() {
 	updateCmd.Flags().VarP(&updateHeaders, "header", "H", "Response header (key:value), repeatable")
 	updateCmd.Flags().IntVar(&updateDelay, "delay", 0, "Response delay in milliseconds")
 	updateCmd.Flags().StringVar(&updateTable, "table", "", "Bind to a stateful resource table")
-	updateCmd.Flags().StringVar(&updateBind, "bind", "", "Stateful action: list, get, create, update, delete, custom")
+	updateCmd.Flags().StringVar(&updateBind, "bind", "", "Stateful action: list, get, create, update, patch, delete, custom")
 	updateCmd.Flags().StringVar(&updateOperation, "operation", "", "Custom operation name (for --bind custom)")
 	updateCmd.Flags().StringVarP(&updateName, "name", "n", "", "Mock display name")
 	updateCmd.Flags().StringVar(&updateEnabled, "enabled", "", "Enable or disable the mock (true/false)")

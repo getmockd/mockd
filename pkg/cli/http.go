@@ -89,7 +89,7 @@ func init() {
 	httpAddCmd.Flags().StringVar(&addName, "name", "", "Mock display name")
 	httpAddCmd.Flags().StringVar(&addStatefulOperation, "stateful-operation", "", "Wire to a custom stateful operation (e.g., TransferFunds)")
 	httpAddCmd.Flags().StringVar(&addTable, "table", "", "Bind to a stateful resource table (e.g., users)")
-	httpAddCmd.Flags().StringVar(&addBindAction, "bind", "", "Stateful action: list, get, create, update, delete, custom")
+	httpAddCmd.Flags().StringVar(&addBindAction, "bind", "", "Stateful action: list, get, create, update, patch, delete, custom")
 
 	// Missing commands like list/get/delete fall back to root aliases exactly like before
 	httpCmd.AddCommand(&cobra.Command{

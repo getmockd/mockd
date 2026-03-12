@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/portability"
 	"github.com/spf13/cobra"
@@ -409,6 +410,17 @@ func importData(data []byte, source string, impFormat portability.Format) error 
 		fmt.Printf("Imported %d mocks to server\n", result.Imported)
 		if importReplace {
 			fmt.Printf("Total mocks: %d\n", result.Total)
+		}
+
+		// Surface workspace base path so users know where mocks are served
+		ws := resolvedWorkspace()
+		if ws != "" {
+			wsClient := NewWorkspaceClient(cliconfig.ResolveAdminURL(adminURL), nil)
+			wsInfo, err := wsClient.GetWorkspace(ws)
+			if err == nil && wsInfo != nil && wsInfo.BasePath != "" {
+				fmt.Printf("Workspace: %s (base path: %s)\n", wsInfo.Name, wsInfo.BasePath)
+				fmt.Printf("Mocks are served under %s (e.g., %s/v1/resource)\n", wsInfo.BasePath, wsInfo.BasePath)
+			}
 		}
 	})
 
