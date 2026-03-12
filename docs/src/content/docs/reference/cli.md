@@ -707,6 +707,8 @@ mockd http add [flags]
 | `--priority` | | Mock priority (higher = matched first) | |
 | `--delay` | | Response delay in milliseconds | |
 | `--stateful-operation` | | Wire to a custom stateful operation (e.g., TransferFunds) | |
+| `--table` | | Bind to a stateful resource table (e.g., users) | |
+| `--bind` | | Stateful action: list, get, create, update, patch, delete, custom | |
 
 **SSE Flags (for streaming):**
 
@@ -725,6 +727,14 @@ mockd http add --path /api/users --status 200 --body '[{"id":1}]'
 mockd http add -m POST --path /api/users -s 201 -b '{"created": true}'
 mockd http add --path /events --sse --sse-event 'connected:{"status":"ok"}'
 mockd http add -m POST --path /api/transfer --stateful-operation TransferFunds
+
+# Stateful bindings — bind to a table for automatic CRUD
+mockd http add --path /api/users --table users --bind list
+mockd http add -m POST --path /api/users --table users --bind create
+mockd http add --path /api/users/{id} --table users --bind get
+mockd http add -m PUT --path /api/users/{id} --table users --bind update
+mockd http add -m DELETE --path /api/users/{id} --table users --bind delete
+mockd http add -m POST --path /api/users/{id}/verify --table users --bind custom --stateful-operation VerifyUser
 ```
 
 ---
@@ -1645,6 +1655,73 @@ mockd rm [<mock-id>] [flags]
 ```
 
 See [mockd delete](#mockd-delete) for full documentation.
+
+---
+
+### mockd update
+
+Update an existing mock endpoint by ID. Only specified fields are modified — unspecified fields retain their current values.
+
+```bash
+mockd update <id> [flags]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `id` | ID of the mock to update (required) |
+
+**Flags:**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--body` | `-b` | New response body | |
+| `--body-file` | | Read response body from file | |
+| `--status` | `-s` | New response status code | |
+| `--header` | `-H` | Response header (key:value), repeatable | |
+| `--delay` | | Response delay in milliseconds | |
+| `--table` | | Bind to a stateful resource table | |
+| `--bind` | | Stateful action: list, get, create, update, patch, delete, custom | |
+| `--operation` | | Custom operation name (for `--bind custom`) | |
+| `--name` | `-n` | Mock display name | |
+| `--enabled` | | Enable or disable the mock (`true`/`false`) | |
+
+> `--table` and `--bind` must be used together. When set, the mock is bound to the specified table and the response/SSE/statefulOperation fields are cleared.
+
+**Examples:**
+
+```bash
+# Change response status code
+mockd update http_abc123 --status 201
+
+# Change response body
+mockd update http_abc123 --body '{"updated": true}'
+
+# Read body from file
+mockd update http_abc123 --body-file response.json
+
+# Bind to a stateful table
+mockd update http_abc123 --table users --bind list
+
+# Bind to a custom operation
+mockd update http_abc123 --table users --bind custom --operation VerifyUser
+
+# Add response delay
+mockd update http_abc123 --delay 500
+
+# Disable a mock
+mockd update http_abc123 --enabled false
+
+# Re-enable a mock
+mockd update http_abc123 --enabled true
+
+# Rename a mock
+mockd update http_abc123 --name "Get Users v2"
+
+# Set a response header
+mockd update http_abc123 -H "X-Custom:value"
+```
 
 ---
 
@@ -2895,7 +2972,7 @@ mockd verify reset --all
 
 ### mockd tunnel
 
-Start a local mock server + admin API + QUIC tunnel in one shot. This is the easiest way to expose mocks to the internet — everything starts with a single command.
+Start a local mock server + admin API + cloud tunnel in one shot. This is the easiest way to expose mocks to the internet — everything starts with a single command.
 
 If no `--token` flag or `MOCKD_TOKEN` environment variable is set, an anonymous tunnel token is fetched automatically (2-hour session, 100MB bandwidth).
 
@@ -2918,7 +2995,7 @@ mockd tunnel [flags]
 | `--auth-basic` | | Require Basic Auth for incoming requests (format: `user:pass`) | |
 | `--allow-ips` | | Allow only these IPs (comma-separated CIDR or IP) | |
 
-The default relay is `relay.mockd.io` on port 443 (QUIC). If the relay address does not include a port, port 443 is appended automatically.
+The default relay is `relay.mockd.io` on port 443. If the relay address does not include a port, port 443 is appended automatically.
 
 **Authentication modes** (`--auth-token`, `--auth-basic`, `--allow-ips`) are mutually exclusive — use at most one per tunnel.
 

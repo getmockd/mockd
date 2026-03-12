@@ -100,9 +100,9 @@ Add to `coc-settings.json`:
       "items": { "$ref": "#/definitions/statefulResource" }
     },
     "tables": {
-      "type": "object",
-      "additionalProperties": { "$ref": "#/definitions/table" },
-      "description": "Named data stores (pure data, no routing)"
+      "type": "array",
+      "items": { "$ref": "#/definitions/table" },
+      "description": "Stateful data tables (pure data stores, no routing — endpoints are bound via extend)"
     },
     "extend": {
       "type": "array",
@@ -301,21 +301,61 @@ fields are auto-generated if omitted in config files.
 
 ### Table Definition
 
+Tables are defined as array items under the top-level `tables` key. Each table requires a `name` field.
+
 ```json
 {
   "definitions": {
     "table": {
       "type": "object",
+      "required": ["name"],
       "properties": {
+        "name": {
+          "type": "string",
+          "description": "Table name (e.g., 'customers')"
+        },
         "idField": {
           "type": "string",
           "default": "id",
           "description": "Field used as the unique identifier"
         },
+        "idStrategy": {
+          "type": "string",
+          "enum": ["uuid", "prefix", "ulid", "sequence", "short"],
+          "description": "ID generation strategy for new items"
+        },
+        "idPrefix": {
+          "type": "string",
+          "description": "ID prefix when idStrategy is 'prefix' (e.g., 'cus_')"
+        },
+        "maxItems": {
+          "type": "integer",
+          "description": "Maximum items in the collection"
+        },
+        "parentField": {
+          "type": "string",
+          "description": "Foreign key field for nested resources"
+        },
         "seedData": {
           "type": "array",
           "items": { "type": "object" },
           "description": "Initial data to populate the table"
+        },
+        "response": {
+          "$ref": "#/definitions/responseTransform",
+          "description": "Default response transform for all bindings to this table"
+        },
+        "relationships": {
+          "type": "object",
+          "description": "Maps field names to related tables for ?expand[] support",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["table"],
+            "properties": {
+              "table": { "type": "string", "description": "Target table name" },
+              "field": { "type": "string", "description": "Field in target table to match (defaults to target's idField)" }
+            }
+          }
         }
       }
     }
@@ -360,21 +400,25 @@ fields are auto-generated if omitted in config files.
 ```json
 {
   "definitions": {
-    "importSpec": {
+    "importEntry": {
       "type": "object",
-      "required": ["spec", "namespace"],
+      "required": ["path"],
       "properties": {
-        "spec": {
+        "path": {
           "type": "string",
-          "description": "Path to the spec file (OpenAPI, WSDL, etc.)"
+          "description": "File path to the API spec (relative to config file)"
         },
-        "namespace": {
+        "url": {
           "type": "string",
-          "description": "Prefix for generated mock IDs"
+          "description": "URL to fetch the API spec from (alternative to path)"
+        },
+        "as": {
+          "type": "string",
+          "description": "Namespace prefix for imported mocks (e.g., 'stripe')"
         },
         "format": {
           "type": "string",
-          "enum": ["openapi", "wsdl"],
+          "enum": ["openapi", "swagger", "postman", "har", "wiremock", "wsdl", "mockoon", "curl", "yaml", "json"],
           "description": "Spec format (auto-detected if omitted)"
         }
       }

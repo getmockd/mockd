@@ -177,6 +177,60 @@ mockd's MCP server exposes 18 tools organized by function:
 | `manage_context` | get, switch | Switch between mockd server contexts (multi-environment) |
 | `manage_workspace` | list, switch, create | Manage isolated workspace configurations |
 
+## Key Tool Parameters
+
+### `manage_mock` — Stateful Bindings with `extend`
+
+The `extend` parameter on `manage_mock` binds a mock to a stateful resource table for automatic CRUD. Create the table first with `manage_state` (action: `add_resource`), then create mocks with `extend` to wire them up:
+
+```json
+// Step 1: Create the table
+{ "action": "add_resource", "resource": "users" }
+
+// Step 2: Create mocks bound to the table
+{ "action": "create", "type": "http",
+  "http": { "matcher": { "method": "GET", "path": "/api/users" } },
+  "extend": { "table": "users", "action": "list" } }
+
+{ "action": "create", "type": "http",
+  "http": { "matcher": { "method": "POST", "path": "/api/users" } },
+  "extend": { "table": "users", "action": "create" } }
+
+{ "action": "create", "type": "http",
+  "http": { "matcher": { "method": "GET", "path": "/api/users/{id}" } },
+  "extend": { "table": "users", "action": "get" } }
+
+{ "action": "create", "type": "http",
+  "http": { "matcher": { "method": "PUT", "path": "/api/users/{id}" } },
+  "extend": { "table": "users", "action": "update" } }
+
+{ "action": "create", "type": "http",
+  "http": { "matcher": { "method": "DELETE", "path": "/api/users/{id}" } },
+  "extend": { "table": "users", "action": "delete" } }
+```
+
+For custom operations, use `action: "custom"` with an `operation` name:
+
+```json
+{ "action": "create", "type": "http",
+  "http": { "matcher": { "method": "POST", "path": "/api/users/{id}/verify" } },
+  "extend": { "table": "users", "action": "custom", "operation": "VerifyUser" } }
+```
+
+The `extend` parameter works with both HTTP and SOAP mocks. Available actions: `list`, `get`, `create`, `update`, `delete`, `custom`.
+
+### `import_mocks` — File-Based Import with `file`
+
+For large API specs (OpenAPI, Postman, etc.) that exceed inline content limits, use the `file` parameter to import from the mockd server's filesystem:
+
+```json
+{ "file": "./openapi.yaml" }
+{ "file": "/absolute/path/to/postman-collection.json", "format": "postman" }
+{ "file": "./api-spec.yaml", "dryRun": true }
+```
+
+The `file` and `content` parameters are mutually exclusive — use one or the other. Format is auto-detected when omitted.
+
 ## Example: Creating a Mock via MCP
 
 When you ask your AI editor "Create an endpoint that returns a list of users," the AI calls the `manage_mock` tool behind the scenes:

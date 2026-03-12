@@ -12,12 +12,12 @@ mockd supports several ways to share your mocks publicly:
 | Method | Cost | Protocols | Best For |
 |--------|------|-----------|----------|
 | [mockd tunnel (built-in)](#mockd-tunnel) | Free | All 7 protocols | Recommended for all users |
-| [Third-party tunnels](#third-party-tunnels) | Free | HTTP, WebSocket, SSE | Alternative if UDP/QUIC is blocked |
+| [Third-party tunnels](#third-party-tunnels) | Free | HTTP, WebSocket, SSE | Alternative if built-in tunnel is unavailable |
 | [Self-hosted relay](#self-hosted-relay) | Your infra | All protocols | Enterprise, air-gapped environments |
 
 ## Protocol Support
 
-mockd's built-in tunnel supports **all seven protocols** through a single QUIC connection on port 443:
+mockd's built-in tunnel supports **all seven protocols** through a single secure connection on port 443:
 
 | Protocol | Tunnel Support | How It Works |
 |----------|---------------|--------------|
@@ -31,7 +31,7 @@ mockd's built-in tunnel supports **all seven protocols** through a single QUIC c
 
 ## mockd Tunnel
 
-mockd includes a built-in QUIC tunnel that exposes your local mocks to the internet with a single command. No signup required for anonymous tunnels (2-hour session, 100MB bandwidth).
+mockd includes a built-in cloud tunnel that exposes your local mocks to the internet with a single command. No signup required for anonymous tunnels (2-hour session, 100MB bandwidth).
 
 ### Quick Start
 
@@ -40,7 +40,7 @@ mockd includes a built-in QUIC tunnel that exposes your local mocks to the inter
 mockd tunnel --config mocks.yaml
 
 # Output:
-# Connecting to relay at relay.mockd.io:443 (QUIC)...
+# Connecting to relay at relay.mockd.io:443...
 # Anonymous token acquired (2h session, 100MB bandwidth)
 #
 # Tunnel connected!
@@ -63,7 +63,7 @@ mockd tunnel enable
 
 ### Multi-Protocol Tunneling
 
-All protocols are tunneled automatically through the single QUIC connection:
+All protocols are tunneled automatically through the single secure connection:
 
 ```bash
 # Start tunnel with a config that includes gRPC, MQTT, etc.
