@@ -1931,6 +1931,704 @@ func TestHandleCustomOperation_InvalidJSON(t *testing.T) {
 	}
 }
 
+// ── handleStatefulBinding full CRUD integration ──────────────────────────────
+
+func TestHandleStatefulBinding_FullCRUDFlow(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "products", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	// 1. CREATE via handleStatefulBinding
+	createMock := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/products", Method: "POST"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "products",
+				Action: "create",
+			},
+		},
+	}
+	createBody := []byte(`{"name":"Widget","price":1999}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/products", nil)
+	req.Header.Set("Content-Type", "application/json")
+	status := h.handleStatefulBinding(w, req, createMock, createBody, nil)
+	if status != http.StatusCreated {
+		t.Fatalf("CREATE: expected 201, got %d", status)
+	}
+	var created map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
+		t.Fatalf("CREATE decode: %v", err)
+	}
+	productID, ok := created["id"].(string)
+	if !ok || productID == "" {
+		t.Fatalf("CREATE: expected generated id, got %v", created["id"])
+	}
+	if created["name"] != "Widget" {
+		t.Errorf("CREATE: expected name=Widget, got %v", created["name"])
+	}
+
+	// 2. LIST via handleStatefulBinding
+	listMock := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/products", Method: "GET"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "products",
+				Action: "list",
+			},
+		},
+	}
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/products", nil)
+	status = h.handleStatefulBinding(w, req, listMock, nil, nil)
+	if status != http.StatusOK {
+		t.Fatalf("LIST: expected 200, got %d", status)
+	}
+	var listBody map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&listBody); err != nil {
+		t.Fatalf("LIST decode: %v", err)
+	}
+	data, ok := listBody["data"].([]interface{})
+	if !ok {
+		t.Fatalf("LIST: expected data as array, got %T", listBody["data"])
+	}
+	if len(data) != 1 {
+		t.Errorf("LIST: expected 1 item, got %d", len(data))
+	}
+
+	// 3. GET via handleStatefulBinding
+	getMock := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/products/{product}"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "products",
+				Action: "get",
+			},
+		},
+	}
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/products/"+productID, nil)
+	status = h.handleStatefulBinding(w, req, getMock, nil, map[string]string{"product": productID})
+	if status != http.StatusOK {
+		t.Fatalf("GET: expected 200, got %d", status)
+	}
+	var getBody map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&getBody); err != nil {
+		t.Fatalf("GET decode: %v", err)
+	}
+	if getBody["id"] != productID {
+		t.Errorf("GET: expected id=%s, got %v", productID, getBody["id"])
+	}
+
+	// 4. UPDATE (PUT) via handleStatefulBinding
+	updateMock := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/products/{product}"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "products",
+				Action: "update",
+			},
+		},
+	}
+	updateBody := []byte(`{"name":"Super Widget","price":2999}`)
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPut, "/v1/products/"+productID, nil)
+	req.Header.Set("Content-Type", "application/json")
+	status = h.handleStatefulBinding(w, req, updateMock, updateBody, map[string]string{"product": productID})
+	if status != http.StatusOK {
+		t.Fatalf("UPDATE: expected 200, got %d", status)
+	}
+	var updateResp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&updateResp); err != nil {
+		t.Fatalf("UPDATE decode: %v", err)
+	}
+	if updateResp["name"] != "Super Widget" {
+		t.Errorf("UPDATE: expected name=Super Widget, got %v", updateResp["name"])
+	}
+
+	// 5. DELETE via handleStatefulBinding
+	deleteMock := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/products/{product}"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "products",
+				Action: "delete",
+			},
+		},
+	}
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodDelete, "/v1/products/"+productID, nil)
+	status = h.handleStatefulBinding(w, req, deleteMock, nil, map[string]string{"product": productID})
+	if status != http.StatusNoContent {
+		t.Fatalf("DELETE: expected 204, got %d", status)
+	}
+
+	// 6. Verify item is gone (GET should 404)
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/products/"+productID, nil)
+	status = h.handleStatefulBinding(w, req, getMock, nil, map[string]string{"product": productID})
+	if status != http.StatusNotFound {
+		t.Fatalf("GET after DELETE: expected 404, got %d", status)
+	}
+}
+
+func TestHandleStatefulBinding_UnsupportedAction(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/items"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "items",
+				Action: "bogus_action",
+			},
+		},
+	}
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/items", nil)
+	status := h.handleStatefulBinding(w, req, m, nil, nil)
+	if status != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unsupported action, got %d", status)
+	}
+}
+
+func TestHandleStatefulBinding_MissingItemIDForGet(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	// GET binding with no path params — should fail because item ID is required
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/items"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "items",
+				Action: "get",
+			},
+		},
+	}
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/items", nil)
+	status := h.handleStatefulBinding(w, req, m, nil, nil)
+	if status != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing item ID, got %d", status)
+	}
+}
+
+func TestHandleStatefulBinding_FormEncodedCreate(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "customers", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/customers", Method: "POST"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "customers",
+				Action: "create",
+			},
+		},
+	}
+
+	bodyBytes := []byte("name=Alice&email=alice%40example.com&active=true&balance=5000")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/customers", nil)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	status := h.handleStatefulBinding(w, req, m, bodyBytes, nil)
+	if status != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", body["name"])
+	}
+	if body["email"] != "alice@example.com" {
+		t.Errorf("expected email=alice@example.com, got %v", body["email"])
+	}
+	// Form values are coerced: "true" → bool, "5000" → int64
+	if body["active"] != true {
+		t.Errorf("expected active=true (bool), got %v (%T)", body["active"], body["active"])
+	}
+	// JSON encoding turns int64 into float64
+	if body["balance"] != float64(5000) {
+		t.Errorf("expected balance=5000 (float64 via JSON), got %v (%T)", body["balance"], body["balance"])
+	}
+}
+
+func TestHandleStatefulBinding_PatchAction(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	// Seed an item
+	br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "items",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "item_1", "name": "Original", "color": "red"},
+	})
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/items/{item}"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "items",
+				Action: "patch",
+			},
+		},
+	}
+
+	bodyBytes := []byte(`{"name":"Patched"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/v1/items/item_1", nil)
+	req.Header.Set("Content-Type", "application/json")
+	status := h.handleStatefulBinding(w, req, m, bodyBytes, map[string]string{"item": "item_1"})
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["name"] != "Patched" {
+		t.Errorf("expected name=Patched, got %v", body["name"])
+	}
+}
+
+func TestHandleStatefulBinding_ListWithFieldFilter(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	for _, d := range []map[string]interface{}{
+		{"id": "1", "status": "active", "type": "a"},
+		{"id": "2", "status": "inactive", "type": "a"},
+		{"id": "3", "status": "active", "type": "b"},
+	} {
+		br.Execute(context.Background(), &stateful.OperationRequest{
+			Resource: "items", Action: stateful.ActionCreate, Data: d,
+		})
+	}
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/items"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "items",
+				Action: "list",
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/items?status=active", nil)
+	status := h.handleStatefulBinding(w, req, m, nil, nil)
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	data, ok := body["data"].([]interface{})
+	if !ok {
+		t.Fatalf("expected data as array, got %T", body["data"])
+	}
+	if len(data) != 2 {
+		t.Errorf("expected 2 active items, got %d", len(data))
+	}
+}
+
+func TestHandleStatefulBinding_ListWithSortAndOrder(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	for _, d := range []map[string]interface{}{
+		{"id": "aaa", "name": "Charlie"},
+		{"id": "bbb", "name": "Alice"},
+		{"id": "ccc", "name": "Bob"},
+	} {
+		br.Execute(context.Background(), &stateful.OperationRequest{
+			Resource: "items", Action: stateful.ActionCreate, Data: d,
+		})
+	}
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/items"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "items",
+				Action: "list",
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/items?sort=name&order=asc", nil)
+	status := h.handleStatefulBinding(w, req, m, nil, nil)
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	data, ok := body["data"].([]interface{})
+	if !ok {
+		t.Fatalf("expected data as array, got %T", body["data"])
+	}
+	if len(data) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(data))
+	}
+
+	// Verify sort order: Alice, Bob, Charlie
+	first := data[0].(map[string]interface{})
+	last := data[2].(map[string]interface{})
+	if first["name"] != "Alice" {
+		t.Errorf("expected first item name=Alice (asc sort), got %v", first["name"])
+	}
+	if last["name"] != "Charlie" {
+		t.Errorf("expected last item name=Charlie (asc sort), got %v", last["name"])
+	}
+}
+
+func TestHandleStatefulBinding_ListWithLimitOffset(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	for i := 0; i < 10; i++ {
+		br.Execute(context.Background(), &stateful.OperationRequest{
+			Resource: "items", Action: stateful.ActionCreate,
+			Data: map[string]interface{}{"id": fmt.Sprintf("item_%02d", i), "seq": i},
+		})
+	}
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/items"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "items",
+				Action: "list",
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/items?limit=3&offset=2", nil)
+	status := h.handleStatefulBinding(w, req, m, nil, nil)
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	data, ok := body["data"].([]interface{})
+	if !ok {
+		t.Fatalf("expected data as array, got %T", body["data"])
+	}
+	if len(data) != 3 {
+		t.Errorf("expected 3 items (limit=3), got %d", len(data))
+	}
+
+	meta, ok := body["meta"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected meta as object, got %T", body["meta"])
+	}
+	if total, ok := meta["total"].(float64); !ok || int(total) != 10 {
+		t.Errorf("expected meta.total=10, got %v", meta["total"])
+	}
+}
+
+func TestHandleStatefulBinding_UpdateNotFound(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/items/{item}"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "items",
+				Action: "update",
+			},
+		},
+	}
+
+	bodyBytes := []byte(`{"name":"Updated"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/v1/items/nonexistent", nil)
+	req.Header.Set("Content-Type", "application/json")
+	status := h.handleStatefulBinding(w, req, m, bodyBytes, map[string]string{"item": "nonexistent"})
+	if status != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", status)
+	}
+}
+
+func TestHandleStatefulBinding_DeleteNotFound(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/items/{item}"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "items",
+				Action: "delete",
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/v1/items/nonexistent", nil)
+	status := h.handleStatefulBinding(w, req, m, nil, map[string]string{"item": "nonexistent"})
+	if status != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", status)
+	}
+}
+
+func TestHandleStatefulBinding_CreateBodyTooLarge(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/items", Method: "POST"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "items",
+				Action: "create",
+			},
+		},
+	}
+
+	largeBody := bytes.Repeat([]byte("x"), MaxStatefulBodySize+1)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/items", nil)
+	req.Header.Set("Content-Type", "application/json")
+	status := h.handleStatefulBinding(w, req, m, largeBody, nil)
+	if status != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", status)
+	}
+}
+
+func TestHandleStatefulBinding_WithResponseTransformOverride(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "customers", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "customers",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "cus_1", "name": "Alice"},
+	})
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	responseCfg := &config.ResponseTransform{
+		Fields: &config.FieldTransform{
+			Inject: map[string]interface{}{"object": "customer"},
+		},
+	}
+
+	m := &mock.Mock{
+		HTTP: &mock.HTTPSpec{
+			Matcher: &mock.HTTPMatcher{Path: "/v1/customers/{customer}"},
+			StatefulBinding: &mock.StatefulBinding{
+				Table:  "customers",
+				Action: "get",
+				Response: &mock.StatefulBindingResponse{
+					Transform: responseCfg,
+				},
+			},
+		},
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/customers/cus_1", nil)
+	status := h.handleStatefulBinding(w, req, m, nil, map[string]string{"customer": "cus_1"})
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["object"] != "customer" {
+		t.Errorf("expected injected object=customer, got %v", body["object"])
+	}
+	if body["name"] != "Alice" {
+		t.Errorf("expected name=Alice, got %v", body["name"])
+	}
+}
+
+// ── handleBindingMutate PUT vs PATCH tests ───────────────────────────────────
+
+func TestHandleBindingMutate_UpdateReplacesAllFields(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	br.Execute(context.Background(), &stateful.OperationRequest{
+		Resource: "items",
+		Action:   stateful.ActionCreate,
+		Data:     map[string]interface{}{"id": "item_1", "name": "Original", "color": "red", "size": "large"},
+	})
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	// PUT/update replaces entire data — fields not in body are removed
+	bodyBytes := []byte(`{"name":"Replaced"}`)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/items/item_1", nil)
+	req.Header.Set("Content-Type", "application/json")
+
+	status := h.handleBindingMutate(w, req, "", "items", "item_1", nil, bodyBytes, nil, stateful.ActionUpdate)
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["name"] != "Replaced" {
+		t.Errorf("expected name=Replaced, got %v", body["name"])
+	}
+	// color and size should be gone (PUT semantics)
+	if _, exists := body["color"]; exists {
+		t.Errorf("expected 'color' to be removed by PUT, but it still exists")
+	}
+}
+
+func TestHandleBindingMutate_BodyTooLarge(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	largeBody := bytes.Repeat([]byte("x"), MaxStatefulBodySize+1)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/items/item_1", nil)
+	req.Header.Set("Content-Type", "application/json")
+
+	status := h.handleBindingMutate(w, req, "", "items", "item_1", nil, largeBody, nil, stateful.ActionUpdate)
+	if status != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", status)
+	}
+}
+
+func TestHandleBindingCreate_FormEncoded(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "customers", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	bodyBytes := []byte("name=Bob&email=bob%40example.com&metadata[tier]=premium")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/customers", nil)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	status := h.handleBindingCreate(w, req, "", "customers", nil, bodyBytes, nil)
+	if status != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["name"] != "Bob" {
+		t.Errorf("expected name=Bob, got %v", body["name"])
+	}
+	if body["email"] != "bob@example.com" {
+		t.Errorf("expected email=bob@example.com, got %v", body["email"])
+	}
+	// Check nested form data
+	meta, ok := body["metadata"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected metadata as map, got %T", body["metadata"])
+	}
+	if meta["tier"] != "premium" {
+		t.Errorf("expected metadata.tier=premium, got %v", meta["tier"])
+	}
+}
+
+// ── handleCustomOperation additional tests ───────────────────────────────────
+
+func TestHandleCustomOperation_EmptyBody(t *testing.T) {
+	store := stateful.NewStateStore()
+	_ = store.Register("", &stateful.ResourceConfig{Name: "items", IDField: "id"})
+	br := stateful.NewBridge(store)
+
+	// Register a simple operation with a set step (no body needed)
+	br.RegisterCustomOperation("", "noop", &stateful.CustomOperation{
+		Name: "noop",
+		Steps: []stateful.Step{
+			{Type: stateful.StepSet, Var: "msg", Value: `"hello"`},
+		},
+		Response: map[string]string{
+			"message": "msg",
+		},
+	})
+
+	h := &Handler{log: slog.Default(), statefulBridge: br}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/operations/noop", nil)
+
+	// nil bodyBytes — operation should succeed with empty input
+	status := h.handleCustomOperation(w, req, "", "noop", nil)
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d", status)
+	}
+
+	var body map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["message"] != "hello" {
+		t.Errorf("expected message=hello, got %v", body["message"])
+	}
+}
+
 func TestHandleCustomOperation_Success(t *testing.T) {
 	store := stateful.NewStateStore()
 	_ = store.Register("", &stateful.ResourceConfig{
