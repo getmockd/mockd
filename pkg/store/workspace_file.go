@@ -208,7 +208,11 @@ func (s *WorkspaceFileStore) ensureDefaultWorkspaceLocked() {
 
 	// Create default workspace
 	now := time.Now().Unix()
-	defaultPath := filepath.Join(s.dataDir, "workspaces", DefaultWorkspaceID)
+	dirName := DefaultWorkspaceID
+	if dirName == "" {
+		dirName = "_default"
+	}
+	defaultPath := filepath.Join(s.dataDir, "workspaces", dirName)
 	defaultWS := &Workspace{
 		ID:          DefaultWorkspaceID,
 		Name:        "Default",

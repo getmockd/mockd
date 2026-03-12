@@ -451,6 +451,27 @@ func (a *API) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Persist to file store so custom operations survive restarts.
+	if a.dataStore != nil {
+		opStore := a.dataStore.CustomOperations()
+		// Re-marshal the map into a CustomOperationConfig for typed persistence.
+		rawBytes, marshalErr := json.Marshal(cfg)
+		if marshalErr == nil {
+			var opCfg config.CustomOperationConfig
+			if unmarshalErr := json.Unmarshal(rawBytes, &opCfg); unmarshalErr == nil && opCfg.Name != "" {
+				if createErr := opStore.Create(ctx, &opCfg); createErr != nil {
+					if errors.Is(createErr, store.ErrAlreadyExists) {
+						// Update: delete then re-create
+						_ = opStore.Delete(ctx, opCfg.Name)
+						_ = opStore.Create(ctx, &opCfg)
+					} else {
+						a.logger().Warn("failed to persist custom operation", "name", name, "error", createErr)
+					}
+				}
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"name":    name,
 		"message": "Custom operation registered",
@@ -474,6 +495,15 @@ func (a *API) handleDeleteCustomOperation(w http.ResponseWriter, r *http.Request
 		}
 		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "delete custom operation"))
 		return
+	}
+
+	// Remove from file store.
+	if a.dataStore != nil {
+		if delErr := a.dataStore.CustomOperations().Delete(ctx, name); delErr != nil {
+			if !errors.Is(delErr, store.ErrNotFound) {
+				a.logger().Warn("failed to remove custom operation from file store", "name", name, "error", delErr)
+			}
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{

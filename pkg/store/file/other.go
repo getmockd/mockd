@@ -212,13 +212,8 @@ func (s *folderStore) List(ctx context.Context, filter *store.FolderFilter) ([]*
 	var result []*config.Folder
 	for _, f := range s.fs.data.Folders {
 		// Filter by workspace
-		// Treat empty workspaceID as "local" for backward compatibility
-		if filter.WorkspaceID != "" {
-			folderWsID := f.WorkspaceID
-			if folderWsID == "" {
-				folderWsID = store.DefaultWorkspaceID
-			}
-			if folderWsID != filter.WorkspaceID {
+		if filter.WorkspaceID != nil {
+			if f.WorkspaceID != *filter.WorkspaceID {
 				continue
 			}
 		}

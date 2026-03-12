@@ -786,6 +786,17 @@ func (a *API) syncAdminStoreToEngine(client *engineclient.Client, reason string)
 		}
 	}
 
+	// Read all custom operations.
+	var customOps []*config.CustomOperationConfig
+	if a.dataStore.CustomOperations() != nil {
+		customOps, err = a.dataStore.CustomOperations().List(ctx)
+		if err != nil {
+			a.logger().Warn("sync: failed to list custom operations", "error", err, "reason", reason)
+			// Continue without custom ops.
+			customOps = nil
+		}
+	}
+
 	// Apply workspace base path prefixes so the engine sees the correct paths.
 	if a.workspaceStore != nil && len(mocks) > 0 {
 		workspaces, wsErr := a.workspaceStore.List(ctx)
@@ -795,7 +806,7 @@ func (a *API) syncAdminStoreToEngine(client *engineclient.Client, reason string)
 		}
 	}
 
-	if len(mocks) == 0 && len(resources) == 0 {
+	if len(mocks) == 0 && len(resources) == 0 && len(customOps) == 0 {
 		a.logger().Debug("sync: admin store is empty, nothing to push", "reason", reason)
 		return
 	}
@@ -806,12 +817,14 @@ func (a *API) syncAdminStoreToEngine(client *engineclient.Client, reason string)
 		Name:              "admin-store-sync",
 		Mocks:             mocks,
 		StatefulResources: resources,
+		CustomOperations:  customOps,
 	}
 
 	a.logger().Info("syncing admin store to engine",
 		"reason", reason,
 		"mocks", len(mocks),
 		"statefulResources", len(resources),
+		"customOperations", len(customOps),
 	)
 
 	result, err := client.ImportConfig(ctx, collection, true)
@@ -819,6 +832,7 @@ func (a *API) syncAdminStoreToEngine(client *engineclient.Client, reason string)
 		a.logger().Warn("sync: failed to push admin store to engine",
 			"error", err, "reason", reason,
 			"mocks", len(mocks), "statefulResources", len(resources),
+			"customOperations", len(customOps),
 		)
 		return
 	}

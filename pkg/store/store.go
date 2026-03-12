@@ -186,6 +186,7 @@ type Store interface {
 	RequestLog() RequestLogStore
 	Preferences() PreferencesStore
 	StatefulResources() StatefulResourceStore
+	CustomOperations() CustomOperationStore
 
 	// Transactions (for backends that support it)
 	Begin(ctx context.Context) (Transaction, error)

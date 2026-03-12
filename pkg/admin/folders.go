@@ -49,9 +49,8 @@ func (a *API) handleListFolders(w http.ResponseWriter, r *http.Request) {
 	// Build filter from query params
 	var filter *store.FolderFilter
 	query := r.URL.Query()
-	workspaceID := query.Get("workspaceId")
-	if workspaceID != "" {
-		filter = &store.FolderFilter{WorkspaceID: workspaceID}
+	if wsID := query.Get("workspaceId"); wsID != "" {
+		filter = &store.FolderFilter{WorkspaceID: &wsID}
 	}
 
 	folders, err := folderStore.List(r.Context(), filter)

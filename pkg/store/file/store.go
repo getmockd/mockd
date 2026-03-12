@@ -50,6 +50,9 @@ type storeData struct {
 	// Stateful resource configurations (persisted across restarts)
 	StatefulResources []*config.StatefulResourceConfig `json:"statefulResources,omitempty"`
 
+	// Custom operation definitions (persisted across restarts)
+	CustomOperations []*config.CustomOperationConfig `json:"customOperations,omitempty"`
+
 	Folders     []*config.Folder         `json:"folders,omitempty"`
 	Recordings  []*store.Recording       `json:"recordings,omitempty"`
 	RequestLog  []*store.RequestLogEntry `json:"requestLog,omitempty"`
@@ -275,6 +278,11 @@ func (s *FileStore) Mocks() store.MockStore {
 // StatefulResources returns the stateful resource store.
 func (s *FileStore) StatefulResources() store.StatefulResourceStore {
 	return &statefulResourceStore{fs: s}
+}
+
+// CustomOperations returns the custom operation store.
+func (s *FileStore) CustomOperations() store.CustomOperationStore {
+	return &customOperationStore{fs: s}
 }
 
 // Folders returns the folder store.

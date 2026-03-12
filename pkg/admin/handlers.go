@@ -182,6 +182,11 @@ func (a *API) handleExportConfig(w http.ResponseWriter, r *http.Request) {
 		if err == nil && len(resources) > 0 {
 			collection.StatefulResources = resources
 		}
+		// Include custom operations if available.
+		customOps, err := a.dataStore.CustomOperations().List(ctx)
+		if err == nil && len(customOps) > 0 {
+			collection.CustomOperations = customOps
+		}
 	}
 
 	// Support YAML export via ?format=yaml query parameter.
@@ -285,6 +290,31 @@ func (a *API) persistStatefulResources(ctx context.Context, cfg *config.MockColl
 			} else {
 				a.logger().Warn("failed to write stateful resource to file store",
 					"name", res.Name, "error", err)
+			}
+		}
+	}
+}
+
+// persistCustomOperations dual-writes custom operations from the imported
+// config into the file store so they survive restarts.
+func (a *API) persistCustomOperations(ctx context.Context, cfg *config.MockCollection, replace bool) {
+	if len(cfg.CustomOperations) == 0 || a.dataStore == nil {
+		return
+	}
+	opStore := a.dataStore.CustomOperations()
+	if replace {
+		_ = opStore.DeleteAll(ctx)
+	}
+	for _, op := range cfg.CustomOperations {
+		if op == nil {
+			continue
+		}
+		if err := opStore.Create(ctx, op); err != nil {
+			if errors.Is(err, store.ErrAlreadyExists) {
+				a.logger().Debug("custom operation already exists in file store", "name", op.Name)
+			} else {
+				a.logger().Warn("failed to write custom operation to file store",
+					"name", op.Name, "error", err)
 			}
 		}
 	}
@@ -412,6 +442,8 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 
 	// Dual-write stateful resources to the file store so they survive restarts.
 	a.persistStatefulResources(ctx, req.Config, req.Replace)
+	// Dual-write custom operations to the file store so they survive restarts.
+	a.persistCustomOperations(ctx, req.Config, req.Replace)
 
 	// Pre-validate mocks so we can surface which mock (by index) is invalid.
 	if err := preValidateImportMocks(req.Config.Mocks); err != nil {
@@ -508,6 +540,8 @@ func (a *API) ImportConfigDirect(ctx context.Context, collection *config.MockCol
 
 	// Persist stateful resources
 	a.persistStatefulResources(ctx, collection, replace)
+	// Persist custom operations
+	a.persistCustomOperations(ctx, collection, replace)
 
 	// Pre-validate before sending to engine
 	if err := preValidateImportMocks(collection.Mocks); err != nil {

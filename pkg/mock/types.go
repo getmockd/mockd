@@ -58,7 +58,7 @@ type Mock struct {
 	// MetaSortKey is used for manual ordering within a folder
 	MetaSortKey float64 `json:"metaSortKey,omitempty" yaml:"metaSortKey,omitempty"`
 
-	// WorkspaceID is the source workspace (defaults to "local")
+	// WorkspaceID is the source workspace (defaults to empty string, the default workspace)
 	WorkspaceID string `json:"workspaceId,omitempty" yaml:"workspaceId,omitempty"`
 
 	// SyncVersion is used for CRDT/conflict resolution

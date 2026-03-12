@@ -209,9 +209,10 @@ type StatsResult struct {
 
 // WorkspaceResult contains the result of creating a workspace.
 type WorkspaceResult struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Type string `json:"type"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	BasePath string `json:"basePath"`
 }
 
 // RegisterEngineResult contains the result of registering an engine.
@@ -336,6 +337,12 @@ func NewAdminClient(baseURL string, opts ...ClientOption) AdminClient {
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 50,
+				MaxConnsPerHost:     100,
+				IdleConnTimeout:     90 * time.Second,
+			},
 		},
 	}
 	for _, opt := range opts {

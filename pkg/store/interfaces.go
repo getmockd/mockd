@@ -67,8 +67,9 @@ type Workspace struct {
 	UpdatedAt int64 `json:"updatedAt"`
 }
 
-// DefaultWorkspaceID is the ID of the default local workspace.
-const DefaultWorkspaceID = "local"
+// DefaultWorkspaceID is the workspace used when no workspace is specified.
+// Empty string means the default workspace.
+const DefaultWorkspaceID = ""
 
 // WorkspaceStore handles workspace persistence.
 type WorkspaceStore interface {
@@ -145,9 +146,21 @@ type StatefulResourceStore interface {
 	DeleteAll(ctx context.Context) error
 }
 
+// CustomOperationStore handles persistence for custom operation definitions.
+type CustomOperationStore interface {
+	// List returns all persisted custom operation configs.
+	List(ctx context.Context) ([]*config.CustomOperationConfig, error)
+	// Create persists a new custom operation config.
+	Create(ctx context.Context, op *config.CustomOperationConfig) error
+	// Delete removes a custom operation config by name.
+	Delete(ctx context.Context, name string) error
+	// DeleteAll removes all custom operation configs.
+	DeleteAll(ctx context.Context) error
+}
+
 // FolderFilter provides filtering criteria for folder list operations.
 type FolderFilter struct {
-	WorkspaceID string  // Filter by workspace ("" = no filter)
+	WorkspaceID *string // Filter by workspace (nil = no filter, "" = default workspace)
 	ParentID    *string // Filter by parent folder (nil = no filter, "" = root level)
 }
 

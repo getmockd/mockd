@@ -96,6 +96,34 @@ func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store
 		}
 	}
 
+	// Load persisted custom operation definitions.
+	customOps, err := persistentStore.CustomOperations().List(ctx)
+	if err != nil {
+		cl.log.Warn("failed to load persisted custom operations", "error", err)
+	} else {
+		loaded := 0
+		for _, opCfg := range customOps {
+			if opCfg == nil {
+				continue
+			}
+			customOp, convErr := convertCustomOperation(opCfg)
+			if convErr != nil {
+				cl.log.Warn("failed to convert persisted custom operation, removing stale entry",
+					"name", opCfg.Name, "error", convErr)
+				if delErr := persistentStore.CustomOperations().Delete(ctx, opCfg.Name); delErr != nil {
+					cl.log.Warn("failed to clean up stale custom operation from store",
+						"name", opCfg.Name, "error", delErr)
+				}
+				continue
+			}
+			cl.server.statefulBridge.RegisterCustomOperation("", opCfg.Name, customOp)
+			loaded++
+		}
+		if loaded > 0 {
+			cl.log.Info("restored persisted custom operations", "count", loaded)
+		}
+	}
+
 	return nil
 }
 

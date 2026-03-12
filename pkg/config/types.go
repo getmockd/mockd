@@ -19,7 +19,7 @@ import (
 // EntityMeta contains common metadata for all stored entities.
 // Embed this in entity types for consistent workspace/sync support.
 type EntityMeta struct {
-	WorkspaceID string `json:"workspaceId,omitempty" yaml:"workspaceId,omitempty"` // Source workspace, defaults to "local"
+	WorkspaceID string `json:"workspaceId,omitempty" yaml:"workspaceId,omitempty"` // Source workspace, defaults to empty string (default workspace)
 	SyncVersion int64  `json:"syncVersion,omitempty" yaml:"syncVersion,omitempty"` // For CRDT/conflict resolution
 }
 

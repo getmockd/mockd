@@ -45,6 +45,12 @@ func New(baseURL string, opts ...Option) *Client {
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 50,
+				MaxConnsPerHost:     100,
+				IdleConnTimeout:     90 * time.Second,
+			},
 		},
 	}
 	for _, opt := range opts {
