@@ -725,7 +725,7 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "type": { "type": "string", "enum": ["latency", "error", "timeout", "corrupt_body", "empty_response", "slow_body", "connection_reset", "partial_response"] },
+                    "type": { "type": "string", "enum": ["latency", "error", "timeout", "corrupt_body", "empty_response", "slow_body", "connection_reset", "partial_response", "circuit_breaker", "retry_after", "progressive_degradation", "chunked_dribble"] },
                     "probability": { "type": "number", "minimum": 0, "maximum": 1 },
                     "config": { "type": "object", "additionalProperties": true }
                   }

@@ -12,16 +12,23 @@ mockd is a multi-protocol API mock server. It mocks HTTP, GraphQL, gRPC, WebSock
 mockd has an MCP server. If it's configured in your MCP settings, use the MCP tools directly:
 
 - `manage_mock` — Create, list, get, update, delete, or toggle mocks (action parameter)
-- `verify_mock` — Assert a mock was called N times
-- `get_mock_invocations` — See what requests hit a mock
-- `set_chaos_config` — Inject latency, errors, apply chaos profiles, or configure advanced rules (circuit breaker, retry-after, progressive degradation)
-- `get_stateful_faults` — View circuit breaker, retry-after, and progressive degradation state
-- `manage_circuit_breaker` — Trip or reset circuit breakers manually
-- `get_request_logs` — See all captured traffic
-- `manage_state` — CRUD stateful resources
-- `manage_workspace` — List, switch, or create workspaces (action parameter)
+- `manage_context` — View or switch admin server context (action: get/switch; name for switch)
+- `manage_workspace` — List, switch, or create workspaces (action: list/switch/create; id, name)
 - `import_mocks` — Import from OpenAPI, Postman, HAR, WireMock, cURL, WSDL, Mockoon, or YAML
 - `export_mocks` — Export all mocks as YAML/JSON
+- `get_server_status` — Health check, ports, and statistics (no params)
+- `get_request_logs` — See all captured traffic (limit, offset, method, pathPrefix, mockId, protocol, unmatchedOnly)
+- `clear_request_logs` — Remove all captured request/response logs (no params)
+- `get_chaos_config` — Current chaos fault injection config and statistics (no params)
+- `set_chaos_config` — Inject latency, errors, apply chaos profiles, or configure advanced rules (circuit breaker, retry-after, progressive degradation)
+- `reset_chaos_stats` — Reset chaos counters to zero without changing config (no params)
+- `get_stateful_faults` — View circuit breaker, retry-after, and progressive degradation state
+- `manage_circuit_breaker` — Trip or reset circuit breakers manually (action: trip/reset; key)
+- `verify_mock` — Assert a mock was called N times (id, expected_count, at_least, at_most)
+- `get_mock_invocations` — See what requests hit a mock (id, limit)
+- `reset_verification` — Clear invocation records and counters for one mock or all (id optional, omit for all)
+- `manage_state` — CRUD stateful resources (action: overview/add_resource/list_items/get_item/create_item/reset/delete_resource; resource, item_id, data, seed_data, etc.)
+- `manage_custom_operation` — Manage custom operations on stateful resources (action: list/get/register/delete/execute; name, definition, input)
 
 ## Ports
 
@@ -53,6 +60,13 @@ mockd add soap --path /ws --operation GetUser --status 200 --response '<User>...
 # Manage
 mockd list                         # List all mocks
 mockd delete <id>                  # Delete a mock
+mockd update <id> --status 201     # Update response status
+mockd update <id> --body '{"ok":true}'  # Update response body
+mockd update <id> --table users --bind list  # Bind to stateful table
+mockd update <id> --delay 500      # Add response delay
+mockd update <id> --enabled false  # Disable a mock
+mockd update <id> --name "My Mock" # Set display name
+mockd update <id> --table users --bind custom --operation VerifyUser
 mockd logs --requests              # View request logs
 
 # Verify (CI-friendly, exit code 1 on failure)
