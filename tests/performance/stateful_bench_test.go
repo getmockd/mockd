@@ -38,8 +38,7 @@ func crudMocksForTable(name string) []*config.MockConfiguration {
 			ID:   a.id,
 			Type: mock.TypeHTTP,
 			HTTP: &mock.HTTPSpec{
-				Matcher:  &mock.HTTPMatcher{Method: a.method, Path: a.path},
-				Response: &mock.HTTPResponse{StatusCode: 200},
+				Matcher: &mock.HTTPMatcher{Method: a.method, Path: a.path},
 				StatefulBinding: &mock.StatefulBinding{
 					Table:  name,
 					Action: a.action,

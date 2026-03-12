@@ -232,7 +232,6 @@ func TestBinaryE2E_ValidationConfigFile(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/validated-users"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "validated-users", "action": "create"},
 					},
 				},
@@ -241,7 +240,6 @@ func TestBinaryE2E_ValidationConfigFile(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/validated-users"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "validated-users", "action": "list"},
 					},
 				},
@@ -250,7 +248,6 @@ func TestBinaryE2E_ValidationConfigFile(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/validated-users/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "validated-users", "action": "get"},
 					},
 				},
@@ -259,7 +256,6 @@ func TestBinaryE2E_ValidationConfigFile(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/validated-users/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "validated-users", "action": "update"},
 					},
 				},
@@ -268,7 +264,6 @@ func TestBinaryE2E_ValidationConfigFile(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/validated-users/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "validated-users", "action": "delete"},
 					},
 				},
@@ -394,7 +389,6 @@ func TestBinaryE2E_ValidationErrorResponse(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/error-test-users"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "error-test-users", "action": "create"},
 					},
 				},
@@ -403,7 +397,6 @@ func TestBinaryE2E_ValidationErrorResponse(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/error-test-users"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "error-test-users", "action": "list"},
 					},
 				},
@@ -412,7 +405,6 @@ func TestBinaryE2E_ValidationErrorResponse(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/error-test-users/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "error-test-users", "action": "get"},
 					},
 				},
@@ -421,7 +413,6 @@ func TestBinaryE2E_ValidationErrorResponse(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/error-test-users/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "error-test-users", "action": "update"},
 					},
 				},
@@ -430,7 +421,6 @@ func TestBinaryE2E_ValidationErrorResponse(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/error-test-users/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "error-test-users", "action": "delete"},
 					},
 				},
@@ -496,7 +486,6 @@ func TestBinaryE2E_StatefulCRUDWithValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/crud-validated"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "crud-validated", "action": "create"},
 					},
 				},
@@ -505,7 +494,6 @@ func TestBinaryE2E_StatefulCRUDWithValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/crud-validated"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "crud-validated", "action": "list"},
 					},
 				},
@@ -514,7 +502,6 @@ func TestBinaryE2E_StatefulCRUDWithValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/crud-validated/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "crud-validated", "action": "get"},
 					},
 				},
@@ -523,7 +510,6 @@ func TestBinaryE2E_StatefulCRUDWithValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/crud-validated/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "crud-validated", "action": "update"},
 					},
 				},
@@ -532,7 +518,6 @@ func TestBinaryE2E_StatefulCRUDWithValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/crud-validated/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "crud-validated", "action": "delete"},
 					},
 				},
@@ -684,7 +669,6 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/articles"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "articles", "action": "create"},
 					},
 				},
@@ -693,7 +677,6 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/articles"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "articles", "action": "list"},
 					},
 				},
@@ -702,7 +685,6 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/articles/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "articles", "action": "get"},
 					},
 				},
@@ -711,7 +693,6 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/articles/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "articles", "action": "update"},
 					},
 				},
@@ -720,7 +701,6 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/articles/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "articles", "action": "delete"},
 					},
 				},
@@ -730,7 +710,6 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/articles/{articleId}/comments"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "article-comments", "action": "create"},
 					},
 				},
@@ -739,7 +718,6 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/articles/{articleId}/comments"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "article-comments", "action": "list"},
 					},
 				},
@@ -748,7 +726,6 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/articles/{articleId}/comments/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "article-comments", "action": "get"},
 					},
 				},
@@ -757,7 +734,6 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/articles/{articleId}/comments/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "article-comments", "action": "update"},
 					},
 				},
@@ -766,7 +742,6 @@ func TestBinaryE2E_NestedResourceValidation(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/articles/{articleId}/comments/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "article-comments", "action": "delete"},
 					},
 				},
@@ -852,7 +827,6 @@ func TestBinaryE2E_LargeBodyRejection(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "POST", "path": "/api/large-body-test"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "large-body-test", "action": "create"},
 					},
 				},
@@ -861,7 +835,6 @@ func TestBinaryE2E_LargeBodyRejection(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/large-body-test"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "large-body-test", "action": "list"},
 					},
 				},
@@ -870,7 +843,6 @@ func TestBinaryE2E_LargeBodyRejection(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "GET", "path": "/api/large-body-test/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "large-body-test", "action": "get"},
 					},
 				},
@@ -879,7 +851,6 @@ func TestBinaryE2E_LargeBodyRejection(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "PUT", "path": "/api/large-body-test/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "large-body-test", "action": "update"},
 					},
 				},
@@ -888,7 +859,6 @@ func TestBinaryE2E_LargeBodyRejection(t *testing.T) {
 					"type": "http",
 					"http": map[string]interface{}{
 						"matcher":         map[string]interface{}{"method": "DELETE", "path": "/api/large-body-test/{id}"},
-						"response":        map[string]interface{}{"statusCode": 200},
 						"statefulBinding": map[string]interface{}{"table": "large-body-test", "action": "delete"},
 					},
 				},

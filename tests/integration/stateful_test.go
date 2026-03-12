@@ -171,9 +171,6 @@ func createStatefulServerWithAdmin(t *testing.T, resources ...*statefulResourceC
 						Method: a.method,
 						Path:   a.path,
 					},
-					Response: &mock.HTTPResponse{
-						StatusCode: 200,
-					},
 					StatefulBinding: &mock.StatefulBinding{
 						Table:  res.Name,
 						Action: a.action,

@@ -695,8 +695,8 @@ func TestWorkspaceIsolation(t *testing.T) {
 			} `json:"mock"`
 		}
 		readJSON(resp, &createResp)
-		assert.Equal(t, "local", createResp.Mock.WorkspaceID,
-			"mock without workspace should default to 'local'")
+		assert.Equal(t, "", createResp.Mock.WorkspaceID,
+			"mock without workspace should default to ''")
 
 		// List with workspace A filter — should NOT see the default mock.
 		var listA struct {
@@ -711,7 +711,7 @@ func TestWorkspaceIsolation(t *testing.T) {
 		var listDefault struct {
 			Total int `json:"total"`
 		}
-		resp = apiReq("GET", "/mocks?workspaceId=local", nil)
+		resp = apiReq("GET", "/mocks?workspaceId=", nil)
 		require.Equal(t, 200, resp.StatusCode)
 		readJSON(resp, &listDefault)
 		assert.Equal(t, 1, listDefault.Total, "default workspace should have 1 mock")
