@@ -25,6 +25,12 @@ func dialWS(t *testing.T, ts *httptest.Server, path string) (*gorillaWs.Conn, *h
 	return conn, resp, err
 }
 
+func dialWSConn(t *testing.T, ts *httptest.Server, path string) (*gorillaWs.Conn, error) {
+	t.Helper()
+	conn, _, err := dialWS(t, ts, path) //nolint:bodyclose // closed via t.Cleanup in dialWS
+	return conn, err
+}
+
 // setupHandler creates a ConnectionManager, registers the given endpoints,
 // creates a WebSocketHandler, and starts an httptest.Server.
 // The caller must call ts.Close() when done.
@@ -50,7 +56,7 @@ func TestHandlerE2E_EchoMode(t *testing.T) {
 	ts, _ := setupHandler(t, endpoint)
 	defer ts.Close()
 
-	conn, _, err := dialWS(t, ts, "/ws/echo")
+	conn, err := dialWSConn(t, ts, "/ws/echo")
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -90,7 +96,7 @@ func TestHandlerE2E_ExactMatcher(t *testing.T) {
 	ts, _ := setupHandler(t, endpoint)
 	defer ts.Close()
 
-	conn, _, err := dialWS(t, ts, "/ws/matcher")
+	conn, err := dialWSConn(t, ts, "/ws/matcher")
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -119,7 +125,7 @@ func TestHandlerE2E_ContainsMatcher(t *testing.T) {
 	ts, _ := setupHandler(t, endpoint)
 	defer ts.Close()
 
-	conn, _, err := dialWS(t, ts, "/ws/contains")
+	conn, err := dialWSConn(t, ts, "/ws/contains")
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -153,7 +159,7 @@ func TestHandlerE2E_DefaultResponse(t *testing.T) {
 	ts, _ := setupHandler(t, endpoint)
 	defer ts.Close()
 
-	conn, _, err := dialWS(t, ts, "/ws/default")
+	conn, err := dialWSConn(t, ts, "/ws/default")
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -250,7 +256,7 @@ func TestHandlerE2E_MaxConnections(t *testing.T) {
 	defer ts.Close()
 
 	// First connection should succeed
-	conn1, _, err := dialWS(t, ts, "/ws/limited")
+	conn1, err := dialWSConn(t, ts, "/ws/limited")
 	require.NoError(t, err)
 
 	// Second connection should be rejected
@@ -273,7 +279,7 @@ func TestHandlerE2E_MaxConnections(t *testing.T) {
 	}, 2*time.Second, 50*time.Millisecond, "expected connection count to reach 0 after close")
 
 	// Now a new connection should succeed
-	conn3, _, err := dialWS(t, ts, "/ws/limited")
+	conn3, err := dialWSConn(t, ts, "/ws/limited")
 	require.NoError(t, err)
 	defer conn3.Close()
 
@@ -302,7 +308,7 @@ func TestHandlerE2E_HeartbeatPing(t *testing.T) {
 	ts, _ := setupHandler(t, endpoint)
 	defer ts.Close()
 
-	conn, _, err := dialWS(t, ts, "/ws/heartbeat")
+	conn, err := dialWSConn(t, ts, "/ws/heartbeat")
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -350,7 +356,7 @@ func TestHandlerE2E_IdleTimeout(t *testing.T) {
 	ts, _ := setupHandler(t, endpoint)
 	defer ts.Close()
 
-	conn, _, err := dialWS(t, ts, "/ws/idle")
+	conn, err := dialWSConn(t, ts, "/ws/idle")
 	require.NoError(t, err)
 	defer conn.Close()
 

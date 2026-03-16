@@ -137,24 +137,27 @@ func matchNamedParams(pattern, path string) bool {
 // Examples: "{Sid}.json" matches "SM123.json", "v{ver}" matches "v2".
 func matchSegmentWithParam(pattern, segment string) bool {
 	// Build a regex from the pattern: replace {param} with (.+) for greedy match
-	regexStr := "^"
+	var b strings.Builder
+	b.WriteString("^")
 	rest := pattern
 	for {
 		openIdx := strings.Index(rest, "{")
 		if openIdx == -1 {
-			regexStr += regexp.QuoteMeta(rest)
+			b.WriteString(regexp.QuoteMeta(rest))
 			break
 		}
 		closeIdx := strings.Index(rest[openIdx:], "}")
 		if closeIdx == -1 {
-			regexStr += regexp.QuoteMeta(rest)
+			b.WriteString(regexp.QuoteMeta(rest))
 			break
 		}
 		closeIdx += openIdx
-		regexStr += regexp.QuoteMeta(rest[:openIdx]) + "(.+)"
+		b.WriteString(regexp.QuoteMeta(rest[:openIdx]))
+		b.WriteString("(.+)")
 		rest = rest[closeIdx+1:]
 	}
-	regexStr += "$"
+	b.WriteString("$")
+	regexStr := b.String()
 
 	re := getCompiledRegex(regexStr)
 	if re == nil {
@@ -302,25 +305,30 @@ func MatchPathVariable(pattern, path string) map[string]string {
 // yields {"Sid": "SM123"}.
 func extractSegmentParams(pattern, segment string, result map[string]string) {
 	// Build a regex with named capture groups
-	regexStr := "^"
+	var b strings.Builder
+	b.WriteString("^")
 	rest := pattern
 	for {
 		openIdx := strings.Index(rest, "{")
 		if openIdx == -1 {
-			regexStr += regexp.QuoteMeta(rest)
+			b.WriteString(regexp.QuoteMeta(rest))
 			break
 		}
 		closeIdx := strings.Index(rest[openIdx:], "}")
 		if closeIdx == -1 {
-			regexStr += regexp.QuoteMeta(rest)
+			b.WriteString(regexp.QuoteMeta(rest))
 			break
 		}
 		closeIdx += openIdx
 		paramName := rest[openIdx+1 : closeIdx]
-		regexStr += regexp.QuoteMeta(rest[:openIdx]) + "(?P<" + paramName + ">.+)"
+		b.WriteString(regexp.QuoteMeta(rest[:openIdx]))
+		b.WriteString("(?P<")
+		b.WriteString(paramName)
+		b.WriteString(">.+)")
 		rest = rest[closeIdx+1:]
 	}
-	regexStr += "$"
+	b.WriteString("$")
+	regexStr := b.String()
 
 	re := getCompiledRegex(regexStr)
 	if re == nil {

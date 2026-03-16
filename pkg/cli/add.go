@@ -380,6 +380,8 @@ func mergeSOAPIfExists(client AdminClient, newMock *config.MockConfiguration) (*
 }
 
 // buildHTTPMock creates an HTTP mock configuration.
+//
+//nolint:gocyclo // CLI flag builder with many independent branches — not meaningfully decomposable.
 func buildHTTPMock(name, path, method string, status int, body, bodyFile string, priority, delay int,
 	headers, matchHeaders, matchQueries flags.StringSlice,
 	sse bool, sseEvents flags.StringSlice, sseDelay int, sseTemplate string, sseRepeat, sseKeepalive int,
@@ -1109,15 +1111,16 @@ func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool)
 				fmt.Printf("  Method: %s\n", created.HTTP.Matcher.Method)
 				fmt.Printf("  Path:   %s\n", created.HTTP.Matcher.Path)
 			}
-			if created.HTTP.StatefulBinding != nil {
+			switch {
+			case created.HTTP.StatefulBinding != nil:
 				fmt.Printf("  Table: %s\n", created.HTTP.StatefulBinding.Table)
 				fmt.Printf("  Bind:  %s\n", created.HTTP.StatefulBinding.Action)
 				if created.HTTP.StatefulBinding.Operation != "" {
 					fmt.Printf("  Operation: %s\n", created.HTTP.StatefulBinding.Operation)
 				}
-			} else if created.HTTP.StatefulOperation != "" {
+			case created.HTTP.StatefulOperation != "":
 				fmt.Printf("  Operation: %s\n", created.HTTP.StatefulOperation)
-			} else if created.HTTP.Response != nil {
+			case created.HTTP.Response != nil:
 				fmt.Printf("  Status: %d\n", created.HTTP.Response.StatusCode)
 			}
 		}

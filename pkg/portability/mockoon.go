@@ -243,9 +243,6 @@ func (i *MockoonImporter) convertHTTPRoute(route *MockoonRoute, env *MockoonEnvi
 
 // convertCRUDRoute converts a Mockoon CRUD route to a StatefulResourceConfig.
 func (i *MockoonImporter) convertCRUDRoute(route *MockoonRoute, env *MockoonEnvironment, _ time.Time) *config.StatefulResourceConfig {
-	path := i.buildPath(route.Endpoint, env.EndpointPrefix)
-	path = convertPathParams(path)
-
 	// Find the associated data bucket
 	var seedData []map[string]interface{}
 	for _, bucket := range env.Databuckets {

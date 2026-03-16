@@ -386,7 +386,7 @@ func wrapArrayFieldsAsList(data map[string]interface{}, wraps map[string]*config
 			for k, v := range data {
 				placeholder := "{{" + k + "}}"
 				if s, ok := v.(string); ok {
-					url = strings.Replace(url, placeholder, s, -1)
+					url = strings.ReplaceAll(url, placeholder, s)
 				}
 			}
 			envelope["url"] = url

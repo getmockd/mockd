@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -90,7 +91,7 @@ func readImportSource(imp *config.ImportEntry, configDir string) ([]byte, string
 		return data, filename, nil
 	}
 
-	return nil, "", fmt.Errorf("import entry must have 'path' or 'url'")
+	return nil, "", errors.New("import entry must have 'path' or 'url'")
 }
 
 // applyNamespace prefixes all operationIds in imported mocks with the namespace.
