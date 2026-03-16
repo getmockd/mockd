@@ -253,11 +253,12 @@ func TestHandleManageWorkspace_ListWithActive(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if wsMap["id"] == "ws-2" {
+		switch wsMap["id"] {
+		case "ws-2":
 			if wsMap["active"] != true {
 				t.Errorf("workspace ws-2 should be active, got active=%v", wsMap["active"])
 			}
-		} else if wsMap["id"] == "ws-1" {
+		case "ws-1":
 			if wsMap["active"] == true {
 				t.Errorf("workspace ws-1 should not be active")
 			}

@@ -34,7 +34,7 @@ func TestResponseHandler_SetAndGetResponses(t *testing.T) {
 
 	// GetResponses returns a copy of the slice (not the backing array),
 	// so appending to the returned slice does not affect internal state.
-	got = append(got, &MockResponse{ID: "r3"})
+	_ = append(got, &MockResponse{ID: "r3"}) //nolint:staticcheck // intentionally testing that append to returned slice doesn't affect internal state
 	assert.Len(t, h.GetResponses(), 2, "appending to returned slice must not grow internal list")
 }
 

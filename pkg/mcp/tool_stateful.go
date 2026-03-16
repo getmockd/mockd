@@ -235,7 +235,7 @@ func handleDeleteStatefulResource(args map[string]interface{}, session *MCPSessi
 	err := client.DeleteStatefulResource(session.GetWorkspace(), name)
 	if err != nil {
 		//nolint:nilerr // MCP spec: tool errors are returned in result content, not as JSON-RPC errors
-		return ToolResultError(fmt.Sprintf("failed to delete resource: %s", adminError(err, session.GetAdminURL()))), nil
+		return ToolResultError("failed to delete resource: " + adminError(err, session.GetAdminURL())), nil
 	}
 
 	return ToolResultJSON(map[string]interface{}{

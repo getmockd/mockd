@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -83,7 +84,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	// Handle --table/--bind for stateful binding
 	if updateTable != "" || updateBind != "" {
 		if (updateTable != "") != (updateBind != "") {
-			return fmt.Errorf("--table and --bind must be used together")
+			return errors.New("--table and --bind must be used together")
 		}
 		validActions := map[string]bool{
 			"list": true, "get": true, "create": true,

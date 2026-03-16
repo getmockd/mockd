@@ -454,7 +454,7 @@ func TestCustomOperationStore_CreateWithNoResponse(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("expected 1, got %d", len(list))
 	}
-	if list[0].Response != nil && len(list[0].Response) != 0 {
+	if len(list[0].Response) != 0 {
 		t.Errorf("expected nil or empty Response, got %v", list[0].Response)
 	}
 }

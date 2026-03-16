@@ -213,7 +213,7 @@ func TestHandlerE2E_UnknownPath(t *testing.T) {
 	ts, _ := setupHandler(t, endpoint)
 	defer ts.Close()
 
-	conn, resp, err := dialWS(t, ts, "/ws/not-registered")
+	conn, resp, err := dialWS(t, ts, "/ws/not-registered") //nolint:bodyclose // closed via t.Cleanup in dialWS
 	if conn != nil {
 		conn.Close()
 	}
@@ -234,7 +234,7 @@ func TestHandlerE2E_DisabledEndpoint(t *testing.T) {
 	ts, _ := setupHandler(t, endpoint)
 	defer ts.Close()
 
-	conn, resp, err := dialWS(t, ts, "/ws/disabled")
+	conn, resp, err := dialWS(t, ts, "/ws/disabled") //nolint:bodyclose // closed via t.Cleanup in dialWS
 	if conn != nil {
 		conn.Close()
 	}
@@ -260,7 +260,7 @@ func TestHandlerE2E_MaxConnections(t *testing.T) {
 	require.NoError(t, err)
 
 	// Second connection should be rejected
-	conn2, resp, err := dialWS(t, ts, "/ws/limited")
+	conn2, resp, err := dialWS(t, ts, "/ws/limited") //nolint:bodyclose // closed via t.Cleanup in dialWS
 	if conn2 != nil {
 		conn2.Close()
 	}

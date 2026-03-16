@@ -329,7 +329,7 @@ func mapCreateStatefulItemError(err error, log *slog.Logger) (int, string, strin
 	return http.StatusBadRequest, "create_failed", sanitizeError(err, log, "create stateful item")
 }
 
-func mapStatefulResourceError(err error, log *slog.Logger, notFoundMsg, operation string) (int, string, string) {
+func mapStatefulResourceError(err error, log *slog.Logger, notFoundMsg, operation string) (int, string, string) { //nolint:unparam // notFoundMsg is always "Resource not found" today but kept as a parameter for caller clarity and future flexibility
 	if errors.Is(err, engineclient.ErrNotFound) {
 		return http.StatusNotFound, "not_found", notFoundMsg
 	}

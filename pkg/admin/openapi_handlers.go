@@ -511,42 +511,6 @@ type statefulResourceInfo struct {
 	SampleID string // A sample ID to pre-fill in path parameters
 }
 
-// extractPathParams extracts path parameter names from a URL path and generates sample values.
-// e.g., "/api/posts/:postId/comments" -> {"postId": "post-1"}
-func extractPathParams(path string) map[string]string {
-	result := make(map[string]string)
-	parts := strings.Split(path, "/")
-
-	for _, part := range parts {
-		if strings.HasPrefix(part, ":") {
-			paramName := strings.TrimPrefix(part, ":")
-			// Generate sample value based on param name
-			// e.g., "postId" -> "post-1", "userId" -> "user-1"
-			sampleValue := generateSampleParamValue(paramName)
-			result[paramName] = sampleValue
-		}
-	}
-
-	return result
-}
-
-// generateSampleParamValue generates a sample value for a path parameter.
-// e.g., "postId" -> "post-1", "userId" -> "user-1", "id" -> "item-1"
-func generateSampleParamValue(paramName string) string {
-	// Remove common suffixes to get the base name
-	baseName := strings.TrimSuffix(paramName, "Id")
-	baseName = strings.TrimSuffix(baseName, "ID")
-	baseName = strings.TrimSuffix(baseName, "_id")
-
-	if baseName == "" || baseName == paramName {
-		// No suffix found, use the param name itself
-		return paramName + "-1"
-	}
-
-	// Convert camelCase to kebab-case for the value
-	return strings.ToLower(baseName) + "-1"
-}
-
 // writeInsomniaSettings writes the common Insomnia request settings block
 func writeInsomniaSettings(sb *strings.Builder, indent string) {
 	sb.WriteString(indent + "settings:\n")

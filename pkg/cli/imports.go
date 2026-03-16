@@ -121,7 +121,7 @@ func processTablesAndExtend(collection *config.MockCollection) error {
 		tableMap := make(map[string]*config.TableConfig, len(collection.Tables))
 		for _, table := range collection.Tables {
 			if table.Name == "" {
-				return fmt.Errorf("table: name is required")
+				return errors.New("table: name is required")
 			}
 			if _, exists := tableMap[table.Name]; exists {
 				return fmt.Errorf("table %q: duplicate name", table.Name)
@@ -163,7 +163,7 @@ func processTablesAndExtend(collection *config.MockCollection) error {
 
 			for _, binding := range collection.Extend {
 				if binding.Mock == "" {
-					return fmt.Errorf("extend: mock reference is required")
+					return errors.New("extend: mock reference is required")
 				}
 				if binding.Table == "" {
 					return fmt.Errorf("extend %q: table is required", binding.Mock)
