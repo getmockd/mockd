@@ -665,6 +665,8 @@ func printTableEntry(req *requestlog.Entry) {
 }
 
 // printVerboseEntry prints a single log entry in verbose format.
+//
+//nolint:dupl // Intentionally mirrors printVerboseAPIEntry for a different wire type.
 func printVerboseEntry(req *requestlog.Entry) {
 	timestamp := req.Timestamp.Format("2006-01-02 15:04:05")
 	protocol := req.Protocol

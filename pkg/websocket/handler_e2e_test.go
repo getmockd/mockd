@@ -18,7 +18,11 @@ import (
 func dialWS(t *testing.T, ts *httptest.Server, path string) (*gorillaWs.Conn, *http.Response, error) {
 	t.Helper()
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + path
-	return gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	conn, resp, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		t.Cleanup(func() { _ = resp.Body.Close() })
+	}
+	return conn, resp, err
 }
 
 // setupHandler creates a ConnectionManager, registers the given endpoints,

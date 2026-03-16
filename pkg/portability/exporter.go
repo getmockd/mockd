@@ -70,14 +70,18 @@ func Export(collection *config.MockCollection, opts *ExportOptions) (*ExportResu
 		}
 	}
 
-	// Wire caller options into the exporter when explicitly set.
-	// NativeExporter and OpenAPIExporter both honour AsYAML.
+	// Wire caller options into a local copy of the exporter so parallel
+	// callers don't race on the shared registry singleton.
 	if opts.AsYAML != nil {
 		switch e := exporter.(type) {
 		case *NativeExporter:
-			e.AsYAML = *opts.AsYAML
+			local := *e
+			local.AsYAML = *opts.AsYAML
+			exporter = &local
 		case *OpenAPIExporter:
-			e.AsYAML = *opts.AsYAML
+			local := *e
+			local.AsYAML = *opts.AsYAML
+			exporter = &local
 		}
 	}
 
