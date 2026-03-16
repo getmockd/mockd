@@ -137,7 +137,13 @@ jobs:
 
       - name: Smoke test — stateful CRUD
         run: |
-          ./mockd stateful add smoke-users --path /api/smoke-users
+          # Create table + bind HTTP CRUD mocks via tables+extend
+          ./mockd stateful add smoke-users
+          ./mockd add http --path /api/smoke-users --method POST --table smoke-users --bind create
+          ./mockd add http --path /api/smoke-users --method GET --table smoke-users --bind list
+          ./mockd add http --path /api/smoke-users/{id} --method GET --table smoke-users --bind get
+          ./mockd add http --path /api/smoke-users/{id} --method PUT --table smoke-users --bind update
+          ./mockd add http --path /api/smoke-users/{id} --method DELETE --table smoke-users --bind delete
           # Create
           CREATE=$(curl -sf -X POST http://localhost:4280/api/smoke-users \
             -H "Content-Type: application/json" \
