@@ -1025,20 +1025,6 @@ func runAddStateful(name string) error {
 	return nil
 }
 
-// singularize does a naive singularization (removes trailing "s").
-func singularize(name string) string {
-	if strings.HasSuffix(name, "ies") {
-		return name[:len(name)-3] + "y"
-	}
-	if strings.HasSuffix(name, "ses") || strings.HasSuffix(name, "xes") || strings.HasSuffix(name, "zes") {
-		return name[:len(name)-2]
-	}
-	if strings.HasSuffix(name, "s") && !strings.HasSuffix(name, "ss") {
-		return name[:len(name)-1]
-	}
-	return name
-}
-
 // outputResult formats and prints the created or merged mock result.
 func outputResult(result *CreateMockResult, mockType mock.Type, jsonOutput bool) error { //nolint:gocyclo // CLI output handler for all mock types
 	if jsonOutput {

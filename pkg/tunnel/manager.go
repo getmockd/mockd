@@ -1,7 +1,4 @@
 // Package tunnel provides tunnel client implementations for exposing local mock servers.
-// This file contains the TunnelManager which manages the lifecycle of a QUIC tunnel
-// connection based on configuration from the admin API.
-
 package tunnel
 
 import (

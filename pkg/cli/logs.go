@@ -760,6 +760,8 @@ func printVerboseLogs(requests []*apitypes.RequestLogEntry) error {
 // printVerboseAPIEntry prints a single API log entry in verbose format.
 // This uses types.RequestLogEntry (the admin API wire type) rather than
 // requestlog.Entry (the engine-internal type used by SSE streaming).
+//
+//nolint:dupl // Intentionally mirrors printVerboseEntry for a different wire type.
 func printVerboseAPIEntry(req *apitypes.RequestLogEntry) {
 	timestamp := req.Timestamp.Format("2006-01-02 15:04:05")
 	protocol := req.Protocol

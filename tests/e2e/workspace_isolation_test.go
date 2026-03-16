@@ -1,3 +1,4 @@
+//nolint:bodyclose // Test helpers (apiReq/engineReq) return *http.Response; bodies are closed by readJSON or explicit .Body.Close() calls.
 package e2e_test
 
 import (

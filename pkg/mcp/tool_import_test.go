@@ -26,9 +26,6 @@ mocks:
         statusCode: 200
 `
 
-// validMockdJSON is the JSON equivalent for format-detection tests.
-const validMockdJSON = `{"version":"1.0","mocks":[{"id":"test-mock","type":"http","http":{"matcher":{"method":"GET","path":"/test"},"response":{"statusCode":200}}}]}`
-
 // =============================================================================
 // handleImportMocks Tests
 // =============================================================================

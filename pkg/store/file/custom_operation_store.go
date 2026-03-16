@@ -1,3 +1,4 @@
+//nolint:dupl // Structural similarity with stateful_resource_store.go is intentional; different types.
 package file
 
 import (

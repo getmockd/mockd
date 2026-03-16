@@ -1,3 +1,4 @@
+//nolint:dupl // Structural similarity with custom_operation_store.go is intentional; different types.
 package file
 
 import (

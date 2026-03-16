@@ -155,7 +155,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(patch) == 0 {
-		return fmt.Errorf("no update flags specified\n\nUsage: mockd update <id> [flags]\nRun 'mockd update --help' for available flags")
+		return errors.New("no update flags specified\n\nUsage: mockd update <id> [flags]\nRun 'mockd update --help' for available flags")
 	}
 
 	client := NewAdminClientWithAuth(adminURL)
