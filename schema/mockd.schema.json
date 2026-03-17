@@ -57,11 +57,41 @@
         "$ref": "#/definitions/extendBinding"
       }
     },
+    "workspaces": {
+      "type": "array",
+      "description": "Logical groupings of mocks. Each workspace provides isolated mock environments within a single mockd instance.",
+      "items": {
+        "$ref": "#/definitions/workspaceConfig"
+      }
+    },
     "serverConfig": {
       "$ref": "#/definitions/serverConfig"
     }
   },
   "definitions": {
+    "workspaceConfig": {
+      "type": "object",
+      "description": "A workspace defines a logical grouping of mocks.",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique name for this workspace (required)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of this workspace"
+        },
+        "engines": {
+          "type": "array",
+          "description": "Engine names this workspace is assigned to",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "mock": {
       "type": "object",
       "description": "A mock endpoint definition. The 'type' field determines which protocol spec to use.",
