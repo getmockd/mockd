@@ -991,9 +991,10 @@ func buildOAuthMock(name, issuer, clientID, clientSecret, username, password str
 	return m
 }
 
-// runAddStateful creates a stateful CRUD resource via the admin API.
+// runAddStateful creates a stateful CRUD resource with HTTP endpoints via the admin API.
+// When --path is provided, it generates 5 CRUD mocks bound to the table.
+// Without --path, it creates a bridge-only table (no HTTP endpoints).
 func runAddStateful(name string) error {
-	// Build a config with just the stateful resource
 	collection := &config.MockCollection{
 		Version: "1.0",
 		Mocks:   []*config.MockConfiguration{},
@@ -1004,6 +1005,43 @@ func runAddStateful(name string) error {
 		},
 	}
 
+	// If --path is provided, generate 5 CRUD mocks with statefulBinding
+	if addPath != "" {
+		basePath := strings.TrimSuffix(addPath, "/")
+		itemPath := basePath + "/{id}"
+
+		crudOps := []struct {
+			method string
+			path   string
+			action string
+		}{
+			{"GET", basePath, "list"},
+			{"POST", basePath, "create"},
+			{"GET", itemPath, "get"},
+			{"PUT", itemPath, "update"},
+			{"DELETE", itemPath, "delete"},
+		}
+
+		enabled := true
+		for _, op := range crudOps {
+			m := &mock.Mock{
+				Type:    mock.TypeHTTP,
+				Enabled: &enabled,
+				HTTP: &mock.HTTPSpec{
+					Matcher: &mock.HTTPMatcher{
+						Method: op.method,
+						Path:   op.path,
+					},
+					StatefulBinding: &mock.StatefulBinding{
+						Table:  name,
+						Action: op.action,
+					},
+				},
+			}
+			collection.Mocks = append(collection.Mocks, m)
+		}
+	}
+
 	client := NewAdminClientWithAuth(adminURL)
 	_, err := client.ImportConfig(collection, false, resolvedWorkspace())
 	if err != nil {
@@ -1012,16 +1050,27 @@ func runAddStateful(name string) error {
 
 	if jsonOutput {
 		return output.JSON(struct {
-			Resource string `json:"resource"`
-			Action   string `json:"action"`
+			Resource  string `json:"resource"`
+			Action    string `json:"action"`
+			Endpoints int    `json:"endpoints,omitempty"`
+			BasePath  string `json:"basePath,omitempty"`
 		}{
-			Resource: name,
-			Action:   "created",
+			Resource:  name,
+			Action:    "created",
+			Endpoints: len(collection.Mocks),
+			BasePath:  addPath,
 		})
 	}
 
 	fmt.Printf("Created stateful resource: %s\n", name)
-	fmt.Printf("  Access via: extend bindings or protocol integrations\n")
+	if addPath != "" {
+		fmt.Printf("  Endpoints:\n")
+		for _, m := range collection.Mocks {
+			fmt.Printf("    %s %s → %s\n", m.HTTP.Matcher.Method, m.HTTP.Matcher.Path, m.HTTP.StatefulBinding.Action)
+		}
+	} else {
+		fmt.Printf("  Access via: extend bindings or protocol integrations\n")
+	}
 	return nil
 }
 
