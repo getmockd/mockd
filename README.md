@@ -1,95 +1,134 @@
-# mockd
-
-[![CI](https://github.com/getmockd/mockd/actions/workflows/ci.yaml/badge.svg)](https://github.com/getmockd/mockd/actions/workflows/ci.yaml)
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/getmockd/mockd?include_prereleases)](https://github.com/getmockd/mockd/releases)
-
-**One binary. Seven protocols. Zero dependencies.**
-
-Mock HTTP, gRPC, GraphQL, WebSocket, MQTT, SSE, and SOAP APIs from a single CLI tool. Import from OpenAPI, Postman, WireMock, HAR, or cURL. Share mocks instantly via built-in cloud tunneling.
-
 <p align="center">
-  <img src="demo.gif" alt="mockd demo" width="800">
+  <a href="https://mockd.io"><img src="https://mockd.io/logo-dark.svg" alt="mockd" width="200"></a>
 </p>
 
-## Why mockd?
+<h3 align="center">One binary. Seven protocols. Zero dependencies.</h3>
 
-| | mockd | WireMock | Mockoon | json-server | Prism | MockServer |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Single binary, no runtime** | :white_check_mark: | :x: JVM | :x: Node | :x: Node | :x: Node | :x: JVM |
-| **HTTP mocking** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| **gRPC mocking** | :white_check_mark: | 🔌 Ext | :x: | :x: | :x: | :white_check_mark: |
-| **GraphQL mocking** | :white_check_mark: | 🔌 Ext | :x: | :x: | :x: | :x: |
-| **WebSocket mocking** | :white_check_mark: | 🔌 Ext | :x: | :x: | :x: | :x: |
-| **MQTT broker** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
-| **SOAP mocking** | :white_check_mark: | :x: | :x: | :x: | :x: | :white_check_mark: |
-| **SSE streaming** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
-| **OAuth/OIDC provider** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
-| **Chaos engineering** | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: | :x: |
-| **Stateful CRUD** | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :x: |
-| **Cloud tunnel sharing** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: |
-| **Proxy recording & replay** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: | :white_check_mark: |
-| **Import OpenAPI/Postman/HAR** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
-| **Built-in web dashboard** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: |
-| **MCP server (AI-native)** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
+<p align="center">
+  Mock HTTP, gRPC, GraphQL, WebSocket, MQTT, SSE, and SOAP from a single CLI tool.<br>
+  Import OpenAPI specs. Build digital twins. Let AI agents create mocks for you.
+</p>
 
-> 🔌 **Ext** = available via separate extension JAR, not bundled with WireMock core. mockd includes all protocols natively in a single binary.
+<p align="center">
+  <a href="https://github.com/getmockd/mockd/actions/workflows/ci.yaml"><img src="https://github.com/getmockd/mockd/actions/workflows/ci.yaml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/getmockd/mockd/releases"><img src="https://img.shields.io/github/v/release/getmockd/mockd?include_prereleases" alt="Release"></a>
+  <a href="https://github.com/getmockd/mockd/stargazers"><img src="https://img.shields.io/github/stars/getmockd/mockd?style=social" alt="Stars"></a>
+  <a href="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
+</p>
 
-## Install
+<p align="center">
+  <a href="https://mockd.io">Website</a> &middot;
+  <a href="https://mockd.io/docs">Docs</a> &middot;
+  <a href="https://github.com/getmockd/mockd-samples">Samples</a> &middot;
+  <a href="https://github.com/getmockd/mockd/blob/main/CONTRIBUTING.md">Contributing</a>
+</p>
 
-```bash
-# Quick install
-curl -sSL https://get.mockd.io | sh
-
-# Homebrew
-brew install getmockd/tap/mockd
-
-# Docker
-docker run -p 4280:4280 -p 4290:4290 ghcr.io/getmockd/mockd:latest
-
-# Go
-go install github.com/getmockd/mockd/cmd/mockd@latest
-```
-
-Pre-built binaries for Linux, macOS, and Windows are available on the [Releases](https://github.com/getmockd/mockd/releases) page.
+---
 
 ## Quick Start
 
 ```bash
-# Start the mock server
+# Install
+curl -sSL https://get.mockd.io | sh
+
+# Start + create a stateful CRUD API in one command
 mockd start
+mockd add http --path /api/users --stateful users
 
-# Mock an HTTP endpoint
-mockd add http --path /api/users --body '[{"id": 1, "name": "Alice"}]'
+# It works immediately
+curl -X POST localhost:4280/api/users -d '{"name":"Alice","email":"alice@test.com"}'
+# → {"id":"a1b2c3","name":"Alice","email":"alice@test.com"}
 
-# Test it
-curl http://localhost:4280/api/users
-# → [{"id": 1, "name": "Alice"}]
-
-# Mock a GraphQL API
-mockd add graphql --path /graphql --operation users \
-  --response '[{"id": 1, "name": "Alice"}]'
-
-# Mock a gRPC service
-mockd add grpc --proto ./service.proto \
-  --service myapp.UserService --rpc-method GetUser \
-  --response '{"id": 1, "name": "Alice"}'
-
-# Mock a WebSocket endpoint
-mockd add websocket --path /ws/chat --echo
-
-# Import from OpenAPI, Postman, or cURL
-mockd import openapi.yaml
-mockd import collection.json
-mockd import "curl -X GET https://api.example.com/users"
+curl localhost:4280/api/users
+# → {"data":[{"id":"a1b2c3","name":"Alice","email":"alice@test.com"}],"meta":{"total":1}}
 ```
+
+<details>
+<summary><strong>More install options</strong></summary>
+
+```bash
+brew install getmockd/tap/mockd                                          # Homebrew
+docker run -p 4280:4280 -p 4290:4290 ghcr.io/getmockd/mockd:latest      # Docker
+go install github.com/getmockd/mockd/cmd/mockd@latest                    # Go
+```
+
+Pre-built binaries for Linux, macOS, and Windows on the [Releases](https://github.com/getmockd/mockd/releases) page.
+</details>
+
+## Why mockd?
+
+Every other mock tool makes you choose: pick one protocol, install a runtime, bolt on extensions. mockd doesn't.
+
+| | mockd | WireMock | Mockoon | json-server | Prism | MockServer |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Single binary, no runtime** | :white_check_mark: | :x: JVM | :x: Node | :x: Node | :x: Node | :x: JVM |
+| **HTTP + gRPC + GraphQL + WS** | :white_check_mark: | 🔌 Ext | :x: | :x: | :x: | Partial |
+| **MQTT + SSE + SOAP + OAuth** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
+| **Stateful CRUD** | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| **Import OpenAPI/Postman/HAR** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
+| **Chaos engineering** | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: | :x: |
+| **MCP server (AI-native)** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
+| **Cloud tunnel sharing** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: |
+| **Built-in web dashboard** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: |
+
+> 🔌 **Ext** = available via separate extension, not bundled. mockd includes everything in a single binary.
+
+## Digital Twins
+
+Import a real API spec, bind it to stateful tables, and get a mock that passes the real SDK:
+
+```yaml
+# mockd.yaml — Stripe digital twin
+version: "1.0"
+imports:
+  - path: stripe-openapi.yaml
+    as: stripe
+tables:
+  - name: customers
+    idStrategy: prefix
+    idPrefix: "cus_"
+    seedData:
+      - { id: "cus_1", name: "Acme Corp", email: "billing@acme.com" }
+extend:
+  - { mock: stripe.GetCustomers, table: customers, action: list }
+  - { mock: stripe.PostCustomers, table: customers, action: create }
+  - { mock: stripe.GetCustomersCustomer, table: customers, action: get }
+  - { mock: stripe.PostCustomersCustomer, table: customers, action: update }
+  - { mock: stripe.DeleteCustomersCustomer, table: customers, action: delete }
+```
+
+```bash
+mockd start -c mockd.yaml --no-auth
+curl -X POST localhost:4280/v1/customers -d "name=Test&email=test@corp.com"
+# → {"id":"cus_a1b2c3","object":"customer","name":"Test","email":"test@corp.com"}
+```
+
+**Validated with real SDKs:**
+- Stripe: **49/49** `stripe-go` SDK tests pass
+- Twilio: **13/13** `twilio-go` SDK tests pass
+- OpenAI: `openai` Python SDK verified (models, assistants, chat completions)
+
+See [mockd-samples](https://github.com/getmockd/mockd-samples) for complete digital twin configs.
+
+## AI-Native (MCP)
+
+mockd includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server with **18 tools**. AI agents can create mocks, manage state, import specs, and verify contracts without touching the CLI:
+
+```json
+{
+  "mcpServers": {
+    "mockd": { "command": "mockd", "args": ["mcp"] }
+  }
+}
+```
+
+Works in Claude Desktop, Cursor, Windsurf, and any MCP-compatible editor. Tools cover mock CRUD, stateful resources, chaos injection, request logs, verification, workspaces, and import/export.
 
 ## Features
 
-### Multi-Protocol Mocking
-
-Mock **seven protocols** from a single tool with a unified CLI and Admin API:
+<details>
+<summary><strong>Multi-Protocol Mocking</strong> — 7 protocols, unified CLI</summary>
 
 | Protocol | Port | Example |
 |----------|------|---------|
@@ -100,10 +139,10 @@ Mock **seven protocols** from a single tool with a unified CLI and Admin API:
 | MQTT | 1883 | `mockd add mqtt --topic sensors/temp --payload '{"temp":72}'` |
 | SSE | 4280 | `mockd add http --path /events --sse --sse-event 'data: hello'` |
 | SOAP | 4280 | `mockd add soap --path /soap --operation GetWeather --response '<OK/>'` |
+</details>
 
-### Import & Export
-
-Bring your existing API definitions — no rewriting needed:
+<details>
+<summary><strong>Import & Export</strong> — OpenAPI, Postman, HAR, WireMock, cURL, WSDL</summary>
 
 ```bash
 mockd import openapi.yaml           # OpenAPI 3.x / Swagger 2.0
@@ -114,160 +153,77 @@ mockd import service.wsdl           # WSDL → SOAP mocks
 mockd import "curl -X GET https://api.example.com/users"  # cURL commands
 mockd export --format yaml > mocks.yaml
 ```
+</details>
 
-### Cloud Tunnel
-
-Share local mocks with your team instantly. All protocols routed through a single QUIC connection on port 443:
+<details>
+<summary><strong>Chaos Engineering</strong> — latency, errors, circuit breakers</summary>
 
 ```bash
-mockd tunnel enable
+mockd chaos apply flaky       # 30% error rate
+mockd chaos apply slow-api    # 200-800ms latency
+mockd chaos apply offline     # 100% 503 errors
+mockd chaos disable
+```
+</details>
+
+<details>
+<summary><strong>Cloud Tunnel</strong> — share local mocks instantly</summary>
+
+```bash
+mockd tunnel
 # → https://a1b2c3d4.tunnel.mockd.io → http://localhost:4280
 ```
 
-### Chaos Engineering
+All 7 protocols multiplexed through a single secure connection on port 443. Works behind NAT and firewalls.
+</details>
 
-Test how your app handles failures:
-
-```bash
-# Apply a built-in chaos profile at startup
-mockd serve --chaos-profile flaky --config mockd.yaml
-
-# Or enable chaos at runtime
-mockd chaos apply slow-api
-```
-
-### Stateful Mocking
-
-Simulate CRUD resources with automatic ID generation, pagination, and persistence. Import an API spec and bind its endpoints to stateful tables with the tables+extend pattern:
-
-```yaml
-# mockd.yaml — tables + extend (recommended for config files)
-version: "1.0"
-imports:
-  - path: openapi.yaml
-    as: api
-tables:
-  - name: users
-    seedData:
-      - { id: "1", name: "Alice", email: "alice@example.com" }
-extend:
-  - { mock: api.GetUsers, table: users, action: list }
-  - { mock: api.PostUsers, table: users, action: create }
-  - { mock: api.GetUsersId, table: users, action: get }
-```
-
-Tables are pure data stores (no routing, no basePath). Extend bindings wire imported mock endpoints to table CRUD actions (`list`, `get`, `create`, `update`, `delete`). Custom operations are also supported via `action: custom` + `operation: OpName`.
-
-State is shared across protocols — REST and SOAP can operate on the same table:
-
-```yaml
-# Cross-protocol stateful mocking
-tables:
-  - name: users
-    seedData:
-      - { id: "1", name: "Alice", email: "alice@example.com" }
-
-mocks:
-  - type: soap
-    soap:
-      path: /soap/UserService
-      operations:
-        GetUser:
-          statefulResource: users    # Same data as REST!
-          statefulAction: get
-```
-
-For quick CLI prototyping, `mockd add http --path /api/users --stateful` still works to auto-create CRUD endpoints.
-
-### Workspaces
-
-Isolated environments for mocks, stateful resources, and request logs. Run multiple API environments from a single mockd instance with `--workspace` scoping:
+<details>
+<summary><strong>Workspaces</strong> — isolated mock environments</summary>
 
 ```bash
 mockd workspace create -n "Payment API" --use
 mockd import stripe-openapi.yaml
 mockd workspace create -n "Comms API" --use
 mockd import twilio-openapi.yaml
+# Mocks, state, and logs are fully isolated per workspace
 ```
+</details>
 
-### Proxy Recording
-
-Record real API traffic and replay it as mocks:
+<details>
+<summary><strong>Proxy Recording</strong> — record real traffic, replay as mocks</summary>
 
 ```bash
 mockd proxy start --port 8888
 # Configure your app to use http://localhost:8888 as proxy
 # Traffic is recorded, then replay with:
-mockd import recordings/session-name.json
+mockd import recordings/session.json
 ```
+</details>
 
-### Admin API
+<details>
+<summary><strong>Web Dashboard</strong> — manage mocks visually</summary>
 
-Full REST API for dynamic mock management at runtime:
+Release builds serve a web UI from the admin port (`http://localhost:4290`). VS Code-style editor, command palette, mock tree with folders, request log viewer, and near-miss debugging.
+</details>
 
-```bash
-# Create a mock
-curl -X POST http://localhost:4290/mocks \
-  -H "Content-Type: application/json" \
-  -d '{"type":"http","http":{"matcher":{"method":"GET","path":"/health"},"response":{"statusCode":200,"body":"{\"status\":\"ok\"}"}}}'
+## Mockd Cloud
 
-# List mocks
-curl http://localhost:4290/mocks
+mockd works fully offline with no account required. For teams that want shared environments:
 
-# Import OpenAPI spec
-curl -X POST http://localhost:4290/import \
-  -H "Content-Type: application/x-yaml" \
-  --data-binary @openapi.yaml
-```
+- **Persistent cloud mocks** — deploy mock environments your whole team can hit
+- **Team management** — shared workspaces with access controls
+- **Cloud tunnels** — authenticated tunnels with custom domains
 
-### Web Dashboard
-
-Release builds include a built-in web UI served from the admin port:
-
-```bash
-mockd start
-# Open http://localhost:4290 in your browser
-```
-
-Manage mocks for all 7 protocols visually with a VS Code-style tabbed editor, command palette (Ctrl+K), mock tree with search/sort/folders, request log viewer with near-miss debugging, and more. Docker images and all release packages include the dashboard automatically.
-
-### AI Mock Generation (MCP)
-
-mockd includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server with **18 tools** for full mock lifecycle management from AI-powered editors (Cursor, Windsurf, Claude Code):
-
-```bash
-mockd mcp  # Start the MCP server (stdio transport)
-```
-
-Tools cover mock CRUD, import/export, chaos engineering (10 built-in profiles), mock verification, stateful resource management, custom operations, and multi-environment context switching.
-
-### Configuration
-
-Configure via flags, environment variables, or config files:
-
-```yaml
-# .mockdrc.yaml
-port: 4280
-adminPort: 4290
-httpsPort: 5280
-maxLogEntries: 1000
-```
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `MOCKD_PORT` | Mock server port | `4280` |
-| `MOCKD_ADMIN_PORT` | Admin API port | `4290` |
-| `MOCKD_HTTPS_PORT` | HTTPS port (0=disabled) | `0` |
-| `MOCKD_CONFIG` | Config file path | |
+Coming soon. [Join the waitlist](https://mockd.io/cloud).
 
 ## Documentation
 
-**[mockd.io](https://mockd.io)** — Full documentation, guides, and API reference.
+Full guides, API reference, and config docs at **[mockd.io](https://mockd.io)**.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup.
 
 ## License
 
-[Apache License 2.0](LICENSE)
+[Apache License 2.0](LICENSE) — free for commercial use.
