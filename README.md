@@ -24,6 +24,10 @@
   <a href="https://github.com/getmockd/mockd/blob/main/CONTRIBUTING.md">Contributing</a>
 </p>
 
+<p align="center">
+  <img src=".github/assets/demo.gif" alt="mockd demo" width="800">
+</p>
+
 ---
 
 ## Quick Start
@@ -214,7 +218,7 @@ mockd works fully offline with no account required. For teams that want shared e
 - **Team management** — shared workspaces with access controls
 - **Cloud tunnels** — authenticated tunnels with custom domains
 
-Coming soon. [Join the waitlist](https://mockd.io/cloud).
+Coming soon. [Join the waitlist](https://mockd.io/pricing).
 
 ## Documentation
 
