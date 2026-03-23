@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://mockd.io"><img src="https://mockd.io/logo-dark.svg" alt="mockd" width="200"></a>
+  <a href="https://mockd.io"><img src="https://mockd.io/getmockd.svg" alt="mockd" width="200"></a>
 </p>
 
 <h3 align="center">One binary. Seven protocols. Zero dependencies.</h3>
