@@ -56,7 +56,7 @@ type APIKeyConfig struct {
 func DefaultAPIKeyConfig() APIKeyConfig {
 	return APIKeyConfig{
 		Enabled:        true,
-		AllowLocalhost: false, // Secure by default
+		AllowLocalhost: true, // Localhost requests bypass auth — standard for dev tools
 		ExemptPaths:    []string{"/health", "/metrics"},
 	}
 }
@@ -201,6 +201,31 @@ func (a *apiKeyAuth) isExempt(path string) bool {
 
 	for _, exempt := range a.config.ExemptPaths {
 		if path == exempt || strings.HasPrefix(path, exempt+"/") {
+			return true
+		}
+	}
+
+	// Dashboard static assets are exempt — they're the UI shell (like a login page).
+	// API routes use specific prefixes (/mocks, /config, etc.) so this only
+	// matches the SPA catch-all and its static files.
+	if isDashboardAsset(path) {
+		return true
+	}
+
+	return false
+}
+
+// isDashboardAsset returns true for paths that serve the embedded dashboard.
+// The SPA root ("/") and static files (.js, .css, .html, .svg, .png, .woff2, .ico)
+// are not sensitive and should be accessible without auth so the auth prompt
+// screen can load.
+func isDashboardAsset(path string) bool {
+	if path == "/" {
+		return true
+	}
+	// Check for static file extensions
+	for _, ext := range []string{".js", ".css", ".html", ".svg", ".png", ".ico", ".woff", ".woff2", ".json", ".map"} {
+		if strings.HasSuffix(path, ext) {
 			return true
 		}
 	}

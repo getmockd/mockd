@@ -123,15 +123,16 @@ func TestIsLocalhost_InvalidIP_ReturnsFalse(t *testing.T) {
 }
 
 // ============================================================================
-// Regression Tests for Bug 3.6: Localhost Bypass - Opt-in Behavior
+// Regression Tests for Bug 3.6: Localhost Bypass Behavior
 // ============================================================================
 
 func TestLocalhostBypass_Disabled_RequiresAuth(t *testing.T) {
-	// Create API with localhost bypass DISABLED (default)
+	// Create API with localhost bypass DISABLED
 	api := NewAPI(0,
 		WithDataDir(t.TempDir()),
 		WithAPIKey("test-api-key"),
 		WithAllowLocalhostBypass(false),
+		WithAPIKeyAllowLocalhost(false),
 	)
 	defer api.Stop()
 
