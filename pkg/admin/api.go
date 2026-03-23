@@ -277,7 +277,7 @@ func (a *API) HasLocalEngine() bool {
 const maxRequestBodySize = 10 << 20
 
 // withMiddleware wraps the handler with rate limiting, logging, security headers, CORS, API key auth, and tracing middleware.
-// Middleware order (outermost to innermost): Tracing -> Security Headers -> CORS -> API Key Auth -> Rate Limiting -> Body Limit -> Handler
+// Middleware order (outermost to innermost): Tracing -> Security Headers -> CORS -> API Key Auth -> Rate Limiting -> Workspace Normalization -> Body Limit -> Handler
 func (a *API) withMiddleware(handler http.Handler) http.Handler {
 	// Body size limit (innermost — protects all handlers from oversized request bodies)
 	bodyCapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
