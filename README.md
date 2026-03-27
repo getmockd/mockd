@@ -218,7 +218,7 @@ mockd works fully offline with no account required. For teams that want shared e
 - **Team management** — shared workspaces with access controls
 - **Cloud tunnels** — authenticated tunnels with custom domains
 
-Coming soon. [Join the waitlist](https://mockd.io/pricing).
+Coming soon. [Join the waitlist](https://mockd.io/pricing#waitlist-form).
 
 ## Documentation
 
