@@ -43,6 +43,18 @@ export default defineConfig({
           tag: "meta",
           attrs: { name: "twitter:image", content: ogUrl },
         },
+        {
+          tag: "script",
+          attrs: {
+            async: true,
+            src: "https://plausible.io/js/pa-z6MxR3BksUO2s_1qoAI1q.js",
+          },
+        },
+        {
+          tag: "script",
+          content:
+            'window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()',
+        },
       ],
       social: [
         {
