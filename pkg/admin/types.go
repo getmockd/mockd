@@ -42,3 +42,11 @@ type MockInvocationListResponse struct {
 	Count       int              `json:"count"`
 	Total       int              `json:"total"`
 }
+
+// WebSocketSendRequest represents a request to send a message to a WebSocket connection.
+type WebSocketSendRequest struct {
+	// Type is the message type: "text" (default) or "binary".
+	Type string `json:"type"`
+	// Data is the message payload.
+	Data string `json:"data"`
+}

@@ -750,6 +750,145 @@ func TestHTTPMethods(t *testing.T) {
 	}
 }
 
+// --- WebSocket Tests ---
+
+func TestListWebSocketConnections_Success(t *testing.T) {
+	resp := struct {
+		Connections []*WebSocketConnection `json:"connections"`
+		Count       int                    `json:"count"`
+	}{
+		Connections: []*WebSocketConnection{{ID: "ws-1"}, {ID: "ws-2"}},
+		Count:       2,
+	}
+	_, c := mockServer(t, jsonHandler(t, 200, resp))
+
+	conns, err := c.ListWebSocketConnections(context.Background())
+	if err != nil {
+		t.Fatalf("ListWebSocketConnections() error = %v", err)
+	}
+	if len(conns) != 2 {
+		t.Errorf("ListWebSocketConnections() = %d, want 2", len(conns))
+	}
+	if conns[0].ID != "ws-1" {
+		t.Errorf("ListWebSocketConnections()[0].ID = %q, want %q", conns[0].ID, "ws-1")
+	}
+}
+
+func TestListWebSocketConnections_Error(t *testing.T) {
+	_, c := mockServer(t, jsonHandler(t, 503, nil))
+	_, err := c.ListWebSocketConnections(context.Background())
+	if err == nil {
+		t.Error("ListWebSocketConnections() error = nil, want error for 503")
+	}
+}
+
+func TestGetWebSocketConnection_Success(t *testing.T) {
+	conn := WebSocketConnection{ID: "ws-1", Status: "connected"}
+	_, c := mockServer(t, jsonHandler(t, 200, conn))
+
+	result, err := c.GetWebSocketConnection(context.Background(), "ws-1")
+	if err != nil {
+		t.Fatalf("GetWebSocketConnection() error = %v", err)
+	}
+	if result.ID != "ws-1" {
+		t.Errorf("GetWebSocketConnection().ID = %q, want %q", result.ID, "ws-1")
+	}
+}
+
+func TestGetWebSocketConnection_NotFound(t *testing.T) {
+	_, c := mockServer(t, jsonHandler(t, 404, nil))
+	_, err := c.GetWebSocketConnection(context.Background(), "missing")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetWebSocketConnection() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestCloseWebSocketConnection_Success(t *testing.T) {
+	_, c := mockServer(t, jsonHandler(t, 200, map[string]string{"message": "closed"}))
+	err := c.CloseWebSocketConnection(context.Background(), "ws-1")
+	if err != nil {
+		t.Errorf("CloseWebSocketConnection() error = %v, want nil", err)
+	}
+}
+
+func TestCloseWebSocketConnection_NoContent(t *testing.T) {
+	_, c := mockServer(t, jsonHandler(t, 204, nil))
+	err := c.CloseWebSocketConnection(context.Background(), "ws-1")
+	if err != nil {
+		t.Errorf("CloseWebSocketConnection() 204 error = %v, want nil", err)
+	}
+}
+
+func TestCloseWebSocketConnection_NotFound(t *testing.T) {
+	_, c := mockServer(t, jsonHandler(t, 404, nil))
+	err := c.CloseWebSocketConnection(context.Background(), "missing")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("CloseWebSocketConnection() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSendToWebSocketConnection_Success(t *testing.T) {
+	var capturedBody map[string]string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "sent"})
+	}))
+	defer ts.Close()
+	c := New(ts.URL)
+
+	err := c.SendToWebSocketConnection(context.Background(), "ws-1", "text", "hello")
+	if err != nil {
+		t.Fatalf("SendToWebSocketConnection() error = %v", err)
+	}
+	if capturedBody["type"] != "text" {
+		t.Errorf("request body type = %q, want %q", capturedBody["type"], "text")
+	}
+	if capturedBody["data"] != "hello" {
+		t.Errorf("request body data = %q, want %q", capturedBody["data"], "hello")
+	}
+}
+
+func TestSendToWebSocketConnection_NotFound(t *testing.T) {
+	_, c := mockServer(t, jsonHandler(t, 404, nil))
+	err := c.SendToWebSocketConnection(context.Background(), "missing", "text", "hello")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("SendToWebSocketConnection() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSendToWebSocketConnection_Error(t *testing.T) {
+	_, c := mockServer(t, jsonHandler(t, 500, ErrorResponse{Error: "engine_error", Message: "failed"}))
+	err := c.SendToWebSocketConnection(context.Background(), "ws-1", "text", "hello")
+	if err == nil {
+		t.Error("SendToWebSocketConnection() error = nil, want error for 500")
+	}
+}
+
+func TestGetWebSocketStats_Success(t *testing.T) {
+	stats := WebSocketStats{ActiveConnections: 3, TotalConnections: 10}
+	_, c := mockServer(t, jsonHandler(t, 200, stats))
+
+	result, err := c.GetWebSocketStats(context.Background())
+	if err != nil {
+		t.Fatalf("GetWebSocketStats() error = %v", err)
+	}
+	if result.ActiveConnections != 3 {
+		t.Errorf("GetWebSocketStats().ActiveConnections = %d, want 3", result.ActiveConnections)
+	}
+	if result.TotalConnections != 10 {
+		t.Errorf("GetWebSocketStats().TotalConnections = %d, want 10", result.TotalConnections)
+	}
+}
+
+func TestGetWebSocketStats_Error(t *testing.T) {
+	_, c := mockServer(t, jsonHandler(t, 503, nil))
+	_, err := c.GetWebSocketStats(context.Background())
+	if err == nil {
+		t.Error("GetWebSocketStats() error = nil, want error for 503")
+	}
+}
+
 // containsStr checks if s contains substr.
 func containsStr(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))

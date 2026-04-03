@@ -972,13 +972,37 @@ Send a message to a specific connection.
 
 #### POST /admin/ws/broadcast
 
-Broadcast message to all connections.
+#### POST /websocket/connections/{id}/send
 
-#### GET /admin/ws/endpoints
+Send a text or binary message to a specific active WebSocket connection.
 
-List configured WebSocket endpoints.
+**Request:**
 
-#### GET /admin/ws/stats
+```json
+{
+  "type": "text",
+  "data": "Hello from server"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Message type: `"text"` (default) or `"binary"` |
+| `data` | string | Message payload |
+
+**Response:**
+
+```json
+{
+  "message": "Message sent",
+  "connection": "ws-abc123",
+  "type": "text"
+}
+```
+
+Returns `404` if the connection is not found.
+
+#### GET /websocket/stats
 
 Get WebSocket statistics.
 
