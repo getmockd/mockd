@@ -123,6 +123,12 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /sse/connections/{id}", a.handleCloseSSEConnection)
 	mux.HandleFunc("GET /sse/stats", a.handleGetSSEStats)
 
+	// WebSocket connection management
+	mux.HandleFunc("GET /websocket/connections", a.handleListWebSocketConnections)
+	mux.HandleFunc("GET /websocket/connections/{id}", a.handleGetWebSocketConnection)
+	mux.HandleFunc("DELETE /websocket/connections/{id}", a.handleCloseWebSocketConnection)
+	mux.HandleFunc("GET /websocket/stats", a.handleGetWebSocketStats)
+
 	// Mock-specific SSE endpoints
 	mux.HandleFunc("GET /mocks/{id}/sse/connections", a.requireEngine(a.handleListMockSSEConnections))
 	mux.HandleFunc("DELETE /mocks/{id}/sse/connections", a.requireEngine(a.handleCloseMockSSEConnections))

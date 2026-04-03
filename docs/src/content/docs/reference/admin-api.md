@@ -945,42 +945,73 @@ Get SSE statistics.
 
 ### WebSocket Management
 
-#### GET /admin/ws/connections
+#### GET /websocket/connections
 
 List active WebSocket connections.
 
-#### GET /admin/ws/connections/{id}
-
-Get connection details.
-
-#### DELETE /admin/ws/connections/{id}
-
-Close a WebSocket connection.
-
-#### POST /admin/ws/connections/{id}/send
-
-Send a message to a specific connection.
-
-**Request:**
+**Response:**
 
 ```json
 {
-  "type": "text",
-  "data": "Hello from server"
+  "connections": [
+    {
+      "id": "ws-abc123",
+      "path": "/ws/orderbook",
+      "clientIp": "127.0.0.1",
+      "connectedAt": "2024-01-15T10:30:00Z",
+      "messagesSent": 42,
+      "messagesRecv": 7,
+      "bytesSent": 8192,
+      "bytesReceived": 256,
+      "status": "connected"
+    }
+  ],
+  "stats": {
+    "totalConnections": 1,
+    "activeConnections": 1,
+    "totalMessagesSent": 42,
+    "totalMessagesRecv": 7,
+    "connectionsByMock": {}
+  }
 }
 ```
 
-#### POST /admin/ws/broadcast
+#### GET /websocket/connections/{id}
 
-Broadcast message to all connections.
+Get details of a specific WebSocket connection.
 
-#### GET /admin/ws/endpoints
+**Response:** Single connection object (same shape as items in the list above). Returns `404` if not found.
 
-List configured WebSocket endpoints.
+#### DELETE /websocket/connections/{id}
 
-#### GET /admin/ws/stats
+Close a WebSocket connection.
+
+**Response:**
+
+```json
+{
+  "message": "Connection closed",
+  "connection": "ws-abc123"
+}
+```
+
+Returns `404` if the connection is not found.
+
+#### GET /websocket/stats
 
 Get WebSocket statistics.
+
+**Response:**
+
+```json
+{
+  "totalConnections": 10,
+  "activeConnections": 2,
+  "totalMessagesSent": 500,
+  "totalMessagesRecv": 120,
+  "connectionsByMock": {}
+}
+```
 
 ---
 

@@ -3,7 +3,7 @@ package engineclient
 import (
 	"errors"
 
-	types "github.com/getmockd/mockd/pkg/api/types"
+	"github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/store"
 )
 
@@ -30,29 +30,32 @@ type (
 	ProtocolStatus   = types.ProtocolStatus
 	MockListResponse = types.MockListResponse
 	// RequestFilter is kept for backward compatibility; use requestlog.Filter directly.
-	RequestFilter                = types.RequestLogFilter
-	RequestLogEntry              = types.RequestLogEntry
-	RequestListResponse          = types.RequestListResponse
-	ErrorResponse                = types.ErrorResponse
-	ChaosConfig                  = types.ChaosConfig
-	LatencyConfig                = types.LatencyConfig
-	ErrorRateConfig              = types.ErrorRateConfig
-	BandwidthConfig              = types.BandwidthConfig
-	ChaosRuleConfig              = types.ChaosRuleConfig
-	ChaosFaultConfig             = types.ChaosFaultConfig
-	ChaosStats                   = types.ChaosStats
-	StatefulResource             = types.StatefulResource
-	StatefulItemsResponse        = types.StatefulItemsResponse
-	StateOverview                = types.StateOverview
-	ProtocolHandler              = types.ProtocolHandler
-	SSEConnection                = types.SSEConnection
-	SSEStats                     = types.SSEStats
-	CustomOperationInfo          = types.CustomOperationInfo
-	CustomOperationDetail        = types.CustomOperationDetail
-	CustomOperationStep          = types.CustomOperationStep
-	StatefulFaultStats           = types.StatefulFaultStats
-	CircuitBreakerStatus         = types.CircuitBreakerStatus
-	RetryAfterStatus             = types.RetryAfterStatus
-	ProgressiveDegradationStatus = types.ProgressiveDegradationStatus
-	ResetStateResponse           = types.ResetStateResponse
+	RequestFilter                   = types.RequestLogFilter
+	RequestLogEntry                 = types.RequestLogEntry
+	RequestListResponse             = types.RequestListResponse
+	ErrorResponse                   = types.ErrorResponse
+	ChaosConfig                     = types.ChaosConfig
+	LatencyConfig                   = types.LatencyConfig
+	ErrorRateConfig                 = types.ErrorRateConfig
+	BandwidthConfig                 = types.BandwidthConfig
+	ChaosRuleConfig                 = types.ChaosRuleConfig
+	ChaosFaultConfig                = types.ChaosFaultConfig
+	ChaosStats                      = types.ChaosStats
+	StatefulResource                = types.StatefulResource
+	StatefulItemsResponse           = types.StatefulItemsResponse
+	StateOverview                   = types.StateOverview
+	ProtocolHandler                 = types.ProtocolHandler
+	SSEConnection                   = types.SSEConnection
+	SSEStats                        = types.SSEStats
+	WebSocketConnection             = types.WebSocketConnection
+	WebSocketConnectionListResponse = types.WebSocketConnectionListResponse
+	WebSocketStats                  = types.WebSocketStats
+	CustomOperationInfo             = types.CustomOperationInfo
+	CustomOperationDetail           = types.CustomOperationDetail
+	CustomOperationStep             = types.CustomOperationStep
+	StatefulFaultStats              = types.StatefulFaultStats
+	CircuitBreakerStatus            = types.CircuitBreakerStatus
+	RetryAfterStatus                = types.RetryAfterStatus
+	ProgressiveDegradationStatus    = types.ProgressiveDegradationStatus
+	ResetStateResponse              = types.ResetStateResponse
 )

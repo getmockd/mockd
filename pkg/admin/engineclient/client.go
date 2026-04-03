@@ -1077,6 +1077,86 @@ func (c *Client) GetSSEStats(ctx context.Context) (*SSEStats, error) {
 	return &stats, nil
 }
 
+// ListWebSocketConnections returns all active WebSocket connections.
+func (c *Client) ListWebSocketConnections(ctx context.Context) ([]*WebSocketConnection, error) {
+	resp, err := c.get(ctx, "/websocket/connections")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result struct {
+		Connections []*WebSocketConnection `json:"connections"`
+		Count       int                    `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode WebSocket connections: %w", err)
+	}
+	return result.Connections, nil
+}
+
+// GetWebSocketConnection returns a specific WebSocket connection by ID.
+func (c *Client) GetWebSocketConnection(ctx context.Context, id string) (*WebSocketConnection, error) {
+	resp, err := c.get(ctx, "/websocket/connections/"+url.PathEscape(id))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var conn WebSocketConnection
+	if err := json.NewDecoder(resp.Body).Decode(&conn); err != nil {
+		return nil, fmt.Errorf("failed to decode WebSocket connection: %w", err)
+	}
+	return &conn, nil
+}
+
+// CloseWebSocketConnection closes a WebSocket connection by ID.
+func (c *Client) CloseWebSocketConnection(ctx context.Context, id string) error {
+	resp, err := c.delete(ctx, "/websocket/connections/"+url.PathEscape(id))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetWebSocketStats returns WebSocket statistics.
+func (c *Client) GetWebSocketStats(ctx context.Context) (*WebSocketStats, error) {
+	resp, err := c.get(ctx, "/websocket/stats")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var stats WebSocketStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("failed to decode WebSocket stats: %w", err)
+	}
+	return &stats, nil
+}
+
 // HTTP helpers
 
 func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
