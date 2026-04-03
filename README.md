@@ -13,13 +13,13 @@
   <a href="https://github.com/getmockd/mockd/actions/workflows/ci.yaml"><img src="https://github.com/getmockd/mockd/actions/workflows/ci.yaml/badge.svg" alt="CI"></a>
   <a href="https://github.com/getmockd/mockd/releases"><img src="https://img.shields.io/github/v/release/getmockd/mockd?include_prereleases" alt="Release"></a>
   <a href="https://github.com/getmockd/mockd/stargazers"><img src="https://img.shields.io/github/stars/getmockd/mockd?style=social" alt="Stars"></a>
-  <a href="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go"></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
 </p>
 
 <p align="center">
   <a href="https://mockd.io">Website</a> &middot;
-  <a href="https://mockd.io/docs">Docs</a> &middot;
+  <a href="https://docs.mockd.io">Docs</a> &middot;
   <a href="https://github.com/getmockd/mockd-samples">Samples</a> &middot;
   <a href="https://github.com/getmockd/mockd/blob/main/CONTRIBUTING.md">Contributing</a>
 </p>
@@ -222,7 +222,7 @@ Coming soon. [Join the waitlist](https://mockd.io/pricing#waitlist-form).
 
 ## Documentation
 
-Full guides, API reference, and config docs at **[mockd.io](https://mockd.io)**.
+Full guides, API reference, and config docs at **[docs.mockd.io](https://docs.mockd.io)**.
 
 ## Contributing
 
