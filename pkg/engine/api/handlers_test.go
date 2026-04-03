@@ -359,6 +359,15 @@ func (m *mockEngine) GetWebSocketStats() *WebSocketStats {
 	return m.wsStats
 }
 
+func (m *mockEngine) SendToWebSocketConnection(id string, msgType string, data []byte) error {
+	for _, c := range m.wsConnections {
+		if c.ID == id {
+			return nil
+		}
+	}
+	return errors.New("connection not found")
+}
+
 func (m *mockEngine) GetConfig() *ConfigResponse {
 	return m.configResp
 }

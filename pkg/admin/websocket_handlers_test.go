@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
@@ -162,4 +163,77 @@ func TestHandleGetWebSocketStats_EngineUnavailable_Returns503(t *testing.T) {
 	api.handleGetWebSocketStats(rec, req)
 
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+// ============================================================================
+// handleSendToWebSocketConnection
+// ============================================================================
+
+func TestHandleSendToWebSocketConnection_MissingID_Returns400(t *testing.T) {
+	api := NewAPI(0, WithDataDir(t.TempDir()))
+	defer func() { _ = api.Stop() }()
+
+	req := httptest.NewRequest(http.MethodPost, "/websocket/connections//send", strings.NewReader(`{"type":"text","data":"hello"}`))
+	// PathValue "id" intentionally not set → empty string
+	rec := httptest.NewRecorder()
+
+	api.handleSendToWebSocketConnection(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandleSendToWebSocketConnection_InvalidJSON_Returns400(t *testing.T) {
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(engineclient.New("http://127.0.0.1:1")))
+	defer func() { _ = api.Stop() }()
+
+	req := httptest.NewRequest(http.MethodPost, "/websocket/connections/conn-1/send", strings.NewReader(`{invalid`))
+	req.SetPathValue("id", "conn-1")
+	rec := httptest.NewRecorder()
+
+	api.handleSendToWebSocketConnection(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandleSendToWebSocketConnection_NoEngine_Returns404(t *testing.T) {
+	api := NewAPI(0, WithDataDir(t.TempDir()))
+	defer func() { _ = api.Stop() }()
+
+	req := httptest.NewRequest(http.MethodPost, "/websocket/connections/conn-1/send",
+		strings.NewReader(`{"type":"text","data":"hello"}`))
+	req.SetPathValue("id", "conn-1")
+	rec := httptest.NewRecorder()
+
+	api.handleSendToWebSocketConnection(rec, req)
+
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestHandleSendToWebSocketConnection_EngineUnavailable_Returns503(t *testing.T) {
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(engineclient.New("http://127.0.0.1:1")))
+	defer func() { _ = api.Stop() }()
+
+	req := httptest.NewRequest(http.MethodPost, "/websocket/connections/conn-1/send",
+		strings.NewReader(`{"type":"text","data":"hello"}`))
+	req.SetPathValue("id", "conn-1")
+	rec := httptest.NewRecorder()
+
+	api.handleSendToWebSocketConnection(rec, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestHandleSendToWebSocketConnection_EmptyBody_DefaultsToText(t *testing.T) {
+	// No engine — expects 404, but verifies empty body doesn't fail decode
+	api := NewAPI(0, WithDataDir(t.TempDir()))
+	defer func() { _ = api.Stop() }()
+
+	req := httptest.NewRequest(http.MethodPost, "/websocket/connections/conn-1/send", strings.NewReader(""))
+	req.SetPathValue("id", "conn-1")
+	rec := httptest.NewRecorder()
+
+	api.handleSendToWebSocketConnection(rec, req)
+
+	// No engine → 404, not a 400 parse error
+	assert.Equal(t, http.StatusNotFound, rec.Code)
 }

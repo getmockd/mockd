@@ -1138,6 +1138,29 @@ func (c *Client) CloseWebSocketConnection(ctx context.Context, id string) error 
 	return nil
 }
 
+// SendToWebSocketConnection sends a text or binary message to a specific connection.
+// msgType must be "text" (default) or "binary".
+// For binary messages, data should contain the raw bytes as a string.
+func (c *Client) SendToWebSocketConnection(ctx context.Context, id string, msgType string, data string) error {
+	body := map[string]string{
+		"type": msgType,
+		"data": data,
+	}
+	resp, err := c.post(ctx, "/websocket/connections/"+url.PathEscape(id)+"/send", body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
 // GetWebSocketStats returns WebSocket statistics.
 func (c *Client) GetWebSocketStats(ctx context.Context) (*WebSocketStats, error) {
 	resp, err := c.get(ctx, "/websocket/stats")

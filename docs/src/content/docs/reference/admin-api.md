@@ -997,6 +997,36 @@ Close a WebSocket connection.
 
 Returns `404` if the connection is not found.
 
+#### POST /websocket/connections/{id}/send
+
+Send a text or binary message to a specific active WebSocket connection.
+
+**Request:**
+
+```json
+{
+  "type": "text",
+  "data": "Hello from server"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Message type: `"text"` (default) or `"binary"` |
+| `data` | string | Message payload |
+
+**Response:**
+
+```json
+{
+  "message": "Message sent",
+  "connection": "ws-abc123",
+  "type": "text"
+}
+```
+
+Returns `404` if the connection is not found.
+
 #### GET /websocket/stats
 
 Get WebSocket statistics.

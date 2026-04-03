@@ -816,6 +816,43 @@ func (s *Server) handleGetWebSocketStats(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, stats)
 }
 
+// handleSendToWebSocketConnection handles POST /websocket/connections/{id}/send.
+// It sends a text or binary message to a specific active WebSocket connection.
+func (s *Server) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing_id", "Connection ID is required")
+		return
+	}
+
+	limitedBody(w, r)
+
+	var req struct {
+		// Type is "text" (default) or "binary" (data must be plain bytes).
+		Type string `json:"type"`
+		// Data is the message payload. For binary messages, pass raw bytes as a string.
+		Data string `json:"data"`
+	}
+	if err := decodeJSONBody(r, &req, false); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	if req.Type == "" {
+		req.Type = "text"
+	}
+
+	if err := s.engine.SendToWebSocketConnection(id, req.Type, []byte(req.Data)); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "WebSocket connection not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message":    "Message sent",
+		"connection": id,
+		"type":       req.Type,
+	})
+}
+
 // Config handlers
 
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {

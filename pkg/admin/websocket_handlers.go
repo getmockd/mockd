@@ -163,3 +163,47 @@ func (a *API) handleGetWebSocketStats(w http.ResponseWriter, r *http.Request) {
 func mapWebSocketEngineError(err error, log *slog.Logger, operation string) (int, string, string) {
 	return http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, log, operation)
 }
+
+// handleSendToWebSocketConnection handles POST /websocket/connections/{id}/send.
+// It forwards a text or binary message to a specific active connection through the engine.
+func (a *API) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing_id", "Connection ID is required")
+		return
+	}
+
+	var req WebSocketSendRequest
+	if err := decodeOptionalJSONBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON in request body")
+		return
+	}
+	if req.Type == "" {
+		req.Type = "text"
+	}
+
+	engine := a.localEngine.Load()
+	if engine == nil {
+		writeError(w, http.StatusNotFound, "not_found", "Connection not found")
+		return
+	}
+
+	err := engine.SendToWebSocketConnection(ctx, id, req.Type, req.Data)
+	if err != nil {
+		if errors.Is(err, engineclient.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Connection not found")
+			return
+		}
+		a.logger().Error("failed to send to WebSocket connection", "error", err, "connectionID", id)
+		status, code, msg := mapWebSocketEngineError(err, a.logger(), "send to WebSocket connection")
+		writeError(w, status, code, msg)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message":    "Message sent",
+		"connection": id,
+		"type":       req.Type,
+	})
+}
