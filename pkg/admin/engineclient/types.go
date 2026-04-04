@@ -47,6 +47,8 @@ type (
 	ProtocolHandler              = types.ProtocolHandler
 	SSEConnection                = types.SSEConnection
 	SSEStats                     = types.SSEStats
+	WebSocketConnection          = types.WebSocketConnection
+	WebSocketStats               = types.WebSocketStats
 	CustomOperationInfo          = types.CustomOperationInfo
 	CustomOperationDetail        = types.CustomOperationDetail
 	CustomOperationStep          = types.CustomOperationStep
