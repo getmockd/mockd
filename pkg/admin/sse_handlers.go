@@ -149,35 +149,9 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSSEStats handles GET /sse/stats.
 func (a *API) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	engine := a.localEngine.Load()
-	if engine == nil {
-		writeJSON(w, http.StatusOK, sse.ConnectionStats{
-			ConnectionsByMock: make(map[string]int),
-		})
-		return
-	}
-
-	stats, err := engine.GetSSEStats(ctx)
-	if err != nil {
-		a.logger().Error("failed to get SSE stats", "error", err)
-		status, code, msg := mapSSEEngineError(err, a.logger(), "get SSE stats")
-		writeError(w, status, code, msg)
-		return
-	}
-
-	connsByMock := stats.ConnectionsByMock
-	if connsByMock == nil {
-		connsByMock = make(map[string]int)
-	}
-	writeJSON(w, http.StatusOK, sse.ConnectionStats{
-		ActiveConnections: stats.ActiveConnections,
-		TotalConnections:  stats.TotalConnections,
-		TotalEventsSent:   stats.TotalEventsSent,
-		TotalBytesSent:    stats.TotalBytesSent,
-		ConnectionsByMock: connsByMock,
-	})
+	provider := newSSEStatsProvider(engine)
+	a.handleGetStats(w, r, provider)
 }
 
 // handleListMockSSEConnections handles GET /mocks/{id}/sse/connections.

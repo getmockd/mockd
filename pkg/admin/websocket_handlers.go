@@ -129,35 +129,9 @@ func (a *API) handleCloseWebSocketConnection(w http.ResponseWriter, r *http.Requ
 
 // handleGetWebSocketStats handles GET /websocket/stats.
 func (a *API) handleGetWebSocketStats(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	engine := a.localEngine.Load()
-	if engine == nil {
-		writeJSON(w, http.StatusOK, engineclient.WebSocketStats{
-			ConnectionsByMock: make(map[string]int),
-		})
-		return
-	}
-
-	stats, err := engine.GetWebSocketStats(ctx)
-	if err != nil {
-		a.logger().Error("failed to get WebSocket stats", "error", err)
-		status, code, msg := mapWebSocketEngineError(err, a.logger(), "get WebSocket stats")
-		writeError(w, status, code, msg)
-		return
-	}
-
-	connsByMock := stats.ConnectionsByMock
-	if connsByMock == nil {
-		connsByMock = make(map[string]int)
-	}
-	writeJSON(w, http.StatusOK, engineclient.WebSocketStats{
-		TotalConnections:  stats.TotalConnections,
-		ActiveConnections: stats.ActiveConnections,
-		TotalMessagesSent: stats.TotalMessagesSent,
-		TotalMessagesRecv: stats.TotalMessagesRecv,
-		ConnectionsByMock: connsByMock,
-	})
+	provider := newWSStatsProvider(engine)
+	a.handleGetStats(w, r, provider)
 }
 
 func mapWebSocketEngineError(err error, log *slog.Logger, operation string) (int, string, string) {
