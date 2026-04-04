@@ -48,5 +48,8 @@ type WebSocketSendRequest struct {
 	// Type is the message type: "text" (default) or "binary".
 	Type string `json:"type"`
 	// Data is the message payload.
+	// For type "text", Data is a plain UTF-8 string.
+	// For type "binary", Data must be a base64-encoded string; the server decodes it
+	// before sending the raw bytes over the WebSocket connection.
 	Data string `json:"data"`
 }

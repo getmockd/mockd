@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getmockd/mockd/pkg/admin/engineclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/getmockd/mockd/pkg/admin/engineclient"
 )
 
 // ============================================================================
@@ -236,4 +237,37 @@ func TestHandleSendToWebSocketConnection_EmptyBody_DefaultsToText(t *testing.T) 
 
 	// No engine → 404, not a 400 parse error
 	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestHandleSendToWebSocketConnection_Success_Returns200(t *testing.T) {
+	// Spin up a minimal mock engine that accepts the send call and returns 200.
+	mockEngine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/send") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"message":"Message sent","connection":"conn-1","type":"text"}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer mockEngine.Close()
+
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(engineclient.New(mockEngine.URL)))
+	defer func() { _ = api.Stop() }()
+
+	body := strings.NewReader(`{"type":"text","data":"hello"}`)
+	req := httptest.NewRequest(http.MethodPost, "/websocket/connections/conn-1/send", body)
+	req.SetPathValue("id", "conn-1")
+	rec := httptest.NewRecorder()
+
+	api.handleSendToWebSocketConnection(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp map[string]interface{}
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "Message sent", resp["message"])
+	assert.Equal(t, "conn-1", resp["connection"])
+	assert.Equal(t, "text", resp["type"])
 }

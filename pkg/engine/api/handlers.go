@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -828,9 +829,10 @@ func (s *Server) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.
 	limitedBody(w, r)
 
 	var req struct {
-		// Type is "text" (default) or "binary" (data must be plain bytes).
+		// Type is "text" (default) or "binary".
+		// For binary messages, Data must be base64-encoded; it is decoded here
+		// before the raw bytes are sent over the WebSocket connection.
 		Type string `json:"type"`
-		// Data is the message payload. For binary messages, pass raw bytes as a string.
 		Data string `json:"data"`
 	}
 	if err := decodeJSONBody(r, &req, false); err != nil {
@@ -841,7 +843,19 @@ func (s *Server) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.
 		req.Type = "text"
 	}
 
-	if err := s.engine.SendToWebSocketConnection(id, req.Type, []byte(req.Data)); err != nil {
+	var payload []byte
+	if req.Type == "binary" {
+		var err error
+		payload, err = base64.StdEncoding.DecodeString(req.Data)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_base64", "For binary messages, data must be a base64-encoded string")
+			return
+		}
+	} else {
+		payload = []byte(req.Data)
+	}
+
+	if err := s.engine.SendToWebSocketConnection(id, req.Type, payload); err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "WebSocket connection not found")
 		return
 	}
