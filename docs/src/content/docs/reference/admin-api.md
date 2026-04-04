@@ -1013,7 +1013,7 @@ Send a text or binary message to a specific active WebSocket connection.
 | Field | Type | Description |
 |-------|------|-------------|
 | `type` | string | Message type: `"text"` (default) or `"binary"` |
-| `data` | string | Message payload |
+| `data` | string | Message payload. For `"text"`, a plain UTF-8 string. For `"binary"`, a **base64-encoded** string — the server decodes it before writing raw bytes to the WebSocket. |
 
 **Response:**
 

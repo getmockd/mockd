@@ -20,15 +20,10 @@ type statsProvider interface {
 }
 
 // handleGetStats is a generic handler for retrieving statistics.
-// It eliminates code duplication between SSE and WebSocket stats handlers.
+// The caller must guard against a nil engine and handle the empty-stats
+// response before constructing the provider and invoking this function.
 func (a *API) handleGetStats(w http.ResponseWriter, r *http.Request, provider statsProvider) {
 	ctx := r.Context()
-
-	engine := a.localEngine.Load()
-	if engine == nil {
-		writeJSON(w, http.StatusOK, provider.GetEmptyStats())
-		return
-	}
 
 	stats, err := provider.GetStats(ctx)
 	if err != nil {

@@ -134,8 +134,11 @@ func (a *API) handleCloseWebSocketConnection(w http.ResponseWriter, r *http.Requ
 // handleGetWebSocketStats handles GET /websocket/stats.
 func (a *API) handleGetWebSocketStats(w http.ResponseWriter, r *http.Request) {
 	engine := a.localEngine.Load()
-	provider := newWSStatsProvider(engine)
-	a.handleGetStats(w, r, provider)
+	if engine == nil {
+		writeJSON(w, http.StatusOK, engineclient.WebSocketStats{ConnectionsByMock: make(map[string]int)})
+		return
+	}
+	a.handleGetStats(w, r, newWSStatsProvider(engine))
 }
 
 func mapWebSocketEngineError(err error, log *slog.Logger, operation string) (int, string, string) {

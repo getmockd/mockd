@@ -15,6 +15,7 @@ import (
 	"github.com/getmockd/mockd/pkg/httputil"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/websocket"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -856,7 +857,11 @@ func (s *Server) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.
 	}
 
 	if err := s.engine.SendToWebSocketConnection(id, req.Type, payload); err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "WebSocket connection not found")
+		if errors.Is(err, websocket.ErrConnectionNotFound) || errors.Is(err, websocket.ErrConnectionClosed) {
+			writeError(w, http.StatusNotFound, "not_found", "WebSocket connection not found or closed")
+		} else {
+			writeError(w, http.StatusInternalServerError, "send_error", "Failed to send message to WebSocket connection")
+		}
 		return
 	}
 

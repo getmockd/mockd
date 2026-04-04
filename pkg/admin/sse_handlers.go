@@ -150,8 +150,11 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 // handleGetSSEStats handles GET /sse/stats.
 func (a *API) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 	engine := a.localEngine.Load()
-	provider := newSSEStatsProvider(engine)
-	a.handleGetStats(w, r, provider)
+	if engine == nil {
+		writeJSON(w, http.StatusOK, sse.ConnectionStats{ConnectionsByMock: make(map[string]int)})
+		return
+	}
+	a.handleGetStats(w, r, newSSEStatsProvider(engine))
 }
 
 // handleListMockSSEConnections handles GET /mocks/{id}/sse/connections.
