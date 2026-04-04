@@ -35,6 +35,10 @@ func (a *API) handleListWebSocketConnections(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Stats and connections are fetched in two separate calls; they are not
+	// atomically consistent. Connections may change between the two requests,
+	// so the counts in stats may not exactly match the length of the returned
+	// connection list. This is intentional — correctness is not required here.
 	connections, err := engine.ListWebSocketConnections(ctx)
 	if err != nil {
 		a.logger().Error("failed to list WebSocket connections", "error", err)

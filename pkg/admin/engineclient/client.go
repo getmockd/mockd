@@ -1140,7 +1140,8 @@ func (c *Client) CloseWebSocketConnection(ctx context.Context, id string) error 
 
 // SendToWebSocketConnection sends a text or binary message to a specific connection.
 // msgType must be "text" (default) or "binary".
-// For binary messages, data should contain the raw bytes as a string.
+// For binary messages, data must be a base64-encoded string; the engine decodes
+// it before sending the raw bytes over the WebSocket connection.
 func (c *Client) SendToWebSocketConnection(ctx context.Context, id string, msgType string, data string) error {
 	body := map[string]string{
 		"type": msgType,
