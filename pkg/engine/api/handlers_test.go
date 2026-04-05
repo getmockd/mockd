@@ -32,9 +32,11 @@ type mockEngine struct {
 	sseConnections []*SSEConnection
 	wsConnections    []*WebSocketConnection
 	mqttConnections  []*MQTTConnection
+	grpcStreams      []*GRPCStream
 	sseStats         *SSEStats
 	wsStats          *WebSocketStats
 	mqttStats        *MQTTStats
+	grpcStats        *GRPCStats
 	configResp     *ConfigResponse
 	protocols      map[string]ProtocolStatusInfo
 
@@ -405,10 +407,32 @@ func (m *mockEngine) GetMQTTStats() *MQTTStats {
 	return m.mqttStats
 }
 
-func (m *mockEngine) ListGRPCStreams() []*GRPCStream { return nil }
-func (m *mockEngine) GetGRPCStream(id string) *GRPCStream { return nil }
-func (m *mockEngine) CancelGRPCStream(id string) error { return errors.New("not found") }
-func (m *mockEngine) GetGRPCStats() *GRPCStats { return nil }
+func (m *mockEngine) ListGRPCStreams() []*GRPCStream {
+	return m.grpcStreams
+}
+
+func (m *mockEngine) GetGRPCStream(id string) *GRPCStream {
+	for _, s := range m.grpcStreams {
+		if s.ID == id {
+			return s
+		}
+	}
+	return nil
+}
+
+func (m *mockEngine) CancelGRPCStream(id string) error {
+	for i, s := range m.grpcStreams {
+		if s.ID == id {
+			m.grpcStreams = append(m.grpcStreams[:i], m.grpcStreams[i+1:]...)
+			return nil
+		}
+	}
+	return errors.New("stream not found")
+}
+
+func (m *mockEngine) GetGRPCStats() *GRPCStats {
+	return m.grpcStats
+}
 
 func (m *mockEngine) GetConfig() *ConfigResponse {
 	return m.configResp
@@ -2760,5 +2784,153 @@ func TestHandleGetMQTTStats(t *testing.T) {
 		assert.Equal(t, 3, stats.ConnectedClients)
 		assert.Equal(t, 7, stats.TotalSubscriptions)
 		assert.Equal(t, 3, stats.SubscriptionsByClient["c1"])
+	})
+}
+
+// ============================================================================
+// gRPC stream handlers
+// ============================================================================
+
+func TestHandleListGRPCStreams(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListGRPCStreams(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp GRPCStreamListResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, 0, resp.Count)
+	})
+
+	t.Run("with streams", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.grpcStreams = []*GRPCStream{
+			{ID: "stream-1", Method: "/pkg.Svc/Chat", StreamType: "bidi", MessagesSent: 5, MessagesRecv: 3},
+			{ID: "stream-2", Method: "/pkg.Svc/Watch", StreamType: "server_stream", MessagesSent: 10},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListGRPCStreams(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp GRPCStreamListResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, 2, resp.Count)
+		assert.Equal(t, "stream-1", resp.Streams[0].ID)
+	})
+}
+
+func TestHandleGetGRPCStream(t *testing.T) {
+	t.Run("found", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.grpcStreams = []*GRPCStream{
+			{ID: "stream-1", Method: "/pkg.Svc/Chat", StreamType: "bidi"},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/connections/stream-1", nil)
+		req.SetPathValue("id", "stream-1")
+		rec := httptest.NewRecorder()
+
+		server.handleGetGRPCStream(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var stream GRPCStream
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stream))
+		assert.Equal(t, "stream-1", stream.ID)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/connections/nonexistent", nil)
+		req.SetPathValue("id", "nonexistent")
+		rec := httptest.NewRecorder()
+
+		server.handleGetGRPCStream(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+func TestHandleCancelGRPCStream(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.grpcStreams = []*GRPCStream{
+			{ID: "stream-1", Method: "/pkg.Svc/Chat", StreamType: "bidi"},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodDelete, "/grpc/connections/stream-1", nil)
+		req.SetPathValue("id", "stream-1")
+		rec := httptest.NewRecorder()
+
+		server.handleCancelGRPCStream(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodDelete, "/grpc/connections/nonexistent", nil)
+		req.SetPathValue("id", "nonexistent")
+		rec := httptest.NewRecorder()
+
+		server.handleCancelGRPCStream(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+func TestHandleGetGRPCStats(t *testing.T) {
+	t.Run("nil stats", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetGRPCStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var stats GRPCStats
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stats))
+		assert.NotNil(t, stats.StreamsByMethod)
+	})
+
+	t.Run("with stats", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.grpcStats = &GRPCStats{
+			ActiveStreams:      2,
+			TotalStreams:       10,
+			TotalRPCs:          100,
+			TotalMessagesSent:  50,
+			TotalMessagesRecv:  30,
+			StreamsByMethod:    map[string]int{"/pkg.Svc/Chat": 2},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetGRPCStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var stats GRPCStats
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stats))
+		assert.Equal(t, 2, stats.ActiveStreams)
+		assert.Equal(t, int64(100), stats.TotalRPCs)
+		assert.Equal(t, 2, stats.StreamsByMethod["/pkg.Svc/Chat"])
 	})
 }
