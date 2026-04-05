@@ -251,6 +251,12 @@ The response includes ports for:
 
 ### Mock Management
 
+:::note[WebSocket: active clients reconnect on mock changes]
+When a WebSocket mock is updated or deleted, all clients currently connected to that endpoint receive a **close frame with code 1012 (Service Restart)**. Most WebSocket client libraries treat code 1012 as a signal to reconnect automatically. On reconnect, the client establishes a fresh connection that uses the new mock configuration.
+
+This applies to `PUT /mocks/{id}`, `DELETE /mocks/{id}`, `POST /mocks/{id}/toggle` (when disabling), bulk `DELETE /mocks` (delete all), and `POST /config` with `replace: true`.
+:::
+
 #### GET /mocks
 
 List all configured mocks.

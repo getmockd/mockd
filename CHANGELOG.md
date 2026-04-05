@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **WebSocket connection management API** — `GET /websocket/connections`, `GET /websocket/connections/{id}`, `DELETE /websocket/connections/{id}`, `POST /websocket/connections/{id}/send`, `GET /websocket/stats` added to the Admin API for real-time visibility, control, and server-initiated messaging of active WebSocket connections
+- **WebSocket auto-reconnect on mock update** — updating or deleting a WebSocket mock now automatically closes all active connections with close code 1012 (Service Restart) so clients reconnect and pick up the new configuration immediately
 - **Workspace-scoped stateful resources** — stateful resources, custom operations, and request logs are now isolated per workspace
 - **`--workspace` persistent CLI flag** — scope any CLI command to a specific workspace without switching context
 - **`?workspaceId=` API parameter** — all admin API endpoints now accept workspace filtering
