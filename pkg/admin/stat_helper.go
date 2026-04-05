@@ -13,10 +13,10 @@ import (
 type statsProvider interface {
 	// GetStats retrieves statistics from the engine.
 	GetStats(ctx context.Context) (interface{}, error)
-	// GetEmptyStats returns empty statistics for when engine is unavailable.
-	GetEmptyStats() interface{}
 	// MapError converts an error to HTTP status, code, and message.
 	MapError(err error, log *slog.Logger, operation string) (int, string, string)
+	// ProtocolName returns the protocol name for error logging.
+	ProtocolName() string
 }
 
 // handleGetStats is a generic handler for retrieving statistics.
@@ -27,7 +27,7 @@ func (a *API) handleGetStats(w http.ResponseWriter, r *http.Request, provider st
 
 	stats, err := provider.GetStats(ctx)
 	if err != nil {
-		a.logger().Error("failed to get stats", "error", err)
+		a.logger().Error("failed to get "+provider.ProtocolName()+" stats", "error", err)
 		status, code, msg := provider.MapError(err, a.logger(), "get stats")
 		writeError(w, status, code, msg)
 		return
@@ -67,17 +67,13 @@ func (p *sseStatsProvider) GetStats(ctx context.Context) (interface{}, error) {
 	}, nil
 }
 
-// GetEmptyStats returns empty SSE statistics.
-func (p *sseStatsProvider) GetEmptyStats() interface{} {
-	return sse.ConnectionStats{
-		ConnectionsByMock: make(map[string]int),
-	}
-}
-
 // MapError converts an SSE engine error to HTTP status, code, and message.
 func (p *sseStatsProvider) MapError(err error, log *slog.Logger, operation string) (int, string, string) {
 	return mapSSEEngineError(err, log, operation)
 }
+
+// ProtocolName returns the protocol name for error logging.
+func (p *sseStatsProvider) ProtocolName() string { return "SSE" }
 
 // wsStatsProvider implements statsProvider for WebSocket statistics.
 type wsStatsProvider struct {
@@ -110,14 +106,51 @@ func (p *wsStatsProvider) GetStats(ctx context.Context) (interface{}, error) {
 	}, nil
 }
 
-// GetEmptyStats returns empty WebSocket statistics.
-func (p *wsStatsProvider) GetEmptyStats() interface{} {
-	return engineclient.WebSocketStats{
-		ConnectionsByMock: make(map[string]int),
-	}
-}
-
 // MapError converts a WebSocket engine error to HTTP status, code, and message.
 func (p *wsStatsProvider) MapError(err error, log *slog.Logger, operation string) (int, string, string) {
 	return mapWebSocketEngineError(err, log, operation)
 }
+
+// ProtocolName returns the protocol name for error logging.
+func (p *wsStatsProvider) ProtocolName() string { return "WebSocket" }
+
+// mqttStatsProvider implements statsProvider for MQTT statistics.
+type mqttStatsProvider struct {
+	engine *engineclient.Client
+}
+
+// newMQTTStatsProvider creates a new MQTT statistics provider.
+func newMQTTStatsProvider(engine *engineclient.Client) *mqttStatsProvider {
+	return &mqttStatsProvider{engine: engine}
+}
+
+// GetStats retrieves MQTT statistics from the engine.
+func (p *mqttStatsProvider) GetStats(ctx context.Context) (interface{}, error) {
+	stats, err := p.engine.GetMQTTStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	subsByClient := stats.SubscriptionsByClient
+	if subsByClient == nil {
+		subsByClient = make(map[string]int)
+	}
+
+	return engineclient.MQTTStats{
+		ConnectedClients:      stats.ConnectedClients,
+		TotalSubscriptions:    stats.TotalSubscriptions,
+		TopicCount:            stats.TopicCount,
+		Port:                  stats.Port,
+		TLSEnabled:            stats.TLSEnabled,
+		AuthEnabled:           stats.AuthEnabled,
+		SubscriptionsByClient: subsByClient,
+	}, nil
+}
+
+// MapError converts an MQTT engine error to HTTP status, code, and message.
+func (p *mqttStatsProvider) MapError(err error, log *slog.Logger, operation string) (int, string, string) {
+	return mapMQTTEngineError(err, log, operation)
+}
+
+// ProtocolName returns the protocol name for error logging.
+func (p *mqttStatsProvider) ProtocolName() string { return "MQTT" }

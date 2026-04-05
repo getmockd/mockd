@@ -843,6 +843,10 @@ func (s *Server) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.
 	if req.Type == "" {
 		req.Type = "text"
 	}
+	if req.Type != "text" && req.Type != "binary" {
+		writeError(w, http.StatusBadRequest, "invalid_type", `Type must be "text" or "binary"`)
+		return
+	}
 
 	var payload []byte
 	if req.Type == "binary" {
@@ -1062,6 +1066,91 @@ func mapStatefulLookupError(err error) (int, string) {
 // This ensures Content-Type is always set correctly.
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	httputil.WriteJSON(w, status, v)
+}
+
+// MQTT handlers
+
+func (s *Server) handleListMQTTConnections(w http.ResponseWriter, r *http.Request) {
+	connections := s.engine.ListMQTTConnections()
+	writeJSON(w, http.StatusOK, MQTTConnectionListResponse{
+		Connections: connections,
+		Count:       len(connections),
+	})
+}
+
+func (s *Server) handleGetMQTTConnection(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	conn := s.engine.GetMQTTConnection(id)
+	if conn == nil {
+		writeError(w, http.StatusNotFound, "not_found", "MQTT connection not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, conn)
+}
+
+func (s *Server) handleCloseMQTTConnection(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.engine.CloseMQTTConnection(id); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "MQTT connection not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "MQTT connection closed",
+		"id":      id,
+	})
+}
+
+func (s *Server) handleGetMQTTStats(w http.ResponseWriter, r *http.Request) {
+	stats := s.engine.GetMQTTStats()
+	if stats == nil {
+		writeJSON(w, http.StatusOK, MQTTStats{SubscriptionsByClient: make(map[string]int)})
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+// gRPC stream handlers
+
+func (s *Server) handleListGRPCStreams(w http.ResponseWriter, r *http.Request) {
+	streams := s.engine.ListGRPCStreams()
+	if streams == nil {
+		streams = []*GRPCStream{}
+	}
+	writeJSON(w, http.StatusOK, GRPCStreamListResponse{
+		Streams: streams,
+		Count:   len(streams),
+	})
+}
+
+func (s *Server) handleGetGRPCStream(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	stream := s.engine.GetGRPCStream(id)
+	if stream == nil {
+		writeError(w, http.StatusNotFound, "not_found", "gRPC stream not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, stream)
+}
+
+func (s *Server) handleCancelGRPCStream(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.engine.CancelGRPCStream(id); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "gRPC stream not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "gRPC stream cancelled",
+		"id":      id,
+	})
+}
+
+func (s *Server) handleGetGRPCStats(w http.ResponseWriter, r *http.Request) {
+	stats := s.engine.GetGRPCStats()
+	if stats == nil {
+		writeJSON(w, http.StatusOK, GRPCStats{StreamsByMethod: make(map[string]int)})
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {

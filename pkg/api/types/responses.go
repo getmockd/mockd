@@ -471,20 +471,48 @@ type SSEStats struct {
 	ConnectionsByMock map[string]int `json:"connectionsByMock"`
 }
 
+// --- MQTT ---
+
+// MQTTConnection represents an active MQTT client connection.
+type MQTTConnection struct {
+	ID              string    `json:"id"`
+	BrokerID        string    `json:"brokerId"`
+	ConnectedAt     time.Time `json:"connectedAt"`
+	Subscriptions   []string  `json:"subscriptions"`
+	ProtocolVersion byte      `json:"protocolVersion"`
+	Username        string    `json:"username,omitempty"`
+	RemoteAddr      string    `json:"remoteAddr,omitempty"`
+	Status          string    `json:"status"`
+}
+
+// MQTTConnectionListResponse lists MQTT connections.
+type MQTTConnectionListResponse struct {
+	Connections []*MQTTConnection `json:"connections"`
+	Count       int               `json:"count"`
+}
+
+// MQTTStats represents MQTT broker statistics.
+type MQTTStats struct {
+	ConnectedClients    int            `json:"connectedClients"`
+	TotalSubscriptions  int            `json:"totalSubscriptions"`
+	TopicCount          int            `json:"topicCount"`
+	Port                int            `json:"port"`
+	TLSEnabled          bool           `json:"tlsEnabled"`
+	AuthEnabled         bool           `json:"authEnabled"`
+	SubscriptionsByClient map[string]int `json:"subscriptionsByClient"`
+}
+
 // --- WebSocket ---
 
 // WebSocketConnection represents an active WebSocket connection.
 type WebSocketConnection struct {
-	ID            string    `json:"id"`
-	MockID        string    `json:"mockId"`
-	Path          string    `json:"path"`
-	ClientIP      string    `json:"clientIp"`
-	ConnectedAt   time.Time `json:"connectedAt"`
-	MessagesSent  int64     `json:"messagesSent"`
-	MessagesRecv  int64     `json:"messagesRecv"`
-	BytesSent     int64     `json:"bytesSent"`
-	BytesReceived int64     `json:"bytesReceived"`
-	Status        string    `json:"status"`
+	ID           string    `json:"id"`
+	MockID       string    `json:"mockId,omitempty"`
+	Path         string    `json:"path"`
+	ConnectedAt  time.Time `json:"connectedAt"`
+	MessagesSent int64     `json:"messagesSent"`
+	MessagesRecv int64     `json:"messagesRecv"`
+	Status       string    `json:"status"`
 }
 
 // WebSocketConnectionListResponse lists WebSocket connections.
@@ -500,4 +528,33 @@ type WebSocketStats struct {
 	TotalMessagesSent int64          `json:"totalMessagesSent"`
 	TotalMessagesRecv int64          `json:"totalMessagesRecv"`
 	ConnectionsByMock map[string]int `json:"connectionsByMock"`
+}
+
+// --- gRPC ---
+
+// GRPCStream represents an active gRPC streaming RPC.
+type GRPCStream struct {
+	ID           string    `json:"id"`
+	Method       string    `json:"method"`
+	StreamType   string    `json:"streamType"`
+	ClientAddr   string    `json:"clientAddr,omitempty"`
+	ConnectedAt  time.Time `json:"connectedAt"`
+	MessagesSent int64     `json:"messagesSent"`
+	MessagesRecv int64     `json:"messagesRecv"`
+}
+
+// GRPCStreamListResponse lists gRPC streams.
+type GRPCStreamListResponse struct {
+	Streams []*GRPCStream `json:"streams"`
+	Count   int           `json:"count"`
+}
+
+// GRPCStats represents gRPC statistics.
+type GRPCStats struct {
+	ActiveStreams      int            `json:"activeStreams"`
+	TotalStreams       int64          `json:"totalStreams"`
+	TotalRPCs          int64          `json:"totalRPCs"`
+	TotalMessagesSent  int64          `json:"totalMessagesSent"`
+	TotalMessagesRecv  int64          `json:"totalMessagesRecv"`
+	StreamsByMethod    map[string]int `json:"streamsByMethod"`
 }

@@ -181,15 +181,44 @@ func (mm *MockManager) unregisterHandlerLocked(cfg *config.MockConfiguration) {
 		return
 	}
 
-	switch cfg.Type { //nolint:exhaustive // HTTP mocks don't need cleanup on removal
+	switch cfg.Type { //nolint:exhaustive // plain HTTP mocks don't need cleanup on removal
+	case mock.TypeHTTP:
+		// HTTP mocks with SSE configuration have active streaming connections
+		// that must be disconnected before the mock is removed or updated.
+		if mm.handler != nil && cfg.HTTP != nil && cfg.HTTP.SSE != nil {
+			mm.handler.DisconnectSSEByMock(cfg.ID)
+		}
 	case mock.TypeGRPC:
 		if mm.protocolManager != nil {
+			// Cancel active streams first so clients receive codes.Unavailable
+			// and can reconnect with retry policies (gRPC equivalent of WS 1012).
+			if srv := mm.protocolManager.GetGRPCServer(cfg.ID); srv != nil {
+				n := srv.StreamTracker().CancelAll()
+				if n > 0 {
+					mm.log.Info("cancelled active gRPC streams", "id", cfg.ID, "count", n)
+				}
+			}
 			if err := mm.protocolManager.StopGRPCServer(cfg.ID); err != nil {
 				mm.log.Warn("failed to stop gRPC server", "id", cfg.ID, "error", err)
 			}
 		}
 	case mock.TypeMQTT:
 		if mm.protocolManager != nil {
+			// Disconnect all connected clients cleanly before stopping the broker.
+			// This gives clients a chance to detect the disconnection and reconnect
+			// when the broker restarts with the updated configuration.
+			broker := mm.protocolManager.GetMQTTBroker(cfg.ID)
+			if broker != nil && broker.IsRunning() {
+				clients := broker.GetClients()
+				for _, clientID := range clients {
+					if err := broker.DisconnectClient(clientID); err != nil {
+						mm.log.Debug("failed to disconnect MQTT client during mock update",
+							"clientID", clientID, "mockID", cfg.ID, "error", err)
+					}
+				}
+				mm.log.Info("disconnected MQTT clients before mock update",
+					"mockID", cfg.ID, "clientCount", len(clients))
+			}
 			if err := mm.protocolManager.StopMQTTBroker(cfg.ID); err != nil {
 				mm.log.Warn("failed to stop MQTT broker", "id", cfg.ID, "error", err)
 			}

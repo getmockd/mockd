@@ -130,6 +130,20 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /websocket/connections/{id}/send", a.handleSendToWebSocketConnection)
 	mux.HandleFunc("GET /websocket/stats", a.handleGetWebSocketStats)
 
+	// MQTT connection management
+	// Routes use /mqtt-connections/ prefix to avoid ambiguity with existing
+	// /mqtt/{id}/status recording routes.
+	mux.HandleFunc("GET /mqtt-connections", a.handleListMQTTConnections)
+	mux.HandleFunc("GET /mqtt-connections/{id}", a.handleGetMQTTConnection)
+	mux.HandleFunc("DELETE /mqtt-connections/{id}", a.handleCloseMQTTConnection)
+	mux.HandleFunc("GET /mqtt-connections/stats", a.handleGetMQTTStats)
+
+	// gRPC stream management
+	mux.HandleFunc("GET /grpc/connections", a.handleListGRPCStreams)
+	mux.HandleFunc("GET /grpc/connections/{id}", a.handleGetGRPCStream)
+	mux.HandleFunc("DELETE /grpc/connections/{id}", a.handleCancelGRPCStream)
+	mux.HandleFunc("GET /grpc/stats", a.handleGetGRPCStats)
+
 	// Mock-specific SSE endpoints
 	mux.HandleFunc("GET /mocks/{id}/sse/connections", a.requireEngine(a.handleListMockSSEConnections))
 	mux.HandleFunc("DELETE /mocks/{id}/sse/connections", a.requireEngine(a.handleCloseMockSSEConnections))
