@@ -157,6 +157,21 @@ func (h *Handler) DisconnectWebSocketEndpoint(path string) {
 	h.wsManager.DisconnectByEndpoint(path, websocket.CloseServiceRestart, "mock updated")
 }
 
+// DisconnectSSEByMock closes all active SSE connections for the given mock ID.
+// Cancelling each connection's context causes the event loop to exit, the response
+// writer to close, and the client to receive EOF. EventSource clients will
+// auto-reconnect and pick up the new configuration.
+func (h *Handler) DisconnectSSEByMock(mockID string) {
+	if h.sseHandler == nil {
+		return
+	}
+	mgr := h.sseHandler.GetManager()
+	if mgr == nil {
+		return
+	}
+	mgr.CloseByMock(mockID)
+}
+
 // ListSOAPHandlerPaths returns all registered SOAP handler paths.
 func (h *Handler) ListSOAPHandlerPaths() []string {
 	h.soapMu.RLock()
