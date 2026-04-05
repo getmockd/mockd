@@ -150,6 +150,13 @@ func (h *Handler) UnregisterWebSocketEndpoint(path string) {
 	h.wsManager.UnregisterEndpoint(path)
 }
 
+// DisconnectWebSocketEndpoint closes all active connections on a WebSocket endpoint.
+// Uses RFC 6455 close code 1012 (Service Restart) so clients reconnect automatically.
+// Must be called before UnregisterWebSocketEndpoint while byEndpoint still tracks the path.
+func (h *Handler) DisconnectWebSocketEndpoint(path string) {
+	h.wsManager.DisconnectByEndpoint(path, websocket.CloseServiceRestart, "mock updated")
+}
+
 // ListSOAPHandlerPaths returns all registered SOAP handler paths.
 func (h *Handler) ListSOAPHandlerPaths() []string {
 	h.soapMu.RLock()

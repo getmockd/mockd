@@ -197,6 +197,11 @@ func (mm *MockManager) unregisterHandlerLocked(cfg *config.MockConfiguration) {
 
 	case mock.TypeWebSocket:
 		if mm.handler != nil && cfg.WebSocket != nil {
+			// Disconnect active clients first so they receive close code 1012
+			// (Service Restart) and reconnect with the new configuration.
+			// Must happen before UnregisterWebSocketEndpoint while byEndpoint
+			// still tracks the path.
+			mm.handler.DisconnectWebSocketEndpoint(cfg.WebSocket.Path)
 			mm.handler.UnregisterWebSocketEndpoint(cfg.WebSocket.Path)
 		}
 	case mock.TypeGraphQL:
