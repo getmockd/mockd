@@ -147,6 +147,10 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	// Mock-specific SSE endpoints
 	mux.HandleFunc("GET /mocks/{id}/sse/connections", a.requireEngine(a.handleListMockSSEConnections))
 	mux.HandleFunc("DELETE /mocks/{id}/sse/connections", a.requireEngine(a.handleCloseMockSSEConnections))
+
+	// Mock-specific WebSocket endpoints
+	mux.HandleFunc("GET /mocks/{id}/websocket/connections", a.requireEngine(a.handleListMockWebSocketConnections))
+	mux.HandleFunc("DELETE /mocks/{id}/websocket/connections", a.requireEngine(a.handleCloseMockWebSocketConnections))
 	mux.HandleFunc("GET /mocks/{id}/sse/buffer", a.handleGetMockSSEBuffer)
 	mux.HandleFunc("DELETE /mocks/{id}/sse/buffer", a.handleClearMockSSEBuffer)
 

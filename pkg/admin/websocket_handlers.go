@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 // WebSocketConnectionListResponse represents a list of WebSocket connections with stats.
@@ -157,11 +158,15 @@ func (a *API) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.Req
 
 	var req WebSocketSendRequest
 	if err := decodeOptionalJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON in request body")
+		writeJSONDecodeError(w, err, a.logger())
 		return
 	}
 	if req.Type == "" {
 		req.Type = "text"
+	}
+	if req.Type != "text" && req.Type != "binary" {
+		writeError(w, http.StatusBadRequest, "invalid_type", `Type must be "text" or "binary"`)
+		return
 	}
 
 	engine := a.localEngine.Load()
@@ -186,5 +191,94 @@ func (a *API) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.Req
 		"message":    "Message sent",
 		"connection": id,
 		"type":       req.Type,
+	})
+}
+
+// handleListMockWebSocketConnections handles GET /mocks/{id}/websocket/connections.
+func (a *API) handleListMockWebSocketConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+	mockID := r.PathValue("id")
+	if mockID == "" {
+		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")
+		return
+	}
+
+	// Verify mock exists in the admin store (single source of truth).
+	if mockStore := a.getMockStore(); mockStore != nil {
+		if _, err := mockStore.Get(ctx, mockID); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
+			return
+		}
+	}
+
+	// Get all WebSocket connections and filter by mock
+	connections, err := engine.ListWebSocketConnections(ctx)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list WebSocket connections for mock"))
+		return
+	}
+
+	var filtered []*engineclient.WebSocketConnection
+	for _, conn := range connections {
+		if conn.MockID == mockID {
+			filtered = append(filtered, conn)
+		}
+	}
+	if filtered == nil {
+		filtered = []*engineclient.WebSocketConnection{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"connections": filtered,
+		"count":       len(filtered),
+		"mockId":      mockID,
+	})
+}
+
+// handleCloseMockWebSocketConnections handles DELETE /mocks/{id}/websocket/connections.
+func (a *API) handleCloseMockWebSocketConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
+	ctx := r.Context()
+	mockID := r.PathValue("id")
+	if mockID == "" {
+		writeError(w, http.StatusBadRequest, "missing_id", "Mock ID is required")
+		return
+	}
+
+	// Verify mock exists in the admin store (single source of truth).
+	if mockStore := a.getMockStore(); mockStore != nil {
+		if _, err := mockStore.Get(ctx, mockID); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "Mock not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "store_error", ErrMsgInternalError)
+			return
+		}
+	}
+
+	// Get all WebSocket connections and close those for this mock
+	connections, err := engine.ListWebSocketConnections(ctx)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "engine_error", sanitizeEngineError(err, a.logger(), "list WebSocket connections for close"))
+		return
+	}
+
+	closed := 0
+	for _, conn := range connections {
+		if conn.MockID == mockID {
+			if err := engine.CloseWebSocketConnection(ctx, conn.ID); err == nil {
+				closed++
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message": "Connections closed",
+		"closed":  closed,
+		"mockId":  mockID,
 	})
 }

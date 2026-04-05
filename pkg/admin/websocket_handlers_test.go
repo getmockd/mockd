@@ -35,6 +35,43 @@ func TestHandleListWebSocketConnections_NoEngine_ReturnsEmptyList(t *testing.T) 
 	assert.NotNil(t, resp.Stats.ConnectionsByMock)
 }
 
+func TestHandleListWebSocketConnections_WithEngine_ReturnsConnectionsAndStats(t *testing.T) {
+	// Spin up a mock engine that returns connections and stats.
+	mockEngine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/websocket/stats":
+			_, _ = w.Write([]byte(`{"totalConnections":5,"activeConnections":2,"totalMessagesSent":100,"totalMessagesRecv":50,"connectionsByMock":{"mock-1":2}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/websocket/connections":
+			_, _ = w.Write([]byte(`{"connections":[{"id":"conn-1","path":"/ws","connectedAt":"2026-04-05T00:00:00Z","messagesSent":10,"messagesRecv":5,"status":"connected"}],"count":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer mockEngine.Close()
+
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(engineclient.New(mockEngine.URL)))
+	defer func() { _ = api.Stop() }()
+
+	req := httptest.NewRequest(http.MethodGet, "/websocket/connections", nil)
+	rec := httptest.NewRecorder()
+
+	api.handleListWebSocketConnections(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp WebSocketConnectionListResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Len(t, resp.Connections, 1)
+	assert.Equal(t, "conn-1", resp.Connections[0].ID)
+	assert.Equal(t, "/ws", resp.Connections[0].Path)
+	assert.Equal(t, int64(10), resp.Connections[0].MessagesSent)
+	assert.Equal(t, 2, resp.Stats.ActiveConnections)
+	assert.Equal(t, int64(5), resp.Stats.TotalConnections)
+	assert.Equal(t, 2, resp.Stats.ConnectionsByMock["mock-1"])
+}
+
 func TestHandleListWebSocketConnections_EngineUnavailable_Returns503(t *testing.T) {
 	api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(engineclient.New("http://127.0.0.1:1")))
 	defer func() { _ = api.Stop() }()
@@ -194,6 +231,25 @@ func TestHandleSendToWebSocketConnection_InvalidJSON_Returns400(t *testing.T) {
 	api.handleSendToWebSocketConnection(rec, req)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandleSendToWebSocketConnection_InvalidType_Returns400(t *testing.T) {
+	api := NewAPI(0, WithDataDir(t.TempDir()), WithLocalEngineClient(engineclient.New("http://127.0.0.1:1")))
+	defer func() { _ = api.Stop() }()
+
+	req := httptest.NewRequest(http.MethodPost, "/websocket/connections/conn-1/send",
+		strings.NewReader(`{"type":"invalid","data":"hello"}`))
+	req.SetPathValue("id", "conn-1")
+	rec := httptest.NewRecorder()
+
+	api.handleSendToWebSocketConnection(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var resp map[string]interface{}
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "invalid_type", resp["error"])
 }
 
 func TestHandleSendToWebSocketConnection_NoEngine_Returns404(t *testing.T) {

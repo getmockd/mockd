@@ -2934,3 +2934,181 @@ func TestHandleGetGRPCStats(t *testing.T) {
 		assert.Equal(t, 2, stats.StreamsByMethod["/pkg.Svc/Chat"])
 	})
 }
+
+// ============================================================================
+// SSE Handler Tests
+// ============================================================================
+
+// TestHandleListSSEConnections tests the GET /sse/connections handler.
+func TestHandleListSSEConnections(t *testing.T) {
+	t.Run("returns empty list when no connections", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListSSEConnections(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp SSEConnectionListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Empty(t, resp.Connections)
+		assert.Equal(t, 0, resp.Count)
+	})
+
+	t.Run("returns all connections", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.sseConnections = []*SSEConnection{
+			{ID: "sse-1", MockID: "mock-1", Path: "/events", Status: "active"},
+			{ID: "sse-2", MockID: "mock-1", Path: "/events", Status: "active"},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListSSEConnections(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp SSEConnectionListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Len(t, resp.Connections, 2)
+		assert.Equal(t, 2, resp.Count)
+	})
+}
+
+// TestHandleGetSSEConnection tests the GET /sse/connections/{id} handler.
+func TestHandleGetSSEConnection(t *testing.T) {
+	t.Run("returns connection when found", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.sseConnections = []*SSEConnection{
+			{ID: "sse-1", MockID: "mock-1", Path: "/events", ClientIP: "127.0.0.1", Status: "active", EventsSent: 42, BytesSent: 1024},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/connections/sse-1", nil)
+		req.SetPathValue("id", "sse-1")
+		rec := httptest.NewRecorder()
+
+		server.handleGetSSEConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var conn SSEConnection
+		err := json.Unmarshal(rec.Body.Bytes(), &conn)
+		require.NoError(t, err)
+		assert.Equal(t, "sse-1", conn.ID)
+		assert.Equal(t, "mock-1", conn.MockID)
+		assert.Equal(t, "/events", conn.Path)
+		assert.Equal(t, "127.0.0.1", conn.ClientIP)
+		assert.Equal(t, int64(42), conn.EventsSent)
+		assert.Equal(t, int64(1024), conn.BytesSent)
+	})
+
+	t.Run("returns 404 for unknown connection", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/connections/unknown", nil)
+		req.SetPathValue("id", "unknown")
+		rec := httptest.NewRecorder()
+
+		server.handleGetSSEConnection(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+// TestHandleCloseSSEConnection tests the DELETE /sse/connections/{id} handler.
+func TestHandleCloseSSEConnection(t *testing.T) {
+	t.Run("closes existing connection and returns 200", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.sseConnections = []*SSEConnection{
+			{ID: "sse-1", MockID: "mock-1", Path: "/events", Status: "active"},
+		}
+
+		req := httptest.NewRequest(http.MethodDelete, "/sse/connections/sse-1", nil)
+		req.SetPathValue("id", "sse-1")
+		rec := httptest.NewRecorder()
+
+		server.handleCloseSSEConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp map[string]string
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "SSE connection closed", resp["message"])
+		assert.Equal(t, "sse-1", resp["id"])
+
+		// Connection must be removed from the engine.
+		assert.Empty(t, engine.sseConnections)
+	})
+
+	t.Run("returns 404 for unknown connection", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodDelete, "/sse/connections/unknown", nil)
+		req.SetPathValue("id", "unknown")
+		rec := httptest.NewRecorder()
+
+		server.handleCloseSSEConnection(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+// TestHandleGetSSEStats tests the GET /sse/stats handler.
+func TestHandleGetSSEStats(t *testing.T) {
+	t.Run("returns empty stats with non-nil map when sseStats is nil", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetSSEStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var stats SSEStats
+		err := json.Unmarshal(rec.Body.Bytes(), &stats)
+		require.NoError(t, err)
+		assert.NotNil(t, stats.ConnectionsByMock)
+	})
+
+	t.Run("returns populated stats", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.sseStats = &SSEStats{
+			TotalConnections:  10,
+			ActiveConnections: 2,
+			TotalEventsSent:   500,
+			TotalBytesSent:    50000,
+			ConnectionErrors:  1,
+			ConnectionsByMock: map[string]int{"mock-1": 2},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetSSEStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var stats SSEStats
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stats))
+		assert.Equal(t, int64(10), stats.TotalConnections)
+		assert.Equal(t, 2, stats.ActiveConnections)
+		assert.Equal(t, int64(500), stats.TotalEventsSent)
+		assert.Equal(t, int64(50000), stats.TotalBytesSent)
+		assert.Equal(t, int64(1), stats.ConnectionErrors)
+		assert.Equal(t, 2, stats.ConnectionsByMock["mock-1"])
+	})
+}
