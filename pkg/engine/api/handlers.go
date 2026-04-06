@@ -840,9 +840,6 @@ func (s *Server) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.
 		writeDecodeError(w, err)
 		return
 	}
-	if req.Type == "" {
-		req.Type = "text"
-	}
 	if req.Type != "text" && req.Type != "binary" {
 		writeError(w, http.StatusBadRequest, "invalid_type", `type must be "text" or "binary"`)
 		return

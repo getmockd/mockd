@@ -224,8 +224,8 @@ func TestHandleSendToWebSocketConnection_EngineUnavailable_Returns503(t *testing
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
-func TestHandleSendToWebSocketConnection_EmptyBody_DefaultsToText(t *testing.T) {
-	// No engine — expects 404, but verifies empty body doesn't fail decode
+func TestHandleSendToWebSocketConnection_EmptyBody_Returns400(t *testing.T) {
+	// Empty body omits type → invalid_type 400
 	api := NewAPI(0, WithDataDir(t.TempDir()))
 	defer func() { _ = api.Stop() }()
 
@@ -235,8 +235,10 @@ func TestHandleSendToWebSocketConnection_EmptyBody_DefaultsToText(t *testing.T) 
 
 	api.handleSendToWebSocketConnection(rec, req)
 
-	// No engine → 404, not a 400 parse error
-	assert.Equal(t, http.StatusNotFound, rec.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "invalid_type", resp["error"])
 }
 
 func TestHandleSendToWebSocketConnection_Success_Returns200(t *testing.T) {

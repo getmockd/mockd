@@ -160,8 +160,9 @@ func (a *API) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON in request body")
 		return
 	}
-	if req.Type == "" {
-		req.Type = "text"
+	if req.Type != "text" && req.Type != "binary" {
+		writeError(w, http.StatusBadRequest, "invalid_type", `type must be "text" or "binary"`)
+		return
 	}
 
 	engine := a.localEngine.Load()

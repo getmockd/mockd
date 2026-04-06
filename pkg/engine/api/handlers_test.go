@@ -2507,7 +2507,7 @@ func TestHandleSendToWebSocketConnection(t *testing.T) {
 		assert.Equal(t, "binary", resp["type"])
 	})
 
-	t.Run("defaults type to text when omitted", func(t *testing.T) {
+	t.Run("returns 400 when type is omitted", func(t *testing.T) {
 		engine := newMockEngine()
 		server := newTestServer(engine)
 		engine.wsConnections = []*WebSocketConnection{{ID: "ws-1"}}
@@ -2519,10 +2519,10 @@ func TestHandleSendToWebSocketConnection(t *testing.T) {
 
 		server.handleSendToWebSocketConnection(rec, req)
 
-		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
 		var resp map[string]interface{}
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-		assert.Equal(t, "text", resp["type"])
+		assert.Equal(t, "invalid_type", resp["error"])
 	})
 
 	t.Run("returns 400 for unknown type", func(t *testing.T) {
