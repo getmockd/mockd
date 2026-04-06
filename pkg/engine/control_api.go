@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 
-	types "github.com/getmockd/mockd/pkg/api/types"
+	"github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/chaos"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine/api"
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/websocket"
 )
 
 // Errors returned by the control API adapter.
@@ -735,6 +736,27 @@ func (a *ControlAPIAdapter) CloseWebSocketConnection(id string) error {
 	}
 
 	return wsManager.CloseConnection(id, "closed by API")
+}
+
+// SendToWebSocketConnection implements api.EngineController.
+// msgType must be "text" or "binary"; data is the raw message payload.
+func (a *ControlAPIAdapter) SendToWebSocketConnection(id string, msgType string, data []byte) error {
+	handler := a.server.Handler()
+	if handler == nil {
+		return ErrWebSocketHandlerNotInitialized
+	}
+
+	wsManager := handler.WebSocketManager()
+	if wsManager == nil {
+		return ErrWebSocketHandlerNotInitialized
+	}
+
+	mt := websocket.MessageText
+	if msgType == "binary" {
+		mt = websocket.MessageBinary
+	}
+
+	return wsManager.SendToConnection(id, mt, data)
 }
 
 // GetWebSocketStats implements api.EngineController.

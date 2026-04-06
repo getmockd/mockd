@@ -3,7 +3,7 @@ package engineclient
 import (
 	"errors"
 
-	types "github.com/getmockd/mockd/pkg/api/types"
+	"github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/store"
 )
 
@@ -47,6 +47,8 @@ type (
 	ProtocolHandler              = types.ProtocolHandler
 	SSEConnection                = types.SSEConnection
 	SSEStats                     = types.SSEStats
+	WebSocketConnection          = types.WebSocketConnection
+	WebSocketStats               = types.WebSocketStats
 	CustomOperationInfo          = types.CustomOperationInfo
 	CustomOperationDetail        = types.CustomOperationDetail
 	CustomOperationStep          = types.CustomOperationStep

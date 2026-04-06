@@ -945,21 +945,58 @@ Get SSE statistics.
 
 ### WebSocket Management
 
-#### GET /admin/ws/connections
+#### GET /websocket/connections
 
 List active WebSocket connections.
 
-#### GET /admin/ws/connections/{id}
+**Response:**
 
-Get connection details.
+```json
+{
+  "connections": [
+    {
+      "id": "ws-abc123",
+      "path": "/ws/orderbook",
+      "connectedAt": "2024-01-15T10:30:00Z",
+      "messagesSent": 42,
+      "messagesRecv": 7,
+      "status": "connected"
+    }
+  ],
+  "stats": {
+    "totalConnections": 1,
+    "activeConnections": 1,
+    "totalMessagesSent": 42,
+    "totalMessagesRecv": 7,
+    "connectionsByMock": {}
+  }
+}
+```
 
-#### DELETE /admin/ws/connections/{id}
+#### GET /websocket/connections/{id}
+
+Get details of a specific WebSocket connection.
+
+**Response:** Single connection object (same shape as items in the list above). Returns `404` if not found.
+
+#### DELETE /websocket/connections/{id}
 
 Close a WebSocket connection.
 
-#### POST /admin/ws/connections/{id}/send
+**Response:**
 
-Send a message to a specific connection.
+```json
+{
+  "message": "Connection closed",
+  "connection": "ws-abc123"
+}
+```
+
+Returns `404` if the connection is not found.
+
+#### POST /websocket/connections/{id}/send
+
+Send a text or binary message to a specific active WebSocket connection.
 
 **Request:**
 
@@ -970,17 +1007,38 @@ Send a message to a specific connection.
 }
 ```
 
-#### POST /admin/ws/broadcast
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Message type: `"text"` (default) or `"binary"` |
+| `data` | string | Message payload. For `"text"`, a plain UTF-8 string. For `"binary"`, a **base64-encoded** string — the server decodes it before writing raw bytes to the WebSocket. |
 
-Broadcast message to all connections.
+**Response:**
 
-#### GET /admin/ws/endpoints
+```json
+{
+  "message": "Message sent",
+  "connection": "ws-abc123",
+  "type": "text"
+}
+```
 
-List configured WebSocket endpoints.
+Returns `404` if the connection is not found.
 
-#### GET /admin/ws/stats
+#### GET /websocket/stats
 
 Get WebSocket statistics.
+
+**Response:**
+
+```json
+{
+  "totalConnections": 10,
+  "activeConnections": 2,
+  "totalMessagesSent": 500,
+  "totalMessagesRecv": 120,
+  "connectionsByMock": {}
+}
+```
 
 ---
 
