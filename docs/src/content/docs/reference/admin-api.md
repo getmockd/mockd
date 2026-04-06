@@ -957,12 +957,9 @@ List active WebSocket connections.
     {
       "id": "ws-abc123",
       "path": "/ws/orderbook",
-      "clientIp": "127.0.0.1",
       "connectedAt": "2024-01-15T10:30:00Z",
       "messagesSent": 42,
       "messagesRecv": 7,
-      "bytesSent": 8192,
-      "bytesReceived": 256,
       "status": "connected"
     }
   ],

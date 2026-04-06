@@ -475,16 +475,12 @@ type SSEStats struct {
 
 // WebSocketConnection represents an active WebSocket connection.
 type WebSocketConnection struct {
-	ID            string    `json:"id"`
-	MockID        string    `json:"mockId"`
-	Path          string    `json:"path"`
-	ClientIP      string    `json:"clientIp"`
-	ConnectedAt   time.Time `json:"connectedAt"`
-	MessagesSent  int64     `json:"messagesSent"`
-	MessagesRecv  int64     `json:"messagesRecv"`
-	BytesSent     int64     `json:"bytesSent"`
-	BytesReceived int64     `json:"bytesReceived"`
-	Status        string    `json:"status"`
+	ID           string    `json:"id"`
+	Path         string    `json:"path"`
+	ConnectedAt  time.Time `json:"connectedAt"`
+	MessagesSent int64     `json:"messagesSent"`
+	MessagesRecv int64     `json:"messagesRecv"`
+	Status       string    `json:"status"`
 }
 
 // WebSocketConnectionListResponse lists WebSocket connections.

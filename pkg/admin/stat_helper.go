@@ -13,8 +13,6 @@ import (
 type statsProvider interface {
 	// GetStats retrieves statistics from the engine.
 	GetStats(ctx context.Context) (interface{}, error)
-	// GetEmptyStats returns empty statistics for when engine is unavailable.
-	GetEmptyStats() interface{}
 	// MapError converts an error to HTTP status, code, and message.
 	MapError(err error, log *slog.Logger, operation string) (int, string, string)
 }
@@ -67,13 +65,6 @@ func (p *sseStatsProvider) GetStats(ctx context.Context) (interface{}, error) {
 	}, nil
 }
 
-// GetEmptyStats returns empty SSE statistics.
-func (p *sseStatsProvider) GetEmptyStats() interface{} {
-	return sse.ConnectionStats{
-		ConnectionsByMock: make(map[string]int),
-	}
-}
-
 // MapError converts an SSE engine error to HTTP status, code, and message.
 func (p *sseStatsProvider) MapError(err error, log *slog.Logger, operation string) (int, string, string) {
 	return mapSSEEngineError(err, log, operation)
@@ -108,13 +99,6 @@ func (p *wsStatsProvider) GetStats(ctx context.Context) (interface{}, error) {
 		TotalMessagesRecv: stats.TotalMessagesRecv,
 		ConnectionsByMock: connsByMock,
 	}, nil
-}
-
-// GetEmptyStats returns empty WebSocket statistics.
-func (p *wsStatsProvider) GetEmptyStats() interface{} {
-	return engineclient.WebSocketStats{
-		ConnectionsByMock: make(map[string]int),
-	}
 }
 
 // MapError converts a WebSocket engine error to HTTP status, code, and message.

@@ -2525,6 +2525,24 @@ func TestHandleSendToWebSocketConnection(t *testing.T) {
 		assert.Equal(t, "text", resp["type"])
 	})
 
+	t.Run("returns 400 for unknown type", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.wsConnections = []*WebSocketConnection{{ID: "ws-1"}}
+
+		req := httptest.NewRequest(http.MethodPost, "/websocket/connections/ws-1/send",
+			strings.NewReader(`{"type":"ping","data":"hello"}`))
+		req.SetPathValue("id", "ws-1")
+		rec := httptest.NewRecorder()
+
+		server.handleSendToWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "invalid_type", resp["error"])
+	})
+
 	t.Run("returns 404 when connection is not found", func(t *testing.T) {
 		engine := newMockEngine()
 		server := newTestServer(engine)
