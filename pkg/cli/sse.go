@@ -64,7 +64,7 @@ func runSSEConnectionsList(cmd *cobra.Command, args []string) error {
 				c.EventsSent, c.Status)
 		}
 		_ = tw.Flush()
-		fmt.Printf("\nTotal: %d connection(s)\n", result.Count)
+		fmt.Printf("\nTotal: %d connection(s)\n", len(result.Connections))
 	})
 	return nil
 }

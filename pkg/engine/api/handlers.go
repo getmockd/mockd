@@ -740,9 +740,14 @@ func (s *Server) handleGetHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 	connections := s.engine.ListSSEConnections()
+	stats := s.engine.GetSSEStats()
+	respStats := SSEStats{ConnectionsByMock: make(map[string]int)}
+	if stats != nil {
+		respStats = *stats
+	}
 	writeJSON(w, http.StatusOK, SSEConnectionListResponse{
 		Connections: connections,
-		Count:       len(connections),
+		Stats:       respStats,
 	})
 }
 
@@ -781,9 +786,14 @@ func (s *Server) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListWebSocketConnections(w http.ResponseWriter, r *http.Request) {
 	connections := s.engine.ListWebSocketConnections()
+	stats := s.engine.GetWebSocketStats()
+	respStats := WebSocketStats{ConnectionsByMock: make(map[string]int)}
+	if stats != nil {
+		respStats = *stats
+	}
 	writeJSON(w, http.StatusOK, WebSocketConnectionListResponse{
 		Connections: connections,
-		Count:       len(connections),
+		Stats:       respStats,
 	})
 }
 
@@ -1072,9 +1082,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func (s *Server) handleListMQTTConnections(w http.ResponseWriter, r *http.Request) {
 	connections := s.engine.ListMQTTConnections()
+	stats := s.engine.GetMQTTStats()
+	respStats := MQTTStats{SubscriptionsByClient: make(map[string]int)}
+	if stats != nil {
+		respStats = *stats
+	}
 	writeJSON(w, http.StatusOK, MQTTConnectionListResponse{
 		Connections: connections,
-		Count:       len(connections),
+		Stats:       respStats,
 	})
 }
 
@@ -1116,9 +1131,14 @@ func (s *Server) handleListGRPCStreams(w http.ResponseWriter, r *http.Request) {
 	if streams == nil {
 		streams = []*GRPCStream{}
 	}
+	stats := s.engine.GetGRPCStats()
+	respStats := GRPCStats{StreamsByMethod: make(map[string]int)}
+	if stats != nil {
+		respStats = *stats
+	}
 	writeJSON(w, http.StatusOK, GRPCStreamListResponse{
 		Streams: streams,
-		Count:   len(streams),
+		Stats:   respStats,
 	})
 }
 

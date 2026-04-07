@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/getmockd/mockd/pkg/metrics"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // StreamInfo holds metadata about an active streaming RPC.
@@ -37,8 +35,9 @@ type StreamStats struct {
 
 // StreamTracker tracks active gRPC streaming RPCs for a single Server.
 type StreamTracker struct {
-	streams map[string]*trackedStream // ID -> tracked stream
-	mu      sync.RWMutex
+	streams          map[string]*trackedStream // ID -> tracked stream
+	adminCancelled   map[string]bool           // IDs cancelled by admin/mock-update
+	mu               sync.RWMutex
 
 	// Lifetime counters (include completed streams).
 	totalStreams  atomic.Int64
@@ -58,7 +57,8 @@ type trackedStream struct {
 // NewStreamTracker creates a new StreamTracker.
 func NewStreamTracker() *StreamTracker {
 	return &StreamTracker{
-		streams: make(map[string]*trackedStream),
+		streams:        make(map[string]*trackedStream),
+		adminCancelled: make(map[string]bool),
 	}
 }
 
@@ -108,6 +108,7 @@ func (t *StreamTracker) Unregister(id string) {
 	if ok {
 		delete(t.streams, id)
 	}
+	delete(t.adminCancelled, id)
 	t.mu.Unlock()
 
 	if !ok {
@@ -183,14 +184,26 @@ func (t *StreamTracker) Count() int {
 // Cancel cancels a specific stream's context, causing the RPC handler to
 // return codes.Unavailable to the client.
 func (t *StreamTracker) Cancel(id string) error {
-	t.mu.RLock()
+	t.mu.Lock()
 	ts := t.streams[id]
-	t.mu.RUnlock()
+	if ts != nil {
+		t.adminCancelled[id] = true
+	}
+	t.mu.Unlock()
 	if ts == nil {
 		return fmt.Errorf("stream %s not found", id)
 	}
 	ts.cancel()
 	return nil
+}
+
+// WasAdminCancelled returns true if the stream was cancelled by an admin
+// action (CancelAll for mock update, or explicit Cancel via admin API)
+// rather than by the client.
+func (t *StreamTracker) WasAdminCancelled(id string) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.adminCancelled[id]
 }
 
 // CancelAll cancels all active streams with the given gRPC status.
@@ -210,13 +223,6 @@ func (t *StreamTracker) CancelAll() int {
 		}
 	}
 	return count
-}
-
-// CancelAllWithStatus cancels all active streams. The gRPC handler
-// should check ctx.Err() and return the appropriate status to the client.
-// Returns the number of streams cancelled.
-func (t *StreamTracker) CancelAllWithStatus() int {
-	return t.CancelAll()
 }
 
 // Stats returns aggregate statistics.
@@ -259,9 +265,3 @@ func (t *StreamTracker) toInfo(ts *trackedStream) *StreamInfo {
 	}
 }
 
-// UnavailableError returns a gRPC Unavailable status error with the given message.
-// This is the gRPC equivalent of WebSocket close code 1012 — clients with retry
-// policies will reconnect automatically.
-func UnavailableError(msg string) error {
-	return status.Error(codes.Unavailable, msg)
-}

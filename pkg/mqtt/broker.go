@@ -59,6 +59,7 @@ type Broker struct {
 	log                        *slog.Logger
 	internalSubscribers        map[string][]SubscriptionHandler
 	clientSubscriptions        map[string][]string
+	clientConnectedAt          map[string]time.Time
 	simulator                  *Simulator
 	recordingEnabled           bool
 	recordingStore             MQTTRecordingStore
@@ -144,6 +145,7 @@ func NewBroker(config *MQTTConfig) (*Broker, error) {
 		log:                 logging.Nop(),
 		internalSubscribers: make(map[string][]SubscriptionHandler),
 		clientSubscriptions: make(map[string][]string),
+		clientConnectedAt:   make(map[string]time.Time),
 		sessionManager:      NewSessionManager(),
 	}
 	broker.responseHandler = NewResponseHandler(broker)
@@ -654,6 +656,28 @@ func (b *Broker) notifyTestPanelPublish(topic string, payload []byte, qos int, r
 	b.sessionManager.NotifyMessage(b.config.ID, msg)
 }
 
+// trackClientConnect records the connection time for a client.
+// Called from the MessageHook's OnSessionEstablished callback.
+func (b *Broker) trackClientConnect(clientID string) {
+	if b.stopping.Load() != 0 {
+		return
+	}
+	b.mu.Lock()
+	b.clientConnectedAt[clientID] = time.Now()
+	b.mu.Unlock()
+}
+
+// trackClientDisconnect removes the connection time for a client.
+// Called from the MessageHook's OnDisconnect callback.
+func (b *Broker) trackClientDisconnect(clientID string) {
+	if b.stopping.Load() != 0 {
+		return
+	}
+	b.mu.Lock()
+	delete(b.clientConnectedAt, clientID)
+	b.mu.Unlock()
+}
+
 // MQTTClientInfo represents information about a connected MQTT client.
 type MQTTClientInfo struct {
 	ID              string
@@ -677,6 +701,10 @@ func (b *Broker) ListClientInfos() []*MQTTClientInfo {
 	for k, v := range b.clientSubscriptions {
 		subs[k] = append([]string{}, v...)
 	}
+	connTimes := make(map[string]time.Time, len(b.clientConnectedAt))
+	for k, v := range b.clientConnectedAt {
+		connTimes[k] = v
+	}
 	b.mu.RUnlock()
 
 	if b.server == nil {
@@ -697,6 +725,9 @@ func (b *Broker) ListClientInfos() []*MQTTClientInfo {
 			Username:        string(cl.Properties.Username),
 			RemoteAddr:      cl.Net.Remote,
 			Closed:          cl.Closed(),
+		}
+		if ct, ok := connTimes[id]; ok {
+			info.ConnectedAt = ct
 		}
 		if subList, ok := subs[id]; ok {
 			info.Subscriptions = subList
@@ -730,11 +761,13 @@ func (b *Broker) GetClientInfo(clientID string) *MQTTClientInfo {
 	if s, ok := b.clientSubscriptions[clientID]; ok {
 		subsCopy = append([]string{}, s...)
 	}
+	connectedAt := b.clientConnectedAt[clientID]
 	b.mu.RUnlock()
 
 	return &MQTTClientInfo{
 		ID:              clientID,
 		BrokerID:        brokerID,
+		ConnectedAt:     connectedAt,
 		ProtocolVersion: cl.Properties.ProtocolVersion,
 		Username:        string(cl.Properties.Username),
 		RemoteAddr:      cl.Net.Remote,

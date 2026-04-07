@@ -219,7 +219,27 @@ func (h *MessageHook) Provides(b byte) bool {
 		mqtt.OnPublish,
 		mqtt.OnSubscribed,
 		mqtt.OnUnsubscribed,
+		mqtt.OnSessionEstablished,
+		mqtt.OnDisconnect,
 	}, []byte{b})
+}
+
+// OnSessionEstablished is called after a client has connected and its session
+// is fully set up. We use it to track the connection time.
+func (h *MessageHook) OnSessionEstablished(cl *mqtt.Client, _ packets.Packet) {
+	if cl.Net.Inline {
+		return
+	}
+	h.broker.trackClientConnect(cl.ID)
+}
+
+// OnDisconnect is called when a client disconnects. We use it to clean up the
+// tracked connection time.
+func (h *MessageHook) OnDisconnect(cl *mqtt.Client, _ error, _ bool) {
+	if cl.Net.Inline {
+		return
+	}
+	h.broker.trackClientDisconnect(cl.ID)
 }
 
 // OnPublish handles incoming publish messages

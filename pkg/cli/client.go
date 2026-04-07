@@ -1759,7 +1759,7 @@ func (c *adminClient) SendWebSocketMessage(id string, message string, binary boo
 		msgType = "binary"
 	}
 	body, err := json.Marshal(map[string]interface{}{
-		"message": message,
+		"data": message,
 		"type":    msgType,
 	})
 	if err != nil {

@@ -812,7 +812,7 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 	// Apply initial delay (context-aware for client/tracker cancellation)
 	s.applyDelayWithContext(ctx, methodCfg.Delay)
 	if ctx.Err() != nil {
-		grpcErr := status.Error(codes.Unavailable, "stream cancelled")
+		grpcErr := s.contextCancelError(streamID)
 		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, nil, grpcErr)
 		return grpcErr
 	}
@@ -843,7 +843,7 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 	for i, respData := range responses {
 		// Check for tracker cancellation between messages
 		if ctx.Err() != nil {
-			grpcErr := status.Error(codes.Unavailable, "mock configuration updated")
+			grpcErr := s.contextCancelError(streamID)
 			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, collectedResponses, grpcErr)
 			return grpcErr
 		}
@@ -870,7 +870,7 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 		if i < len(responses)-1 {
 			s.applyDelayWithContext(ctx, methodCfg.StreamDelay)
 			if ctx.Err() != nil {
-				grpcErr := status.Error(codes.Unavailable, "stream cancelled")
+				grpcErr := s.contextCancelError(streamID)
 				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, collectedResponses, grpcErr)
 				return grpcErr
 			}
@@ -906,7 +906,7 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 	for {
 		// Check for tracker cancellation
 		if ctx.Err() != nil {
-			grpcErr := status.Error(codes.Unavailable, "mock configuration updated")
+			grpcErr := s.contextCancelError(streamID)
 			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
 			return grpcErr
 		}
@@ -936,7 +936,7 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 	// Apply delay (context-aware for client/tracker cancellation)
 	s.applyDelayWithContext(ctx, methodCfg.Delay)
 	if ctx.Err() != nil {
-		grpcErr := status.Error(codes.Unavailable, "stream cancelled")
+		grpcErr := s.contextCancelError(streamID)
 		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
 		return grpcErr
 	}
@@ -1004,7 +1004,7 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 	// Apply initial delay (context-aware for client/tracker cancellation)
 	s.applyDelayWithContext(ctx, methodCfg.Delay)
 	if ctx.Err() != nil {
-		grpcErr := status.Error(codes.Unavailable, "stream cancelled")
+		grpcErr := s.contextCancelError(streamID)
 		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, nil, nil, grpcErr)
 		return grpcErr
 	}
@@ -1035,7 +1035,7 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 	for {
 		// Check for tracker cancellation
 		if ctx.Err() != nil {
-			grpcErr := status.Error(codes.Unavailable, "mock configuration updated")
+			grpcErr := s.contextCancelError(streamID)
 			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
 			return grpcErr
 		}
@@ -1096,7 +1096,7 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 		respIndex++
 		s.applyDelayWithContext(ctx, methodCfg.StreamDelay)
 		if ctx.Err() != nil {
-			grpcErr := status.Error(codes.Unavailable, "stream cancelled")
+			grpcErr := s.contextCancelError(streamID)
 			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
 			return grpcErr
 		}
@@ -1274,6 +1274,18 @@ func (s *Server) createTemplateContext(md metadata.MD, reqMap map[string]interfa
 		}
 	}
 	return template.NewContextFromMap(reqMap, headers)
+}
+
+// contextCancelError returns the appropriate gRPC status error for a
+// cancelled context. If the stream was cancelled by admin action (mock update,
+// explicit admin cancel), it returns codes.Unavailable so clients with retry
+// policies reconnect. If cancelled by the client (e.g., timeout), it returns
+// codes.Canceled.
+func (s *Server) contextCancelError(streamID string) error {
+	if s.streamTracker.WasAdminCancelled(streamID) {
+		return status.Error(codes.Unavailable, "mock configuration updated")
+	}
+	return status.Error(codes.Canceled, "stream cancelled by client")
 }
 
 // applyDelay applies configured delay, respecting the context deadline.

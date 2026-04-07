@@ -48,7 +48,7 @@ func runGRPCConnectionsList(cmd *cobra.Command, args []string) error {
 				s.MessagesSent, s.MessagesRecv)
 		}
 		_ = tw.Flush()
-		fmt.Printf("\nTotal: %d stream(s)\n", result.Count)
+		fmt.Printf("\nTotal: %d stream(s)\n", len(result.Streams))
 	})
 	return nil
 }

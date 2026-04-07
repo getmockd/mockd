@@ -2317,7 +2317,7 @@ func TestHandleListWebSocketConnections(t *testing.T) {
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.Empty(t, resp.Connections)
-		assert.Equal(t, 0, resp.Count)
+		assert.Equal(t, 0, resp.Stats.ActiveConnections)
 	})
 
 	t.Run("returns all connections", func(t *testing.T) {
@@ -2339,7 +2339,6 @@ func TestHandleListWebSocketConnections(t *testing.T) {
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.Len(t, resp.Connections, 2)
-		assert.Equal(t, 2, resp.Count)
 	})
 }
 
@@ -2653,7 +2652,7 @@ func TestHandleListMQTTConnections(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		var resp MQTTConnectionListResponse
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-		assert.Equal(t, 0, resp.Count)
+		assert.Empty(t, resp.Connections)
 	})
 
 	t.Run("with connections", func(t *testing.T) {
@@ -2672,7 +2671,7 @@ func TestHandleListMQTTConnections(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		var resp MQTTConnectionListResponse
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-		assert.Equal(t, 2, resp.Count)
+		assert.Len(t, resp.Connections, 2)
 		assert.Equal(t, "client-1", resp.Connections[0].ID)
 	})
 }
@@ -2804,7 +2803,7 @@ func TestHandleListGRPCStreams(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		var resp GRPCStreamListResponse
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-		assert.Equal(t, 0, resp.Count)
+		assert.Empty(t, resp.Streams)
 	})
 
 	t.Run("with streams", func(t *testing.T) {
@@ -2823,7 +2822,7 @@ func TestHandleListGRPCStreams(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		var resp GRPCStreamListResponse
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-		assert.Equal(t, 2, resp.Count)
+		assert.Len(t, resp.Streams, 2)
 		assert.Equal(t, "stream-1", resp.Streams[0].ID)
 	})
 }
@@ -2956,7 +2955,7 @@ func TestHandleListSSEConnections(t *testing.T) {
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.Empty(t, resp.Connections)
-		assert.Equal(t, 0, resp.Count)
+		assert.Equal(t, 0, resp.Stats.ActiveConnections)
 	})
 
 	t.Run("returns all connections", func(t *testing.T) {
@@ -2978,7 +2977,6 @@ func TestHandleListSSEConnections(t *testing.T) {
 		err := json.Unmarshal(rec.Body.Bytes(), &resp)
 		require.NoError(t, err)
 		assert.Len(t, resp.Connections, 2)
-		assert.Equal(t, 2, resp.Count)
 	})
 }
 

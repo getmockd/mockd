@@ -935,6 +935,34 @@ Export mocks as Insomnia v4 collection (JSON format, legacy).
 
 List active SSE connections.
 
+**Response:**
+
+```json
+{
+  "connections": [
+    {
+      "id": "sse-abc123",
+      "mockId": "mock-1",
+      "path": "/events",
+      "clientIp": "127.0.0.1",
+      "userAgent": "Mozilla/5.0",
+      "connectedAt": "2024-01-15T10:30:00Z",
+      "eventsSent": 42,
+      "bytesSent": 1024,
+      "status": "active"
+    }
+  ],
+  "stats": {
+    "totalConnections": 10,
+    "activeConnections": 1,
+    "totalEventsSent": 500,
+    "totalBytesSent": 51200,
+    "connectionErrors": 0,
+    "connectionsByMock": {"mock-1": 1}
+  }
+}
+```
+
 #### GET /sse/connections/{id}
 
 Get SSE connection details.
@@ -942,6 +970,10 @@ Get SSE connection details.
 #### DELETE /sse/connections/{id}
 
 Close an SSE connection.
+
+:::note[SSE auto-disconnect on mock update]
+When an SSE mock is updated or deleted, all active SSE connections to that endpoint are automatically closed. Clients should reconnect to pick up the new configuration.
+:::
 
 #### GET /sse/stats
 
@@ -951,32 +983,42 @@ Get SSE statistics.
 
 ### WebSocket Management
 
-#### GET /admin/ws/connections
+#### GET /websocket/connections
 
 List active WebSocket connections.
 
-#### GET /admin/ws/connections/{id}
-
-Get connection details.
-
-#### DELETE /admin/ws/connections/{id}
-
-Close a WebSocket connection.
-
-#### POST /admin/ws/connections/{id}/send
-
-Send a message to a specific connection.
-
-**Request:**
+**Response:**
 
 ```json
 {
-  "type": "text",
-  "data": "Hello from server"
+  "connections": [
+    {
+      "id": "ws-abc123",
+      "mockId": "mock-1",
+      "path": "/ws/chat",
+      "connectedAt": "2024-01-15T10:30:00Z",
+      "messagesSent": 15,
+      "messagesRecv": 10,
+      "status": "connected"
+    }
+  ],
+  "stats": {
+    "totalConnections": 50,
+    "activeConnections": 1,
+    "totalMessagesSent": 500,
+    "totalMessagesRecv": 300,
+    "connectionsByMock": {"mock-1": 1}
+  }
 }
 ```
 
-#### POST /admin/ws/broadcast
+#### GET /websocket/connections/{id}
+
+Get connection details.
+
+#### DELETE /websocket/connections/{id}
+
+Close a WebSocket connection.
 
 #### POST /websocket/connections/{id}/send
 
@@ -1007,6 +1049,16 @@ Send a text or binary message to a specific active WebSocket connection.
 ```
 
 Returns `404` if the connection is not found.
+
+#### GET /mocks/{id}/websocket/connections
+
+List active WebSocket connections for a specific mock.
+
+**Response:** Same format as `GET /websocket/connections`, filtered to the given mock ID.
+
+#### DELETE /mocks/{id}/websocket/connections
+
+Close all WebSocket connections for a specific mock.
 
 #### GET /websocket/stats
 
@@ -1051,6 +1103,100 @@ Get replay session status.
 #### DELETE /replay/{id}
 
 Stop a replay session.
+
+---
+
+### MQTT Connection Management
+
+#### GET /mqtt-connections
+
+List active MQTT client connections.
+
+**Response:**
+
+```json
+{
+  "connections": [
+    {
+      "id": "client-abc123",
+      "brokerId": "mqtt-broker-1",
+      "connectedAt": "2024-01-15T10:30:00Z",
+      "subscriptions": ["sensors/#", "devices/+"],
+      "protocolVersion": 5,
+      "username": "device-1",
+      "remoteAddr": "192.168.1.10:54321",
+      "status": "connected"
+    }
+  ],
+  "stats": {
+    "connectedClients": 1,
+    "totalSubscriptions": 2,
+    "topicCount": 5,
+    "port": 1883,
+    "tlsEnabled": false,
+    "authEnabled": false,
+    "subscriptionsByClient": {"client-abc123": 2}
+  }
+}
+```
+
+#### GET /mqtt-connections/{id}
+
+Get details of a specific MQTT client connection.
+
+#### DELETE /mqtt-connections/{id}
+
+Disconnect an MQTT client.
+
+#### GET /mqtt-connections/stats
+
+Get MQTT connection statistics.
+
+---
+
+### gRPC Stream Management
+
+#### GET /grpc/connections
+
+List active gRPC streaming RPCs.
+
+**Response:**
+
+```json
+{
+  "streams": [
+    {
+      "id": "grpc-stream-1",
+      "method": "/myapp.ChatService/StreamMessages",
+      "streamType": "bidi",
+      "clientAddr": "127.0.0.1:54321",
+      "connectedAt": "2024-01-15T10:30:00Z",
+      "messagesSent": 15,
+      "messagesRecv": 10
+    }
+  ],
+  "stats": {
+    "activeStreams": 1,
+    "totalStreams": 50,
+    "totalRPCs": 200,
+    "totalMessagesSent": 1000,
+    "totalMessagesRecv": 800,
+    "streamsByMethod": {"/myapp.ChatService/StreamMessages": 1}
+  }
+}
+```
+
+#### GET /grpc/connections/{id}
+
+Get details of a specific gRPC stream.
+
+#### DELETE /grpc/connections/{id}
+
+Cancel a gRPC stream. The client receives a `codes.Unavailable` status, signaling it should reconnect.
+
+#### GET /grpc/stats
+
+Get gRPC stream statistics.
 
 ---
 

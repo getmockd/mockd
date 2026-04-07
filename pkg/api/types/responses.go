@@ -458,7 +458,7 @@ type SSEConnection struct {
 // SSEConnectionListResponse lists SSE connections.
 type SSEConnectionListResponse struct {
 	Connections []*SSEConnection `json:"connections"`
-	Count       int              `json:"count"`
+	Stats       SSEStats         `json:"stats"`
 }
 
 // SSEStats represents SSE statistics.
@@ -488,7 +488,7 @@ type MQTTConnection struct {
 // MQTTConnectionListResponse lists MQTT connections.
 type MQTTConnectionListResponse struct {
 	Connections []*MQTTConnection `json:"connections"`
-	Count       int               `json:"count"`
+	Stats       MQTTStats         `json:"stats"`
 }
 
 // MQTTStats represents MQTT broker statistics.
@@ -518,7 +518,7 @@ type WebSocketConnection struct {
 // WebSocketConnectionListResponse lists WebSocket connections.
 type WebSocketConnectionListResponse struct {
 	Connections []*WebSocketConnection `json:"connections"`
-	Count       int                    `json:"count"`
+	Stats       WebSocketStats         `json:"stats"`
 }
 
 // WebSocketStats represents WebSocket statistics.
@@ -546,7 +546,7 @@ type GRPCStream struct {
 // GRPCStreamListResponse lists gRPC streams.
 type GRPCStreamListResponse struct {
 	Streams []*GRPCStream `json:"streams"`
-	Count   int           `json:"count"`
+	Stats   GRPCStats     `json:"stats"`
 }
 
 // GRPCStats represents gRPC statistics.

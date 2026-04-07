@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **WebSocket connection management API** — `GET /websocket/connections`, `GET /websocket/connections/{id}`, `DELETE /websocket/connections/{id}`, `POST /websocket/connections/{id}/send`, `GET /websocket/stats` added to the Admin API for real-time visibility, control, and server-initiated messaging of active WebSocket connections
+- **SSE connection management API** — `GET /sse/connections`, `GET /sse/connections/{id}`, `DELETE /sse/connections/{id}`, `GET /sse/stats` for managing active SSE connections with auto-disconnect on mock update
+- **SSE response type improvements** — SSE connection list responses now include full stats alongside connections
+- **MQTT connection management API** — `GET /mqtt-connections`, `GET /mqtt-connections/{id}`, `DELETE /mqtt-connections/{id}`, `GET /mqtt-connections/stats` for managing active MQTT client connections with connection time tracking
+- **gRPC stream tracking and management** — `GET /grpc/connections`, `GET /grpc/connections/{id}`, `DELETE /grpc/connections/{id}`, `GET /grpc/stats` for managing active gRPC streaming RPCs with proper Canceled vs Unavailable status codes
+- **CLI connection management commands** — `mockd connections list`, `mockd connections get`, `mockd connections close` for all protocols (WebSocket, SSE, MQTT, gRPC)
+- **Connection management UI** — unified connections view in the web dashboard showing all active connections across protocols with real-time stats, search, and filtering
 - **WebSocket auto-reconnect on mock update** — updating or deleting a WebSocket mock now automatically closes all active connections with close code 1012 (Service Restart) so clients reconnect and pick up the new configuration immediately
 - **Workspace-scoped stateful resources** — stateful resources, custom operations, and request logs are now isolated per workspace
 - **`--workspace` persistent CLI flag** — scope any CLI command to a specific workspace without switching context
