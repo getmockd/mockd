@@ -120,3 +120,4 @@ completions/
 pkg/admin/dashboard/dist/assets/
 pkg/admin/dashboard/dist/index.html
 .mcp.json
+.claude/worktrees/
