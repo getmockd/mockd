@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "mockd": {
-      "command": "mockd",
-      "args": ["mcp"]
-    }
-  }
-}
