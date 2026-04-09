@@ -56,9 +56,9 @@ func runSSEConnectionsList(cmd *cobra.Command, args []string) error {
 			return
 		}
 		tw := output.Table()
-		fmt.Fprintf(tw, "ID\tPATH\tMOCK ID\tCLIENT IP\tCONNECTED\tEVENTS\tSTATUS\n")
+		_, _ = fmt.Fprintf(tw, "ID\tPATH\tMOCK ID\tCLIENT IP\tCONNECTED\tEVENTS\tSTATUS\n")
 		for _, c := range result.Connections {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
 				c.ID, c.Path, c.MockID, c.ClientIP,
 				formatDuration(time.Since(c.ConnectedAt)),
 				c.EventsSent, c.Status)

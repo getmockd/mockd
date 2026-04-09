@@ -71,7 +71,7 @@ func nextStreamID() string {
 // context. The caller should defer Unregister.
 func (t *StreamTracker) Register(ctx context.Context, method string, st streamType, clientAddr string) (string, context.Context, context.CancelFunc) {
 	id := nextStreamID()
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel is stored in trackedStream.cancel
 
 	ts := &trackedStream{
 		info: StreamInfo{
