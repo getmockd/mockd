@@ -3,7 +3,7 @@
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
-FROM golang:1.26.1-alpine AS builder
+FROM golang:1.26.2-alpine AS builder
 
 # Build arguments for version info
 ARG VERSION=dev
@@ -28,6 +28,7 @@ COPY . .
 # TARGETARCH is automatically set by Docker buildx for multi-platform builds
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
+    -tags dashboard \
     -ldflags="-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT}" \
     -trimpath \
     -o mockd \
