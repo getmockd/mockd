@@ -62,8 +62,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DASHBOARD_PAT }}
         run: |
+          TAG="${{ github.ref_name }}"
           mkdir -p pkg/admin/dashboard/dist
-          gh release download --repo getmockd/mockd-desktop \
+          # Try matching mockd tag first, then fall back to latest stable release.
+          gh release download "$TAG" --repo getmockd/mockd-desktop \
+            --pattern 'dashboard-dist.tar.gz' \
+            --dir /tmp/dashboard 2>/dev/null \
+          || gh release download --repo getmockd/mockd-desktop \
             --pattern 'dashboard-dist.tar.gz' \
             --dir /tmp/dashboard 2>/dev/null \
           || { echo "::warning::Dashboard dist not found — building without embedded UI"; exit 0; }
