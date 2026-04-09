@@ -89,6 +89,7 @@ type EngineController interface {
 	ListWebSocketConnections() []*WebSocketConnection
 	GetWebSocketConnection(id string) *WebSocketConnection
 	CloseWebSocketConnection(id string) error
+	SendToWebSocketConnection(id string, msgType string, data []byte) error
 	GetWebSocketStats() *WebSocketStats
 
 	// Config
@@ -224,6 +225,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /websocket/connections/{id}", s.handleGetWebSocketConnection)
 	mux.HandleFunc("DELETE /websocket/connections/{id}", s.handleCloseWebSocketConnection)
 	mux.HandleFunc("GET /websocket/stats", s.handleGetWebSocketStats)
+	mux.HandleFunc("POST /websocket/connections/{id}/send", s.handleSendToWebSocketConnection)
 
 	// Config
 	mux.HandleFunc("GET /config", s.handleGetConfig)

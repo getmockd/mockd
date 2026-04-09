@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/getmockd/mockd/pkg/httputil"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/websocket"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -814,6 +816,61 @@ func (s *Server) handleGetWebSocketStats(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, stats)
+}
+
+// handleSendToWebSocketConnection handles POST /websocket/connections/{id}/send.
+// It sends a text or binary message to a specific active WebSocket connection.
+func (s *Server) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing_id", "Connection ID is required")
+		return
+	}
+
+	limitedBody(w, r)
+
+	var req struct {
+		// Type is "text" (default) or "binary".
+		// For binary messages, Data must be base64-encoded; it is decoded here
+		// before the raw bytes are sent over the WebSocket connection.
+		Type string `json:"type"`
+		Data string `json:"data"`
+	}
+	if err := decodeJSONBody(r, &req, false); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	if req.Type != "text" && req.Type != "binary" {
+		writeError(w, http.StatusBadRequest, "invalid_type", `type must be "text" or "binary"`)
+		return
+	}
+
+	var payload []byte
+	if req.Type == "binary" {
+		var err error
+		payload, err = base64.StdEncoding.DecodeString(req.Data)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_base64", "For binary messages, data must be a base64-encoded string")
+			return
+		}
+	} else {
+		payload = []byte(req.Data)
+	}
+
+	if err := s.engine.SendToWebSocketConnection(id, req.Type, payload); err != nil {
+		if errors.Is(err, websocket.ErrConnectionNotFound) || errors.Is(err, websocket.ErrConnectionClosed) {
+			writeError(w, http.StatusNotFound, "not_found", "WebSocket connection not found or closed")
+		} else {
+			writeError(w, http.StatusInternalServerError, "send_error", "Failed to send message to WebSocket connection")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message":    "Message sent",
+		"connection": id,
+		"type":       req.Type,
+	})
 }
 
 // Config handlers
