@@ -97,6 +97,8 @@ func (a *API) handleGetMQTTConnection(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCloseMQTTConnection handles DELETE /mqtt/connections/{id}.
+//
+//nolint:dupl // intentionally parallel structure with other protocol close handlers
 func (a *API) handleCloseMQTTConnection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")

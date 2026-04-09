@@ -16,6 +16,8 @@ type GRPCStreamListResponse struct {
 }
 
 // handleListGRPCStreams handles GET /grpc/connections.
+//
+//nolint:dupl // intentionally parallel structure with other protocol list handlers
 func (a *API) handleListGRPCStreams(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -97,6 +99,8 @@ func (a *API) handleGetGRPCStream(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCancelGRPCStream handles DELETE /grpc/connections/{id}.
+//
+//nolint:dupl // intentionally parallel structure with other protocol close handlers
 func (a *API) handleCancelGRPCStream(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")

@@ -92,6 +92,7 @@ var grpcConnectionsCloseCmd = &cobra.Command{
 	},
 }
 
+//nolint:dupl // intentionally parallel structure with other protocol stats commands
 var grpcStatsCmd = &cobra.Command{
 	Use:   "stats",
 	Short: "Show gRPC statistics",

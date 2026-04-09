@@ -16,6 +16,8 @@ type SSEConnectionListResponse struct {
 }
 
 // handleListSSEConnections handles GET /sse/connections.
+//
+//nolint:dupl // intentionally parallel structure with other protocol list handlers
 func (a *API) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -147,6 +149,8 @@ func (a *API) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleListMockSSEConnections handles GET /mocks/{id}/sse/connections.
+//
+//nolint:dupl // intentionally parallel structure with other protocol mock-scoped handlers
 func (a *API) handleListMockSSEConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	mockID := r.PathValue("id")
@@ -193,6 +197,8 @@ func (a *API) handleListMockSSEConnections(w http.ResponseWriter, r *http.Reques
 }
 
 // handleCloseMockSSEConnections handles DELETE /mocks/{id}/sse/connections.
+//
+//nolint:dupl // intentionally parallel structure with other protocol mock-scoped handlers
 func (a *API) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	mockID := r.PathValue("id")

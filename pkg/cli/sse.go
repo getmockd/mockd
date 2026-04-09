@@ -112,6 +112,7 @@ var sseConnectionsCloseCmd = &cobra.Command{
 	},
 }
 
+//nolint:dupl // intentionally parallel structure with other protocol stats commands
 var sseStatsCmd = &cobra.Command{
 	Use:   "stats",
 	Short: "Show SSE statistics",

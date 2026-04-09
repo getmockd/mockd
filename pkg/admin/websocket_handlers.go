@@ -100,6 +100,8 @@ func (a *API) handleGetWebSocketConnection(w http.ResponseWriter, r *http.Reques
 }
 
 // handleCloseWebSocketConnection handles DELETE /websocket/connections/{id}.
+//
+//nolint:dupl // intentionally parallel structure with other protocol close handlers
 func (a *API) handleCloseWebSocketConnection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
@@ -195,6 +197,8 @@ func (a *API) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.Req
 }
 
 // handleListMockWebSocketConnections handles GET /mocks/{id}/websocket/connections.
+//
+//nolint:dupl // intentionally parallel structure with other protocol mock-scoped handlers
 func (a *API) handleListMockWebSocketConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	mockID := r.PathValue("id")
@@ -240,6 +244,8 @@ func (a *API) handleListMockWebSocketConnections(w http.ResponseWriter, r *http.
 }
 
 // handleCloseMockWebSocketConnections handles DELETE /mocks/{id}/websocket/connections.
+//
+//nolint:dupl // intentionally parallel structure with other protocol mock-scoped handlers
 func (a *API) handleCloseMockWebSocketConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	mockID := r.PathValue("id")
