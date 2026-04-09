@@ -19,8 +19,6 @@ type StreamInfo struct {
 	ConnectedAt  time.Time  `json:"connectedAt"`
 	MessagesSent int64      `json:"messagesSent"`
 	MessagesRecv int64      `json:"messagesRecv"`
-
-	cancel context.CancelFunc
 }
 
 // StreamStats holds aggregate statistics for gRPC streams.

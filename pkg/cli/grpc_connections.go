@@ -40,9 +40,9 @@ func runGRPCConnectionsList(cmd *cobra.Command, args []string) error {
 			return
 		}
 		tw := output.Table()
-		fmt.Fprintf(tw, "ID\tMETHOD\tSTREAM TYPE\tCLIENT\tCONNECTED\tMSG SENT\tMSG RECV\n")
+		_, _ = fmt.Fprintf(tw, "ID\tMETHOD\tSTREAM TYPE\tCLIENT\tCONNECTED\tMSG SENT\tMSG RECV\n")
 		for _, s := range result.Streams {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%d\n",
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%d\n",
 				s.ID, s.Method, s.StreamType, s.ClientAddr,
 				formatDuration(time.Since(s.ConnectedAt)),
 				s.MessagesSent, s.MessagesRecv)

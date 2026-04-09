@@ -40,14 +40,14 @@ func runMQTTConnectionsList(cmd *cobra.Command, args []string) error {
 			return
 		}
 		tw := output.Table()
-		fmt.Fprintf(tw, "ID\tREMOTE ADDR\tUSERNAME\tSUBSCRIPTIONS\tCONNECTED\tSTATUS\n")
+		_, _ = fmt.Fprintf(tw, "ID\tREMOTE ADDR\tUSERNAME\tSUBSCRIPTIONS\tCONNECTED\tSTATUS\n")
 		for _, c := range result.Connections {
 			subs := fmt.Sprintf("%d topic(s)", len(c.Subscriptions))
 			username := c.Username
 			if username == "" {
 				username = "-"
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
 				c.ID, c.RemoteAddr, username, subs,
 				formatDuration(time.Since(c.ConnectedAt)),
 				c.Status)

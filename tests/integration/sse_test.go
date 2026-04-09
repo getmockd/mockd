@@ -93,6 +93,7 @@ func connectSSE(t *testing.T, url string) context.CancelFunc {
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+	t.Cleanup(func() { resp.Body.Close() })
 
 	// Read until we get at least one SSE event (data: line), confirming connection is tracked.
 	ready := make(chan struct{})
@@ -106,7 +107,6 @@ func connectSSE(t *testing.T, url string) context.CancelFunc {
 				signalled = true
 			}
 		}
-		// Body closed by context cancellation
 	}()
 
 	select {
