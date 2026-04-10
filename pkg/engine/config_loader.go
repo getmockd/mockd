@@ -83,9 +83,9 @@ func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store
 				// doesn't poison future add_resource calls with a false
 				// "already exists" from the file store while the engine
 				// has no knowledge of it.
-				if delErr := persistentStore.StatefulResources().Delete(ctx, res.Name); delErr != nil {
+				if delErr := persistentStore.StatefulResources().Delete(ctx, res.Workspace, res.Name); delErr != nil {
 					cl.log.Warn("failed to clean up stale stateful resource from store",
-						"name", res.Name, "error", delErr)
+						"name", res.Name, "workspace", res.Workspace, "error", delErr)
 				}
 				continue
 			}
@@ -109,14 +109,16 @@ func (cl *ConfigLoader) LoadFromStore(ctx context.Context, persistentStore store
 			customOp, convErr := convertCustomOperation(opCfg)
 			if convErr != nil {
 				cl.log.Warn("failed to convert persisted custom operation, removing stale entry",
-					"name", opCfg.Name, "error", convErr)
-				if delErr := persistentStore.CustomOperations().Delete(ctx, opCfg.Name); delErr != nil {
+					"name", opCfg.Name, "workspace", opCfg.Workspace, "error", convErr)
+				if delErr := persistentStore.CustomOperations().Delete(ctx, opCfg.Workspace, opCfg.Name); delErr != nil {
 					cl.log.Warn("failed to clean up stale custom operation from store",
-						"name", opCfg.Name, "error", delErr)
+						"name", opCfg.Name, "workspace", opCfg.Workspace, "error", delErr)
 				}
 				continue
 			}
-			cl.server.statefulBridge.RegisterCustomOperation("", opCfg.Name, customOp)
+			// Register under the persisted workspace bucket so lookups by
+			// mock.WorkspaceID at request time succeed (issue #12).
+			cl.server.statefulBridge.RegisterCustomOperation(opCfg.Workspace, opCfg.Name, customOp)
 			loaded++
 		}
 		if loaded > 0 {

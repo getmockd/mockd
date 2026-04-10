@@ -13,7 +13,8 @@ type customOperationStore struct {
 	fs *FileStore
 }
 
-// List returns all persisted custom operation configs.
+// List returns all persisted custom operation configs across every workspace.
+// Each entry's Workspace field identifies its bucket.
 func (s *customOperationStore) List(ctx context.Context) ([]*config.CustomOperationConfig, error) {
 	s.fs.mu.RLock()
 	defer s.fs.mu.RUnlock()
@@ -27,7 +28,8 @@ func (s *customOperationStore) List(ctx context.Context) ([]*config.CustomOperat
 	return result, nil
 }
 
-// Create persists a new custom operation config.
+// Create persists a new custom operation config. Identity is (workspace, name);
+// two workspaces may each register an operation with the same name.
 func (s *customOperationStore) Create(ctx context.Context, op *config.CustomOperationConfig) error {
 	s.fs.mu.Lock()
 	defer s.fs.mu.Unlock()
@@ -36,9 +38,9 @@ func (s *customOperationStore) Create(ctx context.Context, op *config.CustomOper
 		return store.ErrReadOnly
 	}
 
-	// Check for duplicate name
+	// Check for duplicate (workspace, name).
 	for _, existing := range s.fs.data.CustomOperations {
-		if existing.Name == op.Name {
+		if existing.Workspace == op.Workspace && existing.Name == op.Name {
 			return store.ErrAlreadyExists
 		}
 	}
@@ -48,8 +50,8 @@ func (s *customOperationStore) Create(ctx context.Context, op *config.CustomOper
 	return nil
 }
 
-// Delete removes a custom operation config by name.
-func (s *customOperationStore) Delete(ctx context.Context, name string) error {
+// Delete removes a custom operation config from the given workspace by name.
+func (s *customOperationStore) Delete(ctx context.Context, workspaceID, name string) error {
 	s.fs.mu.Lock()
 	defer s.fs.mu.Unlock()
 
@@ -58,7 +60,7 @@ func (s *customOperationStore) Delete(ctx context.Context, name string) error {
 	}
 
 	for i, op := range s.fs.data.CustomOperations {
-		if op.Name == name {
+		if op.Workspace == workspaceID && op.Name == name {
 			s.fs.data.CustomOperations = append(s.fs.data.CustomOperations[:i], s.fs.data.CustomOperations[i+1:]...)
 			s.fs.markDirty()
 			return nil
@@ -67,8 +69,9 @@ func (s *customOperationStore) Delete(ctx context.Context, name string) error {
 	return store.ErrNotFound
 }
 
-// DeleteAll removes all custom operation configs.
-func (s *customOperationStore) DeleteAll(ctx context.Context) error {
+// DeleteAll removes every custom operation config in the given workspace.
+// Operations in other workspaces are left untouched.
+func (s *customOperationStore) DeleteAll(ctx context.Context, workspaceID string) error {
 	s.fs.mu.Lock()
 	defer s.fs.mu.Unlock()
 
@@ -76,7 +79,18 @@ func (s *customOperationStore) DeleteAll(ctx context.Context) error {
 		return store.ErrReadOnly
 	}
 
-	s.fs.data.CustomOperations = nil
-	s.fs.markDirty()
+	kept := s.fs.data.CustomOperations[:0]
+	removed := false
+	for _, op := range s.fs.data.CustomOperations {
+		if op.Workspace == workspaceID {
+			removed = true
+			continue
+		}
+		kept = append(kept, op)
+	}
+	s.fs.data.CustomOperations = kept
+	if removed {
+		s.fs.markDirty()
+	}
 	return nil
 }

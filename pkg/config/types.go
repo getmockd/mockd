@@ -344,9 +344,13 @@ type WebSocketEndpointConfig struct {
 // StatefulResourceConfig defines configuration for a stateful CRUD resource.
 // This is the single canonical type used in YAML config, persistence, and API transport.
 type StatefulResourceConfig struct {
-	// Name is the unique resource name (e.g., "users", "products")
+	// Name is the unique resource name within a workspace (e.g., "users", "products").
+	// Two workspaces may each register a resource with the same name.
 	Name string `json:"name" yaml:"name"`
-	// Workspace is the workspace this resource belongs to (YAML config only, not persisted)
+	// Workspace is the workspace this resource belongs to. An empty value means
+	// the default workspace. This field is persisted and used as part of the
+	// resource's identity (workspaceID, name) by both the file store and the
+	// runtime StateStore.
 	Workspace string `json:"workspace,omitempty" yaml:"workspace,omitempty"`
 	// IDField is the field name for ID (default: "id")
 	IDField string `json:"idField,omitempty" yaml:"idField,omitempty"`
@@ -510,8 +514,15 @@ type ErrorTransform struct {
 //	    response:
 //	      status: '"completed"'
 type CustomOperationConfig struct {
-	// Name is the unique operation name (referenced in SOAP/GraphQL/gRPC configs)
+	// Name is the unique operation name within a workspace (referenced in
+	// SOAP/GraphQL/gRPC configs). Two workspaces may each register an operation
+	// with the same name.
 	Name string `json:"name" yaml:"name"`
+	// Workspace is the workspace this operation belongs to. An empty value means
+	// the default workspace. This field is persisted and used as part of the
+	// operation's identity (workspaceID, name) by both the file store and the
+	// runtime Bridge.
+	Workspace string `json:"workspace,omitempty" yaml:"workspace,omitempty"`
 	// Consistency controls execution semantics: "best_effort" (default) or "atomic".
 	// "atomic" rolls back prior mutations in the operation if a later step fails.
 	Consistency string `json:"consistency,omitempty" yaml:"consistency,omitempty"`
