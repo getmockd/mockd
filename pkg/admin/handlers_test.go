@@ -639,6 +639,160 @@ func TestHandleImportConfig(t *testing.T) {
 		assert.True(t, *stored.Enabled, "imported mock should default to enabled")
 	})
 
+	// Regression test for issue #12: when importing into a named workspace,
+	// the workspaceId query parameter must be forwarded to the engine so
+	// stateful resources and custom operations are registered under the
+	// correct workspace bucket. Otherwise lookups by mock.WorkspaceID at
+	// request time return nil and the request 404s.
+	t.Run("forwards workspaceId query parameter to engine on import (issue #12)", func(t *testing.T) {
+		var capturedQuery string
+		var captured sync.Once
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "POST" && r.URL.Path == "/config" {
+				captured.Do(func() {
+					capturedQuery = r.URL.Query().Get("workspaceId")
+				})
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(200)
+				_, _ = w.Write([]byte(`{"imported":1,"total":1}`))
+				return
+			}
+			w.WriteHeader(200)
+			_, _ = w.Write([]byte(`{}`))
+		}))
+		defer ts.Close()
+
+		api := NewAPI(0,
+			WithDataDir(t.TempDir()),
+			WithLocalEngineClient(engineclient.New(ts.URL)),
+		)
+
+		importData := map[string]interface{}{
+			"config": map[string]interface{}{
+				"version": "1.0",
+				"mocks": []map[string]interface{}{
+					{
+						"id":   "place-order",
+						"name": "Place Order",
+						"type": "http",
+					},
+				},
+				"statefulResources": []map[string]interface{}{
+					{"name": "orders", "idField": "id"},
+				},
+			},
+			"replace": false,
+		}
+		body, _ := json.Marshal(importData)
+
+		req := httptest.NewRequest("POST", "/config?workspaceId=exchange-a", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		api.handleImportConfig(rec, req, engineclient.New(ts.URL))
+
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.Equal(t, "exchange-a", capturedQuery,
+			"engine must receive workspaceId so stateful resources register under the active workspace")
+	})
+
+	// Regression test for issue #12: importing with replace=true into one
+	// workspace must NOT clear stateful resources or custom operations
+	// belonging to OTHER workspaces. Without per-workspace DeleteAll scoping,
+	// a replace import would silently nuke unrelated workspaces' state.
+	t.Run("replace import preserves other workspaces' resources (issue #12)", func(t *testing.T) {
+		server := newMockEngineServer()
+		defer server.Close()
+
+		api := NewAPI(0,
+			WithDataDir(t.TempDir()),
+			WithLocalEngineClient(server.client()),
+		)
+		ctx := t.Context()
+
+		// Pre-populate the file store with resources and operations in workspace ws-other.
+		require.NoError(t, api.dataStore.StatefulResources().Create(ctx, &config.StatefulResourceConfig{
+			Name: "products", Workspace: "ws-other",
+		}))
+		require.NoError(t, api.dataStore.CustomOperations().Create(ctx, &config.CustomOperationConfig{
+			Name: "RestockProduct", Workspace: "ws-other",
+		}))
+		// Also add a same-named "orders" resource in a third workspace to confirm
+		// it stays untouched even though ws-target is also importing "orders".
+		require.NoError(t, api.dataStore.StatefulResources().Create(ctx, &config.StatefulResourceConfig{
+			Name: "orders", Workspace: "ws-third",
+		}))
+		// And a pre-existing mock in ws-other to verify mock-replace is also
+		// scoped to the target workspace (handlers.go replace block).
+		require.NoError(t, api.dataStore.Mocks().Create(ctx, &config.MockConfiguration{
+			ID: "ws-other-mock", Type: mock.TypeHTTP, WorkspaceID: "ws-other",
+		}))
+
+		// Import with replace=true into ws-target.
+		importData := map[string]interface{}{
+			"config": map[string]interface{}{
+				"version": "1.0",
+				"mocks": []map[string]interface{}{{
+					"id": "place-order", "type": "http",
+					"http": map[string]interface{}{
+						"matcher": map[string]interface{}{"method": "POST", "path": "/orders"},
+						"response": map[string]interface{}{"statusCode": 200, "body": "ok"},
+					},
+				}},
+				"statefulResources": []map[string]interface{}{{"name": "orders", "idField": "id"}},
+				"customOperations":  []map[string]interface{}{{"name": "CancelOrder"}},
+			},
+			"replace": true,
+		}
+		body, _ := json.Marshal(importData)
+		req := httptest.NewRequest("POST", "/config?workspaceId=ws-target", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		api.handleImportConfig(rec, req, server.client())
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+		// ws-other's resources/operations must still be present.
+		resources, err := api.dataStore.StatefulResources().List(ctx)
+		require.NoError(t, err)
+		var (
+			otherProducts  bool
+			thirdOrders    bool
+			targetOrders   bool
+		)
+		for _, r := range resources {
+			switch {
+			case r.Name == "products" && r.Workspace == "ws-other":
+				otherProducts = true
+			case r.Name == "orders" && r.Workspace == "ws-third":
+				thirdOrders = true
+			case r.Name == "orders" && r.Workspace == "ws-target":
+				targetOrders = true
+			}
+		}
+		assert.True(t, otherProducts, "ws-other 'products' should survive replace into ws-target")
+		assert.True(t, thirdOrders, "ws-third 'orders' should survive replace into ws-target (same name, different workspace)")
+		assert.True(t, targetOrders, "ws-target should have its newly-imported 'orders'")
+
+		ops, err := api.dataStore.CustomOperations().List(ctx)
+		require.NoError(t, err)
+		var otherRestock, targetCancel bool
+		for _, op := range ops {
+			if op.Name == "RestockProduct" && op.Workspace == "ws-other" {
+				otherRestock = true
+			}
+			if op.Name == "CancelOrder" && op.Workspace == "ws-target" {
+				targetCancel = true
+			}
+		}
+		assert.True(t, otherRestock, "ws-other 'RestockProduct' op should survive replace into ws-target")
+		assert.True(t, targetCancel, "ws-target should have its newly-imported 'CancelOrder' op")
+
+		// And the pre-existing ws-other mock must still be there.
+		stored, err := api.dataStore.Mocks().Get(ctx, "ws-other-mock")
+		require.NoError(t, err, "ws-other-mock should survive replace import into ws-target")
+		assert.Equal(t, "ws-other", stored.WorkspaceID)
+	})
+
 	t.Run("returns error when no engine connected", func(t *testing.T) {
 		api := NewAPI(0, WithDataDir(t.TempDir()))
 

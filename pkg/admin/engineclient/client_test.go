@@ -578,7 +578,7 @@ func TestExportConfig_EmptyName(t *testing.T) {
 func TestImportConfig_Success(t *testing.T) {
 	_, c := mockServer(t, jsonHandler(t, 200, map[string]any{"imported": 1, "total": 1}))
 
-	result, err := c.ImportConfig(context.Background(), &config.MockCollection{Name: "test"}, false)
+	result, err := c.ImportConfig(context.Background(), &config.MockCollection{Name: "test"}, false, "")
 	if err != nil {
 		t.Errorf("ImportConfig() error = %v, want nil", err)
 	}
@@ -593,9 +593,42 @@ func TestImportConfig_Success(t *testing.T) {
 func TestImportConfig_Error(t *testing.T) {
 	_, c := mockServer(t, jsonHandler(t, 400, ErrorResponse{Error: "bad_request", Message: "invalid config"}))
 
-	_, err := c.ImportConfig(context.Background(), &config.MockCollection{}, false)
+	_, err := c.ImportConfig(context.Background(), &config.MockCollection{}, false, "")
 	if err == nil {
 		t.Error("ImportConfig() error = nil, want error for 400")
+	}
+}
+
+// TestImportConfig_WorkspaceIDInQuery is a regression test for issue #12.
+// When a workspaceID is passed, it must be forwarded to the engine as the
+// ?workspaceId= query parameter so the engine registers stateful resources and
+// custom operations under the correct workspace bucket. Without this, lookups
+// by mock.WorkspaceID at request time return nil and the request 404s.
+func TestImportConfig_WorkspaceIDInQuery(t *testing.T) {
+	var capturedQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedQuery = r.URL.Query().Get("workspaceId")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"imported":1,"total":1}`))
+	}))
+	t.Cleanup(ts.Close)
+	c := New(ts.URL)
+
+	if _, err := c.ImportConfig(context.Background(), &config.MockCollection{Name: "test"}, false, "exchange-a"); err != nil {
+		t.Fatalf("ImportConfig() error = %v, want nil", err)
+	}
+	if capturedQuery != "exchange-a" {
+		t.Errorf("engine received workspaceId = %q, want %q", capturedQuery, "exchange-a")
+	}
+
+	// Empty workspaceID must NOT add the query parameter (preserve current default behavior).
+	capturedQuery = "sentinel"
+	if _, err := c.ImportConfig(context.Background(), &config.MockCollection{Name: "test"}, false, ""); err != nil {
+		t.Fatalf("ImportConfig() error = %v, want nil", err)
+	}
+	if capturedQuery != "" {
+		t.Errorf("engine received workspaceId = %q for empty workspaceID, want empty", capturedQuery)
 	}
 }
 

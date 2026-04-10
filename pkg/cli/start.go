@@ -200,6 +200,14 @@ func runStart(cmd *cobra.Command, args []string) error {
 			server.SetStore(persistentStore)
 			// Ensure store is closed on shutdown
 			defer func() { _ = persistentStore.Close() }()
+			// Restore persisted stateful resources and custom operations into the
+			// runtime engine — mocks are loaded lazily via PersistentMockStore but
+			// stateful resources/custom operations need explicit re-registration so
+			// requests can resolve their (workspaceID, name) buckets after restart
+			// (issue #12).
+			if err := server.LoadFromStore(context.Background()); err != nil {
+				output.Warn("failed to load persisted state from store: %v", err)
+			}
 		}
 	}
 
