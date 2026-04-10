@@ -64,17 +64,17 @@ Pre-built binaries for Linux, macOS, and Windows on the [Releases](https://githu
 
 Every other mock tool makes you choose: pick one protocol, install a runtime, bolt on extensions. mockd doesn't.
 
-| | mockd | WireMock | Mockoon | json-server | Prism | MockServer |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Single binary, no runtime** | :white_check_mark: | :x: JVM | :x: Node | :x: Node | :x: Node | :x: JVM |
-| **HTTP + gRPC + GraphQL + WS** | :white_check_mark: | 🔌 Ext | :x: | :x: | :x: | Partial |
-| **MQTT + SSE + SOAP + OAuth** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
-| **Stateful CRUD** | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :x: |
-| **Import OpenAPI/Postman/HAR** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
-| **Chaos engineering** | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: | :x: |
-| **MCP server (AI-native)** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
-| **Cloud tunnel sharing** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: |
-| **Built-in web dashboard** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: |
+| | mockd | WireMock | Mockoon | json-server | Prism | MockServer | Beeceptor |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Single binary, no runtime** | :white_check_mark: | :x: JVM | :x: Node | :x: Node | :x: Node | :x: JVM | :white_check_mark: Cloud |
+| **HTTP + gRPC + GraphQL + WS** | :white_check_mark: | 🔌 Ext | :x: | :x: | :x: | Partial | :white_check_mark: |
+| **MQTT + SSE + SOAP + OAuth** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: | :x: |
+| **Stateful CRUD** | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :x: | :white_check_mark: |
+| **Import OpenAPI/Postman/HAR** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Chaos engineering** | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: | :x: | :white_check_mark: | 
+| **MCP server (AI-native)** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: | :white_check_mark: | 
+| **Cloud tunnel sharing** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: | :white_check_mark: | 
+| **Built-in web dashboard** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: | :white_check_mark: | 
 
 > 🔌 **Ext** = available via separate extension, not bundled. mockd includes everything in a single binary.
 
