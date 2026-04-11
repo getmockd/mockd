@@ -119,3 +119,5 @@ completions/
 # Dashboard frontend dist (copied from mockd-desktop at release time)
 pkg/admin/dashboard/dist/assets/
 pkg/admin/dashboard/dist/index.html
+.mcp.json
+.claude/worktrees/

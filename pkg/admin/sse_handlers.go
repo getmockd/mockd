@@ -6,25 +6,26 @@ import (
 	"net/http"
 
 	"github.com/getmockd/mockd/pkg/admin/engineclient"
-	"github.com/getmockd/mockd/pkg/sse"
 	"github.com/getmockd/mockd/pkg/store"
 )
 
 // SSEConnectionListResponse represents a list of SSE connections.
 type SSEConnectionListResponse struct {
-	Connections []sse.SSEStreamInfo `json:"connections"`
-	Stats       sse.ConnectionStats `json:"stats"`
+	Connections []*engineclient.SSEConnection `json:"connections"`
+	Stats       engineclient.SSEStats         `json:"stats"`
 }
 
 // handleListSSEConnections handles GET /sse/connections.
+//
+//nolint:dupl // intentionally parallel structure with other protocol list handlers
 func (a *API) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	engine := a.localEngine.Load()
 	if engine == nil {
 		writeJSON(w, http.StatusOK, SSEConnectionListResponse{
-			Connections: []sse.SSEStreamInfo{},
-			Stats:       sse.ConnectionStats{ConnectionsByMock: make(map[string]int)},
+			Connections: []*engineclient.SSEConnection{},
+			Stats:       engineclient.SSEStats{ConnectionsByMock: make(map[string]int)},
 		})
 		return
 	}
@@ -45,14 +46,8 @@ func (a *API) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert engine client connections to SSEStreamInfo
-	info := make([]sse.SSEStreamInfo, 0, len(connections))
-	for _, conn := range connections {
-		info = append(info, sse.SSEStreamInfo{
-			ID:       conn.ID,
-			MockID:   conn.MockID,
-			ClientIP: conn.ClientIP,
-		})
+	if connections == nil {
+		connections = []*engineclient.SSEConnection{}
 	}
 
 	connsByMock := stats.ConnectionsByMock
@@ -61,12 +56,13 @@ func (a *API) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, SSEConnectionListResponse{
-		Connections: info,
-		Stats: sse.ConnectionStats{
-			ActiveConnections: stats.ActiveConnections,
+		Connections: connections,
+		Stats: engineclient.SSEStats{
 			TotalConnections:  stats.TotalConnections,
+			ActiveConnections: stats.ActiveConnections,
 			TotalEventsSent:   stats.TotalEventsSent,
 			TotalBytesSent:    stats.TotalBytesSent,
+			ConnectionErrors:  stats.ConnectionErrors,
 			ConnectionsByMock: connsByMock,
 		},
 	})
@@ -99,12 +95,7 @@ func (a *API) handleGetSSEConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info := sse.SSEStreamInfo{
-		ID:     conn.ID,
-		MockID: conn.MockID,
-	}
-
-	writeJSON(w, http.StatusOK, info)
+	writeJSON(w, http.StatusOK, conn)
 }
 
 // handleCloseSSEConnection handles DELETE /sse/connections/{id}.
@@ -149,38 +140,17 @@ func (a *API) handleCloseSSEConnection(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSSEStats handles GET /sse/stats.
 func (a *API) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	engine := a.localEngine.Load()
 	if engine == nil {
-		writeJSON(w, http.StatusOK, sse.ConnectionStats{
-			ConnectionsByMock: make(map[string]int),
-		})
+		writeJSON(w, http.StatusOK, engineclient.SSEStats{ConnectionsByMock: make(map[string]int)})
 		return
 	}
-
-	stats, err := engine.GetSSEStats(ctx)
-	if err != nil {
-		a.logger().Error("failed to get SSE stats", "error", err)
-		status, code, msg := mapSSEEngineError(err, a.logger(), "get SSE stats")
-		writeError(w, status, code, msg)
-		return
-	}
-
-	connsByMock := stats.ConnectionsByMock
-	if connsByMock == nil {
-		connsByMock = make(map[string]int)
-	}
-	writeJSON(w, http.StatusOK, sse.ConnectionStats{
-		ActiveConnections: stats.ActiveConnections,
-		TotalConnections:  stats.TotalConnections,
-		TotalEventsSent:   stats.TotalEventsSent,
-		TotalBytesSent:    stats.TotalBytesSent,
-		ConnectionsByMock: connsByMock,
-	})
+	a.handleGetStats(w, r, newSSEStatsProvider(engine))
 }
 
 // handleListMockSSEConnections handles GET /mocks/{id}/sse/connections.
+//
+//nolint:dupl // intentionally parallel structure with other protocol mock-scoped handlers
 func (a *API) handleListMockSSEConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	mockID := r.PathValue("id")
@@ -208,24 +178,27 @@ func (a *API) handleListMockSSEConnections(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	info := make([]sse.SSEStreamInfo, 0)
+	var filtered []*engineclient.SSEConnection
 	for _, conn := range connections {
 		if conn.MockID == mockID {
-			info = append(info, sse.SSEStreamInfo{
-				ID:     conn.ID,
-				MockID: conn.MockID,
-			})
+			filtered = append(filtered, conn)
 		}
 	}
 
+	if filtered == nil {
+		filtered = []*engineclient.SSEConnection{}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"connections": info,
-		"count":       len(info),
+		"connections": filtered,
+		"count":       len(filtered),
 		"mockId":      mockID,
 	})
 }
 
 // handleCloseMockSSEConnections handles DELETE /mocks/{id}/sse/connections.
+//
+//nolint:dupl // intentionally parallel structure with other protocol mock-scoped handlers
 func (a *API) handleCloseMockSSEConnections(w http.ResponseWriter, r *http.Request, engine *engineclient.Client) {
 	ctx := r.Context()
 	mockID := r.PathValue("id")

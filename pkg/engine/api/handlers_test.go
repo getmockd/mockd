@@ -14,6 +14,7 @@ import (
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,9 +30,13 @@ type mockEngine struct {
 	stateOverview  *StateOverview
 	handlers       []*ProtocolHandler
 	sseConnections []*SSEConnection
-	wsConnections  []*WebSocketConnection
-	sseStats       *SSEStats
-	wsStats        *WebSocketStats
+	wsConnections    []*WebSocketConnection
+	mqttConnections  []*MQTTConnection
+	grpcStreams      []*GRPCStream
+	sseStats         *SSEStats
+	wsStats          *WebSocketStats
+	mqttStats        *MQTTStats
+	grpcStats        *GRPCStats
 	configResp     *ConfigResponse
 	protocols      map[string]ProtocolStatusInfo
 
@@ -48,6 +53,9 @@ type mockEngine struct {
 	resetStateErr         error
 	listStatefulItemsErr  error
 	getStatefulItemErr    error
+	// wsSendErr allows injecting a specific error for a connection ID in
+	// SendToWebSocketConnection. Keyed by connection ID.
+	wsSendErr map[string]error
 }
 
 func newMockEngine() *mockEngine {
@@ -55,6 +63,7 @@ func newMockEngine() *mockEngine {
 		mocks:       make(map[string]*config.MockConfiguration),
 		requestLogs: make(map[string]*requestlog.Entry),
 		customOps:   make(map[string]*CustomOperationDetail),
+		wsSendErr:   make(map[string]error),
 		running:     true,
 		uptime:      100,
 		protocols: map[string]ProtocolStatusInfo{
@@ -356,6 +365,73 @@ func (m *mockEngine) CloseWebSocketConnection(id string) error {
 
 func (m *mockEngine) GetWebSocketStats() *WebSocketStats {
 	return m.wsStats
+}
+
+func (m *mockEngine) SendToWebSocketConnection(id string, msgType string, data []byte) error {
+	// Allow per-connection error injection for testing specific error paths.
+	if err, ok := m.wsSendErr[id]; ok {
+		return err
+	}
+	for _, c := range m.wsConnections {
+		if c.ID == id {
+			return nil
+		}
+	}
+	return websocket.ErrConnectionNotFound
+}
+
+func (m *mockEngine) ListMQTTConnections() []*MQTTConnection {
+	return m.mqttConnections
+}
+
+func (m *mockEngine) GetMQTTConnection(id string) *MQTTConnection {
+	for _, c := range m.mqttConnections {
+		if c.ID == id {
+			return c
+		}
+	}
+	return nil
+}
+
+func (m *mockEngine) CloseMQTTConnection(id string) error {
+	for i, c := range m.mqttConnections {
+		if c.ID == id {
+			m.mqttConnections = append(m.mqttConnections[:i], m.mqttConnections[i+1:]...)
+			return nil
+		}
+	}
+	return errors.New("connection not found")
+}
+
+func (m *mockEngine) GetMQTTStats() *MQTTStats {
+	return m.mqttStats
+}
+
+func (m *mockEngine) ListGRPCStreams() []*GRPCStream {
+	return m.grpcStreams
+}
+
+func (m *mockEngine) GetGRPCStream(id string) *GRPCStream {
+	for _, s := range m.grpcStreams {
+		if s.ID == id {
+			return s
+		}
+	}
+	return nil
+}
+
+func (m *mockEngine) CancelGRPCStream(id string) error {
+	for i, s := range m.grpcStreams {
+		if s.ID == id {
+			m.grpcStreams = append(m.grpcStreams[:i], m.grpcStreams[i+1:]...)
+			return nil
+		}
+	}
+	return errors.New("stream not found")
+}
+
+func (m *mockEngine) GetGRPCStats() *GRPCStats {
+	return m.grpcStats
 }
 
 func (m *mockEngine) GetConfig() *ConfigResponse {
@@ -2222,4 +2298,815 @@ func TestCustomOperationFullCRUD(t *testing.T) {
 	getRec2 := httptest.NewRecorder()
 	server.handleGetCustomOperation(getRec2, getReq2)
 	assert.Equal(t, http.StatusNotFound, getRec2.Code)
+}
+
+// TestHandleListWebSocketConnections tests the GET /websocket/connections handler.
+func TestHandleListWebSocketConnections(t *testing.T) {
+	t.Run("returns empty list when no connections", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/websocket/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListWebSocketConnections(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp WebSocketConnectionListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Empty(t, resp.Connections)
+		assert.Equal(t, 0, resp.Stats.ActiveConnections)
+	})
+
+	t.Run("returns all connections", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.wsConnections = []*WebSocketConnection{
+			{ID: "ws-1", Path: "/ws", Status: "connected"},
+			{ID: "ws-2", Path: "/ws", Status: "connected"},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/websocket/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListWebSocketConnections(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp WebSocketConnectionListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Len(t, resp.Connections, 2)
+	})
+}
+
+// TestHandleGetWebSocketConnection tests the GET /websocket/connections/{id} handler.
+func TestHandleGetWebSocketConnection(t *testing.T) {
+	t.Run("returns connection when found", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.wsConnections = []*WebSocketConnection{
+			{ID: "ws-1", Path: "/ws", Status: "connected"},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/websocket/connections/ws-1", nil)
+		req.SetPathValue("id", "ws-1")
+		rec := httptest.NewRecorder()
+
+		server.handleGetWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var conn WebSocketConnection
+		err := json.Unmarshal(rec.Body.Bytes(), &conn)
+		require.NoError(t, err)
+		assert.Equal(t, "ws-1", conn.ID)
+	})
+
+	t.Run("returns 404 for unknown connection", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/websocket/connections/unknown", nil)
+		req.SetPathValue("id", "unknown")
+		rec := httptest.NewRecorder()
+
+		server.handleGetWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+// TestHandleCloseWebSocketConnection tests the DELETE /websocket/connections/{id} handler.
+func TestHandleCloseWebSocketConnection(t *testing.T) {
+	t.Run("closes existing connection and returns 200", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.wsConnections = []*WebSocketConnection{
+			{ID: "ws-1", Path: "/ws", Status: "connected"},
+		}
+
+		req := httptest.NewRequest(http.MethodDelete, "/websocket/connections/ws-1", nil)
+		req.SetPathValue("id", "ws-1")
+		rec := httptest.NewRecorder()
+
+		server.handleCloseWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp map[string]string
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "WebSocket connection closed", resp["message"])
+		assert.Equal(t, "ws-1", resp["id"])
+
+		// Connection must be removed from the engine.
+		assert.Empty(t, engine.wsConnections)
+	})
+
+	t.Run("returns 404 for unknown connection", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodDelete, "/websocket/connections/unknown", nil)
+		req.SetPathValue("id", "unknown")
+		rec := httptest.NewRecorder()
+
+		server.handleCloseWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+// TestHandleGetWebSocketStats tests the GET /websocket/stats handler.
+func TestHandleGetWebSocketStats(t *testing.T) {
+	t.Run("returns empty stats with non-nil map when wsStats is nil", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		// wsStats is nil by default in newMockEngine.
+
+		req := httptest.NewRequest(http.MethodGet, "/websocket/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetWebSocketStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var stats WebSocketStats
+		err := json.Unmarshal(rec.Body.Bytes(), &stats)
+		require.NoError(t, err)
+		assert.NotNil(t, stats.ConnectionsByMock)
+	})
+
+	t.Run("returns populated stats", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.wsStats = &WebSocketStats{
+			TotalConnections:  5,
+			ActiveConnections: 3,
+			TotalMessagesSent: 100,
+			TotalMessagesRecv: 50,
+			ConnectionsByMock: map[string]int{"mock-1": 3},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/websocket/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetWebSocketStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var stats WebSocketStats
+		err := json.Unmarshal(rec.Body.Bytes(), &stats)
+		require.NoError(t, err)
+		assert.Equal(t, int64(5), stats.TotalConnections)
+		assert.Equal(t, 3, stats.ActiveConnections)
+		assert.Equal(t, int64(100), stats.TotalMessagesSent)
+		assert.Equal(t, int64(50), stats.TotalMessagesRecv)
+		assert.Equal(t, 3, stats.ConnectionsByMock["mock-1"])
+	})
+}
+
+// TestHandleSendToWebSocketConnection covers every branch of the send handler,
+// including the new 404/500 distinction introduced in the review fix.
+func TestHandleSendToWebSocketConnection(t *testing.T) {
+	t.Run("returns 400 when connection id is missing", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodPost, "/websocket/connections//send",
+			strings.NewReader(`{"type":"text","data":"hello"}`))
+		// PathValue "id" intentionally not set → empty string
+		rec := httptest.NewRecorder()
+
+		server.handleSendToWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "missing_id", resp["error"])
+	})
+
+	t.Run("returns 400 for invalid JSON body", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodPost, "/websocket/connections/ws-1/send",
+			strings.NewReader(`{invalid`))
+		req.SetPathValue("id", "ws-1")
+		rec := httptest.NewRecorder()
+
+		server.handleSendToWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("returns 400 for invalid base64 binary payload", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.wsConnections = []*WebSocketConnection{{ID: "ws-1"}}
+
+		req := httptest.NewRequest(http.MethodPost, "/websocket/connections/ws-1/send",
+			strings.NewReader(`{"type":"binary","data":"not-valid-base64!!!"}`))
+		req.SetPathValue("id", "ws-1")
+		rec := httptest.NewRecorder()
+
+		server.handleSendToWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "invalid_base64", resp["error"])
+	})
+
+	t.Run("returns 200 for text message to existing connection", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.wsConnections = []*WebSocketConnection{{ID: "ws-1"}}
+
+		req := httptest.NewRequest(http.MethodPost, "/websocket/connections/ws-1/send",
+			strings.NewReader(`{"type":"text","data":"hello"}`))
+		req.SetPathValue("id", "ws-1")
+		rec := httptest.NewRecorder()
+
+		server.handleSendToWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "Message sent", resp["message"])
+		assert.Equal(t, "ws-1", resp["connection"])
+		assert.Equal(t, "text", resp["type"])
+	})
+
+	t.Run("returns 200 for valid base64 binary message", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.wsConnections = []*WebSocketConnection{{ID: "ws-1"}}
+
+		// base64("hello") = "aGVsbG8="
+		req := httptest.NewRequest(http.MethodPost, "/websocket/connections/ws-1/send",
+			strings.NewReader(`{"type":"binary","data":"aGVsbG8="}`))
+		req.SetPathValue("id", "ws-1")
+		rec := httptest.NewRecorder()
+
+		server.handleSendToWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "binary", resp["type"])
+	})
+
+	t.Run("defaults type to text when omitted", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.wsConnections = []*WebSocketConnection{{ID: "ws-1"}}
+
+		req := httptest.NewRequest(http.MethodPost, "/websocket/connections/ws-1/send",
+			strings.NewReader(`{"data":"hello"}`))
+		req.SetPathValue("id", "ws-1")
+		rec := httptest.NewRecorder()
+
+		server.handleSendToWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "text", resp["type"])
+	})
+
+	t.Run("returns 404 when connection is not found", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		// No connections registered → ErrConnectionNotFound
+
+		req := httptest.NewRequest(http.MethodPost, "/websocket/connections/missing/send",
+			strings.NewReader(`{"type":"text","data":"hello"}`))
+		req.SetPathValue("id", "missing")
+		rec := httptest.NewRecorder()
+
+		server.handleSendToWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "not_found", resp["error"])
+	})
+
+	t.Run("returns 404 when connection is already closed", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		// Inject ErrConnectionClosed for ws-1 (connection exists but is closed)
+		engine.wsSendErr["ws-1"] = websocket.ErrConnectionClosed
+
+		req := httptest.NewRequest(http.MethodPost, "/websocket/connections/ws-1/send",
+			strings.NewReader(`{"type":"text","data":"hello"}`))
+		req.SetPathValue("id", "ws-1")
+		rec := httptest.NewRecorder()
+
+		server.handleSendToWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "not_found", resp["error"])
+	})
+
+	t.Run("returns 500 for unexpected write error", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		// Inject a generic I/O error (e.g., broken pipe)
+		engine.wsSendErr["ws-1"] = errors.New("write: broken pipe")
+
+		req := httptest.NewRequest(http.MethodPost, "/websocket/connections/ws-1/send",
+			strings.NewReader(`{"type":"text","data":"hello"}`))
+		req.SetPathValue("id", "ws-1")
+		rec := httptest.NewRecorder()
+
+		server.handleSendToWebSocketConnection(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "send_error", resp["error"])
+	})
+}
+
+// ============================================================================
+// MQTT handlers
+// ============================================================================
+
+func TestHandleListMQTTConnections(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/mqtt/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListMQTTConnections(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp MQTTConnectionListResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Empty(t, resp.Connections)
+	})
+
+	t.Run("with connections", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.mqttConnections = []*MQTTConnection{
+			{ID: "client-1", BrokerID: "broker-1", Subscriptions: []string{"sensors/#"}, Status: "connected"},
+			{ID: "client-2", BrokerID: "broker-1", Subscriptions: []string{"devices/+"}, Status: "connected"},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/mqtt/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListMQTTConnections(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp MQTTConnectionListResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Len(t, resp.Connections, 2)
+		assert.Equal(t, "client-1", resp.Connections[0].ID)
+	})
+}
+
+func TestHandleGetMQTTConnection(t *testing.T) {
+	t.Run("found", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.mqttConnections = []*MQTTConnection{
+			{ID: "client-1", BrokerID: "broker-1", ProtocolVersion: 5, Subscriptions: []string{"topic/a"}, Status: "connected"},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/mqtt/connections/client-1", nil)
+		req.SetPathValue("id", "client-1")
+		rec := httptest.NewRecorder()
+
+		server.handleGetMQTTConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var conn MQTTConnection
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &conn))
+		assert.Equal(t, "client-1", conn.ID)
+		assert.Equal(t, byte(5), conn.ProtocolVersion)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/mqtt/connections/nonexistent", nil)
+		req.SetPathValue("id", "nonexistent")
+		rec := httptest.NewRecorder()
+
+		server.handleGetMQTTConnection(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+func TestHandleCloseMQTTConnection(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.mqttConnections = []*MQTTConnection{
+			{ID: "client-1", BrokerID: "broker-1", Status: "connected"},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodDelete, "/mqtt/connections/client-1", nil)
+		req.SetPathValue("id", "client-1")
+		rec := httptest.NewRecorder()
+
+		server.handleCloseMQTTConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "MQTT connection closed", resp["message"])
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodDelete, "/mqtt/connections/nonexistent", nil)
+		req.SetPathValue("id", "nonexistent")
+		rec := httptest.NewRecorder()
+
+		server.handleCloseMQTTConnection(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+func TestHandleGetMQTTStats(t *testing.T) {
+	t.Run("nil stats returns empty", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/mqtt/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetMQTTStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var stats MQTTStats
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stats))
+		assert.NotNil(t, stats.SubscriptionsByClient)
+	})
+
+	t.Run("with stats", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.mqttStats = &MQTTStats{
+			ConnectedClients:      3,
+			TotalSubscriptions:    7,
+			TopicCount:            4,
+			Port:                  1883,
+			SubscriptionsByClient: map[string]int{"c1": 3, "c2": 4},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/mqtt/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetMQTTStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var stats MQTTStats
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stats))
+		assert.Equal(t, 3, stats.ConnectedClients)
+		assert.Equal(t, 7, stats.TotalSubscriptions)
+		assert.Equal(t, 3, stats.SubscriptionsByClient["c1"])
+	})
+}
+
+// ============================================================================
+// gRPC stream handlers
+// ============================================================================
+
+func TestHandleListGRPCStreams(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListGRPCStreams(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp GRPCStreamListResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Empty(t, resp.Streams)
+	})
+
+	t.Run("with streams", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.grpcStreams = []*GRPCStream{
+			{ID: "stream-1", Method: "/pkg.Svc/Chat", StreamType: "bidi", MessagesSent: 5, MessagesRecv: 3},
+			{ID: "stream-2", Method: "/pkg.Svc/Watch", StreamType: "server_stream", MessagesSent: 10},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListGRPCStreams(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp GRPCStreamListResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Len(t, resp.Streams, 2)
+		assert.Equal(t, "stream-1", resp.Streams[0].ID)
+	})
+}
+
+func TestHandleGetGRPCStream(t *testing.T) {
+	t.Run("found", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.grpcStreams = []*GRPCStream{
+			{ID: "stream-1", Method: "/pkg.Svc/Chat", StreamType: "bidi"},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/connections/stream-1", nil)
+		req.SetPathValue("id", "stream-1")
+		rec := httptest.NewRecorder()
+
+		server.handleGetGRPCStream(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var stream GRPCStream
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stream))
+		assert.Equal(t, "stream-1", stream.ID)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/connections/nonexistent", nil)
+		req.SetPathValue("id", "nonexistent")
+		rec := httptest.NewRecorder()
+
+		server.handleGetGRPCStream(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+func TestHandleCancelGRPCStream(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.grpcStreams = []*GRPCStream{
+			{ID: "stream-1", Method: "/pkg.Svc/Chat", StreamType: "bidi"},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodDelete, "/grpc/connections/stream-1", nil)
+		req.SetPathValue("id", "stream-1")
+		rec := httptest.NewRecorder()
+
+		server.handleCancelGRPCStream(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodDelete, "/grpc/connections/nonexistent", nil)
+		req.SetPathValue("id", "nonexistent")
+		rec := httptest.NewRecorder()
+
+		server.handleCancelGRPCStream(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+func TestHandleGetGRPCStats(t *testing.T) {
+	t.Run("nil stats", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetGRPCStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var stats GRPCStats
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stats))
+		assert.NotNil(t, stats.StreamsByMethod)
+	})
+
+	t.Run("with stats", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.grpcStats = &GRPCStats{
+			ActiveStreams:      2,
+			TotalStreams:       10,
+			TotalRPCs:          100,
+			TotalMessagesSent:  50,
+			TotalMessagesRecv:  30,
+			StreamsByMethod:    map[string]int{"/pkg.Svc/Chat": 2},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/grpc/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetGRPCStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var stats GRPCStats
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stats))
+		assert.Equal(t, 2, stats.ActiveStreams)
+		assert.Equal(t, int64(100), stats.TotalRPCs)
+		assert.Equal(t, 2, stats.StreamsByMethod["/pkg.Svc/Chat"])
+	})
+}
+
+// ============================================================================
+// SSE Handler Tests
+// ============================================================================
+
+// TestHandleListSSEConnections tests the GET /sse/connections handler.
+func TestHandleListSSEConnections(t *testing.T) {
+	t.Run("returns empty list when no connections", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListSSEConnections(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp SSEConnectionListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Empty(t, resp.Connections)
+		assert.Equal(t, 0, resp.Stats.ActiveConnections)
+	})
+
+	t.Run("returns all connections", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.sseConnections = []*SSEConnection{
+			{ID: "sse-1", MockID: "mock-1", Path: "/events", Status: "active"},
+			{ID: "sse-2", MockID: "mock-1", Path: "/events", Status: "active"},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/connections", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleListSSEConnections(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp SSEConnectionListResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Len(t, resp.Connections, 2)
+	})
+}
+
+// TestHandleGetSSEConnection tests the GET /sse/connections/{id} handler.
+func TestHandleGetSSEConnection(t *testing.T) {
+	t.Run("returns connection when found", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.sseConnections = []*SSEConnection{
+			{ID: "sse-1", MockID: "mock-1", Path: "/events", ClientIP: "127.0.0.1", Status: "active", EventsSent: 42, BytesSent: 1024},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/connections/sse-1", nil)
+		req.SetPathValue("id", "sse-1")
+		rec := httptest.NewRecorder()
+
+		server.handleGetSSEConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var conn SSEConnection
+		err := json.Unmarshal(rec.Body.Bytes(), &conn)
+		require.NoError(t, err)
+		assert.Equal(t, "sse-1", conn.ID)
+		assert.Equal(t, "mock-1", conn.MockID)
+		assert.Equal(t, "/events", conn.Path)
+		assert.Equal(t, "127.0.0.1", conn.ClientIP)
+		assert.Equal(t, int64(42), conn.EventsSent)
+		assert.Equal(t, int64(1024), conn.BytesSent)
+	})
+
+	t.Run("returns 404 for unknown connection", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/connections/unknown", nil)
+		req.SetPathValue("id", "unknown")
+		rec := httptest.NewRecorder()
+
+		server.handleGetSSEConnection(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+// TestHandleCloseSSEConnection tests the DELETE /sse/connections/{id} handler.
+func TestHandleCloseSSEConnection(t *testing.T) {
+	t.Run("closes existing connection and returns 200", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+		engine.sseConnections = []*SSEConnection{
+			{ID: "sse-1", MockID: "mock-1", Path: "/events", Status: "active"},
+		}
+
+		req := httptest.NewRequest(http.MethodDelete, "/sse/connections/sse-1", nil)
+		req.SetPathValue("id", "sse-1")
+		rec := httptest.NewRecorder()
+
+		server.handleCloseSSEConnection(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp map[string]string
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "SSE connection closed", resp["message"])
+		assert.Equal(t, "sse-1", resp["id"])
+
+		// Connection must be removed from the engine.
+		assert.Empty(t, engine.sseConnections)
+	})
+
+	t.Run("returns 404 for unknown connection", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodDelete, "/sse/connections/unknown", nil)
+		req.SetPathValue("id", "unknown")
+		rec := httptest.NewRecorder()
+
+		server.handleCloseSSEConnection(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+// TestHandleGetSSEStats tests the GET /sse/stats handler.
+func TestHandleGetSSEStats(t *testing.T) {
+	t.Run("returns empty stats with non-nil map when sseStats is nil", func(t *testing.T) {
+		engine := newMockEngine()
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetSSEStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var stats SSEStats
+		err := json.Unmarshal(rec.Body.Bytes(), &stats)
+		require.NoError(t, err)
+		assert.NotNil(t, stats.ConnectionsByMock)
+	})
+
+	t.Run("returns populated stats", func(t *testing.T) {
+		engine := newMockEngine()
+		engine.sseStats = &SSEStats{
+			TotalConnections:  10,
+			ActiveConnections: 2,
+			TotalEventsSent:   500,
+			TotalBytesSent:    50000,
+			ConnectionErrors:  1,
+			ConnectionsByMock: map[string]int{"mock-1": 2},
+		}
+		server := newTestServer(engine)
+
+		req := httptest.NewRequest(http.MethodGet, "/sse/stats", nil)
+		rec := httptest.NewRecorder()
+
+		server.handleGetSSEStats(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var stats SSEStats
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stats))
+		assert.Equal(t, int64(10), stats.TotalConnections)
+		assert.Equal(t, 2, stats.ActiveConnections)
+		assert.Equal(t, int64(500), stats.TotalEventsSent)
+		assert.Equal(t, int64(50000), stats.TotalBytesSent)
+		assert.Equal(t, int64(1), stats.ConnectionErrors)
+		assert.Equal(t, 2, stats.ConnectionsByMock["mock-1"])
+	})
 }

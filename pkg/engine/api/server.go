@@ -89,7 +89,20 @@ type EngineController interface {
 	ListWebSocketConnections() []*WebSocketConnection
 	GetWebSocketConnection(id string) *WebSocketConnection
 	CloseWebSocketConnection(id string) error
+	SendToWebSocketConnection(id string, msgType string, data []byte) error
 	GetWebSocketStats() *WebSocketStats
+
+	// MQTT connections
+	ListMQTTConnections() []*MQTTConnection
+	GetMQTTConnection(id string) *MQTTConnection
+	CloseMQTTConnection(id string) error
+	GetMQTTStats() *MQTTStats
+
+	// gRPC streams
+	ListGRPCStreams() []*GRPCStream
+	GetGRPCStream(id string) *GRPCStream
+	CancelGRPCStream(id string) error
+	GetGRPCStats() *GRPCStats
 
 	// Config
 	GetConfig() *ConfigResponse
@@ -224,6 +237,19 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /websocket/connections/{id}", s.handleGetWebSocketConnection)
 	mux.HandleFunc("DELETE /websocket/connections/{id}", s.handleCloseWebSocketConnection)
 	mux.HandleFunc("GET /websocket/stats", s.handleGetWebSocketStats)
+	mux.HandleFunc("POST /websocket/connections/{id}/send", s.handleSendToWebSocketConnection)
+
+	// MQTT connections
+	mux.HandleFunc("GET /mqtt/connections", s.handleListMQTTConnections)
+	mux.HandleFunc("GET /mqtt/connections/{id}", s.handleGetMQTTConnection)
+	mux.HandleFunc("DELETE /mqtt/connections/{id}", s.handleCloseMQTTConnection)
+	mux.HandleFunc("GET /mqtt/stats", s.handleGetMQTTStats)
+
+	// gRPC streams
+	mux.HandleFunc("GET /grpc/connections", s.handleListGRPCStreams)
+	mux.HandleFunc("GET /grpc/connections/{id}", s.handleGetGRPCStream)
+	mux.HandleFunc("DELETE /grpc/connections/{id}", s.handleCancelGRPCStream)
+	mux.HandleFunc("GET /grpc/stats", s.handleGetGRPCStats)
 
 	// Config
 	mux.HandleFunc("GET /config", s.handleGetConfig)

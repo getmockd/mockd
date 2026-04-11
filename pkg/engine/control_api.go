@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 
-	types "github.com/getmockd/mockd/pkg/api/types"
+	"github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/chaos"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine/api"
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/websocket"
 )
 
 // Errors returned by the control API adapter.
@@ -737,6 +738,27 @@ func (a *ControlAPIAdapter) CloseWebSocketConnection(id string) error {
 	return wsManager.CloseConnection(id, "closed by API")
 }
 
+// SendToWebSocketConnection implements api.EngineController.
+// msgType must be "text" or "binary"; data is the raw message payload.
+func (a *ControlAPIAdapter) SendToWebSocketConnection(id string, msgType string, data []byte) error {
+	handler := a.server.Handler()
+	if handler == nil {
+		return ErrWebSocketHandlerNotInitialized
+	}
+
+	wsManager := handler.WebSocketManager()
+	if wsManager == nil {
+		return ErrWebSocketHandlerNotInitialized
+	}
+
+	mt := websocket.MessageText
+	if msgType == "binary" {
+		mt = websocket.MessageBinary
+	}
+
+	return wsManager.SendToConnection(id, mt, data)
+}
+
 // GetWebSocketStats implements api.EngineController.
 func (a *ControlAPIAdapter) GetWebSocketStats() *api.WebSocketStats {
 	handler := a.server.Handler()
@@ -767,6 +789,220 @@ func (a *ControlAPIAdapter) GetWebSocketStats() *api.WebSocketStats {
 		TotalMessagesRecv: stats.TotalMessagesReceived,
 		ConnectionsByMock: connectionsByMock,
 	}
+}
+
+// ErrMQTTBrokerNotInitialized is returned when no MQTT broker is available.
+var ErrMQTTBrokerNotInitialized = errors.New("MQTT broker not initialized")
+
+// ListMQTTConnections implements api.EngineController.
+func (a *ControlAPIAdapter) ListMQTTConnections() []*api.MQTTConnection {
+	brokers := a.server.GetMQTTBrokers()
+	var result []*api.MQTTConnection
+
+	for _, broker := range brokers {
+		if broker == nil || !broker.IsRunning() {
+			continue
+		}
+		infos := broker.ListClientInfos()
+		for _, info := range infos {
+			if info.Closed {
+				continue
+			}
+			conn := &api.MQTTConnection{
+				ID:              info.ID,
+				BrokerID:        info.BrokerID,
+				ConnectedAt:     info.ConnectedAt,
+				Subscriptions:   info.Subscriptions,
+				ProtocolVersion: info.ProtocolVersion,
+				Username:        info.Username,
+				RemoteAddr:      info.RemoteAddr,
+				Status:          "connected",
+			}
+			if conn.Subscriptions == nil {
+				conn.Subscriptions = []string{}
+			}
+			result = append(result, conn)
+		}
+	}
+
+	return result
+}
+
+// GetMQTTConnection implements api.EngineController.
+func (a *ControlAPIAdapter) GetMQTTConnection(id string) *api.MQTTConnection {
+	brokers := a.server.GetMQTTBrokers()
+
+	for _, broker := range brokers {
+		if broker == nil || !broker.IsRunning() {
+			continue
+		}
+		info := broker.GetClientInfo(id)
+		if info == nil {
+			continue
+		}
+		subs := info.Subscriptions
+		if subs == nil {
+			subs = []string{}
+		}
+		return &api.MQTTConnection{
+			ID:              info.ID,
+			BrokerID:        info.BrokerID,
+			ConnectedAt:     info.ConnectedAt,
+			Subscriptions:   subs,
+			ProtocolVersion: info.ProtocolVersion,
+			Username:        info.Username,
+			RemoteAddr:      info.RemoteAddr,
+			Status:          "connected",
+		}
+	}
+
+	return nil
+}
+
+// CloseMQTTConnection implements api.EngineController.
+func (a *ControlAPIAdapter) CloseMQTTConnection(id string) error {
+	brokers := a.server.GetMQTTBrokers()
+
+	for _, broker := range brokers {
+		if broker == nil || !broker.IsRunning() {
+			continue
+		}
+		if err := broker.DisconnectClient(id); err == nil {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("MQTT client %q not found", id)
+}
+
+// GetMQTTStats implements api.EngineController.
+func (a *ControlAPIAdapter) GetMQTTStats() *api.MQTTStats {
+	brokers := a.server.GetMQTTBrokers()
+	if len(brokers) == 0 {
+		return nil
+	}
+
+	stats := &api.MQTTStats{
+		SubscriptionsByClient: make(map[string]int),
+	}
+
+	for _, broker := range brokers {
+		if broker == nil || !broker.IsRunning() {
+			continue
+		}
+		connected, totalSubs, subsByClient := broker.GetConnectionStats()
+		stats.ConnectedClients += connected
+		stats.TotalSubscriptions += totalSubs
+		for k, v := range subsByClient {
+			stats.SubscriptionsByClient[k] = v
+		}
+		cfg := broker.Config()
+		if cfg != nil {
+			stats.TopicCount += len(cfg.Topics)
+			stats.Port = cfg.Port
+			stats.TLSEnabled = stats.TLSEnabled || (cfg.TLS != nil && cfg.TLS.Enabled)
+			stats.AuthEnabled = stats.AuthEnabled || (cfg.Auth != nil && cfg.Auth.Enabled)
+		}
+	}
+
+	return stats
+}
+
+// ErrGRPCServerNotInitialized is returned when no gRPC server is available.
+var ErrGRPCServerNotInitialized = errors.New("gRPC server not initialized")
+
+// ListGRPCStreams implements api.EngineController.
+func (a *ControlAPIAdapter) ListGRPCStreams() []*api.GRPCStream {
+	servers := a.server.GRPCServers()
+	var result []*api.GRPCStream
+
+	for _, srv := range servers {
+		if srv == nil || !srv.IsRunning() {
+			continue
+		}
+		for _, info := range srv.StreamTracker().List() {
+			result = append(result, &api.GRPCStream{
+				ID:           info.ID,
+				Method:       info.Method,
+				StreamType:   string(info.StreamType),
+				ClientAddr:   info.ClientAddr,
+				ConnectedAt:  info.ConnectedAt,
+				MessagesSent: info.MessagesSent,
+				MessagesRecv: info.MessagesRecv,
+			})
+		}
+	}
+
+	return result
+}
+
+// GetGRPCStream implements api.EngineController.
+func (a *ControlAPIAdapter) GetGRPCStream(id string) *api.GRPCStream {
+	servers := a.server.GRPCServers()
+
+	for _, srv := range servers {
+		if srv == nil || !srv.IsRunning() {
+			continue
+		}
+		if info := srv.StreamTracker().Get(id); info != nil {
+			return &api.GRPCStream{
+				ID:           info.ID,
+				Method:       info.Method,
+				StreamType:   string(info.StreamType),
+				ClientAddr:   info.ClientAddr,
+				ConnectedAt:  info.ConnectedAt,
+				MessagesSent: info.MessagesSent,
+				MessagesRecv: info.MessagesRecv,
+			}
+		}
+	}
+
+	return nil
+}
+
+// CancelGRPCStream implements api.EngineController.
+func (a *ControlAPIAdapter) CancelGRPCStream(id string) error {
+	servers := a.server.GRPCServers()
+
+	for _, srv := range servers {
+		if srv == nil || !srv.IsRunning() {
+			continue
+		}
+		if err := srv.StreamTracker().Cancel(id); err == nil {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("gRPC stream %s not found", id)
+}
+
+// GetGRPCStats implements api.EngineController.
+func (a *ControlAPIAdapter) GetGRPCStats() *api.GRPCStats {
+	servers := a.server.GRPCServers()
+	if len(servers) == 0 {
+		return nil
+	}
+
+	stats := &api.GRPCStats{
+		StreamsByMethod: make(map[string]int),
+	}
+
+	for _, srv := range servers {
+		if srv == nil || !srv.IsRunning() {
+			continue
+		}
+		s := srv.StreamTracker().Stats()
+		stats.ActiveStreams += s.ActiveStreams
+		stats.TotalStreams += s.TotalStreams
+		stats.TotalRPCs += s.TotalRPCs
+		stats.TotalMessagesSent += s.TotalMsgSent
+		stats.TotalMessagesRecv += s.TotalMsgRecv
+		for method, count := range s.StreamsByMethod {
+			stats.StreamsByMethod[method] += count
+		}
+	}
+
+	return stats
 }
 
 // GetConfig implements api.EngineController.

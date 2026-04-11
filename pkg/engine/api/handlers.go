@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/getmockd/mockd/pkg/httputil"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/websocket"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -738,9 +740,14 @@ func (s *Server) handleGetHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListSSEConnections(w http.ResponseWriter, r *http.Request) {
 	connections := s.engine.ListSSEConnections()
+	stats := s.engine.GetSSEStats()
+	respStats := SSEStats{ConnectionsByMock: make(map[string]int)}
+	if stats != nil {
+		respStats = *stats
+	}
 	writeJSON(w, http.StatusOK, SSEConnectionListResponse{
 		Connections: connections,
-		Count:       len(connections),
+		Stats:       respStats,
 	})
 }
 
@@ -779,9 +786,14 @@ func (s *Server) handleGetSSEStats(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListWebSocketConnections(w http.ResponseWriter, r *http.Request) {
 	connections := s.engine.ListWebSocketConnections()
+	stats := s.engine.GetWebSocketStats()
+	respStats := WebSocketStats{ConnectionsByMock: make(map[string]int)}
+	if stats != nil {
+		respStats = *stats
+	}
 	writeJSON(w, http.StatusOK, WebSocketConnectionListResponse{
 		Connections: connections,
-		Count:       len(connections),
+		Stats:       respStats,
 	})
 }
 
@@ -814,6 +826,64 @@ func (s *Server) handleGetWebSocketStats(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, stats)
+}
+
+// handleSendToWebSocketConnection handles POST /websocket/connections/{id}/send.
+// It sends a text or binary message to a specific active WebSocket connection.
+func (s *Server) handleSendToWebSocketConnection(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing_id", "Connection ID is required")
+		return
+	}
+
+	limitedBody(w, r)
+
+	var req struct {
+		// Type is "text" (default) or "binary".
+		// For binary messages, Data must be base64-encoded; it is decoded here
+		// before the raw bytes are sent over the WebSocket connection.
+		Type string `json:"type"`
+		Data string `json:"data"`
+	}
+	if err := decodeJSONBody(r, &req, false); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	if req.Type == "" {
+		req.Type = "text"
+	}
+	if req.Type != "text" && req.Type != "binary" {
+		writeError(w, http.StatusBadRequest, "invalid_type", `Type must be "text" or "binary"`)
+		return
+	}
+
+	var payload []byte
+	if req.Type == "binary" {
+		var err error
+		payload, err = base64.StdEncoding.DecodeString(req.Data)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_base64", "For binary messages, data must be a base64-encoded string")
+			return
+		}
+	} else {
+		payload = []byte(req.Data)
+	}
+
+	if err := s.engine.SendToWebSocketConnection(id, req.Type, payload); err != nil {
+		if errors.Is(err, websocket.ErrConnectionNotFound) || errors.Is(err, websocket.ErrConnectionClosed) {
+			writeError(w, http.StatusNotFound, "not_found", "WebSocket connection not found or closed")
+		} else {
+			writeError(w, http.StatusInternalServerError, "send_error", "Failed to send message to WebSocket connection")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message":    "Message sent",
+		"connection": id,
+		"type":       req.Type,
+	})
 }
 
 // Config handlers
@@ -1006,6 +1076,101 @@ func mapStatefulLookupError(err error) (int, string) {
 // This ensures Content-Type is always set correctly.
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	httputil.WriteJSON(w, status, v)
+}
+
+// MQTT handlers
+
+func (s *Server) handleListMQTTConnections(w http.ResponseWriter, r *http.Request) {
+	connections := s.engine.ListMQTTConnections()
+	stats := s.engine.GetMQTTStats()
+	respStats := MQTTStats{SubscriptionsByClient: make(map[string]int)}
+	if stats != nil {
+		respStats = *stats
+	}
+	writeJSON(w, http.StatusOK, MQTTConnectionListResponse{
+		Connections: connections,
+		Stats:       respStats,
+	})
+}
+
+func (s *Server) handleGetMQTTConnection(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	conn := s.engine.GetMQTTConnection(id)
+	if conn == nil {
+		writeError(w, http.StatusNotFound, "not_found", "MQTT connection not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, conn)
+}
+
+func (s *Server) handleCloseMQTTConnection(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.engine.CloseMQTTConnection(id); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "MQTT connection not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "MQTT connection closed",
+		"id":      id,
+	})
+}
+
+func (s *Server) handleGetMQTTStats(w http.ResponseWriter, r *http.Request) {
+	stats := s.engine.GetMQTTStats()
+	if stats == nil {
+		writeJSON(w, http.StatusOK, MQTTStats{SubscriptionsByClient: make(map[string]int)})
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+// gRPC stream handlers
+
+func (s *Server) handleListGRPCStreams(w http.ResponseWriter, r *http.Request) {
+	streams := s.engine.ListGRPCStreams()
+	if streams == nil {
+		streams = []*GRPCStream{}
+	}
+	stats := s.engine.GetGRPCStats()
+	respStats := GRPCStats{StreamsByMethod: make(map[string]int)}
+	if stats != nil {
+		respStats = *stats
+	}
+	writeJSON(w, http.StatusOK, GRPCStreamListResponse{
+		Streams: streams,
+		Stats:   respStats,
+	})
+}
+
+func (s *Server) handleGetGRPCStream(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	stream := s.engine.GetGRPCStream(id)
+	if stream == nil {
+		writeError(w, http.StatusNotFound, "not_found", "gRPC stream not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, stream)
+}
+
+func (s *Server) handleCancelGRPCStream(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.engine.CancelGRPCStream(id); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "gRPC stream not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "gRPC stream cancelled",
+		"id":      id,
+	})
+}
+
+func (s *Server) handleGetGRPCStats(w http.ResponseWriter, r *http.Request) {
+	stats := s.engine.GetGRPCStats()
+	if stats == nil {
+		writeJSON(w, http.StatusOK, GRPCStats{StreamsByMethod: make(map[string]int)})
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {

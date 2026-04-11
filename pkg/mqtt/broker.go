@@ -59,6 +59,7 @@ type Broker struct {
 	log                        *slog.Logger
 	internalSubscribers        map[string][]SubscriptionHandler
 	clientSubscriptions        map[string][]string
+	clientConnectedAt          map[string]time.Time
 	simulator                  *Simulator
 	recordingEnabled           bool
 	recordingStore             MQTTRecordingStore
@@ -144,6 +145,7 @@ func NewBroker(config *MQTTConfig) (*Broker, error) {
 		log:                 logging.Nop(),
 		internalSubscribers: make(map[string][]SubscriptionHandler),
 		clientSubscriptions: make(map[string][]string),
+		clientConnectedAt:   make(map[string]time.Time),
 		sessionManager:      NewSessionManager(),
 	}
 	broker.responseHandler = NewResponseHandler(broker)
@@ -652,6 +654,156 @@ func (b *Broker) notifyTestPanelPublish(topic string, payload []byte, qos int, r
 	}
 
 	b.sessionManager.NotifyMessage(b.config.ID, msg)
+}
+
+// trackClientConnect records the connection time for a client.
+// Called from the MessageHook's OnSessionEstablished callback.
+func (b *Broker) trackClientConnect(clientID string) {
+	if b.stopping.Load() != 0 {
+		return
+	}
+	b.mu.Lock()
+	b.clientConnectedAt[clientID] = time.Now()
+	b.mu.Unlock()
+}
+
+// trackClientDisconnect removes the connection time for a client.
+// Called from the MessageHook's OnDisconnect callback.
+func (b *Broker) trackClientDisconnect(clientID string) {
+	if b.stopping.Load() != 0 {
+		return
+	}
+	b.mu.Lock()
+	delete(b.clientConnectedAt, clientID)
+	b.mu.Unlock()
+}
+
+// MQTTClientInfo represents information about a connected MQTT client.
+type MQTTClientInfo struct {
+	ID              string
+	BrokerID        string
+	ConnectedAt     time.Time
+	Subscriptions   []string
+	ProtocolVersion byte
+	Username        string
+	RemoteAddr      string
+	Closed          bool
+}
+
+// ListClientInfos returns information about all connected MQTT clients.
+func (b *Broker) ListClientInfos() []*MQTTClientInfo {
+	b.mu.RLock()
+	brokerID := ""
+	if b.config != nil {
+		brokerID = b.config.ID
+	}
+	subs := make(map[string][]string, len(b.clientSubscriptions))
+	for k, v := range b.clientSubscriptions {
+		subs[k] = append([]string{}, v...)
+	}
+	connTimes := make(map[string]time.Time, len(b.clientConnectedAt))
+	for k, v := range b.clientConnectedAt {
+		connTimes[k] = v
+	}
+	b.mu.RUnlock()
+
+	if b.server == nil {
+		return nil
+	}
+
+	clients := b.server.Clients.GetAll()
+	var result []*MQTTClientInfo
+
+	for id, cl := range clients {
+		if cl.Net.Inline {
+			continue // skip the built-in inline client
+		}
+		info := &MQTTClientInfo{
+			ID:              id,
+			BrokerID:        brokerID,
+			ProtocolVersion: cl.Properties.ProtocolVersion,
+			Username:        string(cl.Properties.Username),
+			RemoteAddr:      cl.Net.Remote,
+			Closed:          cl.Closed(),
+		}
+		if ct, ok := connTimes[id]; ok {
+			info.ConnectedAt = ct
+		}
+		if subList, ok := subs[id]; ok {
+			info.Subscriptions = subList
+		}
+		result = append(result, info)
+	}
+
+	return result
+}
+
+// GetClientInfo returns information about a specific MQTT client.
+func (b *Broker) GetClientInfo(clientID string) *MQTTClientInfo {
+	if b.server == nil {
+		return nil
+	}
+
+	cl, ok := b.server.Clients.Get(clientID)
+	if !ok {
+		return nil
+	}
+	if cl.Net.Inline {
+		return nil
+	}
+
+	b.mu.RLock()
+	brokerID := ""
+	if b.config != nil {
+		brokerID = b.config.ID
+	}
+	var subsCopy []string
+	if s, ok := b.clientSubscriptions[clientID]; ok {
+		subsCopy = append([]string{}, s...)
+	}
+	connectedAt := b.clientConnectedAt[clientID]
+	b.mu.RUnlock()
+
+	return &MQTTClientInfo{
+		ID:              clientID,
+		BrokerID:        brokerID,
+		ConnectedAt:     connectedAt,
+		ProtocolVersion: cl.Properties.ProtocolVersion,
+		Username:        string(cl.Properties.Username),
+		RemoteAddr:      cl.Net.Remote,
+		Closed:          cl.Closed(),
+		Subscriptions:   subsCopy,
+	}
+}
+
+// DisconnectClient disconnects a specific MQTT client by client ID.
+// Returns an error if the client is not found.
+func (b *Broker) DisconnectClient(clientID string) error {
+	if b.server == nil {
+		return errors.New("broker is not running")
+	}
+
+	cl, ok := b.server.Clients.Get(clientID)
+	if !ok || cl.Net.Inline {
+		return fmt.Errorf("client %q not found", clientID)
+	}
+
+	cl.Stop(errors.New("disconnected by admin API"))
+	return nil
+}
+
+// GetConnectionStats returns aggregate connection statistics.
+func (b *Broker) GetConnectionStats() (connectedClients int, totalSubscriptions int, subsByClient map[string]int) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	subsByClient = make(map[string]int, len(b.clientSubscriptions))
+	for clientID, subs := range b.clientSubscriptions {
+		subsByClient[clientID] = len(subs)
+		totalSubscriptions += len(subs)
+	}
+	connectedClients = len(b.getClientsLocked())
+	return
 }
 
 // detectPayloadFormat detects the format of a payload

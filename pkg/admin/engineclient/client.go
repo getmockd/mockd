@@ -1077,6 +1077,270 @@ func (c *Client) GetSSEStats(ctx context.Context) (*SSEStats, error) {
 	return &stats, nil
 }
 
+// ListWebSocketConnections returns all active WebSocket connections.
+func (c *Client) ListWebSocketConnections(ctx context.Context) ([]*WebSocketConnection, error) {
+	resp, err := c.get(ctx, "/websocket/connections")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result struct {
+		Connections []*WebSocketConnection `json:"connections"`
+		Count       int                    `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode WebSocket connections: %w", err)
+	}
+	return result.Connections, nil
+}
+
+// GetWebSocketConnection returns a specific WebSocket connection by ID.
+func (c *Client) GetWebSocketConnection(ctx context.Context, id string) (*WebSocketConnection, error) {
+	resp, err := c.get(ctx, "/websocket/connections/"+url.PathEscape(id))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var conn WebSocketConnection
+	if err := json.NewDecoder(resp.Body).Decode(&conn); err != nil {
+		return nil, fmt.Errorf("failed to decode WebSocket connection: %w", err)
+	}
+	return &conn, nil
+}
+
+// CloseWebSocketConnection closes a WebSocket connection by ID.
+func (c *Client) CloseWebSocketConnection(ctx context.Context, id string) error {
+	resp, err := c.delete(ctx, "/websocket/connections/"+url.PathEscape(id))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// SendToWebSocketConnection sends a text or binary message to a specific connection.
+// msgType must be "text" (default) or "binary".
+// For binary messages, data must be a base64-encoded string; the engine decodes
+// it before sending the raw bytes over the WebSocket connection.
+func (c *Client) SendToWebSocketConnection(ctx context.Context, id string, msgType string, data string) error {
+	body := map[string]string{
+		"type": msgType,
+		"data": data,
+	}
+	resp, err := c.post(ctx, "/websocket/connections/"+url.PathEscape(id)+"/send", body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetWebSocketStats returns WebSocket statistics.
+func (c *Client) GetWebSocketStats(ctx context.Context) (*WebSocketStats, error) {
+	resp, err := c.get(ctx, "/websocket/stats")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var stats WebSocketStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("failed to decode WebSocket stats: %w", err)
+	}
+	return &stats, nil
+}
+
+// ListMQTTConnections returns all active MQTT client connections.
+func (c *Client) ListMQTTConnections(ctx context.Context) ([]*MQTTConnection, error) {
+	resp, err := c.get(ctx, "/mqtt/connections")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result struct {
+		Connections []*MQTTConnection `json:"connections"`
+		Count       int               `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode MQTT connections: %w", err)
+	}
+	return result.Connections, nil
+}
+
+// GetMQTTConnection returns a specific MQTT client connection.
+func (c *Client) GetMQTTConnection(ctx context.Context, id string) (*MQTTConnection, error) {
+	resp, err := c.get(ctx, "/mqtt/connections/"+url.PathEscape(id))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var conn MQTTConnection
+	if err := json.NewDecoder(resp.Body).Decode(&conn); err != nil {
+		return nil, fmt.Errorf("failed to decode MQTT connection: %w", err)
+	}
+	return &conn, nil
+}
+
+// CloseMQTTConnection disconnects a specific MQTT client.
+func (c *Client) CloseMQTTConnection(ctx context.Context, id string) error {
+	resp, err := c.delete(ctx, "/mqtt/connections/"+url.PathEscape(id))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetMQTTStats returns MQTT broker statistics.
+func (c *Client) GetMQTTStats(ctx context.Context) (*MQTTStats, error) {
+	resp, err := c.get(ctx, "/mqtt/stats")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var stats MQTTStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("failed to decode MQTT stats: %w", err)
+	}
+	return &stats, nil
+}
+
+// ListGRPCStreams returns all active gRPC streaming connections.
+func (c *Client) ListGRPCStreams(ctx context.Context) ([]*GRPCStream, error) {
+	resp, err := c.get(ctx, "/grpc/connections")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var result struct {
+		Streams []*GRPCStream `json:"streams"`
+		Count   int           `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode gRPC streams: %w", err)
+	}
+	return result.Streams, nil
+}
+
+// GetGRPCStream returns a specific gRPC stream by ID.
+func (c *Client) GetGRPCStream(ctx context.Context, id string) (*GRPCStream, error) {
+	resp, err := c.get(ctx, "/grpc/connections/"+url.PathEscape(id))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var stream GRPCStream
+	if err := json.NewDecoder(resp.Body).Decode(&stream); err != nil {
+		return nil, fmt.Errorf("failed to decode gRPC stream: %w", err)
+	}
+	return &stream, nil
+}
+
+// CancelGRPCStream cancels (terminates) a specific gRPC stream.
+func (c *Client) CancelGRPCStream(ctx context.Context, id string) error {
+	resp, err := c.delete(ctx, "/grpc/connections/"+url.PathEscape(id))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetGRPCStats returns gRPC statistics.
+func (c *Client) GetGRPCStats(ctx context.Context) (*GRPCStats, error) {
+	resp, err := c.get(ctx, "/grpc/stats")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+
+	var stats GRPCStats
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("failed to decode gRPC stats: %w", err)
+	}
+	return &stats, nil
+}
+
 // HTTP helpers
 
 func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
