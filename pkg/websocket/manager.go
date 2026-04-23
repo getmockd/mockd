@@ -102,12 +102,15 @@ func (m *ConnectionManager) RegisterEndpoint(e *Endpoint) {
 }
 
 // UnregisterEndpoint removes an endpoint from the manager.
+// Callers that want active clients to reconnect with new config should call
+// DisconnectByEndpoint before this method, while byEndpoint still tracks
+// the path. The engine's unregisterHandlerLocked does this automatically
+// for every mock update, delete, and clear operation.
 func (m *ConnectionManager) UnregisterEndpoint(path string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	delete(m.endpoints, path)
-	// Note: connections remain until they close
 }
 
 // GetEndpoint returns an endpoint by path.
@@ -253,6 +256,38 @@ func (m *ConnectionManager) CountByEndpoint(path string) int {
 		return len(eps)
 	}
 	return 0
+}
+
+// DisconnectByEndpoint closes all active connections on an endpoint with the given code and reason.
+// Returns the number of connections that were closed.
+//
+// Must be called before UnregisterEndpoint so that byEndpoint still contains the connections.
+// Uses the read-lock/copy pattern (same as BroadcastToEndpoint) to avoid holding the lock
+// while calling conn.Close, which acquires its own lock.
+func (m *ConnectionManager) DisconnectByEndpoint(path string, code CloseCode, reason string) int {
+	m.mu.RLock()
+	var ids []string
+	if eps, ok := m.byEndpoint[path]; ok {
+		ids = make([]string, 0, len(eps))
+		for id := range eps {
+			ids = append(ids, id)
+		}
+	}
+	m.mu.RUnlock()
+
+	closed := 0
+	for _, id := range ids {
+		m.mu.RLock()
+		conn := m.connections[id]
+		m.mu.RUnlock()
+
+		if conn != nil && !conn.IsClosed() {
+			if err := conn.Close(code, reason); err == nil {
+				closed++
+			}
+		}
+	}
+	return closed
 }
 
 // BroadcastToEndpoint sends a message to all connections on an endpoint.
