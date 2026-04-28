@@ -93,7 +93,7 @@ Every other mock tool makes you choose: pick one protocol, install a runtime, bo
 | REST / HTTP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | gRPC | ✅ | 🔌 Ext | ❌ | ❌ | ❌ | ✅ | ❌ |
 | GraphQL | ✅ | 🔌 Ext | ❌ | ❌ | ❌ | ✅ | ❌ |
-| WebSocket | ✅ | 🔌 Ext (beta) | ✅ | ❌ | ❌ | ⚠️ unverified | ❌ |
+| WebSocket | ✅ | 🔌 Ext (beta) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | MQTT | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | SSE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | SOAP (WSDL) | ✅ | ❌ | Partial | ❌ | Partial | ✅ | ❌ |
@@ -109,7 +109,7 @@ Every other mock tool makes you choose: pick one protocol, install a runtime, bo
 | Fault injection (delay, errors) | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
 | Chaos profiles | ✅ | ⚠️ Cloud | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Circuit breakers | ✅ | ⚠️ Cloud | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Bandwidth throttling | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Bandwidth throttling | ✅ | ❌ | ❌ | ❌ | ❌ | roadmap | ❌ |
 | Admin REST API | ✅ | ✅ | CLI only | ❌ | ✅ | ✅ | Partial |
 | Built-in web dashboard | ✅ | ⚠️ Cloud | ⚠️ Cloud | ❌ | ✅ read-only | ✅ | ❌ |
 | Native desktop GUI | ❌ | ❌ | ✅ Electron | ❌ | ❌ | ❌ | ❌ |
@@ -121,7 +121,7 @@ Every other mock tool makes you choose: pick one protocol, install a runtime, bo
 | | mockd | WireMock OSS | Mockoon | Prism | MockServer | Beeceptor | json-server |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | OpenAPI import | ✅ | ⚠️ Cloud | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Postman import | ✅ | ⚠️ Cloud | ❌ | ✅ | ❌ | ⚠️ unverified | ❌ |
+| Postman import | ✅ | ⚠️ Cloud | ❌ | ✅ | ❌ | ❌ | ❌ |
 | HAR import | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | WSDL import | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | cURL import | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -141,7 +141,7 @@ Every other mock tool makes you choose: pick one protocol, install a runtime, bo
 | Beeceptor free tier | 50 / day / endpoint | 3 | $10/mo+ for more |
 | json-server | unlimited | unlimited | free (MIT) |
 
-**Legend**: ✅ built-in • 🔌 Ext = separate OSS extension • ⚠️ Cloud = only in paid / hosted tier • Partial = limited implementation • ⚠️ unverified = claim present but not yet confirmed against primary docs
+**Legend**: ✅ built-in • 🔌 Ext = separate OSS extension • ⚠️ Cloud = only in paid / hosted tier • Partial = limited implementation • roadmap = on the project's stated roadmap, not yet shipped
 
 > **Note on WireMock imports.** The `⚠️ Cloud` marks on OpenAPI and Postman import reflect first-party WireMock features. Community converters exist (e.g. `openapi-to-wiremock`, OpenAPI Generator targets) but are not bundled with the OSS standalone JAR.
 
