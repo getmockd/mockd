@@ -64,19 +64,88 @@ Pre-built binaries for Linux, macOS, and Windows on the [Releases](https://githu
 
 Every other mock tool makes you choose: pick one protocol, install a runtime, bolt on extensions. mockd doesn't.
 
-| | mockd | WireMock | Mockoon | json-server | Prism | MockServer |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Single binary, no runtime** | :white_check_mark: | :x: JVM | :x: Node | :x: Node | :x: Node | :x: JVM |
-| **HTTP + gRPC + GraphQL + WS** | :white_check_mark: | 🔌 Ext | :x: | :x: | :x: | Partial |
-| **MQTT + SSE + SOAP + OAuth** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
-| **Stateful CRUD** | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :x: |
-| **Import OpenAPI/Postman/HAR** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
-| **Chaos engineering** | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: | :x: |
-| **MCP server (AI-native)** | :white_check_mark: | :x: | :x: | :x: | :x: | :x: |
-| **Cloud tunnel sharing** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: |
-| **Built-in web dashboard** | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :x: |
+| | mockd | WireMock | Mockoon | Prism | MockServer | Beeceptor | json-server |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Single binary, no runtime** | ✅ | ❌ JVM | ❌ Electron | ✅ | ❌ JVM | ❌ SaaS | ❌ Node |
+| **All 9 protocols built-in** | ✅ | 🔌 Ext | Partial | HTTP only | HTTP only | Partial | REST only |
+| **Chaos profiles + circuit breakers** | ✅ | ⚠️ Cloud | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **MCP server** | ✅ local | ⚠️ Cloud | ❌ | ❌ | ❌ | ⚠️ Cloud, Team+ | ❌ |
+| **Free + self-hostable, unlimited** | ✅ | ✅ | ✅ | ✅ | ✅ | 50 req/day | ✅ |
 
-> 🔌 **Ext** = available via separate extension, not bundled. mockd includes everything in a single binary.
+> 🔌 **Ext** = requires separate extension JAR • ⚠️ **Cloud** = only in paid/hosted tier
+
+<details>
+<summary><strong>Full capability matrix</strong> (deployment, protocols, capabilities, imports/exports, pricing)</summary>
+
+### Deployment
+
+| | mockd | WireMock | Mockoon | Prism | MockServer | Beeceptor | json-server |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Native single binary | ✅ Go | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Runtime required | none | JVM | Electron/Node | optional Node | JVM | n/a (SaaS) | Node |
+| Docker image | ✅ | ✅ | ✅ CLI | ✅ | ✅ | ⚠️ Enterprise | ❌ |
+| Managed SaaS offering | roadmap | WireMock Cloud | Mockoon Cloud | Stoplight | ❌ | ✅ | ❌ |
+
+### Protocol support
+
+| | mockd | WireMock OSS | Mockoon | Prism | MockServer | Beeceptor | json-server |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| REST / HTTP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| gRPC | ✅ | 🔌 Ext | ❌ | ❌ | ❌ | ✅ | ❌ |
+| GraphQL | ✅ | 🔌 Ext | ❌ | ❌ | ❌ | ✅ | ❌ |
+| WebSocket | ✅ | 🔌 Ext (beta) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| MQTT | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| SSE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| SOAP (WSDL) | ✅ | ❌ | Partial | ❌ | Partial | ✅ | ❌ |
+| mTLS | ✅ | ✅ | Partial | ❌ | ✅ | ✅ | ❌ |
+| OAuth flows | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+### Capabilities
+
+| | mockd | WireMock OSS | Mockoon | Prism | MockServer | Beeceptor | json-server |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Stateful CRUD | ✅ | ❌ | ✅ | Partial | ❌ | ✅ | ✅ |
+| Multi-step stateful flows | ✅ | ✅ Scenarios | Partial | ❌ | Partial | ✅ | ❌ |
+| Fault injection (delay, errors) | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
+| Chaos profiles | ✅ | ⚠️ Cloud | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Circuit breakers | ✅ | ⚠️ Cloud | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Bandwidth throttling | ✅ | ❌ | ❌ | ❌ | ❌ | roadmap | ❌ |
+| Admin REST API | ✅ | ✅ | CLI only | ❌ | ✅ | ✅ | Partial |
+| Built-in web dashboard | ✅ | ⚠️ Cloud | ⚠️ Cloud | ❌ | ✅ read-only | ✅ | ❌ |
+| Native desktop GUI | ❌ | ❌ | ✅ Electron | ❌ | ❌ | ❌ | ❌ |
+| MCP server | ✅ local | ⚠️ Cloud | ❌ | ❌ | ❌ | ⚠️ Cloud Team+ | ❌ |
+| Cloud tunnel sharing | ✅ | ❌ | ⚠️ Cloud | ❌ | ❌ | ✅ | ❌ |
+
+### Import / export
+
+| | mockd | WireMock OSS | Mockoon | Prism | MockServer | Beeceptor | json-server |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| OpenAPI import | ✅ | ⚠️ Cloud | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Postman import | ✅ | ⚠️ Cloud | ❌ | ✅ | ❌ | ❌ | ❌ |
+| HAR import | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| WSDL import | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| cURL import | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| WireMock format import | ✅ | native | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Mockoon format import | ✅ | ❌ | native | ❌ | ❌ | ❌ | ❌ |
+| HAR export | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
+
+### Free tier limits
+
+| | Requests | Mock rules | Cost |
+|---|---|---|---|
+| mockd | unlimited | unlimited | free (Apache 2.0) |
+| WireMock OSS | unlimited | unlimited | free (Apache 2.0) |
+| Mockoon desktop / CLI | unlimited | unlimited | free (MIT) |
+| Prism | unlimited | unlimited | free (Apache 2.0) |
+| MockServer | unlimited | unlimited | free (Apache 2.0) |
+| Beeceptor free tier | 50 / day / endpoint | 3 | $10/mo+ for more |
+| json-server | unlimited | unlimited | free (MIT) |
+
+**Legend**: ✅ built-in • 🔌 Ext = separate OSS extension • ⚠️ Cloud = only in paid / hosted tier • Partial = limited implementation • roadmap = on the project's stated roadmap, not yet shipped
+
+> **Note on WireMock imports.** The `⚠️ Cloud` marks on OpenAPI and Postman import reflect first-party WireMock features. Community converters exist (e.g. `openapi-to-wiremock`, OpenAPI Generator targets) but are not bundled with the OSS standalone JAR.
+
+</details>
 
 ## Digital Twins
 
