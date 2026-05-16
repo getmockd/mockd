@@ -16,7 +16,7 @@ We take security seriously. If you discover a security vulnerability, please rep
 
 ### How to Report
 
-1. Email security@getmockd.com with details of the vulnerability
+1. Email security@mockd.io with details of the vulnerability
 2. Include steps to reproduce, if possible
 3. Include the version of mockd affected
 
