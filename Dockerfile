@@ -28,6 +28,7 @@ COPY . .
 # TARGETARCH is automatically set by Docker buildx for multi-platform builds
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
+    -tags dashboard \
     -ldflags="-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT}" \
     -trimpath \
     -o mockd \
