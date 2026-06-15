@@ -276,7 +276,7 @@ func (a *API) enrichWorkspacePorts(workspaces []store.EngineWorkspace, status *e
 func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	// Check if localhost bypass is allowed AND request is from localhost,
 	// or if API key auth is disabled (trusted network / dev mode).
-	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	localhostBypass := a.allowLocalhostBypass && keylessLocalhostTrusted(r)
 	authDisabled := !a.apiKeyConfig.Enabled
 
 	if !localhostBypass && !authDisabled {
@@ -392,7 +392,7 @@ func (a *API) handleUnregisterEngine(w http.ResponseWriter, r *http.Request) {
 
 	// Check if localhost bypass is allowed AND request is from localhost,
 	// or if API key auth is disabled (trusted network / dev mode).
-	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	localhostBypass := a.allowLocalhostBypass && keylessLocalhostTrusted(r)
 	authDisabled := !a.apiKeyConfig.Enabled
 
 	if !localhostBypass && !authDisabled {
@@ -428,7 +428,7 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// Check if localhost bypass is allowed AND request is from localhost,
 	// or if API key auth is disabled (trusted network / dev mode).
-	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	localhostBypass := a.allowLocalhostBypass && keylessLocalhostTrusted(r)
 	authDisabled := !a.apiKeyConfig.Enabled
 
 	if !localhostBypass && !authDisabled {
@@ -498,7 +498,7 @@ func (a *API) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	// Check if localhost bypass is allowed AND request is from localhost,
 	// or if API key auth is disabled (trusted network / dev mode).
-	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	localhostBypass := a.allowLocalhostBypass && keylessLocalhostTrusted(r)
 	authDisabled := !a.apiKeyConfig.Enabled
 
 	if !localhostBypass && !authDisabled {

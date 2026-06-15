@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -104,6 +105,19 @@ func NewClient(cfg *ClientConfig) *Client {
 	}
 }
 
+// isHostedRelay reports whether addr targets the official hosted relay
+// (relay.mockd.io or a subdomain of it). The dial-failure hint about the paused
+// hosted relay is shown only for that endpoint, not for a self-hosted relay
+// whose address merely contains the substring (e.g. relay.mockd.io.evil.com).
+func isHostedRelay(addr string) bool {
+	host := addr
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	return host == "relay.mockd.io" || strings.HasSuffix(host, ".relay.mockd.io")
+}
+
 // Connect establishes a QUIC connection to the relay and authenticates.
 func (c *Client) Connect(ctx context.Context) error {
 	if c.connected.Load() {
@@ -128,7 +142,11 @@ func (c *Client) Connect(ctx context.Context) error {
 	// Connect
 	conn, err := quic.DialAddr(ctx, c.relayAddr, tlsConfig, quicConfig)
 	if err != nil {
-		return fmt.Errorf("dial relay: %w", err)
+		if isHostedRelay(c.relayAddr) {
+			return fmt.Errorf("dial relay %s: %w; the hosted mockd relay is paused, "+
+				"run your own relay and pass --relay <host[:port]> to connect", c.relayAddr, err)
+		}
+		return fmt.Errorf("dial relay %s: %w", c.relayAddr, err)
 	}
 
 	c.conn = conn

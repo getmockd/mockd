@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCP workspace filtering** — MCP tools automatically scope to the session's active workspace
 - **`manage_workspace create` MCP action** — create workspaces directly from AI agents
 
+### Security
+
+- **Admin API: cross-origin localhost takeover via the localhost auth bypass** — When the Admin API key was enabled with the default localhost bypass, a website opened in a browser on the same machine could drive the Admin API without a key: the bypass trusted any request from the loopback socket, but a browser `fetch()` from any origin also originates from loopback, and the Admin API additionally returned `Access-Control-Allow-Origin: *`. The localhost bypass now refuses cross-site / foreign-origin browser requests (identified via the unforgeable `Sec-Fetch-*` headers, with an `Origin` fallback) and validates the `Host` header against the loopback allowlist as an anti-DNS-rebinding control; the same gating is applied to the engine-registration endpoints. The Admin API CORS default no longer echoes arbitrary origins — it allows loopback origins only. Non-browser clients (the `mockd` CLI and MCP client) keep keyless localhost access for read-only requests. Reported by an external researcher against v0.6.5.
+- **Admin API: unauthenticated `/openapi.json` and `/insomnia.json` exports** — The dashboard static-asset auth exemption matched any request path ending in `.json` or `.map`, which exposed the OpenAPI and Insomnia exports — the full mock configuration, which can embed credentials and internal URLs — without the API key even when auth was enabled. The exemption no longer matches by those extensions, so both exports now require authentication, consistent with their `/openapi.yaml` and `/insomnia.yaml` equivalents. Reported by an external researcher against v0.6.5.
+- **Toolchain and dependency updates for stdlib/library CVEs** — Go build and CI pinned to 1.26.4 (fixes the `net/textproto` GO-2026-5039, `crypto/x509` GO-2026-5037, `net/mail`, `html/template`, `net`, and `net/http` standard-library advisories) and `golang.org/x/net` bumped to v0.55.0 (fixes the `idna` GO-2026-5026 and `http2` GO-2026-4918 advisories).
+
+### Changed
+
+- **Hosted tunnel relay paused** — The hosted relay at `relay.mockd.io` is temporarily offline. `mockd tunnel` and `mockd up --tunnel` against the default endpoint now print a clear message; point `--relay <host[:port]>` at a self-hosted relay to use tunnels in the meantime.
+
 ## [0.5.1] - 2026-03-07
 
 ### Security
