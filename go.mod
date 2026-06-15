@@ -17,7 +17,7 @@ require (
 	github.com/jhump/protoreflect v1.17.0
 	github.com/mochi-mqtt/server/v2 v2.7.9
 	github.com/ohler55/ojg v1.27.0
-	github.com/quic-go/quic-go v0.57.0
+	github.com/quic-go/quic-go v0.59.1
 	github.com/rogpeppe/go-internal v1.14.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/spf13/cobra v1.10.2
