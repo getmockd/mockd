@@ -143,10 +143,8 @@ func (c *Client) Connect(ctx context.Context) error {
 	conn, err := quic.DialAddr(ctx, c.relayAddr, tlsConfig, quicConfig)
 	if err != nil {
 		if isHostedRelay(c.relayAddr) {
-			return fmt.Errorf("dial relay %s: %w\n"+
-				"The hosted mockd relay is currently paused. "+
-				"Run your own relay and pass --relay <host[:port]> to connect to it.",
-				c.relayAddr, err)
+			return fmt.Errorf("dial relay %s: %w; the hosted mockd relay is paused, "+
+				"run your own relay and pass --relay <host[:port]> to connect", c.relayAddr, err)
 		}
 		return fmt.Errorf("dial relay %s: %w", c.relayAddr, err)
 	}
