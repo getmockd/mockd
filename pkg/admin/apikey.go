@@ -215,16 +215,25 @@ func (a *apiKeyAuth) isExempt(path string) bool {
 	return false
 }
 
-// isDashboardAsset returns true for paths that serve the embedded dashboard.
-// The SPA root ("/") and static files (.js, .css, .html, .svg, .png, .woff2, .ico)
-// are not sensitive and should be accessible without auth so the auth prompt
-// screen can load.
+// isDashboardAsset returns true for paths that serve the embedded dashboard
+// shell and its static assets, which must load without auth so the API-key
+// prompt screen can render (like a login page).
+//
+// It deliberately does NOT exempt the ".json" or ".map" extensions. The admin
+// API exports /openapi.json and /insomnia.json return the full mock config
+// (which can embed credentials and internal URLs) and source maps are sensitive
+// — both must stay behind auth, exactly as their /openapi.yaml and
+// /insomnia.yaml twins already do. Matching any "*.json" path was the auth
+// bypass. The PWA manifest is the one dashboard file that legitimately ends in
+// .json, so it is exempted by exact path rather than by extension.
 func isDashboardAsset(path string) bool {
-	if path == "/" {
+	switch path {
+	case "/", "/index.html", "/manifest.json", "/manifest.webmanifest":
 		return true
 	}
-	// Check for static file extensions
-	for _, ext := range []string{".js", ".css", ".html", ".svg", ".png", ".ico", ".woff", ".woff2", ".json", ".map"} {
+	// Static asset extensions for the SPA shell. Note the absence of ".json"
+	// and ".map" — see the doc comment above.
+	for _, ext := range []string{".js", ".css", ".html", ".svg", ".png", ".ico", ".woff", ".woff2"} {
 		if strings.HasSuffix(path, ext) {
 			return true
 		}
@@ -247,8 +256,15 @@ func (a *apiKeyAuth) middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Check localhost exemption
-		if a.config.AllowLocalhost && isLocalhost(r) {
+		// Check localhost exemption.
+		//
+		// A request arriving over the loopback socket is NOT inherently trusted: a
+		// browser fetch() from any website the user visits also reaches us over
+		// loopback. keylessLocalhostTrusted gates the bypass on the request not
+		// being untrusted cross-site browser content and, for browser/unsafe
+		// requests, on a loopback Host (anti-DNS-rebinding). CLI/curl/MCP keep
+		// keyless access. See its doc for the full rationale.
+		if a.config.AllowLocalhost && keylessLocalhostTrusted(r) {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -9,7 +9,10 @@ import (
 // CORSConfig holds the configuration for CORS middleware.
 type CORSConfig struct {
 	// AllowedOrigins is a list of origins that are allowed to make cross-origin requests.
-	// If empty or contains "*", all origins are allowed.
+	// If empty or contains "*", all origins are allowed. The reserved sentinel
+	// value "loopback" matches any http(s)://localhost / 127.0.0.1 / [::1] origin
+	// on any port (it is not a real Origin value, so it never collides with one);
+	// it is the secure default for the admin API.
 	AllowedOrigins []string
 
 	// AllowedMethods is a list of HTTP methods allowed for cross-origin requests.
@@ -30,19 +33,25 @@ type CORSConfig struct {
 	MaxAge int
 }
 
-// DefaultCORSConfig returns a CORSConfig with default values that maintains
-// backward compatibility (allows all origins).
-//
-// SECURITY WARNING: The default configuration uses AllowedOrigins: ["*"] which permits
-// cross-origin requests from ANY domain. For production deployments, you should:
-// - Specify explicit allowed origins instead of using "*"
-// - Use NewCORSMiddlewareWithConfig() with a custom CORSConfig
-// - Consider the security implications if AllowCredentials is enabled with wildcards
+// DefaultCORSConfig returns the secure default CORS config for the admin API:
+// loopback origins only (see the "loopback" sentinel below). The admin API is a
+// localhost control plane, so it must not echo arbitrary web origins by default.
+// Callers that genuinely need to allow other origins can opt in explicitly with
+// WithCORS — wildcard ("*") is supported there but never the default.
 func DefaultCORSConfig() CORSConfig {
 	return CORSConfig{
-		AllowedOrigins:   []string{"*"},
+		// Loopback-only by default: the admin API is a localhost control plane
+		// that can read and mutate every mock, config, and captured request log
+		// (which may contain secrets), so arbitrary web origins must not be able
+		// to read its responses. The sentinel "loopback" entry matches any
+		// http(s)://localhost / 127.0.0.1 / [::1] origin on any port (handled in
+		// isOriginAllowed via isLoopbackOrigin), so the embedded dashboard works
+		// on any local port without enumerating ports. We never emit "*" and
+		// never echo "null". Wildcard remains opt-in via WithCORS for callers
+		// that explicitly want it.
+		AllowedOrigins:   []string{"loopback"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-API-Key"},
 		AllowCredentials: false,
 		MaxAge:           86400,
 	}
@@ -54,11 +63,21 @@ func (c *CORSConfig) isOriginAllowed(origin string) bool {
 	if len(c.AllowedOrigins) == 0 {
 		return true
 	}
+	// Never echo the opaque/null origin.
+	if origin == "" || origin == "null" {
+		return false
+	}
 	for _, allowed := range c.AllowedOrigins {
 		if allowed == "*" {
 			return true
 		}
 		if allowed == origin {
+			return true
+		}
+		// "loopback" sentinel: allow any loopback origin (port-insensitive), so
+		// the dashboard works on localhost/127.0.0.1/[::1] on any port without
+		// enumerating ports. Rebinding/non-loopback origins still fail.
+		if allowed == "loopback" && isLoopbackOrigin(origin) {
 			return true
 		}
 	}
