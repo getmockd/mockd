@@ -708,7 +708,7 @@ func (e *Executor) executeSelectionSetWithDoc(ctx context.Context, doc *ast.Quer
 				// Prune the response to only include selected sub-fields
 				// This ensures @skip/@include on sub-fields work correctly
 				if s.SelectionSet != nil {
-					value = e.pruneResponse(doc, value, s.SelectionSet, variables)
+					value = e.pruneResponse(doc, e.fieldTypeName(opType, s.Name), value, s.SelectionSet, variables)
 				}
 				result[alias] = value
 			}
@@ -755,7 +755,7 @@ func (e *Executor) executeSelectionSetWithDoc(ctx context.Context, doc *ast.Quer
 // respecting @skip/@include directives. This is necessary because mock resolvers return
 // complete pre-configured response objects, and directive-based field exclusion needs to
 // happen as a post-processing step.
-func (e *Executor) pruneResponse(doc *ast.QueryDocument, value interface{}, selections ast.SelectionSet, variables map[string]interface{}) interface{} {
+func (e *Executor) pruneResponse(doc *ast.QueryDocument, typeName string, value interface{}, selections ast.SelectionSet, variables map[string]interface{}) interface{} {
 	if value == nil || selections == nil {
 		return value
 	}
@@ -764,14 +764,14 @@ func (e *Executor) pruneResponse(doc *ast.QueryDocument, value interface{}, sele
 	case map[string]interface{}:
 		// Collect all requested field names (expanding fragments)
 		result := make(map[string]interface{})
-		e.collectSelectedFields(doc, result, v, selections, variables)
+		e.collectSelectedFields(doc, typeName, result, v, selections, variables)
 		return result
 
 	case []interface{}:
 		// Apply pruning to each element in the array
 		pruned := make([]interface{}, len(v))
 		for i, item := range v {
-			pruned[i] = e.pruneResponse(doc, item, selections, variables)
+			pruned[i] = e.pruneResponse(doc, typeName, item, selections, variables)
 		}
 		return pruned
 
@@ -782,7 +782,7 @@ func (e *Executor) pruneResponse(doc *ast.QueryDocument, value interface{}, sele
 
 // collectSelectedFields walks the selection set and copies matching fields from src to dst,
 // respecting @skip/@include directives and expanding fragments.
-func (e *Executor) collectSelectedFields(doc *ast.QueryDocument, dst, src map[string]interface{}, selections ast.SelectionSet, variables map[string]interface{}) {
+func (e *Executor) collectSelectedFields(doc *ast.QueryDocument, typeName string, dst, src map[string]interface{}, selections ast.SelectionSet, variables map[string]interface{}) {
 	for _, sel := range selections {
 		switch s := sel.(type) {
 		case *ast.Field:
@@ -794,12 +794,19 @@ func (e *Executor) collectSelectedFields(doc *ast.QueryDocument, dst, src map[st
 				alias = s.Name
 			}
 			if s.Name == "__typename" {
-				dst[alias] = "Object"
+				// Resolve the actual schema-defined type name for this object.
+				// Fall back to "Object" only when the type is unknown (e.g. no
+				// schema type information is available for this selection).
+				if typeName != "" {
+					dst[alias] = typeName
+				} else {
+					dst[alias] = "Object"
+				}
 				continue
 			}
 			if val, ok := src[s.Name]; ok {
 				if s.SelectionSet != nil {
-					val = e.pruneResponse(doc, val, s.SelectionSet, variables)
+					val = e.pruneResponse(doc, e.fieldTypeName(typeName, s.Name), val, s.SelectionSet, variables)
 				}
 				dst[alias] = val
 			}
@@ -811,7 +818,13 @@ func (e *Executor) collectSelectedFields(doc *ast.QueryDocument, dst, src map[st
 			if doc != nil {
 				for _, frag := range doc.Fragments {
 					if frag.Name == s.Name {
-						e.collectSelectedFields(doc, dst, src, frag.SelectionSet, variables)
+						// A fragment's type condition narrows the concrete type, so
+						// prefer it when resolving __typename inside the fragment.
+						fragType := typeName
+						if frag.TypeCondition != "" {
+							fragType = frag.TypeCondition
+						}
+						e.collectSelectedFields(doc, fragType, dst, src, frag.SelectionSet, variables)
 						break
 					}
 				}
@@ -821,9 +834,29 @@ func (e *Executor) collectSelectedFields(doc *ast.QueryDocument, dst, src map[st
 			if e.shouldSkipField(s.Directives, variables) {
 				continue
 			}
-			e.collectSelectedFields(doc, dst, src, s.SelectionSet, variables)
+			// An inline fragment's type condition narrows the concrete type.
+			fragType := typeName
+			if s.TypeCondition != "" {
+				fragType = s.TypeCondition
+			}
+			e.collectSelectedFields(doc, fragType, dst, src, s.SelectionSet, variables)
 		}
 	}
+}
+
+// fieldTypeName returns the unwrapped (named) GraphQL type of the field
+// fieldName declared on the type typeName, or "" when it cannot be resolved
+// from the schema. Non-null and list wrappers are stripped so the result is
+// always a concrete type name suitable for __typename resolution.
+func (e *Executor) fieldTypeName(typeName, fieldName string) string {
+	if e.schema == nil || typeName == "" {
+		return ""
+	}
+	field := e.schema.GetField(typeName, fieldName)
+	if field == nil || field.Type == nil {
+		return ""
+	}
+	return field.Type.Name()
 }
 
 // shouldSkipField evaluates @skip(if:) and @include(if:) directives.

@@ -592,6 +592,121 @@ func TestExecutor_Execute_TypenameField(t *testing.T) {
 	}
 }
 
+// nestedTypenameSchema exercises __typename resolution on nested object types,
+// object types reached via lists, and aliases.
+const nestedTypenameSchema = `
+type Query {
+	user(id: ID!): User
+	users: [User!]!
+}
+
+type User {
+	id: ID!
+	name: String!
+	profile: Profile
+}
+
+type Profile {
+	bio: String
+}
+`
+
+func TestExecutor_Execute_NestedTypename(t *testing.T) {
+	schema, err := ParseSchema(nestedTypenameSchema)
+	if err != nil {
+		t.Fatalf("ParseSchema() error = %v", err)
+	}
+
+	config := &GraphQLConfig{
+		Resolvers: map[string]ResolverConfig{
+			"Query.user": {
+				Response: map[string]interface{}{
+					"id":   "1",
+					"name": "Alice",
+					"profile": map[string]interface{}{
+						"bio": "Hello",
+					},
+				},
+			},
+			"Query.users": {
+				Response: []interface{}{
+					map[string]interface{}{"id": "1", "name": "Alice"},
+					map[string]interface{}{"id": "2", "name": "Bob"},
+				},
+			},
+		},
+	}
+
+	executor := NewExecutor(schema, config)
+
+	t.Run("nested object returns schema type name", func(t *testing.T) {
+		req := &GraphQLRequest{
+			Query: `query { user(id: "1") { __typename id } }`,
+		}
+		resp := executor.Execute(context.Background(), req)
+		if len(resp.Errors) > 0 {
+			t.Fatalf("Execute() returned errors: %v", resp.Errors)
+		}
+		data := resp.Data.(map[string]interface{})
+		user := data["user"].(map[string]interface{})
+		if user["__typename"] != "User" {
+			t.Errorf("user.__typename = %v, want 'User'", user["__typename"])
+		}
+	})
+
+	t.Run("doubly-nested object returns schema type name", func(t *testing.T) {
+		req := &GraphQLRequest{
+			Query: `query { user(id: "1") { profile { __typename bio } } }`,
+		}
+		resp := executor.Execute(context.Background(), req)
+		if len(resp.Errors) > 0 {
+			t.Fatalf("Execute() returned errors: %v", resp.Errors)
+		}
+		data := resp.Data.(map[string]interface{})
+		user := data["user"].(map[string]interface{})
+		profile := user["profile"].(map[string]interface{})
+		if profile["__typename"] != "Profile" {
+			t.Errorf("profile.__typename = %v, want 'Profile'", profile["__typename"])
+		}
+	})
+
+	t.Run("__typename via alias on nested object", func(t *testing.T) {
+		req := &GraphQLRequest{
+			Query: `query { user(id: "1") { kind: __typename } }`,
+		}
+		resp := executor.Execute(context.Background(), req)
+		if len(resp.Errors) > 0 {
+			t.Fatalf("Execute() returned errors: %v", resp.Errors)
+		}
+		data := resp.Data.(map[string]interface{})
+		user := data["user"].(map[string]interface{})
+		if user["kind"] != "User" {
+			t.Errorf("user.kind (aliased __typename) = %v, want 'User'", user["kind"])
+		}
+	})
+
+	t.Run("list element objects return schema type name", func(t *testing.T) {
+		req := &GraphQLRequest{
+			Query: `query { users { __typename id } }`,
+		}
+		resp := executor.Execute(context.Background(), req)
+		if len(resp.Errors) > 0 {
+			t.Fatalf("Execute() returned errors: %v", resp.Errors)
+		}
+		data := resp.Data.(map[string]interface{})
+		users := data["users"].([]interface{})
+		if len(users) != 2 {
+			t.Fatalf("len(users) = %d, want 2", len(users))
+		}
+		for i, u := range users {
+			um := u.(map[string]interface{})
+			if um["__typename"] != "User" {
+				t.Errorf("users[%d].__typename = %v, want 'User'", i, um["__typename"])
+			}
+		}
+	})
+}
+
 func TestExecutor_Execute_FieldAlias(t *testing.T) {
 	schema, err := ParseSchema(executorTestSchema)
 	if err != nil {
