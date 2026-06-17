@@ -14,6 +14,7 @@ import (
 	"github.com/getmockd/mockd/pkg/httputil"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -880,27 +881,69 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 		imported++
 	}
 
-	// Import stateful resources
+	// Resolve the engine's persistent store once. The engine and admin run as
+	// distinct file.FileStore instances pointed at the same data.json (admin's
+	// dataStore + engine's persistentStore), and whichever one writes last wins
+	// on disk. Mocks survive because both stores write them through their own
+	// paths; stateful resources and custom operations only flow through admin
+	// today, so the engine's stale view used to overwrite admin's freshly-saved
+	// resources on shutdown. Mirror the writes here so both file stores agree
+	// (issue #12).
+	persistentStore := s.engine.PersistentStore()
+
+	// Import stateful resources. Each resource may pin its own workspace via
+	// res.Workspace; the ?workspaceId= query param is the default for entries
+	// that don't (issue #12). This lets a single import payload register
+	// resources spanning multiple workspaces — which is exactly how the admin
+	// sync path replays the file store on startup.
 	statefulCount := 0
 	for _, res := range req.Config.StatefulResources {
-		if res != nil {
-			if err := s.engine.RegisterStatefulResource(workspaceID, res); err != nil {
-				s.log.Warn("failed to import stateful resource", "name", res.Name, "error", err)
-				continue
-			}
-			statefulCount++
+		if res == nil {
+			continue
 		}
+		bucket := res.Workspace
+		if bucket == "" {
+			bucket = workspaceID
+		}
+		if err := s.engine.RegisterStatefulResource(bucket, res); err != nil {
+			s.log.Warn("failed to import stateful resource",
+				"name", res.Name, "workspace", bucket, "error", err)
+			continue
+		}
+		// Stamp the resource's workspace before persisting so reload-from-disk
+		// re-registers it under the correct bucket.
+		res.Workspace = bucket
+		if persistentStore != nil && persistentStore.StatefulResources() != nil {
+			if err := persistentStore.StatefulResources().Create(r.Context(), res); err != nil && !errors.Is(err, store.ErrAlreadyExists) {
+				s.log.Warn("failed to persist stateful resource to engine store",
+					"name", res.Name, "workspace", bucket, "error", err)
+			}
+		}
+		statefulCount++
 	}
 
-	// Import custom operations
+	// Import custom operations. Each operation may pin its own workspace via
+	// opCfg.Workspace; the ?workspaceId= query param is the default (issue #12).
 	customOpCount := 0
 	for _, opCfg := range req.Config.CustomOperations {
 		if opCfg == nil {
 			continue
 		}
-		if err := s.engine.RegisterCustomOperation(workspaceID, opCfg); err != nil {
-			s.log.Warn("failed to import custom operation", "name", opCfg.Name, "error", err)
+		bucket := opCfg.Workspace
+		if bucket == "" {
+			bucket = workspaceID
+		}
+		if err := s.engine.RegisterCustomOperation(bucket, opCfg); err != nil {
+			s.log.Warn("failed to import custom operation",
+				"name", opCfg.Name, "workspace", bucket, "error", err)
 			continue
+		}
+		opCfg.Workspace = bucket
+		if persistentStore != nil && persistentStore.CustomOperations() != nil {
+			if err := persistentStore.CustomOperations().Create(r.Context(), opCfg); err != nil && !errors.Is(err, store.ErrAlreadyExists) {
+				s.log.Warn("failed to persist custom operation to engine store",
+					"name", opCfg.Name, "workspace", bucket, "error", err)
+			}
 		}
 		customOpCount++
 	}

@@ -270,26 +270,36 @@ func (a *API) decodeImportRequest(w http.ResponseWriter, r *http.Request) (*Conf
 
 // persistStatefulResources dual-writes stateful resources from the imported
 // config into the file store so they survive restarts.
-func (a *API) persistStatefulResources(ctx context.Context, cfg *config.MockCollection, replace bool) {
+//
+// Each resource is stamped with workspaceID before persistence so the (workspace,
+// name) identity is preserved. When replace is true, only resources in the
+// target workspace are cleared — other workspaces are left untouched.
+func (a *API) persistStatefulResources(ctx context.Context, cfg *config.MockCollection, replace bool, workspaceID string) {
 	if len(cfg.StatefulResources) == 0 || a.dataStore == nil {
 		return
 	}
 	resStore := a.dataStore.StatefulResources()
 	if replace {
-		_ = resStore.DeleteAll(ctx)
+		_ = resStore.DeleteAll(ctx, workspaceID)
 	}
 	for _, res := range cfg.StatefulResources {
 		if res == nil {
 			continue
 		}
+		// Stamp the workspace if the imported config didn't pin one explicitly,
+		// so the file store records (workspaceID, name) as identity (issue #12).
+		if res.Workspace == "" {
+			res.Workspace = workspaceID
+		}
 		if err := resStore.Create(ctx, res); err != nil {
 			if errors.Is(err, store.ErrAlreadyExists) {
-				// Resource already exists; on replace we already cleared, so this
-				// shouldn't happen, but handle gracefully.
-				a.logger().Debug("stateful resource already exists in file store", "name", res.Name)
+				// Resource already exists in this workspace; on replace we already
+				// cleared, so this shouldn't happen, but handle gracefully.
+				a.logger().Debug("stateful resource already exists in file store",
+					"name", res.Name, "workspace", res.Workspace)
 			} else {
 				a.logger().Warn("failed to write stateful resource to file store",
-					"name", res.Name, "error", err)
+					"name", res.Name, "workspace", res.Workspace, "error", err)
 			}
 		}
 	}
@@ -297,24 +307,34 @@ func (a *API) persistStatefulResources(ctx context.Context, cfg *config.MockColl
 
 // persistCustomOperations dual-writes custom operations from the imported
 // config into the file store so they survive restarts.
-func (a *API) persistCustomOperations(ctx context.Context, cfg *config.MockCollection, replace bool) {
+//
+// Each operation is stamped with workspaceID before persistence so the
+// (workspace, name) identity is preserved. When replace is true, only operations
+// in the target workspace are cleared — other workspaces are left untouched.
+func (a *API) persistCustomOperations(ctx context.Context, cfg *config.MockCollection, replace bool, workspaceID string) {
 	if len(cfg.CustomOperations) == 0 || a.dataStore == nil {
 		return
 	}
 	opStore := a.dataStore.CustomOperations()
 	if replace {
-		_ = opStore.DeleteAll(ctx)
+		_ = opStore.DeleteAll(ctx, workspaceID)
 	}
 	for _, op := range cfg.CustomOperations {
 		if op == nil {
 			continue
 		}
+		// Stamp the workspace if the imported config didn't pin one explicitly
+		// (issue #12).
+		if op.Workspace == "" {
+			op.Workspace = workspaceID
+		}
 		if err := opStore.Create(ctx, op); err != nil {
 			if errors.Is(err, store.ErrAlreadyExists) {
-				a.logger().Debug("custom operation already exists in file store", "name", op.Name)
+				a.logger().Debug("custom operation already exists in file store",
+					"name", op.Name, "workspace", op.Workspace)
 			} else {
 				a.logger().Warn("failed to write custom operation to file store",
-					"name", op.Name, "error", err)
+					"name", op.Name, "workspace", op.Workspace, "error", err)
 			}
 		}
 	}
@@ -407,9 +427,11 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	}
 
 	// If replacing, clear the file store first so we don't leave stale entries.
+	// Scope the deletion to the target workspace — a replace import into one
+	// workspace must NOT delete mocks belonging to other workspaces (issue #12,
+	// same class as the stateful resource fix).
 	if req.Replace && mockStore != nil {
-		// Delete all existing mocks from the file store in this workspace.
-		existing, _ := mockStore.List(ctx, nil)
+		existing, _ := mockStore.List(ctx, &store.MockFilter{WorkspaceID: workspaceID})
 		for _, em := range existing {
 			_ = mockStore.Delete(ctx, em.ID)
 		}
@@ -441,9 +463,10 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	}
 
 	// Dual-write stateful resources to the file store so they survive restarts.
-	a.persistStatefulResources(ctx, req.Config, req.Replace)
+	// Pass workspaceID so each entry is bucketed correctly (issue #12).
+	a.persistStatefulResources(ctx, req.Config, req.Replace, workspaceID)
 	// Dual-write custom operations to the file store so they survive restarts.
-	a.persistCustomOperations(ctx, req.Config, req.Replace)
+	a.persistCustomOperations(ctx, req.Config, req.Replace, workspaceID)
 
 	// Pre-validate mocks so we can surface which mock (by index) is invalid.
 	if err := preValidateImportMocks(req.Config.Mocks); err != nil {
@@ -452,7 +475,10 @@ func (a *API) handleImportConfig(w http.ResponseWriter, r *http.Request, engine 
 	}
 
 	// Forward to engine for runtime registration (starts gRPC/MQTT servers, registers handlers).
-	importResult, err := engine.ImportConfig(ctx, req.Config, req.Replace)
+	// Pass workspaceID so the engine registers stateful resources and custom operations
+	// under the active workspace bucket — otherwise lookups by mock.WorkspaceID fail at
+	// request time (issue #12).
+	importResult, err := engine.ImportConfig(ctx, req.Config, req.Replace, workspaceID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "import_error", sanitizeError(err, a.logger(), "import config"))
 		return
@@ -538,18 +564,20 @@ func (a *API) ImportConfigDirect(ctx context.Context, collection *config.MockCol
 		}
 	}
 
-	// Persist stateful resources
-	a.persistStatefulResources(ctx, collection, replace)
-	// Persist custom operations
-	a.persistCustomOperations(ctx, collection, replace)
+	// Persist stateful resources to the default workspace bucket. Per-workspace
+	// imports go through the HTTP path (handleImportConfig).
+	a.persistStatefulResources(ctx, collection, replace, store.DefaultWorkspaceID)
+	// Persist custom operations to the default workspace bucket.
+	a.persistCustomOperations(ctx, collection, replace, store.DefaultWorkspaceID)
 
 	// Pre-validate before sending to engine
 	if err := preValidateImportMocks(collection.Mocks); err != nil {
 		return 0, err
 	}
 
-	// Forward to all engines for runtime registration
-	importResult, err := a.pushImportToEngines(ctx, collection, replace)
+	// Forward to all engines for runtime registration. Initial config load uses
+	// the default workspace; per-workspace imports go through the HTTP path.
+	importResult, err := a.pushImportToEngines(ctx, collection, replace, store.DefaultWorkspaceID)
 	if err != nil {
 		return 0, fmt.Errorf("engine import failed: %w", err)
 	}

@@ -827,7 +827,10 @@ func (a *API) syncAdminStoreToEngine(client *engineclient.Client, reason string)
 		"customOperations", len(customOps),
 	)
 
-	result, err := client.ImportConfig(ctx, collection, true)
+	// NOTE(#12): the file store does not yet bucket stateful resources or custom
+	// operations by workspace, so on sync everything is pushed under the default
+	// workspace. Per-workspace persistence is tracked as a follow-up to issue #12.
+	result, err := client.ImportConfig(ctx, collection, true, store.DefaultWorkspaceID)
 	if err != nil {
 		a.logger().Warn("sync: failed to push admin store to engine",
 			"error", err, "reason", reason,

@@ -12,6 +12,7 @@ import (
 	"github.com/getmockd/mockd/pkg/protocol"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 // Errors returned by the control API adapter.
@@ -767,6 +768,14 @@ func (a *ControlAPIAdapter) GetWebSocketStats() *api.WebSocketStats {
 		TotalMessagesRecv: stats.TotalMessagesReceived,
 		ConnectionsByMock: connectionsByMock,
 	}
+}
+
+// PersistentStore implements api.EngineController. Returns the engine's
+// underlying persistent store, if any. Used by the import handler to dual-write
+// stateful resources and custom operations alongside the admin file store
+// (issue #12).
+func (a *ControlAPIAdapter) PersistentStore() store.Store {
+	return a.server.PersistentStore()
 }
 
 // GetConfig implements api.EngineController.

@@ -1558,8 +1558,8 @@ func TestStatefulResourceStore_CRUD(t *testing.T) {
 		t.Errorf("expected 'users', got %q", list[0].Name)
 	}
 
-	// Delete by name
-	if err := srs.Delete(ctx, "users"); err != nil {
+	// Delete by (workspace, name)
+	if err := srs.Delete(ctx, "", "users"); err != nil {
 		t.Fatalf("Delete() failed: %v", err)
 	}
 	list, _ = srs.List(ctx)
@@ -1583,7 +1583,7 @@ func TestStatefulResourceStore_Create_DuplicateName(t *testing.T) {
 func TestStatefulResourceStore_Delete_NotFound(t *testing.T) {
 	fs := newTestStore(t)
 	ctx := context.Background()
-	err := fs.StatefulResources().Delete(ctx, "nonexistent")
+	err := fs.StatefulResources().Delete(ctx, "", "nonexistent")
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -1597,12 +1597,58 @@ func TestStatefulResourceStore_DeleteAll(t *testing.T) {
 	_ = srs.Create(ctx, &config.StatefulResourceConfig{Name: "users"})
 	_ = srs.Create(ctx, &config.StatefulResourceConfig{Name: "products"})
 
-	if err := srs.DeleteAll(ctx); err != nil {
+	if err := srs.DeleteAll(ctx, ""); err != nil {
 		t.Fatalf("DeleteAll() failed: %v", err)
 	}
 	list, _ := srs.List(ctx)
 	if len(list) != 0 {
 		t.Errorf("expected 0, got %d", len(list))
+	}
+}
+
+// TestStatefulResourceStore_WorkspaceIsolation is a regression test for issue #12.
+// Two workspaces must be able to register resources with the same name, and
+// Delete/DeleteAll must be scoped to one workspace at a time.
+func TestStatefulResourceStore_WorkspaceIsolation(t *testing.T) {
+	fs := newTestStore(t)
+	ctx := context.Background()
+	srs := fs.StatefulResources()
+
+	// Same name, different workspaces — both must succeed.
+	if err := srs.Create(ctx, &config.StatefulResourceConfig{Name: "orders", Workspace: "ws-a"}); err != nil {
+		t.Fatalf("Create ws-a: %v", err)
+	}
+	if err := srs.Create(ctx, &config.StatefulResourceConfig{Name: "orders", Workspace: "ws-b"}); err != nil {
+		t.Fatalf("Create ws-b: %v", err)
+	}
+	// Same (workspace, name) is a duplicate.
+	if err := srs.Create(ctx, &config.StatefulResourceConfig{Name: "orders", Workspace: "ws-a"}); !errors.Is(err, store.ErrAlreadyExists) {
+		t.Errorf("expected ErrAlreadyExists, got %v", err)
+	}
+
+	// Delete only touches the named workspace.
+	if err := srs.Delete(ctx, "ws-a", "orders"); err != nil {
+		t.Fatalf("Delete ws-a: %v", err)
+	}
+	list, _ := srs.List(ctx)
+	if len(list) != 1 || list[0].Workspace != "ws-b" {
+		t.Errorf("expected only ws-b orders to remain, got %+v", list)
+	}
+
+	// DeleteAll is also workspace-scoped.
+	_ = srs.Create(ctx, &config.StatefulResourceConfig{Name: "products", Workspace: "ws-b"})
+	_ = srs.Create(ctx, &config.StatefulResourceConfig{Name: "products", Workspace: "ws-c"})
+	if err := srs.DeleteAll(ctx, "ws-b"); err != nil {
+		t.Fatalf("DeleteAll ws-b: %v", err)
+	}
+	list, _ = srs.List(ctx)
+	for _, r := range list {
+		if r.Workspace == "ws-b" {
+			t.Errorf("ws-b resource %q should have been deleted", r.Name)
+		}
+	}
+	if len(list) != 1 || list[0].Workspace != "ws-c" {
+		t.Errorf("expected only ws-c products to remain, got %+v", list)
 	}
 }
 
@@ -1629,10 +1675,10 @@ func TestStatefulResourceStore_ReadOnly(t *testing.T) {
 	if err := srs.Create(ctx, &config.StatefulResourceConfig{Name: "x"}); !errors.Is(err, store.ErrReadOnly) {
 		t.Errorf("Create: expected ErrReadOnly, got %v", err)
 	}
-	if err := srs.Delete(ctx, "x"); !errors.Is(err, store.ErrReadOnly) {
+	if err := srs.Delete(ctx, "", "x"); !errors.Is(err, store.ErrReadOnly) {
 		t.Errorf("Delete: expected ErrReadOnly, got %v", err)
 	}
-	if err := srs.DeleteAll(ctx); !errors.Is(err, store.ErrReadOnly) {
+	if err := srs.DeleteAll(ctx, ""); !errors.Is(err, store.ErrReadOnly) {
 		t.Errorf("DeleteAll: expected ErrReadOnly, got %v", err)
 	}
 }
@@ -1668,8 +1714,8 @@ func TestCustomOperationStore_CRUD(t *testing.T) {
 		t.Errorf("expected 1 step, got %d", len(list[0].Steps))
 	}
 
-	// Delete by name
-	if err := cos.Delete(ctx, "TransferFunds"); err != nil {
+	// Delete by (workspace, name)
+	if err := cos.Delete(ctx, "", "TransferFunds"); err != nil {
 		t.Fatalf("Delete() failed: %v", err)
 	}
 	list, _ = cos.List(ctx)
@@ -1693,7 +1739,7 @@ func TestCustomOperationStore_Create_DuplicateName(t *testing.T) {
 func TestCustomOperationStore_Delete_NotFound(t *testing.T) {
 	fs := newTestStore(t)
 	ctx := context.Background()
-	err := fs.CustomOperations().Delete(ctx, "nonexistent")
+	err := fs.CustomOperations().Delete(ctx, "", "nonexistent")
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -1707,7 +1753,7 @@ func TestCustomOperationStore_DeleteAll(t *testing.T) {
 	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "Op1"})
 	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "Op2"})
 
-	if err := cos.DeleteAll(ctx); err != nil {
+	if err := cos.DeleteAll(ctx, ""); err != nil {
 		t.Fatalf("DeleteAll() failed: %v", err)
 	}
 	list, _ := cos.List(ctx)
@@ -1739,10 +1785,10 @@ func TestCustomOperationStore_ReadOnly(t *testing.T) {
 	if err := cos.Create(ctx, &config.CustomOperationConfig{Name: "x"}); !errors.Is(err, store.ErrReadOnly) {
 		t.Errorf("Create: expected ErrReadOnly, got %v", err)
 	}
-	if err := cos.Delete(ctx, "x"); !errors.Is(err, store.ErrReadOnly) {
+	if err := cos.Delete(ctx, "", "x"); !errors.Is(err, store.ErrReadOnly) {
 		t.Errorf("Delete: expected ErrReadOnly, got %v", err)
 	}
-	if err := cos.DeleteAll(ctx); !errors.Is(err, store.ErrReadOnly) {
+	if err := cos.DeleteAll(ctx, ""); !errors.Is(err, store.ErrReadOnly) {
 		t.Errorf("DeleteAll: expected ErrReadOnly, got %v", err)
 	}
 }
@@ -1770,9 +1816,16 @@ func TestFileStore_Persistence_RoundTrip(t *testing.T) {
 	_ = fs1.Recordings().Create(ctx, &store.Recording{ID: "rec-persist", Protocol: "http"})
 	_ = fs1.RequestLog().Append(ctx, &store.RequestLogEntry{ID: "log-persist", Method: "GET"})
 	_ = fs1.StatefulResources().Create(ctx, &config.StatefulResourceConfig{Name: "persist-res"})
+	// Same name in a different workspace must round-trip independently (issue #12).
+	_ = fs1.StatefulResources().Create(ctx, &config.StatefulResourceConfig{Name: "persist-res", Workspace: "ws-persist"})
 	_ = fs1.CustomOperations().Create(ctx, &config.CustomOperationConfig{
 		Name:  "persist-op",
 		Steps: []config.CustomStepConfig{{Type: "read", Resource: "users", ID: "input.id", As: "user"}},
+	})
+	_ = fs1.CustomOperations().Create(ctx, &config.CustomOperationConfig{
+		Name:      "persist-op",
+		Workspace: "ws-persist",
+		Steps:     []config.CustomStepConfig{{Type: "read", Resource: "users", ID: "input.id", As: "user"}},
 	})
 	_ = fs1.Preferences().Set(ctx, &store.Preferences{Theme: "dark", DefaultMockPort: 4280})
 	_ = fs1.Close()
@@ -1824,19 +1877,39 @@ func TestFileStore_Persistence_RoundTrip(t *testing.T) {
 		t.Errorf("log method wrong: %q", logEntry.Method)
 	}
 
-	// Stateful resources
+	// Stateful resources — both buckets (default and ws-persist) must round-trip.
 	srs, _ := fs2.StatefulResources().List(ctx)
-	if len(srs) != 1 || srs[0].Name != "persist-res" {
-		t.Errorf("stateful resources not persisted correctly: %+v", srs)
+	if len(srs) != 2 {
+		t.Errorf("expected 2 stateful resources after reload, got %d: %+v", len(srs), srs)
+	}
+	srWorkspaces := map[string]bool{}
+	for _, r := range srs {
+		if r.Name != "persist-res" {
+			t.Errorf("unexpected resource name %q", r.Name)
+		}
+		srWorkspaces[r.Workspace] = true
+	}
+	if !srWorkspaces[""] || !srWorkspaces["ws-persist"] {
+		t.Errorf("expected stateful resources in default and ws-persist workspaces, got %+v", srWorkspaces)
 	}
 
-	// Custom operations
+	// Custom operations — both buckets must round-trip.
 	cos, _ := fs2.CustomOperations().List(ctx)
-	if len(cos) != 1 || cos[0].Name != "persist-op" {
-		t.Errorf("custom operations not persisted correctly: %+v", cos)
+	if len(cos) != 2 {
+		t.Errorf("expected 2 custom operations after reload, got %d: %+v", len(cos), cos)
 	}
-	if len(cos) == 1 && len(cos[0].Steps) != 1 {
-		t.Errorf("custom operation steps not persisted correctly: %+v", cos[0].Steps)
+	coWorkspaces := map[string]bool{}
+	for _, op := range cos {
+		if op.Name != "persist-op" {
+			t.Errorf("unexpected op name %q", op.Name)
+		}
+		if len(op.Steps) != 1 {
+			t.Errorf("custom operation steps not persisted correctly: %+v", op.Steps)
+		}
+		coWorkspaces[op.Workspace] = true
+	}
+	if !coWorkspaces[""] || !coWorkspaces["ws-persist"] {
+		t.Errorf("expected custom operations in default and ws-persist workspaces, got %+v", coWorkspaces)
 	}
 
 	// Preferences

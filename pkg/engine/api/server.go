@@ -12,6 +12,7 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/logging"
 	"github.com/getmockd/mockd/pkg/requestlog"
+	"github.com/getmockd/mockd/pkg/store"
 )
 
 // Server is the Engine Control API server.
@@ -93,6 +94,12 @@ type EngineController interface {
 
 	// Config
 	GetConfig() *ConfigResponse
+
+	// PersistentStore returns the underlying persistent store, if one is wired
+	// up. Used by the import handler to dual-write stateful resources and
+	// custom operations alongside the admin file store (issue #12). May
+	// return nil when no persistent store is configured.
+	PersistentStore() store.Store
 }
 
 // NewServer creates a new Engine Control API server.

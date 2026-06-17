@@ -14,6 +14,7 @@ import (
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -360,6 +361,10 @@ func (m *mockEngine) GetWebSocketStats() *WebSocketStats {
 
 func (m *mockEngine) GetConfig() *ConfigResponse {
 	return m.configResp
+}
+
+func (m *mockEngine) PersistentStore() store.Store {
+	return nil
 }
 
 func (m *mockEngine) ListCustomOperations(workspaceID string) []CustomOperationInfo {

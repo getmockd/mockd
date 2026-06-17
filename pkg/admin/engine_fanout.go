@@ -278,7 +278,11 @@ func (a *API) pushToggleToEngines(ctx context.Context, id string, enabled bool) 
 
 // pushImportToEngines sends an ImportConfig to all engine targets in parallel.
 // Returns the result from the local engine (if any), or the first remote result.
-func (a *API) pushImportToEngines(ctx context.Context, collection *config.MockCollection, replace bool) (*engineclient.ImportResult, error) {
+//
+// workspaceID is forwarded to each engine so stateful resources and custom
+// operations are registered under the correct workspace bucket. An empty
+// workspaceID means the default workspace.
+func (a *API) pushImportToEngines(ctx context.Context, collection *config.MockCollection, replace bool, workspaceID string) (*engineclient.ImportResult, error) {
 	targets := a.allEngineTargets()
 	if len(targets) == 0 {
 		return &engineclient.ImportResult{Imported: 0, Total: len(collection.Mocks)}, nil
@@ -306,7 +310,7 @@ func (a *API) pushImportToEngines(ctx context.Context, collection *config.MockCo
 	}
 
 	if len(targets) == 1 && targets[0].label == "local" {
-		return targets[0].client.ImportConfig(ctx, engineCollection, replace)
+		return targets[0].client.ImportConfig(ctx, engineCollection, replace, workspaceID)
 	}
 
 	type importResult struct {
@@ -318,7 +322,7 @@ func (a *API) pushImportToEngines(ctx context.Context, collection *config.MockCo
 
 	for _, t := range targets {
 		go func(t engineTarget) {
-			res, err := t.client.ImportConfig(ctx, engineCollection, replace)
+			res, err := t.client.ImportConfig(ctx, engineCollection, replace, workspaceID)
 			results <- importResult{label: t.label, result: res, err: err}
 		}(t)
 	}
