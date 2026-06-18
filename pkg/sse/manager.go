@@ -162,6 +162,15 @@ func (m *SSEConnectionManager) CloseByMock(mockID string) int {
 			}
 			delete(m.connections, id)
 			count++
+
+			// Update metrics symmetrically with Deregister — otherwise the
+			// ActiveConnections gauge leaks, staying inflated after the
+			// connections are gone.
+			if metrics.ActiveConnections != nil {
+				if vec, err := metrics.ActiveConnections.WithLabels("sse"); err == nil {
+					vec.Dec()
+				}
+			}
 		}
 	}
 	return count

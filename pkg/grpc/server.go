@@ -24,9 +24,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
-	grpcpeer "google.golang.org/grpc/peer"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
+	grpcpeer "google.golang.org/grpc/peer"
 	"google.golang.org/grpc/reflection"
 	v1reflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	v1alphareflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
@@ -773,6 +773,26 @@ func (s *Server) handleStreamMethod(_ interface{}, stream grpc.ServerStream, ser
 	}
 }
 
+// recvMsgCtx reads the next message from the stream but returns early if ctx is
+// cancelled. grpc.ServerStream.RecvMsg blocks on the underlying transport
+// context, so without this an admin/mock-update cancellation — which cancels the
+// StreamTracker-derived ctx, not the transport ctx — would never unblock an idle
+// stream (handlers only re-check ctx.Err() between messages). The spawned reader
+// goroutine is not leaked: once the handler returns, gRPC closes the stream, the
+// pending RecvMsg returns, and the result drains into the buffered channel. The
+// caller must not read m after a non-nil ctx error, since the goroutine may still
+// be writing to it.
+func recvMsgCtx(ctx context.Context, stream grpc.ServerStream, m interface{}) error {
+	errCh := make(chan error, 1)
+	go func() { errCh <- stream.RecvMsg(m) }()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errCh:
+		return err
+	}
+}
+
 // handleServerStreaming handles server-streaming RPC calls.
 func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodDescriptor, serviceName, methodName string, md metadata.MD) error {
 	startTime := time.Now()
@@ -792,7 +812,12 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 	}
 
 	reqMsg := dynamicpb.NewMessage(inputDesc)
-	if err := stream.RecvMsg(reqMsg); err != nil {
+	if err := recvMsgCtx(ctx, stream, reqMsg); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			grpcErr := s.contextCancelError(streamID)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, nil, nil, grpcErr)
+			return grpcErr
+		}
 		grpcErr := status.Errorf(codes.InvalidArgument, "failed to receive request: %v", err)
 		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, nil, nil, grpcErr)
 		return grpcErr
@@ -912,9 +937,14 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 		}
 
 		reqMsg := dynamicpb.NewMessage(inputDesc)
-		if err := stream.RecvMsg(reqMsg); err != nil {
+		if err := recvMsgCtx(ctx, stream, reqMsg); err != nil {
 			if errors.Is(err, io.EOF) {
 				break
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				grpcErr := s.contextCancelError(streamID)
+				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
+				return grpcErr
 			}
 			grpcErr := status.Errorf(codes.InvalidArgument, "failed to receive request: %v", err)
 			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
@@ -1041,12 +1071,17 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 		}
 
 		reqMsg := dynamicpb.NewMessage(inputDesc)
-		if err := stream.RecvMsg(reqMsg); err != nil {
+		if err := recvMsgCtx(ctx, stream, reqMsg); err != nil {
 			if errors.Is(err, io.EOF) {
 				// Log the successful call
 				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, nil)
 
 				return nil
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				grpcErr := s.contextCancelError(streamID)
+				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
+				return grpcErr
 			}
 			grpcErr := status.Errorf(codes.InvalidArgument, "failed to receive request: %v", err)
 			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)

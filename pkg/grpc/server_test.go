@@ -484,6 +484,75 @@ func TestClientStreaming(t *testing.T) {
 	assert.Equal(t, int32(3), respMsg.GetFieldByName("created_count"))
 }
 
+// TestClientStreaming_AdminCancelUnblocksIdleStream is a regression test for the
+// gRPC cancellation liveness bug: an admin/mock-update Cancel must actually
+// unblock a stream that is idle in stream.RecvMsg and return codes.Unavailable,
+// rather than returning 200 from the admin API while the stream stays blocked.
+// Before the fix the handler blocked on the original transport context and never
+// observed the StreamTracker-derived ctx cancellation, so this would hang.
+func TestClientStreaming_AdminCancelUnblocksIdleStream(t *testing.T) {
+	schema := getTestSchema(t)
+	files := getTestDescriptors(t)
+	config := &GRPCConfig{
+		Port: 0,
+		Services: map[string]ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]MethodConfig{
+					"CreateUsers": {Response: map[string]interface{}{"created_count": 1}},
+				},
+			},
+		},
+	}
+
+	srv, err := NewServer(config, schema)
+	require.NoError(t, err)
+	require.NoError(t, srv.Start(context.Background()))
+	defer srv.Stop(context.Background(), 5*time.Second)
+
+	conn, err := grpc.NewClient(srv.Address(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer conn.Close()
+
+	methodDesc := getMethodDesc(t, files, "test.UserService", "CreateUsers")
+	stub := grpcdynamic.NewStub(conn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Open the client-streaming RPC but send NOTHING — the server handler blocks in RecvMsg.
+	stream, err := stub.InvokeRpcClientStream(ctx, methodDesc)
+	require.NoError(t, err)
+
+	// Wait until the server has registered the idle stream (handler is in RecvMsg).
+	tracker := srv.StreamTracker()
+	var streamID string
+	require.Eventually(t, func() bool {
+		for _, info := range tracker.List() {
+			streamID = info.ID
+			return true
+		}
+		return false
+	}, 5*time.Second, 10*time.Millisecond, "idle stream was never registered with the tracker")
+
+	// Admin-cancel the idle stream. This must unblock the handler's RecvMsg.
+	require.NoError(t, tracker.Cancel(streamID))
+
+	// The client should observe codes.Unavailable promptly — proving the handler unblocked.
+	done := make(chan error, 1)
+	go func() {
+		_, rerr := stream.CloseAndReceive()
+		done <- rerr
+	}()
+	select {
+	case rerr := <-done:
+		require.Error(t, rerr)
+		assert.Equal(t, codes.Unavailable, status.Code(rerr),
+			"admin-cancelled idle stream should return codes.Unavailable")
+	case <-time.After(5 * time.Second):
+		t.Fatal("stream did not unblock after admin Cancel — gRPC cancellation liveness bug")
+	}
+}
+
 func TestBidirectionalStreaming(t *testing.T) {
 	schema := getTestSchema(t)
 	files := getTestDescriptors(t)
