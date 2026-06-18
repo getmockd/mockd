@@ -106,8 +106,8 @@ func TestCustomOperationStore_DeleteByName(t *testing.T) {
 	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "Op2"})
 	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "Op3"})
 
-	// Delete the middle one
-	if err := cos.Delete(ctx, "Op2"); err != nil {
+	// Delete the middle one (default workspace)
+	if err := cos.Delete(ctx, "", "Op2"); err != nil {
 		t.Fatalf("Delete(Op2) failed: %v", err)
 	}
 
@@ -131,7 +131,7 @@ func TestCustomOperationStore_DeleteByName(t *testing.T) {
 func TestCustomOperationStore_DeleteNotFound(t *testing.T) {
 	fs := newTestStore(t)
 	ctx := context.Background()
-	err := fs.CustomOperations().Delete(ctx, "nonexistent")
+	err := fs.CustomOperations().Delete(ctx, "", "nonexistent")
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -146,13 +146,59 @@ func TestCustomOperationStore_DeleteAll_MultipleItems(t *testing.T) {
 	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "B"})
 	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "C"})
 
-	if err := cos.DeleteAll(ctx); err != nil {
+	if err := cos.DeleteAll(ctx, ""); err != nil {
 		t.Fatalf("DeleteAll() failed: %v", err)
 	}
 
 	list, _ := cos.List(ctx)
 	if len(list) != 0 {
 		t.Errorf("expected 0 after DeleteAll, got %d", len(list))
+	}
+}
+
+// TestCustomOperationStore_WorkspaceIsolation is a regression test for issue #12.
+// Two workspaces must be able to register custom operations with the same name,
+// and Delete/DeleteAll must be scoped to one workspace at a time.
+func TestCustomOperationStore_WorkspaceIsolation(t *testing.T) {
+	fs := newTestStore(t)
+	ctx := context.Background()
+	cos := fs.CustomOperations()
+
+	// Same name, different workspaces — both must succeed.
+	if err := cos.Create(ctx, &config.CustomOperationConfig{Name: "CancelOrder", Workspace: "ws-a"}); err != nil {
+		t.Fatalf("Create ws-a: %v", err)
+	}
+	if err := cos.Create(ctx, &config.CustomOperationConfig{Name: "CancelOrder", Workspace: "ws-b"}); err != nil {
+		t.Fatalf("Create ws-b: %v", err)
+	}
+	// Same (workspace, name) is a duplicate.
+	if err := cos.Create(ctx, &config.CustomOperationConfig{Name: "CancelOrder", Workspace: "ws-a"}); !errors.Is(err, store.ErrAlreadyExists) {
+		t.Errorf("expected ErrAlreadyExists, got %v", err)
+	}
+
+	// Delete only touches the named workspace.
+	if err := cos.Delete(ctx, "ws-a", "CancelOrder"); err != nil {
+		t.Fatalf("Delete ws-a: %v", err)
+	}
+	list, _ := cos.List(ctx)
+	if len(list) != 1 || list[0].Workspace != "ws-b" {
+		t.Errorf("expected only ws-b CancelOrder to remain, got %+v", list)
+	}
+
+	// DeleteAll is also workspace-scoped.
+	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "Refund", Workspace: "ws-b"})
+	_ = cos.Create(ctx, &config.CustomOperationConfig{Name: "Refund", Workspace: "ws-c"})
+	if err := cos.DeleteAll(ctx, "ws-b"); err != nil {
+		t.Fatalf("DeleteAll ws-b: %v", err)
+	}
+	list, _ = cos.List(ctx)
+	for _, op := range list {
+		if op.Workspace == "ws-b" {
+			t.Errorf("ws-b operation %q should have been deleted", op.Name)
+		}
+	}
+	if len(list) != 1 || list[0].Workspace != "ws-c" {
+		t.Errorf("expected only ws-c Refund to remain, got %+v", list)
 	}
 }
 
@@ -196,10 +242,10 @@ func TestCustomOperationStore_ReadOnly_AllMethods(t *testing.T) {
 	if err := cos.Create(ctx, &config.CustomOperationConfig{Name: "x"}); !errors.Is(err, store.ErrReadOnly) {
 		t.Errorf("Create: expected ErrReadOnly, got %v", err)
 	}
-	if err := cos.Delete(ctx, "x"); !errors.Is(err, store.ErrReadOnly) {
+	if err := cos.Delete(ctx, "", "x"); !errors.Is(err, store.ErrReadOnly) {
 		t.Errorf("Delete: expected ErrReadOnly, got %v", err)
 	}
-	if err := cos.DeleteAll(ctx); !errors.Is(err, store.ErrReadOnly) {
+	if err := cos.DeleteAll(ctx, ""); !errors.Is(err, store.ErrReadOnly) {
 		t.Errorf("DeleteAll: expected ErrReadOnly, got %v", err)
 	}
 
@@ -333,7 +379,7 @@ func TestCustomOperationStore_PersistenceAfterDelete(t *testing.T) {
 	cos1 := fs1.CustomOperations()
 	_ = cos1.Create(ctx, &config.CustomOperationConfig{Name: "ToKeep"})
 	_ = cos1.Create(ctx, &config.CustomOperationConfig{Name: "ToDelete"})
-	_ = cos1.Delete(ctx, "ToDelete")
+	_ = cos1.Delete(ctx, "", "ToDelete")
 	_ = fs1.Close()
 
 	// Session 2: Only ToKeep should remain

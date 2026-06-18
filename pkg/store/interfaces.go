@@ -135,27 +135,41 @@ type MockStore interface {
 }
 
 // StatefulResourceStore handles persistence for stateful resource configurations.
+//
+// Identity is (workspaceID, name): two workspaces may each register a resource
+// with the same name. The workspace is taken from each config's Workspace
+// field on Create. An empty workspaceID denotes the default workspace.
 type StatefulResourceStore interface {
-	// List returns all persisted stateful resource configs.
+	// List returns all persisted stateful resource configs across every workspace.
+	// Each entry's Workspace field identifies its bucket.
 	List(ctx context.Context) ([]*config.StatefulResourceConfig, error)
-	// Create persists a new stateful resource config.
+	// Create persists a new stateful resource config. The Workspace field on
+	// res determines its workspace bucket.
 	Create(ctx context.Context, res *config.StatefulResourceConfig) error
-	// Delete removes a stateful resource config by name.
-	Delete(ctx context.Context, name string) error
-	// DeleteAll removes all stateful resource configs.
-	DeleteAll(ctx context.Context) error
+	// Delete removes a stateful resource config from the given workspace by name.
+	Delete(ctx context.Context, workspaceID, name string) error
+	// DeleteAll removes every stateful resource config in the given workspace.
+	// It does NOT touch other workspaces.
+	DeleteAll(ctx context.Context, workspaceID string) error
 }
 
 // CustomOperationStore handles persistence for custom operation definitions.
+//
+// Identity is (workspaceID, name): two workspaces may each register an operation
+// with the same name. The workspace is taken from each config's Workspace
+// field on Create. An empty workspaceID denotes the default workspace.
 type CustomOperationStore interface {
-	// List returns all persisted custom operation configs.
+	// List returns all persisted custom operation configs across every workspace.
+	// Each entry's Workspace field identifies its bucket.
 	List(ctx context.Context) ([]*config.CustomOperationConfig, error)
-	// Create persists a new custom operation config.
+	// Create persists a new custom operation config. The Workspace field on
+	// op determines its workspace bucket.
 	Create(ctx context.Context, op *config.CustomOperationConfig) error
-	// Delete removes a custom operation config by name.
-	Delete(ctx context.Context, name string) error
-	// DeleteAll removes all custom operation configs.
-	DeleteAll(ctx context.Context) error
+	// Delete removes a custom operation config from the given workspace by name.
+	Delete(ctx context.Context, workspaceID, name string) error
+	// DeleteAll removes every custom operation config in the given workspace.
+	// It does NOT touch other workspaces.
+	DeleteAll(ctx context.Context, workspaceID string) error
 }
 
 // FolderFilter provides filtering criteria for folder list operations.

@@ -13,7 +13,8 @@ type statefulResourceStore struct {
 	fs *FileStore
 }
 
-// List returns all persisted stateful resource configs.
+// List returns all persisted stateful resource configs across every workspace.
+// Each entry's Workspace field identifies its bucket.
 func (s *statefulResourceStore) List(ctx context.Context) ([]*config.StatefulResourceConfig, error) {
 	s.fs.mu.RLock()
 	defer s.fs.mu.RUnlock()
@@ -27,7 +28,8 @@ func (s *statefulResourceStore) List(ctx context.Context) ([]*config.StatefulRes
 	return result, nil
 }
 
-// Create persists a new stateful resource config.
+// Create persists a new stateful resource config. Identity is (workspace, name);
+// two workspaces may each register a resource with the same name.
 func (s *statefulResourceStore) Create(ctx context.Context, res *config.StatefulResourceConfig) error {
 	s.fs.mu.Lock()
 	defer s.fs.mu.Unlock()
@@ -36,9 +38,9 @@ func (s *statefulResourceStore) Create(ctx context.Context, res *config.Stateful
 		return store.ErrReadOnly
 	}
 
-	// Check for duplicate name
+	// Check for duplicate (workspace, name).
 	for _, existing := range s.fs.data.StatefulResources {
-		if existing.Name == res.Name {
+		if existing.Workspace == res.Workspace && existing.Name == res.Name {
 			return store.ErrAlreadyExists
 		}
 	}
@@ -48,8 +50,8 @@ func (s *statefulResourceStore) Create(ctx context.Context, res *config.Stateful
 	return nil
 }
 
-// Delete removes a stateful resource config by name.
-func (s *statefulResourceStore) Delete(ctx context.Context, name string) error {
+// Delete removes a stateful resource config from the given workspace by name.
+func (s *statefulResourceStore) Delete(ctx context.Context, workspaceID, name string) error {
 	s.fs.mu.Lock()
 	defer s.fs.mu.Unlock()
 
@@ -58,7 +60,7 @@ func (s *statefulResourceStore) Delete(ctx context.Context, name string) error {
 	}
 
 	for i, res := range s.fs.data.StatefulResources {
-		if res.Name == name {
+		if res.Workspace == workspaceID && res.Name == name {
 			s.fs.data.StatefulResources = append(s.fs.data.StatefulResources[:i], s.fs.data.StatefulResources[i+1:]...)
 			s.fs.markDirty()
 			return nil
@@ -67,8 +69,9 @@ func (s *statefulResourceStore) Delete(ctx context.Context, name string) error {
 	return store.ErrNotFound
 }
 
-// DeleteAll removes all stateful resource configs.
-func (s *statefulResourceStore) DeleteAll(ctx context.Context) error {
+// DeleteAll removes every stateful resource config in the given workspace.
+// Resources in other workspaces are left untouched.
+func (s *statefulResourceStore) DeleteAll(ctx context.Context, workspaceID string) error {
 	s.fs.mu.Lock()
 	defer s.fs.mu.Unlock()
 
@@ -76,7 +79,18 @@ func (s *statefulResourceStore) DeleteAll(ctx context.Context) error {
 		return store.ErrReadOnly
 	}
 
-	s.fs.data.StatefulResources = nil
-	s.fs.markDirty()
+	kept := s.fs.data.StatefulResources[:0]
+	removed := false
+	for _, res := range s.fs.data.StatefulResources {
+		if res.Workspace == workspaceID {
+			removed = true
+			continue
+		}
+		kept = append(kept, res)
+	}
+	s.fs.data.StatefulResources = kept
+	if removed {
+		s.fs.markDirty()
+	}
 	return nil
 }

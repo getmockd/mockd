@@ -276,7 +276,7 @@ func (a *API) enrichWorkspacePorts(workspaces []store.EngineWorkspace, status *e
 func (a *API) handleRegisterEngine(w http.ResponseWriter, r *http.Request) {
 	// Check if localhost bypass is allowed AND request is from localhost,
 	// or if API key auth is disabled (trusted network / dev mode).
-	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	localhostBypass := a.allowLocalhostBypass && keylessLocalhostTrusted(r)
 	authDisabled := !a.apiKeyConfig.Enabled
 
 	if !localhostBypass && !authDisabled {
@@ -392,7 +392,7 @@ func (a *API) handleUnregisterEngine(w http.ResponseWriter, r *http.Request) {
 
 	// Check if localhost bypass is allowed AND request is from localhost,
 	// or if API key auth is disabled (trusted network / dev mode).
-	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	localhostBypass := a.allowLocalhostBypass && keylessLocalhostTrusted(r)
 	authDisabled := !a.apiKeyConfig.Enabled
 
 	if !localhostBypass && !authDisabled {
@@ -428,7 +428,7 @@ func (a *API) handleEngineHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// Check if localhost bypass is allowed AND request is from localhost,
 	// or if API key auth is disabled (trusted network / dev mode).
-	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	localhostBypass := a.allowLocalhostBypass && keylessLocalhostTrusted(r)
 	authDisabled := !a.apiKeyConfig.Enabled
 
 	if !localhostBypass && !authDisabled {
@@ -498,7 +498,7 @@ func (a *API) handleAssignWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	// Check if localhost bypass is allowed AND request is from localhost,
 	// or if API key auth is disabled (trusted network / dev mode).
-	localhostBypass := a.allowLocalhostBypass && isLocalhost(r)
+	localhostBypass := a.allowLocalhostBypass && keylessLocalhostTrusted(r)
 	authDisabled := !a.apiKeyConfig.Enabled
 
 	if !localhostBypass && !authDisabled {
@@ -827,7 +827,10 @@ func (a *API) syncAdminStoreToEngine(client *engineclient.Client, reason string)
 		"customOperations", len(customOps),
 	)
 
-	result, err := client.ImportConfig(ctx, collection, true)
+	// NOTE(#12): the file store does not yet bucket stateful resources or custom
+	// operations by workspace, so on sync everything is pushed under the default
+	// workspace. Per-workspace persistence is tracked as a follow-up to issue #12.
+	result, err := client.ImportConfig(ctx, collection, true, store.DefaultWorkspaceID)
 	if err != nil {
 		a.logger().Warn("sync: failed to push admin store to engine",
 			"error", err, "reason", reason,

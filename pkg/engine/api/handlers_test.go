@@ -14,6 +14,7 @@ import (
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/getmockd/mockd/pkg/stateful"
+	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,24 +22,24 @@ import (
 
 // mockEngine is a test double for EngineController.
 type mockEngine struct {
-	mocks          map[string]*config.MockConfiguration
-	requestLogs    map[string]*requestlog.Entry
-	running        bool
-	uptime         int
-	chaosConfig    *ChaosConfig
-	chaosStats     *ChaosStats
-	stateOverview  *StateOverview
-	handlers       []*ProtocolHandler
-	sseConnections []*SSEConnection
-	wsConnections    []*WebSocketConnection
-	mqttConnections  []*MQTTConnection
-	grpcStreams      []*GRPCStream
-	sseStats         *SSEStats
-	wsStats          *WebSocketStats
-	mqttStats        *MQTTStats
-	grpcStats        *GRPCStats
-	configResp     *ConfigResponse
-	protocols      map[string]ProtocolStatusInfo
+	mocks           map[string]*config.MockConfiguration
+	requestLogs     map[string]*requestlog.Entry
+	running         bool
+	uptime          int
+	chaosConfig     *ChaosConfig
+	chaosStats      *ChaosStats
+	stateOverview   *StateOverview
+	handlers        []*ProtocolHandler
+	sseConnections  []*SSEConnection
+	wsConnections   []*WebSocketConnection
+	mqttConnections []*MQTTConnection
+	grpcStreams     []*GRPCStream
+	sseStats        *SSEStats
+	wsStats         *WebSocketStats
+	mqttStats       *MQTTStats
+	grpcStats       *GRPCStats
+	configResp      *ConfigResponse
+	protocols       map[string]ProtocolStatusInfo
 
 	// Custom operations support
 	customOps map[string]*CustomOperationDetail
@@ -436,6 +437,10 @@ func (m *mockEngine) GetGRPCStats() *GRPCStats {
 
 func (m *mockEngine) GetConfig() *ConfigResponse {
 	return m.configResp
+}
+
+func (m *mockEngine) PersistentStore() store.Store {
+	return nil
 }
 
 func (m *mockEngine) ListCustomOperations(workspaceID string) []CustomOperationInfo {
@@ -2911,12 +2916,12 @@ func TestHandleGetGRPCStats(t *testing.T) {
 	t.Run("with stats", func(t *testing.T) {
 		engine := newMockEngine()
 		engine.grpcStats = &GRPCStats{
-			ActiveStreams:      2,
-			TotalStreams:       10,
-			TotalRPCs:          100,
-			TotalMessagesSent:  50,
-			TotalMessagesRecv:  30,
-			StreamsByMethod:    map[string]int{"/pkg.Svc/Chat": 2},
+			ActiveStreams:     2,
+			TotalStreams:      10,
+			TotalRPCs:         100,
+			TotalMessagesSent: 50,
+			TotalMessagesRecv: 30,
+			StreamsByMethod:   map[string]int{"/pkg.Svc/Chat": 2},
 		}
 		server := newTestServer(engine)
 

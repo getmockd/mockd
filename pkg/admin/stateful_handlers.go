@@ -143,6 +143,9 @@ func (a *API) handleCreateStateResource(w http.ResponseWriter, r *http.Request, 
 	// survives restarts. If persistence fails (e.g., stale duplicate in
 	// data.json), log a warning but don't error — the engine is authoritative.
 	if a.dataStore != nil {
+		// Stamp the workspace so the file store records (workspace, name) as
+		// identity (issue #12). The engine already registered under workspaceID.
+		cfg.Workspace = workspaceID
 		resStore := a.dataStore.StatefulResources()
 		if err := resStore.Create(ctx, &cfg); err != nil {
 			if errors.Is(err, store.ErrAlreadyExists) {
@@ -183,8 +186,9 @@ func (a *API) handleDeleteStateResource(w http.ResponseWriter, r *http.Request, 
 	// Remove from the file store so it doesn't reload on restart.
 	if a.dataStore != nil {
 		resStore := a.dataStore.StatefulResources()
-		if err := resStore.Delete(ctx, name); err != nil {
-			a.logger().Warn("failed to delete stateful resource from store", "name", name, "error", err)
+		if err := resStore.Delete(ctx, workspaceID, name); err != nil {
+			a.logger().Warn("failed to delete stateful resource from store",
+				"name", name, "workspace", workspaceID, "error", err)
 		}
 	}
 
@@ -459,13 +463,17 @@ func (a *API) handleRegisterCustomOperation(w http.ResponseWriter, r *http.Reque
 		if marshalErr == nil {
 			var opCfg config.CustomOperationConfig
 			if unmarshalErr := json.Unmarshal(rawBytes, &opCfg); unmarshalErr == nil && opCfg.Name != "" {
+				// Stamp the workspace so the file store records (workspace, name) as
+				// identity (issue #12).
+				opCfg.Workspace = workspaceID
 				if createErr := opStore.Create(ctx, &opCfg); createErr != nil {
 					if errors.Is(createErr, store.ErrAlreadyExists) {
-						// Update: delete then re-create
-						_ = opStore.Delete(ctx, opCfg.Name)
+						// Update: delete then re-create within this workspace.
+						_ = opStore.Delete(ctx, workspaceID, opCfg.Name)
 						_ = opStore.Create(ctx, &opCfg)
 					} else {
-						a.logger().Warn("failed to persist custom operation", "name", name, "error", createErr)
+						a.logger().Warn("failed to persist custom operation",
+							"name", name, "workspace", workspaceID, "error", createErr)
 					}
 				}
 			}
@@ -499,9 +507,10 @@ func (a *API) handleDeleteCustomOperation(w http.ResponseWriter, r *http.Request
 
 	// Remove from file store.
 	if a.dataStore != nil {
-		if delErr := a.dataStore.CustomOperations().Delete(ctx, name); delErr != nil {
+		if delErr := a.dataStore.CustomOperations().Delete(ctx, workspaceID, name); delErr != nil {
 			if !errors.Is(delErr, store.ErrNotFound) {
-				a.logger().Warn("failed to remove custom operation from file store", "name", name, "error", delErr)
+				a.logger().Warn("failed to remove custom operation from file store",
+					"name", name, "workspace", workspaceID, "error", delErr)
 			}
 		}
 	}

@@ -432,12 +432,20 @@ type ImportResult struct {
 
 // ImportConfig imports a configuration to the engine and returns the result
 // including any per-mock errors that occurred during import.
-func (c *Client) ImportConfig(ctx context.Context, collection *config.MockCollection, replace bool) (*ImportResult, error) {
+//
+// workspaceID is forwarded as the ?workspaceId= query parameter so the engine
+// registers stateful resources and custom operations under the correct
+// workspace bucket. An empty workspaceID means the default workspace.
+func (c *Client) ImportConfig(ctx context.Context, collection *config.MockCollection, replace bool, workspaceID string) (*ImportResult, error) {
 	body := map[string]interface{}{
 		"config":  collection,
 		"replace": replace,
 	}
-	resp, err := c.post(ctx, "/config", body)
+	path := "/config"
+	if workspaceID != "" {
+		path += "?workspaceId=" + url.QueryEscape(workspaceID)
+	}
+	resp, err := c.post(ctx, path, body)
 	if err != nil {
 		return nil, err
 	}
