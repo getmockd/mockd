@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	apitypes "github.com/getmockd/mockd/pkg/api/types"
 	"github.com/getmockd/mockd/pkg/cli"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
@@ -428,6 +429,40 @@ func (m *mockAdminClient) AddEngineWorkspace(_, _, _ string) error { return nil 
 func (m *mockAdminClient) BulkCreateMocks(_ []*mock.Mock, _ string) (*cli.BulkCreateResult, error) {
 	return nil, nil
 }
+
+// --- Connection Management (stubs) ---
+
+func (m *mockAdminClient) ListWebSocketConnections() (*apitypes.WebSocketConnectionListResponse, error) {
+	return nil, nil
+}
+func (m *mockAdminClient) GetWebSocketConnection(_ string) (*apitypes.WebSocketConnection, error) {
+	return nil, nil
+}
+func (m *mockAdminClient) CloseWebSocketConnection(_ string) error { return nil }
+func (m *mockAdminClient) SendWebSocketMessage(_ string, _ string, _ bool) error { return nil }
+func (m *mockAdminClient) GetWebSocketStats() (*apitypes.WebSocketStats, error) { return nil, nil }
+func (m *mockAdminClient) ListSSEConnections() (*apitypes.SSEConnectionListResponse, error) {
+	return nil, nil
+}
+func (m *mockAdminClient) GetSSEConnection(_ string) (*apitypes.SSEConnection, error) {
+	return nil, nil
+}
+func (m *mockAdminClient) CloseSSEConnection(_ string) error { return nil }
+func (m *mockAdminClient) GetSSEStats() (*apitypes.SSEStats, error) { return nil, nil }
+func (m *mockAdminClient) ListMQTTConnections() (*apitypes.MQTTConnectionListResponse, error) {
+	return nil, nil
+}
+func (m *mockAdminClient) GetMQTTConnection(_ string) (*apitypes.MQTTConnection, error) {
+	return nil, nil
+}
+func (m *mockAdminClient) CloseMQTTConnection(_ string) error { return nil }
+func (m *mockAdminClient) GetMQTTStats() (*apitypes.MQTTStats, error) { return nil, nil }
+func (m *mockAdminClient) ListGRPCStreams() (*apitypes.GRPCStreamListResponse, error) {
+	return nil, nil
+}
+func (m *mockAdminClient) GetGRPCStream(_ string) (*apitypes.GRPCStream, error) { return nil, nil }
+func (m *mockAdminClient) CloseGRPCStream(_ string) error { return nil }
+func (m *mockAdminClient) GetGRPCStats() (*apitypes.GRPCStats, error) { return nil, nil }
 
 // =============================================================================
 // Test Helpers

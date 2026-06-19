@@ -123,9 +123,34 @@ func (a *API) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /sse/connections/{id}", a.handleCloseSSEConnection)
 	mux.HandleFunc("GET /sse/stats", a.handleGetSSEStats)
 
+	// WebSocket connection management
+	mux.HandleFunc("GET /websocket/connections", a.handleListWebSocketConnections)
+	mux.HandleFunc("GET /websocket/connections/{id}", a.handleGetWebSocketConnection)
+	mux.HandleFunc("DELETE /websocket/connections/{id}", a.handleCloseWebSocketConnection)
+	mux.HandleFunc("POST /websocket/connections/{id}/send", a.handleSendToWebSocketConnection)
+	mux.HandleFunc("GET /websocket/stats", a.handleGetWebSocketStats)
+
+	// MQTT connection management
+	// Routes use /mqtt-connections/ prefix to avoid ambiguity with existing
+	// /mqtt/{id}/status recording routes.
+	mux.HandleFunc("GET /mqtt-connections", a.handleListMQTTConnections)
+	mux.HandleFunc("GET /mqtt-connections/{id}", a.handleGetMQTTConnection)
+	mux.HandleFunc("DELETE /mqtt-connections/{id}", a.handleCloseMQTTConnection)
+	mux.HandleFunc("GET /mqtt-connections/stats", a.handleGetMQTTStats)
+
+	// gRPC stream management
+	mux.HandleFunc("GET /grpc/connections", a.handleListGRPCStreams)
+	mux.HandleFunc("GET /grpc/connections/{id}", a.handleGetGRPCStream)
+	mux.HandleFunc("DELETE /grpc/connections/{id}", a.handleCancelGRPCStream)
+	mux.HandleFunc("GET /grpc/stats", a.handleGetGRPCStats)
+
 	// Mock-specific SSE endpoints
 	mux.HandleFunc("GET /mocks/{id}/sse/connections", a.requireEngine(a.handleListMockSSEConnections))
 	mux.HandleFunc("DELETE /mocks/{id}/sse/connections", a.requireEngine(a.handleCloseMockSSEConnections))
+
+	// Mock-specific WebSocket endpoints
+	mux.HandleFunc("GET /mocks/{id}/websocket/connections", a.requireEngine(a.handleListMockWebSocketConnections))
+	mux.HandleFunc("DELETE /mocks/{id}/websocket/connections", a.requireEngine(a.handleCloseMockWebSocketConnections))
 	mux.HandleFunc("GET /mocks/{id}/sse/buffer", a.handleGetMockSSEBuffer)
 	mux.HandleFunc("DELETE /mocks/{id}/sse/buffer", a.handleClearMockSSEBuffer)
 

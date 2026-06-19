@@ -230,6 +230,55 @@ func TestConnectionManager_ConcurrentJoinFromBothSides(t *testing.T) {
 	}
 }
 
+func TestConnectionManager_DisconnectByEndpoint_UnknownPath(t *testing.T) {
+	manager := NewConnectionManager()
+
+	// Endpoint that was never registered — should return 0 without panicking
+	count := manager.DisconnectByEndpoint("/ws/unknown", CloseServiceRestart, "mock updated")
+	if count != 0 {
+		t.Errorf("expected 0 for unknown path, got %d", count)
+	}
+}
+
+func TestConnectionManager_DisconnectByEndpoint_SkipsAlreadyClosed(t *testing.T) {
+	manager := NewConnectionManager()
+
+	// Pre-closed connection — Close must not be called again (nil conn would panic).
+	conn := &Connection{
+		id:           "conn-already-closed",
+		endpointPath: "/ws/test",
+		groups:       make(map[string]struct{}),
+	}
+	conn.closed.Store(true)
+	manager.Add(conn)
+
+	// All connections already closed → count must be 0.
+	count := manager.DisconnectByEndpoint("/ws/test", CloseServiceRestart, "mock updated")
+	if count != 0 {
+		t.Errorf("expected 0 (connection pre-closed), got %d", count)
+	}
+}
+
+func TestConnectionManager_DisconnectByEndpoint_IsolatesEndpoint(t *testing.T) {
+	manager := NewConnectionManager()
+
+	// Two endpoints: only /ws/target should be affected.
+	target := &Connection{id: "t1", endpointPath: "/ws/target", groups: make(map[string]struct{})}
+	target.closed.Store(true) // pre-close to avoid nil conn panic
+	other := &Connection{id: "o1", endpointPath: "/ws/other", groups: make(map[string]struct{})}
+	other.closed.Store(true)
+
+	manager.Add(target)
+	manager.Add(other)
+
+	manager.DisconnectByEndpoint("/ws/target", CloseServiceRestart, "mock updated")
+
+	// The connection on /ws/other must still be tracked by the manager.
+	if manager.Get("o1") == nil {
+		t.Error("connection on /ws/other should not be removed by DisconnectByEndpoint on /ws/target")
+	}
+}
+
 func TestConnectionManager_BroadcastToGroup(t *testing.T) {
 	manager := NewConnectionManager()
 

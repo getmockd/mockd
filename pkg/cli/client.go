@@ -143,6 +143,45 @@ type AdminClient interface {
 	AddEngineWorkspace(engineID, workspaceID, workspaceName string) error
 	// BulkCreateMocks creates multiple mocks in a single request.
 	BulkCreateMocks(mocks []*mock.Mock, workspaceID string) (*BulkCreateResult, error)
+
+	// Connection management
+	// ListWebSocketConnections returns active WebSocket connections.
+	ListWebSocketConnections() (*apitypes.WebSocketConnectionListResponse, error)
+	// GetWebSocketConnection returns a specific WebSocket connection.
+	GetWebSocketConnection(id string) (*apitypes.WebSocketConnection, error)
+	// CloseWebSocketConnection closes a WebSocket connection.
+	CloseWebSocketConnection(id string) error
+	// SendWebSocketMessage sends a message to a WebSocket connection.
+	SendWebSocketMessage(id string, message string, binary bool) error
+	// GetWebSocketStats returns WebSocket statistics.
+	GetWebSocketStats() (*apitypes.WebSocketStats, error)
+
+	// ListSSEConnections returns active SSE connections.
+	ListSSEConnections() (*apitypes.SSEConnectionListResponse, error)
+	// GetSSEConnection returns a specific SSE connection.
+	GetSSEConnection(id string) (*apitypes.SSEConnection, error)
+	// CloseSSEConnection closes an SSE connection.
+	CloseSSEConnection(id string) error
+	// GetSSEStats returns SSE statistics.
+	GetSSEStats() (*apitypes.SSEStats, error)
+
+	// ListMQTTConnections returns active MQTT client connections.
+	ListMQTTConnections() (*apitypes.MQTTConnectionListResponse, error)
+	// GetMQTTConnection returns a specific MQTT client connection.
+	GetMQTTConnection(id string) (*apitypes.MQTTConnection, error)
+	// CloseMQTTConnection disconnects an MQTT client.
+	CloseMQTTConnection(id string) error
+	// GetMQTTStats returns MQTT broker statistics.
+	GetMQTTStats() (*apitypes.MQTTStats, error)
+
+	// ListGRPCStreams returns active gRPC streaming connections.
+	ListGRPCStreams() (*apitypes.GRPCStreamListResponse, error)
+	// GetGRPCStream returns a specific gRPC stream.
+	GetGRPCStream(id string) (*apitypes.GRPCStream, error)
+	// CloseGRPCStream cancels a gRPC stream.
+	CloseGRPCStream(id string) error
+	// GetGRPCStats returns gRPC statistics.
+	GetGRPCStats() (*apitypes.GRPCStats, error)
 }
 
 // LogFilter specifies filtering criteria for request logs.
@@ -1652,6 +1691,315 @@ func (c *adminClient) BulkCreateMocks(mocks []*mock.Mock, workspaceID string) (*
 	}
 
 	var result BulkCreateResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// ─── Connection management ──────────────────────────────────────────────────
+
+// ListWebSocketConnections returns active WebSocket connections.
+func (c *adminClient) ListWebSocketConnections() (*apitypes.WebSocketConnectionListResponse, error) {
+	resp, err := c.get("/websocket/connections")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.WebSocketConnectionListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// GetWebSocketConnection returns a specific WebSocket connection.
+func (c *adminClient) GetWebSocketConnection(id string) (*apitypes.WebSocketConnection, error) {
+	resp, err := c.get("/websocket/connections/" + url.PathEscape(id))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{StatusCode: resp.StatusCode, ErrorCode: "not_found", Message: "WebSocket connection not found: " + id}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.WebSocketConnection
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// CloseWebSocketConnection closes a WebSocket connection.
+func (c *adminClient) CloseWebSocketConnection(id string) error {
+	resp, err := c.delete("/websocket/connections/" + url.PathEscape(id))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{StatusCode: resp.StatusCode, ErrorCode: "not_found", Message: "WebSocket connection not found: " + id}
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// SendWebSocketMessage sends a message to a WebSocket connection.
+func (c *adminClient) SendWebSocketMessage(id string, message string, binary bool) error {
+	msgType := "text"
+	if binary {
+		msgType = "binary"
+	}
+	body, err := json.Marshal(map[string]interface{}{
+		"data": message,
+		"type":    msgType,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to encode request: %w", err)
+	}
+	resp, err := c.post("/websocket/connections/"+url.PathEscape(id)+"/send", body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{StatusCode: resp.StatusCode, ErrorCode: "not_found", Message: "WebSocket connection not found: " + id}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetWebSocketStats returns WebSocket statistics.
+func (c *adminClient) GetWebSocketStats() (*apitypes.WebSocketStats, error) {
+	resp, err := c.get("/websocket/stats")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.WebSocketStats
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// ListSSEConnections returns active SSE connections.
+func (c *adminClient) ListSSEConnections() (*apitypes.SSEConnectionListResponse, error) {
+	resp, err := c.get("/sse/connections")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.SSEConnectionListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// GetSSEConnection returns a specific SSE connection.
+func (c *adminClient) GetSSEConnection(id string) (*apitypes.SSEConnection, error) {
+	resp, err := c.get("/sse/connections/" + url.PathEscape(id))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{StatusCode: resp.StatusCode, ErrorCode: "not_found", Message: "SSE connection not found: " + id}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.SSEConnection
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// CloseSSEConnection closes an SSE connection.
+func (c *adminClient) CloseSSEConnection(id string) error {
+	resp, err := c.delete("/sse/connections/" + url.PathEscape(id))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{StatusCode: resp.StatusCode, ErrorCode: "not_found", Message: "SSE connection not found: " + id}
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetSSEStats returns SSE statistics.
+func (c *adminClient) GetSSEStats() (*apitypes.SSEStats, error) {
+	resp, err := c.get("/sse/stats")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.SSEStats
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// ListMQTTConnections returns active MQTT client connections.
+func (c *adminClient) ListMQTTConnections() (*apitypes.MQTTConnectionListResponse, error) {
+	resp, err := c.get("/mqtt-connections")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.MQTTConnectionListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// GetMQTTConnection returns a specific MQTT client connection.
+func (c *adminClient) GetMQTTConnection(id string) (*apitypes.MQTTConnection, error) {
+	resp, err := c.get("/mqtt-connections/" + url.PathEscape(id))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{StatusCode: resp.StatusCode, ErrorCode: "not_found", Message: "MQTT connection not found: " + id}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.MQTTConnection
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// CloseMQTTConnection disconnects an MQTT client.
+func (c *adminClient) CloseMQTTConnection(id string) error {
+	resp, err := c.delete("/mqtt-connections/" + url.PathEscape(id))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{StatusCode: resp.StatusCode, ErrorCode: "not_found", Message: "MQTT connection not found: " + id}
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetMQTTStats returns MQTT broker statistics.
+func (c *adminClient) GetMQTTStats() (*apitypes.MQTTStats, error) {
+	resp, err := c.get("/mqtt-connections/stats")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.MQTTStats
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// ListGRPCStreams returns active gRPC streaming connections.
+func (c *adminClient) ListGRPCStreams() (*apitypes.GRPCStreamListResponse, error) {
+	resp, err := c.get("/grpc/connections")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.GRPCStreamListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// GetGRPCStream returns a specific gRPC stream.
+func (c *adminClient) GetGRPCStream(id string) (*apitypes.GRPCStream, error) {
+	resp, err := c.get("/grpc/connections/" + url.PathEscape(id))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &APIError{StatusCode: resp.StatusCode, ErrorCode: "not_found", Message: "gRPC stream not found: " + id}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.GRPCStream
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+// CloseGRPCStream cancels a gRPC stream.
+func (c *adminClient) CloseGRPCStream(id string) error {
+	resp, err := c.delete("/grpc/connections/" + url.PathEscape(id))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return &APIError{StatusCode: resp.StatusCode, ErrorCode: "not_found", Message: "gRPC stream not found: " + id}
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
+// GetGRPCStats returns gRPC statistics.
+func (c *adminClient) GetGRPCStats() (*apitypes.GRPCStats, error) {
+	resp, err := c.get("/grpc/stats")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var result apitypes.GRPCStats
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}

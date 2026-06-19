@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/getmockd/mockd/pkg/metrics"
 )
 
 func TestConnectionManager_Register(t *testing.T) {
@@ -296,6 +298,51 @@ func TestConnectionManager_CloseByMock(t *testing.T) {
 
 	if manager.CountByMock("mock-2") != 1 {
 		t.Error("expected mock-2 connection to still exist")
+	}
+}
+
+// TestConnectionManager_CloseByMock_DecrementsGauge is a regression test: closing
+// connections via CloseByMock must decrement the ActiveConnections gauge (it
+// previously leaked, leaving the gauge inflated after the connections were gone).
+func TestConnectionManager_CloseByMock_DecrementsGauge(t *testing.T) {
+	metrics.Reset()
+	metrics.Init()
+	t.Cleanup(func() { metrics.Reset() })
+
+	gauge := metrics.ActiveConnections
+	if gauge == nil {
+		t.Fatal("ActiveConnections gauge not initialized")
+	}
+	sseGauge := func() float64 {
+		for _, s := range gauge.Collect() {
+			if s.Labels["protocol"] == "sse" {
+				return s.Value
+			}
+		}
+		return 0
+	}
+
+	manager := NewConnectionManager(100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for i := 0; i < 3; i++ {
+		_ = manager.Register(&SSEStream{
+			ID:     formatStreamID(int64(i)),
+			MockID: "mock-1",
+			ctx:    ctx,
+			cancel: cancel,
+		})
+	}
+	if got := sseGauge(); got != 3 {
+		t.Fatalf("expected ActiveConnections gauge 3 after registering, got %v", got)
+	}
+
+	if closed := manager.CloseByMock("mock-1"); closed != 3 {
+		t.Fatalf("expected 3 closed, got %d", closed)
+	}
+	if got := sseGauge(); got != 0 {
+		t.Errorf("ActiveConnections gauge leaked: expected 0 after CloseByMock, got %v", got)
 	}
 }
 

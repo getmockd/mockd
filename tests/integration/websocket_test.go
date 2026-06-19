@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,12 +10,13 @@ import (
 	"time"
 
 	ws "github.com/coder/websocket"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/engine"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/getmockd/mockd/pkg/websocket"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // ============================================================================
@@ -797,6 +799,217 @@ func TestWS_FullServer_WithMiddleware(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ws.MessageText, msgType)
 	assert.Equal(t, testMsg, string(data))
+}
+
+// ============================================================================
+// User Story: Mock Update / Delete Closes Active Connections
+// ============================================================================
+
+// assertCloseCode1012 asserts that readErr is a WebSocket close error with code 1012
+// (Service Restart). Expects readErr to be non-nil (connection already closed by server).
+func assertCloseCode1012(t *testing.T, readErr error) {
+	t.Helper()
+	require.Error(t, readErr, "expected connection to be closed by server")
+	var closeErr ws.CloseError
+	if errors.As(readErr, &closeErr) {
+		assert.Equal(t, ws.StatusCode(websocket.CloseServiceRestart), closeErr.Code,
+			"expected close code 1012 Service Restart")
+	}
+}
+
+// setupWSMockServer creates a test server that has a WebSocket mock registered
+// via the engine's control adapter (not the legacy WebSocketEndpoints collection
+// field). Returns the httptest.Server and a ControlAPIAdapter for mock management.
+func setupWSMockServer(t *testing.T) (*httptest.Server, *engine.ControlAPIAdapter) {
+	t.Helper()
+	cfg := config.DefaultServerConfiguration()
+	srv := engine.NewServer(cfg)
+	adapter := engine.NewControlAPIAdapter(srv)
+
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(func() { ts.Close() })
+	return ts, adapter
+}
+
+// TestWS_MockUpdate_ClosesActiveConnections verifies that updating a WebSocket mock
+// sends close code 1012 (Service Restart) to all connected clients so they reconnect
+// and receive the new configuration.
+func TestWS_MockUpdate_ClosesActiveConnections(t *testing.T) {
+	ts, adapter := setupWSMockServer(t)
+
+	// Create initial WebSocket mock.
+	initialResponse := &mock.WSMessageResponse{Type: "text", Value: "v1"}
+	mockCfg := &mock.Mock{
+		Type: mock.TypeWebSocket,
+		WebSocket: &mock.WebSocketSpec{
+			Path:            "/ws/update-test",
+			DefaultResponse: initialResponse,
+		},
+	}
+	require.NoError(t, adapter.AddMock(mockCfg))
+
+	// Connect a WebSocket client.
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/update-test"
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dialCancel()
+
+	conn, resp, err := ws.Dial(dialCtx, wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
+	require.NoError(t, err, "WebSocket dial failed")
+
+	// Wait for connection to be tracked.
+	time.Sleep(50 * time.Millisecond)
+
+	wsm := getWSManager(t, ts)
+	assert.Equal(t, 1, wsm.CountByEndpoint("/ws/update-test"), "expected 1 active connection before update")
+
+	// Update the mock — this should trigger disconnect of all active clients.
+	mocks := adapter.ListMocks()
+	require.Len(t, mocks, 1)
+	updated := *mocks[0]
+	updated.WebSocket = &mock.WebSocketSpec{
+		Path:            "/ws/update-test",
+		DefaultResponse: &mock.WSMessageResponse{Type: "text", Value: "v2"},
+	}
+	require.NoError(t, adapter.UpdateMock(updated.ID, &updated))
+
+	// The client must receive a close frame with code 1012 Service Restart.
+	readCtx, readCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer readCancel()
+
+	_, _, readErr := conn.Read(readCtx)
+	require.Error(t, readErr, "expected connection to be closed by server")
+
+	var closeErr ws.CloseError
+	if errors.As(readErr, &closeErr) {
+		assert.Equal(t, ws.StatusCode(websocket.CloseServiceRestart), closeErr.Code,
+			"expected close code 1012 Service Restart")
+	}
+}
+
+// TestWS_MockDelete_ClosesActiveConnections verifies that deleting a WebSocket mock
+// sends close code 1012 (Service Restart) to all connected clients.
+func TestWS_MockDelete_ClosesActiveConnections(t *testing.T) {
+	ts, adapter := setupWSMockServer(t)
+
+	mockCfg := &mock.Mock{
+		Type: mock.TypeWebSocket,
+		WebSocket: &mock.WebSocketSpec{
+			Path: "/ws/delete-test",
+		},
+	}
+	require.NoError(t, adapter.AddMock(mockCfg))
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/delete-test"
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dialCancel()
+
+	conn, resp, err := ws.Dial(dialCtx, wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
+	require.NoError(t, err, "WebSocket dial failed")
+
+	// Wait for connection to be tracked.
+	time.Sleep(50 * time.Millisecond)
+
+	// Delete the mock — active clients should receive close code 1012.
+	mocks := adapter.ListMocks()
+	require.Len(t, mocks, 1)
+	require.NoError(t, adapter.DeleteMock(mocks[0].ID))
+
+	readCtx, readCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer readCancel()
+
+	_, _, readErr := conn.Read(readCtx)
+	require.Error(t, readErr, "expected connection to be closed by server")
+
+	var closeErr ws.CloseError
+	if errors.As(readErr, &closeErr) {
+		assert.Equal(t, ws.StatusCode(websocket.CloseServiceRestart), closeErr.Code,
+			"expected close code 1012 Service Restart")
+	}
+}
+
+// TestWS_MockToggleDisable_ClosesActiveConnections verifies that disabling a WebSocket
+// mock (toggle to enabled=false) sends close code 1012 to all connected clients.
+// This covers the path: POST /mocks/{id}/toggle → UpdateMock → unregisterHandlerLocked.
+func TestWS_MockToggleDisable_ClosesActiveConnections(t *testing.T) {
+	ts, adapter := setupWSMockServer(t)
+
+	mockCfg := &mock.Mock{
+		Type: mock.TypeWebSocket,
+		WebSocket: &mock.WebSocketSpec{
+			Path: "/ws/toggle-test",
+		},
+	}
+	require.NoError(t, adapter.AddMock(mockCfg))
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/toggle-test"
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dialCancel()
+
+	conn, resp, err := ws.Dial(dialCtx, wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
+	require.NoError(t, err, "WebSocket dial failed")
+
+	// Wait for connection to be tracked.
+	time.Sleep(50 * time.Millisecond)
+
+	// Disable the mock — active clients should receive close code 1012.
+	mocks := adapter.ListMocks()
+	require.Len(t, mocks, 1)
+	disabled := *mocks[0]
+	enabled := false
+	disabled.Enabled = &enabled
+	require.NoError(t, adapter.UpdateMock(disabled.ID, &disabled))
+
+	readCtx, readCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer readCancel()
+
+	_, _, readErr := conn.Read(readCtx)
+	assertCloseCode1012(t, readErr)
+}
+
+// TestWS_ClearMocks_ClosesActiveConnections verifies that clearing all mocks
+// sends close code 1012 to all connected WebSocket clients.
+// This covers the path used by bulk DELETE /mocks and POST /config?replace=true.
+func TestWS_ClearMocks_ClosesActiveConnections(t *testing.T) {
+	ts, adapter := setupWSMockServer(t)
+
+	mockCfg := &mock.Mock{
+		Type: mock.TypeWebSocket,
+		WebSocket: &mock.WebSocketSpec{
+			Path: "/ws/clear-test",
+		},
+	}
+	require.NoError(t, adapter.AddMock(mockCfg))
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/clear-test"
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dialCancel()
+
+	conn, resp, err := ws.Dial(dialCtx, wsURL, nil)
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
+	require.NoError(t, err, "WebSocket dial failed")
+
+	// Wait for connection to be tracked.
+	time.Sleep(50 * time.Millisecond)
+
+	// Clear all mocks — the WebSocket client must receive close code 1012.
+	adapter.ClearMocks()
+
+	readCtx, readCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer readCancel()
+
+	_, _, readErr := conn.Read(readCtx)
+	assertCloseCode1012(t, readErr)
 }
 
 // itoa converts int to string without importing strconv.

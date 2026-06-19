@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
+	grpcpeer "google.golang.org/grpc/peer"
 	"google.golang.org/grpc/reflection"
 	v1reflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	v1alphareflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
@@ -86,6 +87,7 @@ type Server struct {
 	startedAt      time.Time
 	log            *slog.Logger
 	templateEngine *template.Engine
+	streamTracker  *StreamTracker
 
 	// Request logging support
 	requestLoggerMu sync.RWMutex
@@ -106,6 +108,7 @@ func NewServer(config *GRPCConfig, schema *ProtoSchema) (*Server, error) {
 		schema:         schema,
 		log:            logging.Nop(),
 		templateEngine: template.New(),
+		streamTracker:  NewStreamTracker(),
 	}, nil
 }
 
@@ -195,6 +198,10 @@ func (s *Server) Stop(ctx context.Context, timeout time.Duration) error {
 	s.grpcServer = nil
 	s.listener = nil
 	s.mu.Unlock()
+
+	// Cancel all tracked streams before stopping the gRPC server so that
+	// stream handlers return codes.Unavailable promptly.
+	s.streamTracker.CancelAll()
 
 	if grpcSrv != nil {
 		// Create a channel to signal graceful stop completion
@@ -630,6 +637,7 @@ func (s *Server) makeStreamHandler(serviceName, methodName string) func(srv inte
 
 // handleUnary handles unary RPC calls.
 func (s *Server) handleUnary(_ interface{}, ctx context.Context, dec func(interface{}) error, _ grpc.UnaryServerInterceptor, serviceName, methodName string) (interface{}, error) {
+	s.streamTracker.RecordUnaryRPC()
 	startTime := time.Now()
 	fullPath := fmt.Sprintf("/%s/%s", serviceName, methodName)
 
@@ -765,18 +773,35 @@ func (s *Server) handleStreamMethod(_ interface{}, stream grpc.ServerStream, ser
 	}
 }
 
+// recvMsgCtx reads the next message from the stream but returns early if ctx is
+// cancelled. grpc.ServerStream.RecvMsg blocks on the underlying transport
+// context, so without this an admin/mock-update cancellation — which cancels the
+// StreamTracker-derived ctx, not the transport ctx — would never unblock an idle
+// stream (handlers only re-check ctx.Err() between messages). The spawned reader
+// goroutine is not leaked: once the handler returns, gRPC closes the stream, the
+// pending RecvMsg returns, and the result drains into the buffered channel. The
+// caller must not read m after a non-nil ctx error, since the goroutine may still
+// be writing to it.
+func recvMsgCtx(ctx context.Context, stream grpc.ServerStream, m interface{}) error {
+	errCh := make(chan error, 1)
+	go func() { errCh <- stream.RecvMsg(m) }()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errCh:
+		return err
+	}
+}
+
 // handleServerStreaming handles server-streaming RPC calls.
 func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodDescriptor, serviceName, methodName string, md metadata.MD) error {
 	startTime := time.Now()
 	fullPath := fmt.Sprintf("/%s/%s", serviceName, methodName)
 
-	// Track active stream connection
-	if metrics.ActiveConnections != nil {
-		if vec, err := metrics.ActiveConnections.WithLabels("grpc"); err == nil {
-			vec.Inc()
-			defer vec.Dec()
-		}
-	}
+	// Register stream with tracker (replaces raw metrics.ActiveConnections)
+	streamID, ctx, cancel := s.streamTracker.Register(stream.Context(), fullPath, streamServerStream, peerAddr(stream.Context()))
+	defer cancel()
+	defer s.streamTracker.Unregister(streamID)
 
 	// Read single request from client
 	inputDesc := method.GetInputDescriptor()
@@ -787,11 +812,17 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 	}
 
 	reqMsg := dynamicpb.NewMessage(inputDesc)
-	if err := stream.RecvMsg(reqMsg); err != nil {
+	if err := recvMsgCtx(ctx, stream, reqMsg); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			grpcErr := s.contextCancelError(streamID)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, nil, nil, grpcErr)
+			return grpcErr
+		}
 		grpcErr := status.Errorf(codes.InvalidArgument, "failed to receive request: %v", err)
 		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, nil, nil, grpcErr)
 		return grpcErr
 	}
+	s.streamTracker.RecordRecv(streamID)
 
 	reqMap := dynamicMessageToMap(reqMsg)
 
@@ -803,11 +834,10 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 		return err
 	}
 
-	// Apply initial delay (context-aware for client cancellation)
-	ctx := stream.Context()
+	// Apply initial delay (context-aware for client/tracker cancellation)
 	s.applyDelayWithContext(ctx, methodCfg.Delay)
 	if ctx.Err() != nil {
-		grpcErr := status.Error(codes.Canceled, "client cancelled during configured delay")
+		grpcErr := s.contextCancelError(streamID)
 		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, nil, grpcErr)
 		return grpcErr
 	}
@@ -836,6 +866,13 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 	var collectedResponses []interface{}
 
 	for i, respData := range responses {
+		// Check for tracker cancellation between messages
+		if ctx.Err() != nil {
+			grpcErr := s.contextCancelError(streamID)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, collectedResponses, grpcErr)
+			return grpcErr
+		}
+
 		resp, err := s.buildResponse(method, respData, templateCtx)
 		if err != nil {
 			grpcErr := status.Errorf(codes.Internal, "failed to build response: %v", err)
@@ -849,6 +886,8 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 			return grpcErr
 		}
 
+		s.streamTracker.RecordSent(streamID)
+
 		// Collect for logging
 		collectedResponses = append(collectedResponses, dynamicMessageToMap(resp))
 
@@ -856,7 +895,7 @@ func (s *Server) handleServerStreaming(stream grpc.ServerStream, method *MethodD
 		if i < len(responses)-1 {
 			s.applyDelayWithContext(ctx, methodCfg.StreamDelay)
 			if ctx.Err() != nil {
-				grpcErr := status.Error(codes.Canceled, "client cancelled during stream delay")
+				grpcErr := s.contextCancelError(streamID)
 				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamServerStream, md, reqMap, collectedResponses, grpcErr)
 				return grpcErr
 			}
@@ -874,13 +913,10 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 	startTime := time.Now()
 	fullPath := fmt.Sprintf("/%s/%s", serviceName, methodName)
 
-	// Track active stream connection
-	if metrics.ActiveConnections != nil {
-		if vec, err := metrics.ActiveConnections.WithLabels("grpc"); err == nil {
-			vec.Inc()
-			defer vec.Dec()
-		}
-	}
+	// Register stream with tracker
+	streamID, ctx, cancel := s.streamTracker.Register(stream.Context(), fullPath, streamClientStream, peerAddr(stream.Context()))
+	defer cancel()
+	defer s.streamTracker.Unregister(streamID)
 
 	inputDesc := method.GetInputDescriptor()
 	if inputDesc == nil {
@@ -893,15 +929,28 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 	var allRequests []interface{}
 	var lastReqMap map[string]interface{}
 	for {
+		// Check for tracker cancellation
+		if ctx.Err() != nil {
+			grpcErr := s.contextCancelError(streamID)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
+			return grpcErr
+		}
+
 		reqMsg := dynamicpb.NewMessage(inputDesc)
-		if err := stream.RecvMsg(reqMsg); err != nil {
+		if err := recvMsgCtx(ctx, stream, reqMsg); err != nil {
 			if errors.Is(err, io.EOF) {
 				break
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				grpcErr := s.contextCancelError(streamID)
+				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
+				return grpcErr
 			}
 			grpcErr := status.Errorf(codes.InvalidArgument, "failed to receive request: %v", err)
 			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
 			return grpcErr
 		}
+		s.streamTracker.RecordRecv(streamID)
 		lastReqMap = dynamicMessageToMap(reqMsg)
 		allRequests = append(allRequests, lastReqMap)
 	}
@@ -914,11 +963,10 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 		return err
 	}
 
-	// Apply delay (context-aware for client cancellation)
-	ctx := stream.Context()
+	// Apply delay (context-aware for client/tracker cancellation)
 	s.applyDelayWithContext(ctx, methodCfg.Delay)
 	if ctx.Err() != nil {
-		grpcErr := status.Error(codes.Canceled, "client cancelled during configured delay")
+		grpcErr := s.contextCancelError(streamID)
 		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamClientStream, md, allRequests, nil, grpcErr)
 		return grpcErr
 	}
@@ -949,6 +997,7 @@ func (s *Server) handleClientStreaming(stream grpc.ServerStream, method *MethodD
 		return err
 	}
 
+	s.streamTracker.RecordSent(streamID)
 	respMap := dynamicMessageToMap(resp)
 
 	// Log the successful call
@@ -962,13 +1011,10 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 	startTime := time.Now()
 	fullPath := fmt.Sprintf("/%s/%s", serviceName, methodName)
 
-	// Track active stream connection
-	if metrics.ActiveConnections != nil {
-		if vec, err := metrics.ActiveConnections.WithLabels("grpc"); err == nil {
-			vec.Inc()
-			defer vec.Dec()
-		}
-	}
+	// Register stream with tracker
+	streamID, ctx, cancel := s.streamTracker.Register(stream.Context(), fullPath, streamBidi, peerAddr(stream.Context()))
+	defer cancel()
+	defer s.streamTracker.Unregister(streamID)
 
 	inputDesc := method.GetInputDescriptor()
 	if inputDesc == nil {
@@ -985,11 +1031,10 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 		return err
 	}
 
-	// Apply initial delay (context-aware for client cancellation)
-	ctx := stream.Context()
+	// Apply initial delay (context-aware for client/tracker cancellation)
 	s.applyDelayWithContext(ctx, methodCfg.Delay)
 	if ctx.Err() != nil {
-		grpcErr := status.Error(codes.Canceled, "client cancelled during configured delay")
+		grpcErr := s.contextCancelError(streamID)
 		s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, nil, nil, grpcErr)
 		return grpcErr
 	}
@@ -1018,18 +1063,32 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 
 	// Echo pattern: for each received message, send a response
 	for {
+		// Check for tracker cancellation
+		if ctx.Err() != nil {
+			grpcErr := s.contextCancelError(streamID)
+			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
+			return grpcErr
+		}
+
 		reqMsg := dynamicpb.NewMessage(inputDesc)
-		if err := stream.RecvMsg(reqMsg); err != nil {
+		if err := recvMsgCtx(ctx, stream, reqMsg); err != nil {
 			if errors.Is(err, io.EOF) {
 				// Log the successful call
 				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, nil)
 
 				return nil
 			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				grpcErr := s.contextCancelError(streamID)
+				s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
+				return grpcErr
+			}
 			grpcErr := status.Errorf(codes.InvalidArgument, "failed to receive request: %v", err)
 			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
 			return grpcErr
 		}
+
+		s.streamTracker.RecordRecv(streamID)
 
 		// Collect request for logging
 		reqMap := dynamicMessageToMap(reqMsg)
@@ -1064,13 +1123,15 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 			return grpcErr
 		}
 
+		s.streamTracker.RecordSent(streamID)
+
 		// Collect response for logging
 		allResponses = append(allResponses, dynamicMessageToMap(resp))
 
 		respIndex++
 		s.applyDelayWithContext(ctx, methodCfg.StreamDelay)
 		if ctx.Err() != nil {
-			grpcErr := status.Error(codes.Canceled, "client cancelled during stream delay")
+			grpcErr := s.contextCancelError(streamID)
 			s.logGRPCCall(startTime, fullPath, serviceName, methodName, streamBidi, md, allRequests, allResponses, grpcErr)
 			return grpcErr
 		}
@@ -1248,6 +1309,18 @@ func (s *Server) createTemplateContext(md metadata.MD, reqMap map[string]interfa
 		}
 	}
 	return template.NewContextFromMap(reqMap, headers)
+}
+
+// contextCancelError returns the appropriate gRPC status error for a
+// cancelled context. If the stream was cancelled by admin action (mock update,
+// explicit admin cancel), it returns codes.Unavailable so clients with retry
+// policies reconnect. If cancelled by the client (e.g., timeout), it returns
+// codes.Canceled.
+func (s *Server) contextCancelError(streamID string) error {
+	if s.streamTracker.WasAdminCancelled(streamID) {
+		return status.Error(codes.Unavailable, "mock configuration updated")
+	}
+	return status.Error(codes.Canceled, "stream cancelled by client")
 }
 
 // applyDelay applies configured delay, respecting the context deadline.
@@ -1652,6 +1725,11 @@ func (s *Server) Config() *GRPCConfig {
 	return s.config
 }
 
+// StreamTracker returns the server's stream tracker.
+func (s *Server) StreamTracker() *StreamTracker {
+	return s.streamTracker
+}
+
 // Schema returns the proto schema.
 func (s *Server) Schema() *ProtoSchema {
 	return s.schema
@@ -1930,4 +2008,12 @@ func (s *Server) recordGRPCMetrics(fullPath string, grpcErr error, duration time
 			vec.Observe(duration.Seconds())
 		}
 	}
+}
+
+// peerAddr extracts the client address from a gRPC context.
+func peerAddr(ctx context.Context) string {
+	if p, ok := grpcpeer.FromContext(ctx); ok && p.Addr != nil {
+		return p.Addr.String()
+	}
+	return ""
 }

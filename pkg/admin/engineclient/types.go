@@ -47,6 +47,12 @@ type (
 	ProtocolHandler              = types.ProtocolHandler
 	SSEConnection                = types.SSEConnection
 	SSEStats                     = types.SSEStats
+	WebSocketConnection          = types.WebSocketConnection
+	WebSocketStats               = types.WebSocketStats
+	MQTTConnection               = types.MQTTConnection
+	MQTTStats                    = types.MQTTStats
+	GRPCStream                   = types.GRPCStream
+	GRPCStats                    = types.GRPCStats
 	CustomOperationInfo          = types.CustomOperationInfo
 	CustomOperationDetail        = types.CustomOperationDetail
 	CustomOperationStep          = types.CustomOperationStep
