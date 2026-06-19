@@ -1168,17 +1168,40 @@ func (s *Server) findMethodConfig(serviceName, methodName string, md metadata.MD
 		variants = append(variants, &methodCfg.Variants[i])
 	}
 
+	// Return a copy so callers never observe the nested Variants slice and can't
+	// accidentally recurse into it.
+	returnCopy := func(variant *MethodConfig) *MethodConfig {
+		cfg := *variant
+		cfg.Variants = nil
+		return &cfg
+	}
+
+	// First pass: variants with real (non-catch-all) conditions win, in order.
+	// This makes routing independent of where the unconditioned default sits in
+	// the list, so a catch-all added before a specific variant (e.g. a default
+	// mock created before a specific one via separate admin calls) can never
+	// shadow it.
 	for _, variant := range variants {
-		if variant.Match == nil || s.matchesCondition(variant.Match, md, req) {
-			// Return a copy so callers never observe the nested Variants slice
-			// and can't accidentally recurse into it.
-			cfg := *variant
-			cfg.Variants = nil
-			return &cfg
+		if !isCatchAllMatch(variant.Match) && s.matchesCondition(variant.Match, md, req) {
+			return returnCopy(variant)
+		}
+	}
+	// Second pass: fall back to the first unconditioned default (nil/empty Match).
+	for _, variant := range variants {
+		if isCatchAllMatch(variant.Match) {
+			return returnCopy(variant)
 		}
 	}
 
 	return nil
+}
+
+// isCatchAllMatch reports whether a match acts as an unconditioned default that
+// applies to every request (nil, or no metadata/request conditions). A catch-all
+// is only used as a last-resort fallback so it never shadows a more specific
+// variant, regardless of ordering.
+func isCatchAllMatch(m *MethodMatch) bool {
+	return m == nil || (len(m.Metadata) == 0 && len(m.Request) == 0)
 }
 
 // matchesCondition checks if the request matches the match conditions.

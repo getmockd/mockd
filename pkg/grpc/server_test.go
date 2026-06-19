@@ -879,6 +879,51 @@ func TestFindMethodConfigVariantOrdering(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{"id": "default"}, cfg.Response)
 }
 
+// TestFindMethodConfig_CatchAllPrimary_DoesNotShadowVariant is a regression test
+// for #30: a catch-all (unconditioned) config that comes FIRST — e.g. a default
+// mock created before a specific one via separate admin calls, so the merge
+// appends the specific variant after it — must NOT shadow the more specific
+// variant. Routing is order-independent: specific matches always win and the
+// catch-all is only the last-resort fallback.
+func TestFindMethodConfig_CatchAllPrimary_DoesNotShadowVariant(t *testing.T) {
+	schema := getTestSchema(t)
+	for _, primaryMatch := range []*MethodMatch{nil, {}} { // nil and empty (non-nil) catch-all
+		config := &GRPCConfig{
+			Port: 0,
+			Services: map[string]ServiceConfig{
+				"test.UserService": {
+					Methods: map[string]MethodConfig{
+						"GetUser": {
+							// Primary is the catch-all (created first).
+							Match:    primaryMatch,
+							Response: map[string]interface{}{"id": "default"},
+							Variants: []MethodConfig{
+								{
+									Match:    &MethodMatch{Request: map[string]interface{}{"id": "specific"}},
+									Response: map[string]interface{}{"id": "specific"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		srv, err := NewServer(config, schema)
+		require.NoError(t, err)
+
+		// The specific variant must win even though the catch-all is first.
+		cfg := srv.findMethodConfig("test.UserService", "GetUser", nil, map[string]interface{}{"id": "specific"})
+		require.NotNil(t, cfg)
+		assert.Equal(t, map[string]interface{}{"id": "specific"}, cfg.Response,
+			"specific variant must win over a catch-all primary (regression #30)")
+
+		// A non-matching request falls back to the catch-all default.
+		cfg = srv.findMethodConfig("test.UserService", "GetUser", nil, map[string]interface{}{"id": "other"})
+		require.NotNil(t, cfg)
+		assert.Equal(t, map[string]interface{}{"id": "default"}, cfg.Response)
+	}
+}
+
 // TestMethodMatchVariantsNoDefault confirms that when NO variant matches and
 // there is no unconditioned default, the server returns Unimplemented.
 func TestMethodMatchVariantsNoDefault(t *testing.T) {
