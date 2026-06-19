@@ -1140,6 +1140,14 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 
 // findMethodConfig finds config for a method based on service name, method name,
 // metadata, and request body matching.
+//
+// A single service+method may have several match variants (e.g. a different
+// response per requested id). The primary MethodConfig is evaluated first,
+// followed by each entry in its Variants slice IN ORDER. The first variant
+// whose Match passes wins. A variant with no Match (or an empty Match) matches
+// any request, so it acts as a default — order such variants last so more
+// specific variants take precedence. nil is returned only when none match,
+// which the callers translate into codes.Unimplemented.
 func (s *Server) findMethodConfig(serviceName, methodName string, md metadata.MD, req map[string]interface{}) *MethodConfig {
 	svcCfg, ok := s.config.Services[serviceName]
 	if !ok {
@@ -1151,14 +1159,26 @@ func (s *Server) findMethodConfig(serviceName, methodName string, md metadata.MD
 		return nil
 	}
 
-	// Check if this config has a match condition
-	if methodCfg.Match != nil {
-		if !s.matchesCondition(methodCfg.Match, md, req) {
-			return nil
+	// Evaluate the primary config first, then each variant in order. The first
+	// one whose Match condition passes is returned. Variants are flattened to a
+	// single ordered list so a missing/empty Match always behaves as a default.
+	variants := make([]*MethodConfig, 0, 1+len(methodCfg.Variants))
+	variants = append(variants, &methodCfg)
+	for i := range methodCfg.Variants {
+		variants = append(variants, &methodCfg.Variants[i])
+	}
+
+	for _, variant := range variants {
+		if variant.Match == nil || s.matchesCondition(variant.Match, md, req) {
+			// Return a copy so callers never observe the nested Variants slice
+			// and can't accidentally recurse into it.
+			cfg := *variant
+			cfg.Variants = nil
+			return &cfg
 		}
 	}
 
-	return &methodCfg
+	return nil
 }
 
 // matchesCondition checks if the request matches the match conditions.

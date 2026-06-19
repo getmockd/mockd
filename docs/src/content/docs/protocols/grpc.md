@@ -125,6 +125,12 @@ mocks:
               error: # Return gRPC error
                 code: NOT_FOUND
                 message: "Resource not found"
+              variants: # Additional match variants for THIS method (first-match-wins)
+                - match:
+                    request:
+                      field: "other-value"
+                  response:
+                    field: "other"
 ```
 
 ### Configuration Fields
@@ -461,7 +467,20 @@ services:
 
 ### Multiple Match Conditions
 
-Configure multiple mocks with different match conditions for the same method:
+A single RPC (service + method) can serve different responses depending on the
+request. mockd evaluates the configured match variants **in order** and uses the
+**first one whose `match` passes** (first-match-wins). A variant with no `match`
+(or an empty `match`) matches every request, so it acts as a **default** — put it
+**last** so the more specific variants win. If no variant matches and there is no
+default, the call returns `UNIMPLEMENTED`.
+
+There are two equivalent ways to define multiple variants for the same RPC.
+
+#### Option A — multiple mocks on the same port
+
+Define each variant as its own mock. mockd merges mocks that share a port,
+service, and method into a single gRPC server, preserving the order in which
+they were added:
 
 ```yaml
 mocks:
@@ -483,8 +502,8 @@ mocks:
                 id: "123"
                 name: "Admin User"
 
-  # Match not found case
-  - id: grpc-user-not-found
+  # Different match condition for the SAME service + method
+  - id: grpc-user-999
     type: grpc
     enabled: true
     grpc:
@@ -497,10 +516,74 @@ mocks:
               match:
                 request:
                   id: "999"
+              response:
+                id: "999"
+                name: "Jane Doe"
+
+  # Catch-all (no match) — returns NOT_FOUND for any other id.
+  # Listed last so the specific variants above take precedence.
+  - id: grpc-user-not-found
+    type: grpc
+    enabled: true
+    grpc:
+      port: 50051
+      protoFile: ./user.proto
+      services:
+        UserService:
+          methods:
+            GetUser:
               error:
                 code: NOT_FOUND
-                message: "User with ID 999 not found"
+                message: "User not found"
 ```
+
+A second mock for the same service + method is appended as an additional match
+variant **as long as its `match` differs**. A mock whose `match` is identical to
+an existing one — or that has no `match` when a catch-all already exists — is
+rejected, because it would silently shadow the earlier mock.
+
+#### Option B — `variants` on a single mock
+
+Alternatively, keep everything in one mock and list the extra variants inline
+under `variants`. The top-level config is the first (primary) variant; each entry
+in `variants` is evaluated after it, in order:
+
+```yaml
+mocks:
+  - id: grpc-user
+    type: grpc
+    enabled: true
+    grpc:
+      port: 50051
+      protoFile: ./user.proto
+      services:
+        UserService:
+          methods:
+            GetUser:
+              # Primary variant
+              match:
+                request:
+                  id: "123"
+              response:
+                id: "123"
+                name: "Admin User"
+              # Additional variants, evaluated in order
+              variants:
+                - match:
+                    request:
+                      id: "999"
+                  response:
+                    id: "999"
+                    name: "Jane Doe"
+                # Default (no match) — ordered last.
+                - error:
+                    code: NOT_FOUND
+                    message: "User not found"
+```
+
+Both options behave identically at request time. Use Option A when each variant
+is managed independently (e.g. created via separate API calls), and Option B when
+you want a single self-contained mock definition.
 
 ## gRPC Errors
 

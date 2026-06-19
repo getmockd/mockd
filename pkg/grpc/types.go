@@ -86,6 +86,15 @@ type MethodConfig struct {
 	// Match specifies conditions that must be met for this config to apply.
 	// If multiple MethodConfigs exist, the first matching one is used.
 	Match *MethodMatch `json:"match,omitempty" yaml:"match,omitempty"`
+
+	// Variants holds additional match variants for the same service+method.
+	// The parent Methods map can only hold one MethodConfig per method, so when
+	// several mocks target the same RPC with different Match conditions the
+	// extra variants are stored here. findMethodConfig evaluates the primary
+	// config first, then each variant in order, returning the first whose Match
+	// passes. An unconditioned (empty/nil Match) variant acts as a default and
+	// should be ordered last. Nested Variants on a variant are ignored.
+	Variants []MethodConfig `json:"variants,omitempty" yaml:"variants,omitempty"`
 }
 
 // MethodMatch defines conditions for matching incoming gRPC requests.

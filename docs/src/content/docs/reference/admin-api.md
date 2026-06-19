@@ -330,6 +330,8 @@ For convenience, bare `matcher`/`response` fields (without the `type`/`http` wra
 
 When creating a gRPC or MQTT mock on a port that's already in use by another mock of the **same protocol** in the **same workspace**, the new services/topics are **merged** into the existing mock instead of creating a new one. This mirrors real-world behavior where a single gRPC server serves multiple services and a single MQTT broker handles multiple topics.
 
+For gRPC, a second mock targeting the **same service + method** is also merged: when its `match` condition **differs** from the existing config, it is appended as an additional [match variant](/protocols/grpc/#multiple-match-conditions) for that method (evaluated in order, first-match-wins). Only a **true duplicate** — an identical `match`, or an empty `match` when a catch-all already exists — is rejected, since it would silently shadow the earlier mock.
+
 **Merge Response (HTTP 200):**
 
 ```json
@@ -345,7 +347,7 @@ When creating a gRPC or MQTT mock on a port that's already in use by another moc
 
 **Conflict cases (HTTP 409):**
 - Different protocols on the same port (e.g., gRPC on an MQTT port)
-- Service/method already exists (gRPC) or topic already exists (MQTT)
+- A gRPC service/method with an identical or shadowing `match` already exists, or an MQTT topic already exists
 - Different workspaces trying to use the same port
 
 #### PUT /mocks/{id}

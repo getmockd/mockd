@@ -725,6 +725,15 @@ type ServiceConfig struct {
 }
 
 // MethodConfig configures how a gRPC method responds to requests.
+//
+// A single service+method may need to respond differently depending on the
+// request (e.g. a different response per requested id). Because the parent
+// Methods map can only hold one MethodConfig per method, additional match
+// variants for the same method live in Variants. The top-level config is the
+// primary/first variant; Variants are evaluated in order after it and the
+// first variant whose Match passes wins. An unconditioned (empty/nil Match)
+// variant acts as a default and should be ordered last so specific variants
+// take precedence.
 type MethodConfig struct {
 	Response    any              `json:"response,omitempty" yaml:"response,omitempty"`
 	Responses   []any            `json:"responses,omitempty" yaml:"responses,omitempty"`
@@ -732,6 +741,12 @@ type MethodConfig struct {
 	StreamDelay string           `json:"streamDelay,omitempty" yaml:"streamDelay,omitempty"`
 	Error       *GRPCErrorConfig `json:"error,omitempty" yaml:"error,omitempty"`
 	Match       *MethodMatch     `json:"match,omitempty" yaml:"match,omitempty"`
+
+	// Variants holds additional match variants for the same service+method.
+	// Each variant is itself a MethodConfig with its own Match and
+	// Response/Error. Nested Variants on a variant are ignored — only one
+	// level is meaningful.
+	Variants []MethodConfig `json:"variants,omitempty" yaml:"variants,omitempty"`
 }
 
 // MethodMatch defines conditions for matching incoming gRPC requests.
