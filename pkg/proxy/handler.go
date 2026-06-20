@@ -19,6 +19,20 @@ const (
 func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
+	// Reject non-proxy (origin-form) requests. A proper proxy client sends the
+	// request in absolute-form (e.g. "GET http://host/path"), which populates
+	// r.URL.Host. A request sent directly to the proxy as if it were an origin
+	// server (e.g. `curl http://localhost:8888` without -x/--proxy) arrives in
+	// origin-form with an empty r.URL.Host and r.Host pointing at the proxy
+	// itself. Forwarding such a request would target the proxy's own address,
+	// creating a self-referential loop that hangs until the client timeout and
+	// returns 502 (see issue #35). Fail fast with a clear message instead.
+	if r.URL.Host == "" {
+		p.log("Rejected non-proxy request to %s%s (client must use this address as an HTTP proxy, e.g. curl -x http://<proxy> <url>)", r.Host, r.URL.Path)
+		http.Error(w, "mockd proxy received a direct request. Configure your client to use this address as an HTTP proxy (e.g. curl -x http://<proxy-host:port> <url>).", http.StatusBadRequest)
+		return
+	}
+
 	// Read and buffer the request body
 	var reqBody []byte
 	if r.Body != nil {
