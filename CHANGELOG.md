@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-19
+
 ### Added
 
 - **WebSocket connection management API** — `GET /websocket/connections`, `GET /websocket/connections/{id}`, `DELETE /websocket/connections/{id}`, `POST /websocket/connections/{id}/send`, `GET /websocket/stats` added to the Admin API for real-time visibility, control, and server-initiated messaging of active WebSocket connections
@@ -22,6 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`?workspaceId=` API parameter** — all admin API endpoints now accept workspace filtering
 - **MCP workspace filtering** — MCP tools automatically scope to the session's active workspace
 - **`manage_workspace create` MCP action** — create workspaces directly from AI agents
+
+### Fixed
+
+- **gRPC: multiple mocks on one RPC** (#30) — multiple gRPC mocks on the same service+method with different match conditions are now supported via ordered match variants (a specific match always wins over an unconditioned default, regardless of the order they were added), instead of the second mock being rejected or silently overwriting the first.
+- **GraphQL `__typename` on nested objects** (#32) — nested objects now resolve `__typename` to the actual schema type name instead of the hardcoded `"Object"`.
+- **Proxy mode always returning 502** (#35) — a request sent directly to the proxy in origin-form (without configuring the client to use it as an HTTP proxy) no longer self-loops into a 502; it returns a clear `400` with guidance.
+- **gRPC stream cancellation** — `DELETE /grpc/connections/{id}` (and cancel-on-mock-update) now reliably unblocks an idle stream and returns `codes.Unavailable`, instead of returning `200` while the stream stayed blocked.
+- **SSE active-connections gauge leak** — closing SSE connections via a mock update now decrements the active-connections gauge.
+
+### Changed
+
+- **Quick installer hardened** (#34) — `install.sh` now fails loudly on a missing or invalid release asset (uses `curl -f`) instead of silently writing an HTTP error body as the binary or its checksum.
+
+## [0.6.6] - 2026-06-15
 
 ### Security
 
