@@ -751,6 +751,232 @@ func TestRequestFieldMatching(t *testing.T) {
 	assert.Equal(t, codes.Unimplemented, st.Code())
 }
 
+// TestMethodMatchVariants is the regression test for issue #30: multiple mocks
+// on the same port + service + method with different match conditions.
+//
+// Before the fix, ServiceConfig.Methods could only hold ONE MethodConfig per
+// method, so a second match variant was impossible — findMethodConfig did a
+// single map lookup, evaluated that one config's Match, and returned
+// Unimplemented if it failed instead of trying other variants. Now the primary
+// config plus its Variants are evaluated in order and the first whose Match
+// passes wins.
+func TestMethodMatchVariants(t *testing.T) {
+	schema := getTestSchema(t)
+	files := getTestDescriptors(t)
+
+	// Primary variant matches id "123"; the Variants list holds a second variant
+	// matching id "999" and a final unconditioned default. Ordering is
+	// deterministic: specific variants first, default last.
+	config := &GRPCConfig{
+		Port: 0,
+		Services: map[string]ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]MethodConfig{
+					"GetUser": {
+						Match:    &MethodMatch{Request: map[string]interface{}{"id": "123"}},
+						Response: map[string]interface{}{"id": "123", "name": "John Doe"},
+						Variants: []MethodConfig{
+							{
+								Match:    &MethodMatch{Request: map[string]interface{}{"id": "999"}},
+								Response: map[string]interface{}{"id": "999", "name": "Jane Doe"},
+							},
+							{
+								// Unconditioned default — must be ordered last.
+								Response: map[string]interface{}{"id": "0", "name": "Default User"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	srv, err := NewServer(config, schema)
+	require.NoError(t, err)
+	err = srv.Start(context.Background())
+	require.NoError(t, err)
+	defer srv.Stop(context.Background(), 5*time.Second)
+
+	conn, err := grpc.NewClient(srv.Address(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	methodDesc := getMethodDesc(t, files, "test.UserService", "GetUser")
+	stub := grpcdynamic.NewStub(conn)
+
+	call := func(id string) *dynamic.Message {
+		reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
+		reqMsg.SetFieldByName("id", id)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		resp, err := stub.InvokeRpc(ctx, methodDesc, reqMsg)
+		require.NoError(t, err, "request id=%s should match a variant", id)
+		return resp.(*dynamic.Message)
+	}
+
+	// Request field A -> primary variant.
+	respA := call("123")
+	assert.Equal(t, "123", respA.GetFieldByName("id"))
+	assert.Equal(t, "John Doe", respA.GetFieldByName("name"))
+
+	// Request field B -> second variant (this is the exact issue #30 scenario
+	// that previously returned Unimplemented).
+	respB := call("999")
+	assert.Equal(t, "999", respB.GetFieldByName("id"))
+	assert.Equal(t, "Jane Doe", respB.GetFieldByName("name"))
+
+	// No specific match -> unconditioned default variant (fallthrough).
+	respDefault := call("does-not-exist")
+	assert.Equal(t, "0", respDefault.GetFieldByName("id"))
+	assert.Equal(t, "Default User", respDefault.GetFieldByName("name"))
+}
+
+// TestFindMethodConfigVariantOrdering unit-tests findMethodConfig directly
+// (no network), asserting deterministic, in-order variant evaluation.
+func TestFindMethodConfigVariantOrdering(t *testing.T) {
+	schema := getTestSchema(t)
+	config := &GRPCConfig{
+		Port: 0,
+		Services: map[string]ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]MethodConfig{
+					"GetUser": {
+						Match:    &MethodMatch{Request: map[string]interface{}{"id": "a"}},
+						Response: map[string]interface{}{"id": "a"},
+						Variants: []MethodConfig{
+							{
+								Match:    &MethodMatch{Request: map[string]interface{}{"id": "b"}},
+								Response: map[string]interface{}{"id": "b"},
+							},
+							{
+								Response: map[string]interface{}{"id": "default"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	srv, err := NewServer(config, schema)
+	require.NoError(t, err)
+
+	// Primary variant.
+	cfg := srv.findMethodConfig("test.UserService", "GetUser", nil, map[string]interface{}{"id": "a"})
+	require.NotNil(t, cfg)
+	assert.Equal(t, map[string]interface{}{"id": "a"}, cfg.Response)
+	assert.Nil(t, cfg.Variants, "returned config must not leak nested variants")
+
+	// Second variant.
+	cfg = srv.findMethodConfig("test.UserService", "GetUser", nil, map[string]interface{}{"id": "b"})
+	require.NotNil(t, cfg)
+	assert.Equal(t, map[string]interface{}{"id": "b"}, cfg.Response)
+
+	// Default (unconditioned) variant, ordered last.
+	cfg = srv.findMethodConfig("test.UserService", "GetUser", nil, map[string]interface{}{"id": "zzz"})
+	require.NotNil(t, cfg)
+	assert.Equal(t, map[string]interface{}{"id": "default"}, cfg.Response)
+}
+
+// TestFindMethodConfig_CatchAllPrimary_DoesNotShadowVariant is a regression test
+// for #30: a catch-all (unconditioned) config that comes FIRST — e.g. a default
+// mock created before a specific one via separate admin calls, so the merge
+// appends the specific variant after it — must NOT shadow the more specific
+// variant. Routing is order-independent: specific matches always win and the
+// catch-all is only the last-resort fallback.
+func TestFindMethodConfig_CatchAllPrimary_DoesNotShadowVariant(t *testing.T) {
+	schema := getTestSchema(t)
+	for _, primaryMatch := range []*MethodMatch{nil, {}} { // nil and empty (non-nil) catch-all
+		config := &GRPCConfig{
+			Port: 0,
+			Services: map[string]ServiceConfig{
+				"test.UserService": {
+					Methods: map[string]MethodConfig{
+						"GetUser": {
+							// Primary is the catch-all (created first).
+							Match:    primaryMatch,
+							Response: map[string]interface{}{"id": "default"},
+							Variants: []MethodConfig{
+								{
+									Match:    &MethodMatch{Request: map[string]interface{}{"id": "specific"}},
+									Response: map[string]interface{}{"id": "specific"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		srv, err := NewServer(config, schema)
+		require.NoError(t, err)
+
+		// The specific variant must win even though the catch-all is first.
+		cfg := srv.findMethodConfig("test.UserService", "GetUser", nil, map[string]interface{}{"id": "specific"})
+		require.NotNil(t, cfg)
+		assert.Equal(t, map[string]interface{}{"id": "specific"}, cfg.Response,
+			"specific variant must win over a catch-all primary (regression #30)")
+
+		// A non-matching request falls back to the catch-all default.
+		cfg = srv.findMethodConfig("test.UserService", "GetUser", nil, map[string]interface{}{"id": "other"})
+		require.NotNil(t, cfg)
+		assert.Equal(t, map[string]interface{}{"id": "default"}, cfg.Response)
+	}
+}
+
+// TestMethodMatchVariantsNoDefault confirms that when NO variant matches and
+// there is no unconditioned default, the server returns Unimplemented.
+func TestMethodMatchVariantsNoDefault(t *testing.T) {
+	schema := getTestSchema(t)
+	files := getTestDescriptors(t)
+
+	config := &GRPCConfig{
+		Port: 0,
+		Services: map[string]ServiceConfig{
+			"test.UserService": {
+				Methods: map[string]MethodConfig{
+					"GetUser": {
+						Match:    &MethodMatch{Request: map[string]interface{}{"id": "123"}},
+						Response: map[string]interface{}{"id": "123"},
+						Variants: []MethodConfig{
+							{
+								Match:    &MethodMatch{Request: map[string]interface{}{"id": "999"}},
+								Response: map[string]interface{}{"id": "999"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	srv, err := NewServer(config, schema)
+	require.NoError(t, err)
+	err = srv.Start(context.Background())
+	require.NoError(t, err)
+	defer srv.Stop(context.Background(), 5*time.Second)
+
+	conn, err := grpc.NewClient(srv.Address(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	methodDesc := getMethodDesc(t, files, "test.UserService", "GetUser")
+	stub := grpcdynamic.NewStub(conn)
+
+	reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
+	reqMsg.SetFieldByName("id", "unmatched")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err = stub.InvokeRpc(ctx, methodDesc, reqMsg)
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unimplemented, st.Code())
+}
+
 func TestNoMockConfigured(t *testing.T) {
 	schema := getTestSchema(t)
 	files := getTestDescriptors(t)

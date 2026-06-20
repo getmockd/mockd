@@ -1121,7 +1121,10 @@ func TestMergeGRPCMock(t *testing.T) {
 		assert.Len(t, existing.GRPC.Services["test.UserService"].Methods, 2)
 	})
 
-	t.Run("fails when method already exists", func(t *testing.T) {
+	t.Run("fails on true duplicate (both empty match would shadow)", func(t *testing.T) {
+		// Both configs have an empty/nil Match, so the second would shadow the
+		// first and never be reachable. This must still error to avoid silently
+		// overwriting the earlier mock.
 		existing := &mock.Mock{
 			ID:          "grpc-1",
 			Type:        mock.TypeGRPC,
@@ -1160,6 +1163,159 @@ func TestMergeGRPCMock(t *testing.T) {
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "test.UserService")
 		assert.Contains(t, err.Error(), "GetUser")
+		assert.Contains(t, err.Error(), "already exists")
+	})
+
+	t.Run("appends as variant when match differs (issue #30)", func(t *testing.T) {
+		// Two mocks on the same port + service + method but with DIFFERENT match
+		// conditions must merge: the second becomes a variant of the first
+		// instead of erroring.
+		existing := &mock.Mock{
+			ID:          "grpc-1",
+			Type:        mock.TypeGRPC,
+			WorkspaceID: store.DefaultWorkspaceID,
+			GRPC: &mock.GRPCSpec{
+				Port: 50051,
+				Services: map[string]mock.ServiceConfig{
+					"users.UserService": {
+						Methods: map[string]mock.MethodConfig{
+							"GetUser": {
+								Match:    &mock.MethodMatch{Request: map[string]any{"id": "123"}},
+								Response: map[string]any{"id": "123", "name": "John Doe"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		newMock := &mock.Mock{
+			ID:          "grpc-2",
+			Type:        mock.TypeGRPC,
+			WorkspaceID: store.DefaultWorkspaceID,
+			GRPC: &mock.GRPCSpec{
+				Port: 50051,
+				Services: map[string]mock.ServiceConfig{
+					"users.UserService": {
+						Methods: map[string]mock.MethodConfig{
+							"GetUser": {
+								Match:    &mock.MethodMatch{Request: map[string]any{"id": "999"}},
+								Response: map[string]any{"id": "999", "name": "Jane Doe"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result, err := mergeGRPCMock(existing, newMock)
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Contains(t, result.AddedServices, "users.UserService/GetUser")
+
+		merged := existing.GRPC.Services["users.UserService"].Methods["GetUser"]
+		// Primary keeps its original match; new config is appended as a variant.
+		assert.Equal(t, "123", merged.Match.Request["id"])
+		require.Len(t, merged.Variants, 1)
+		assert.Equal(t, "999", merged.Variants[0].Match.Request["id"])
+	})
+
+	t.Run("appends multiple variants in order", func(t *testing.T) {
+		existing := &mock.Mock{
+			ID:          "grpc-1",
+			Type:        mock.TypeGRPC,
+			WorkspaceID: store.DefaultWorkspaceID,
+			GRPC: &mock.GRPCSpec{
+				Port: 50051,
+				Services: map[string]mock.ServiceConfig{
+					"users.UserService": {
+						Methods: map[string]mock.MethodConfig{
+							"GetUser": {
+								Match:    &mock.MethodMatch{Request: map[string]any{"id": "a"}},
+								Response: map[string]any{"id": "a"},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// Source already carries a variant of its own; both should land on the
+		// target in order (b, then default).
+		newMock := &mock.Mock{
+			ID:          "grpc-2",
+			Type:        mock.TypeGRPC,
+			WorkspaceID: store.DefaultWorkspaceID,
+			GRPC: &mock.GRPCSpec{
+				Port: 50051,
+				Services: map[string]mock.ServiceConfig{
+					"users.UserService": {
+						Methods: map[string]mock.MethodConfig{
+							"GetUser": {
+								Match:    &mock.MethodMatch{Request: map[string]any{"id": "b"}},
+								Response: map[string]any{"id": "b"},
+								Variants: []mock.MethodConfig{
+									{Response: map[string]any{"id": "default"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		_, err := mergeGRPCMock(existing, newMock)
+		require.NoError(t, err)
+
+		merged := existing.GRPC.Services["users.UserService"].Methods["GetUser"]
+		require.Len(t, merged.Variants, 2)
+		assert.Equal(t, "b", merged.Variants[0].Match.Request["id"])
+		assert.Nil(t, merged.Variants[1].Match, "default variant must be ordered last")
+	})
+
+	t.Run("fails when incoming default would shadow existing default", func(t *testing.T) {
+		// Existing primary already matches everything (no Match). An incoming
+		// config that also matches everything is unreachable -> error.
+		existing := &mock.Mock{
+			ID:          "grpc-1",
+			Type:        mock.TypeGRPC,
+			WorkspaceID: store.DefaultWorkspaceID,
+			GRPC: &mock.GRPCSpec{
+				Port: 50051,
+				Services: map[string]mock.ServiceConfig{
+					"users.UserService": {
+						Methods: map[string]mock.MethodConfig{
+							"GetUser": {Response: map[string]any{"id": "catch-all"}},
+						},
+					},
+				},
+			},
+		}
+		newMock := &mock.Mock{
+			ID:          "grpc-2",
+			Type:        mock.TypeGRPC,
+			WorkspaceID: store.DefaultWorkspaceID,
+			GRPC: &mock.GRPCSpec{
+				Port: 50051,
+				Services: map[string]mock.ServiceConfig{
+					"users.UserService": {
+						Methods: map[string]mock.MethodConfig{
+							"GetUser": {
+								Match:    &mock.MethodMatch{Request: map[string]any{"id": "x"}},
+								Response: map[string]any{"id": "x"},
+								Variants: []mock.MethodConfig{
+									{Response: map[string]any{"id": "another-catch-all"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		_, err := mergeGRPCMock(existing, newMock)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "already exists")
 	})
 }

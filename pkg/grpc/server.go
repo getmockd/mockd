@@ -1140,6 +1140,14 @@ func (s *Server) handleBidirectionalStreaming(stream grpc.ServerStream, method *
 
 // findMethodConfig finds config for a method based on service name, method name,
 // metadata, and request body matching.
+//
+// A single service+method may have several match variants (e.g. a different
+// response per requested id). The primary MethodConfig is evaluated first,
+// followed by each entry in its Variants slice IN ORDER. The first variant
+// whose Match passes wins. A variant with no Match (or an empty Match) matches
+// any request, so it acts as a default — order such variants last so more
+// specific variants take precedence. nil is returned only when none match,
+// which the callers translate into codes.Unimplemented.
 func (s *Server) findMethodConfig(serviceName, methodName string, md metadata.MD, req map[string]interface{}) *MethodConfig {
 	svcCfg, ok := s.config.Services[serviceName]
 	if !ok {
@@ -1151,14 +1159,49 @@ func (s *Server) findMethodConfig(serviceName, methodName string, md metadata.MD
 		return nil
 	}
 
-	// Check if this config has a match condition
-	if methodCfg.Match != nil {
-		if !s.matchesCondition(methodCfg.Match, md, req) {
-			return nil
+	// Evaluate the primary config first, then each variant in order. The first
+	// one whose Match condition passes is returned. Variants are flattened to a
+	// single ordered list so a missing/empty Match always behaves as a default.
+	variants := make([]*MethodConfig, 0, 1+len(methodCfg.Variants))
+	variants = append(variants, &methodCfg)
+	for i := range methodCfg.Variants {
+		variants = append(variants, &methodCfg.Variants[i])
+	}
+
+	// Return a copy so callers never observe the nested Variants slice and can't
+	// accidentally recurse into it.
+	returnCopy := func(variant *MethodConfig) *MethodConfig {
+		cfg := *variant
+		cfg.Variants = nil
+		return &cfg
+	}
+
+	// First pass: variants with real (non-catch-all) conditions win, in order.
+	// This makes routing independent of where the unconditioned default sits in
+	// the list, so a catch-all added before a specific variant (e.g. a default
+	// mock created before a specific one via separate admin calls) can never
+	// shadow it.
+	for _, variant := range variants {
+		if !isCatchAllMatch(variant.Match) && s.matchesCondition(variant.Match, md, req) {
+			return returnCopy(variant)
+		}
+	}
+	// Second pass: fall back to the first unconditioned default (nil/empty Match).
+	for _, variant := range variants {
+		if isCatchAllMatch(variant.Match) {
+			return returnCopy(variant)
 		}
 	}
 
-	return &methodCfg
+	return nil
+}
+
+// isCatchAllMatch reports whether a match acts as an unconditioned default that
+// applies to every request (nil, or no metadata/request conditions). A catch-all
+// is only used as a last-resort fallback so it never shadows a more specific
+// variant, regardless of ordering.
+func isCatchAllMatch(m *MethodMatch) bool {
+	return m == nil || (len(m.Metadata) == 0 && len(m.Request) == 0)
 }
 
 // matchesCondition checks if the request matches the match conditions.

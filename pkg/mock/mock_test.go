@@ -3441,3 +3441,130 @@ func TestHTTPResponse_FullMock_YAML_ObjectBody(t *testing.T) {
 	assert.Contains(t, collection.Mocks[0].HTTP.Response.Body, `"message"`)
 	assert.Contains(t, collection.Mocks[0].HTTP.Response.Body, `"hello"`)
 }
+
+// =============================================================================
+// gRPC MethodConfig variant (de)serialization — issue #30
+// =============================================================================
+
+// TestGRPCMethodConfig_Variants_RoundTrip verifies that a MethodConfig carrying
+// multiple match variants round-trips through both JSON and YAML, preserving
+// variant ordering and contents.
+func TestGRPCMethodConfig_Variants_RoundTrip(t *testing.T) {
+	original := GRPCSpec{
+		Port:      50051,
+		ProtoFile: "user.proto",
+		Services: map[string]ServiceConfig{
+			"users.UserService": {
+				Methods: map[string]MethodConfig{
+					"GetUser": {
+						Match:    &MethodMatch{Request: map[string]any{"id": "123"}},
+						Response: map[string]any{"id": "123", "name": "John Doe"},
+						Variants: []MethodConfig{
+							{
+								Match:    &MethodMatch{Request: map[string]any{"id": "999"}},
+								Response: map[string]any{"id": "999", "name": "Jane Doe"},
+							},
+							{
+								// Unconditioned default, ordered last.
+								Response: map[string]any{"id": "0", "name": "Default"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	assertVariants := func(t *testing.T, got GRPCSpec) {
+		t.Helper()
+		method := got.Services["users.UserService"].Methods["GetUser"]
+		require.NotNil(t, method.Match)
+		require.Len(t, method.Variants, 2, "both variants must survive the round-trip")
+
+		// Primary keeps its specific match.
+		assert.Equal(t, "123", method.Match.Request["id"])
+		// Order is preserved: id=999 first, default (no match) last.
+		assert.Equal(t, "999", method.Variants[0].Match.Request["id"])
+		assert.Nil(t, method.Variants[1].Match, "default variant has no match")
+	}
+
+	t.Run("json", func(t *testing.T) {
+		data, err := json.Marshal(original)
+		require.NoError(t, err)
+		assert.Contains(t, string(data), `"variants"`)
+
+		var got GRPCSpec
+		require.NoError(t, json.Unmarshal(data, &got))
+		assertVariants(t, got)
+	})
+
+	t.Run("yaml", func(t *testing.T) {
+		data, err := yaml.Marshal(original)
+		require.NoError(t, err)
+		assert.Contains(t, string(data), "variants:")
+
+		var got GRPCSpec
+		require.NoError(t, yaml.Unmarshal(data, &got))
+		assertVariants(t, got)
+	})
+}
+
+// TestGRPCMethodConfig_SingleConfig_BackwardCompat verifies that the existing
+// single-config form (no variants) still loads unchanged from both JSON and
+// YAML, and that the variants field is absent when not used (omitempty).
+func TestGRPCMethodConfig_SingleConfig_BackwardCompat(t *testing.T) {
+	const jsonCfg = `{
+		"port": 50051,
+		"protoFile": "user.proto",
+		"services": {
+			"users.UserService": {
+				"methods": {
+					"GetUser": {
+						"match": {"request": {"id": "123"}},
+						"response": {"id": "123", "name": "John Doe"}
+					}
+				}
+			}
+		}
+	}`
+
+	const yamlCfg = `
+port: 50051
+protoFile: user.proto
+services:
+  users.UserService:
+    methods:
+      GetUser:
+        match:
+          request:
+            id: "123"
+        response:
+          id: "123"
+          name: John Doe
+`
+
+	check := func(t *testing.T, got GRPCSpec) {
+		t.Helper()
+		method := got.Services["users.UserService"].Methods["GetUser"]
+		require.NotNil(t, method.Match)
+		assert.Equal(t, "123", method.Match.Request["id"])
+		assert.Empty(t, method.Variants, "single-config form must not synthesize variants")
+
+		// And it must serialize back out WITHOUT a variants key.
+		data, err := json.Marshal(got)
+		require.NoError(t, err)
+		assert.NotContains(t, string(data), "variants")
+	}
+
+	t.Run("json", func(t *testing.T) {
+		var got GRPCSpec
+		require.NoError(t, json.Unmarshal([]byte(jsonCfg), &got))
+		check(t, got)
+	})
+
+	t.Run("yaml", func(t *testing.T) {
+		var got GRPCSpec
+		require.NoError(t, yaml.Unmarshal([]byte(yamlCfg), &got))
+		check(t, got)
+	})
+}

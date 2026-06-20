@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -340,18 +341,27 @@ func mergeGRPCMock(target *mock.Mock, source *mock.Mock) (*MergeResult, error) {
 	// Check for conflicts and merge services
 	for serviceName, serviceConfig := range source.GRPC.Services {
 		if existingService, exists := target.GRPC.Services[serviceName]; exists {
-			// Service exists - check for method conflicts
+			// Service exists - merge each method into it.
 			if existingService.Methods == nil {
 				existingService.Methods = make(map[string]mock.MethodConfig)
 			}
-			for methodName := range serviceConfig.Methods {
-				if _, methodExists := existingService.Methods[methodName]; methodExists {
-					return nil, fmt.Errorf("service '%s' method '%s' already exists on port %d",
-						serviceName, methodName, target.GRPC.Port)
-				}
-			}
-			// Merge methods into existing service
 			for methodName, methodConfig := range serviceConfig.Methods {
+				if existingMethod, methodExists := existingService.Methods[methodName]; methodExists {
+					// Method already configured. Rather than reject (which broke
+					// issue #30), append the new config as an additional match
+					// variant — UNLESS its Match would shadow an existing config
+					// (identical or empty Match), in which case we error to avoid
+					// silently overwriting the earlier mock.
+					merged, err := appendMethodVariant(existingMethod, methodConfig)
+					if err != nil {
+						return nil, fmt.Errorf("service '%s' method '%s' already exists on port %d: %w",
+							serviceName, methodName, target.GRPC.Port, err)
+					}
+					existingService.Methods[methodName] = merged
+					result.AddedServices = append(result.AddedServices, serviceName+"/"+methodName)
+					continue
+				}
+				// New method on existing service.
 				existingService.Methods[methodName] = methodConfig
 				result.AddedServices = append(result.AddedServices, serviceName+"/"+methodName)
 			}
@@ -417,6 +427,83 @@ func mergeGRPCMock(target *mock.Mock, source *mock.Mock) (*MergeResult, error) {
 	}
 
 	return result, nil
+}
+
+// appendMethodVariant adds incoming as an additional match variant of existing
+// for the same service+method. It returns the merged MethodConfig.
+//
+// Variants live in a flat ordered list on the primary config: existing is the
+// primary, and incoming (plus any variants it carries) is appended after the
+// existing variants. To keep an unconditioned/default variant from shadowing
+// later, more-specific variants, an empty-Match incoming config is placed at
+// the end (which is naturally where appends land).
+//
+// It returns an error when incoming would shadow a config that is already
+// present — i.e. incoming has no Match (or an empty Match) while existing
+// already has a config that also matches everything, or incoming's Match is
+// identical to one already configured. This preserves the previous
+// "already exists" protection for true duplicates while allowing genuinely
+// distinct match variants (issue #30).
+func appendMethodVariant(existing, incoming mock.MethodConfig) (mock.MethodConfig, error) {
+	// Flatten incoming into its primary + nested variants so callers may pass
+	// a config that itself already carries variants.
+	incomingConfigs := flattenMethodVariants(incoming)
+
+	for _, inc := range incomingConfigs {
+		// Compare the incoming variant against the primary and every existing
+		// variant. A match that is identical to one already present, or an
+		// empty match that collides with another empty/default match, would
+		// shadow and is rejected.
+		for _, present := range flattenMethodVariants(existing) {
+			if grpcMatchShadows(present.Match, inc.Match) {
+				return mock.MethodConfig{}, errors.New("a config with the same (or empty) match condition already exists")
+			}
+		}
+		// Strip nested variants before appending — the list is kept flat.
+		inc.Variants = nil
+		existing.Variants = append(existing.Variants, inc)
+	}
+
+	return existing, nil
+}
+
+// flattenMethodVariants returns the primary config followed by its variants as
+// a flat slice. Nested variants are not recursed (only one level is meaningful).
+func flattenMethodVariants(cfg mock.MethodConfig) []mock.MethodConfig {
+	out := make([]mock.MethodConfig, 0, 1+len(cfg.Variants))
+	primary := cfg
+	primary.Variants = nil
+	out = append(out, primary)
+	for _, v := range cfg.Variants {
+		v.Variants = nil
+		out = append(out, v)
+	}
+	return out
+}
+
+// grpcMatchShadows reports whether a config with match b would shadow a config
+// with match a — that is, b can never be reached because a already matches the
+// same (or a superset of) requests. This is true when both matches are empty
+// (both match everything) or when they are exactly equal.
+func grpcMatchShadows(a, b *mock.MethodMatch) bool {
+	aEmpty := grpcMatchEmpty(a)
+	bEmpty := grpcMatchEmpty(b)
+	if aEmpty && bEmpty {
+		// Two unconditioned configs — the second is unreachable.
+		return true
+	}
+	if aEmpty || bEmpty {
+		// One is a catch-all default and the other is specific; the specific
+		// one is still reachable when ordered first, so this is not shadowing.
+		return false
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+// grpcMatchEmpty reports whether a match condition matches every request
+// (nil or no metadata/request constraints).
+func grpcMatchEmpty(m *mock.MethodMatch) bool {
+	return m == nil || (len(m.Metadata) == 0 && len(m.Request) == 0)
 }
 
 // mergeMQTTMock merges a new MQTT mock's topics into an existing mock.

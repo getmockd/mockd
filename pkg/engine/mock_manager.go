@@ -690,29 +690,7 @@ func (mm *MockManager) registerGRPCMock(m *mock.Mock) error {
 				Methods: make(map[string]grpc.MethodConfig),
 			}
 			for methodName, method := range svc.Methods {
-				grpcMethod := grpc.MethodConfig{
-					Response:    method.Response,
-					Delay:       method.Delay,
-					StreamDelay: method.StreamDelay,
-				}
-				// Convert responses slice
-				grpcMethod.Responses = append(grpcMethod.Responses, method.Responses...)
-				// Convert error config
-				if method.Error != nil {
-					grpcMethod.Error = &grpc.GRPCErrorConfig{
-						Code:    method.Error.Code,
-						Message: method.Error.Message,
-						Details: method.Error.Details,
-					}
-				}
-				// Convert match config
-				if method.Match != nil {
-					grpcMethod.Match = &grpc.MethodMatch{
-						Metadata: method.Match.Metadata,
-						Request:  method.Match.Request,
-					}
-				}
-				grpcSvc.Methods[methodName] = grpcMethod
+				grpcSvc.Methods[methodName] = convertGRPCMethodConfig(method)
 			}
 			cfg.Services[svcName] = grpcSvc
 		}
@@ -726,6 +704,45 @@ func (mm *MockManager) registerGRPCMock(m *mock.Mock) error {
 
 	mm.log.Info("started gRPC server", "name", m.Name, "port", server.Port())
 	return nil
+}
+
+// convertGRPCMethodConfig converts a mock.MethodConfig (admin/config form) into
+// the grpc.MethodConfig the server consumes. It carries ALL match variants
+// through: the primary config's fields plus each entry in Variants, so that
+// multiple match conditions for a single service+method survive the conversion
+// (issue #30). Nested variants are flattened to a single level since only one
+// level is meaningful.
+func convertGRPCMethodConfig(method mock.MethodConfig) grpc.MethodConfig {
+	grpcMethod := grpc.MethodConfig{
+		Response:    method.Response,
+		Delay:       method.Delay,
+		StreamDelay: method.StreamDelay,
+	}
+	// Convert responses slice
+	grpcMethod.Responses = append(grpcMethod.Responses, method.Responses...)
+	// Convert error config
+	if method.Error != nil {
+		grpcMethod.Error = &grpc.GRPCErrorConfig{
+			Code:    method.Error.Code,
+			Message: method.Error.Message,
+			Details: method.Error.Details,
+		}
+	}
+	// Convert match config
+	if method.Match != nil {
+		grpcMethod.Match = &grpc.MethodMatch{
+			Metadata: method.Match.Metadata,
+			Request:  method.Match.Request,
+		}
+	}
+	// Convert additional match variants in order.
+	for _, variant := range method.Variants {
+		converted := convertGRPCMethodConfig(variant)
+		// Keep the list flat — drop any nested variants on the converted child.
+		converted.Variants = nil
+		grpcMethod.Variants = append(grpcMethod.Variants, converted)
+	}
+	return grpcMethod
 }
 
 // registerOAuthMock registers an OAuth/OIDC mock provider.
