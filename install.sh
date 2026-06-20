@@ -18,6 +18,10 @@ INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY_NAME="mockd"
 TELEMETRY_URL="https://api.mockd.io/api/telemetry/install"
 
+# Base URLs. Overridable for testing; default to GitHub.
+GITHUB_DOWNLOAD_BASE="${MOCKD_DOWNLOAD_BASE:-https://github.com/${REPO}/releases/download}"
+GITHUB_API_BASE="${MOCKD_API_BASE:-https://api.github.com/repos/${REPO}}"
+
 # Colors (if terminal supports it)
 if [ -t 1 ]; then
     RED='\033[0;31m'
@@ -60,23 +64,54 @@ detect_arch() {
 # Get latest version from GitHub
 get_latest_version() {
     if command -v curl >/dev/null 2>&1; then
-        curl -sSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/'
+        curl -fsSL "${GITHUB_API_BASE}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/'
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO- "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/'
+        wget -qO- "${GITHUB_API_BASE}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/'
     else
         error "Neither curl nor wget found. Please install one of them."
     fi
 }
 
-# Download file
+# Download a file to a destination. Returns non-zero (and leaves no body behind)
+# on HTTP errors such as 404/5xx. Without --fail, curl writes the server's error
+# page (e.g. "Not Found") to the destination and still exits 0, which then gets
+# mis-parsed downstream as a checksum/binary — see
+# https://github.com/getmockd/mockd/issues/34
 download() {
     url="$1"
     dest="$2"
     if command -v curl >/dev/null 2>&1; then
-        curl -sSL -o "$dest" "$url"
+        # --fail: exit non-zero on HTTP >= 400 without emitting the error body.
+        curl -fsSL -o "$dest" "$url"
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$dest" "$url"
+        # wget exits non-zero on 404, but -O still creates/truncates the file;
+        # remove the stale destination on failure so callers never see a body.
+        wget -qO "$dest" "$url" || { rm -f "$dest"; return 1; }
+    else
+        return 1
     fi
+}
+
+# A valid sha256 hex digest is exactly 64 lowercase hex characters.
+is_sha256() {
+    case "$1" in
+        "" | *[!0-9a-f]*) return 1 ;;
+        *) [ "${#1}" -eq 64 ] ;;
+    esac
+}
+
+# Download and parse the expected checksum for the binary. Fails loudly with an
+# actionable message rather than letting a missing/garbage checksum slip through
+# and surface as a confusing "Expected: Not" comparison failure.
+fetch_expected_checksum() {
+    if ! download "$CHECKSUM_URL" "${TMPDIR}/checksum"; then
+        error "Could not download checksum from ${CHECKSUM_URL}\n  The release asset may be missing or still publishing. Try again shortly, or pin a known-good version with VERSION=<tag>."
+    fi
+    expected=$(awk '{print $1}' "${TMPDIR}/checksum")
+    if ! is_sha256 "$expected"; then
+        error "Downloaded checksum is not a valid sha256 digest (got: '${expected}')\n  The release asset may be corrupt or missing. Try again shortly, or pin a known-good version with VERSION=<tag>."
+    fi
+    printf '%s' "$expected"
 }
 
 main() {
@@ -107,7 +142,7 @@ main() {
     if [ "$OS" = "windows" ]; then
         FILENAME="${FILENAME}.exe"
     fi
-    URL="https://github.com/${REPO}/releases/download/${VERSION}/${FILENAME}"
+    URL="${GITHUB_DOWNLOAD_BASE}/${VERSION}/${FILENAME}"
     CHECKSUM_URL="${URL}.sha256"
 
     # Download binary
@@ -115,13 +150,16 @@ main() {
     trap 'rm -rf "$TMPDIR"' EXIT
 
     info "Downloading ${URL}..."
-    download "$URL" "${TMPDIR}/${BINARY_NAME}"
+    if ! download "$URL" "${TMPDIR}/${BINARY_NAME}"; then
+        error "Could not download ${URL}\n  The release asset may be missing or still publishing. Check that ${VERSION} exists for ${OS}/${ARCH}, try again shortly, or pin a version with VERSION=<tag>."
+    fi
 
-    # Verify checksum if sha256sum is available
+    # Verify checksum if a sha256 tool is available. A missing or malformed
+    # checksum is treated as a hard error (not silently skipped), since it most
+    # likely means the binary download itself is bad.
     if command -v sha256sum >/dev/null 2>&1; then
         info "Verifying checksum..."
-        download "$CHECKSUM_URL" "${TMPDIR}/checksum"
-        EXPECTED=$(awk '{print $1}' "${TMPDIR}/checksum")
+        EXPECTED=$(fetch_expected_checksum)
         ACTUAL=$(sha256sum "${TMPDIR}/${BINARY_NAME}" | awk '{print $1}')
         if [ "$EXPECTED" != "$ACTUAL" ]; then
             error "Checksum verification failed!\n  Expected: ${EXPECTED}\n  Got:      ${ACTUAL}"
@@ -129,8 +167,7 @@ main() {
         success "Checksum verified"
     elif command -v shasum >/dev/null 2>&1; then
         info "Verifying checksum..."
-        download "$CHECKSUM_URL" "${TMPDIR}/checksum"
-        EXPECTED=$(awk '{print $1}' "${TMPDIR}/checksum")
+        EXPECTED=$(fetch_expected_checksum)
         ACTUAL=$(shasum -a 256 "${TMPDIR}/${BINARY_NAME}" | awk '{print $1}')
         if [ "$EXPECTED" != "$ACTUAL" ]; then
             error "Checksum verification failed!\n  Expected: ${EXPECTED}\n  Got:      ${ACTUAL}"
