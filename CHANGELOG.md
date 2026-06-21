@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-06-20
+
+### Fixed
+
+- **Embedded dashboard now includes the connection-management UI** — the 0.7.0 binary bundled an older build of the web dashboard, so the unified connections view that accompanies 0.7.0's connection-management backend was not present in the embedded UI. The bundled dashboard has been rebuilt so the connections view ships in the binary.
+
 ## [0.7.0] - 2026-06-19
 
 ### Added
