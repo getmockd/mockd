@@ -15,7 +15,8 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/portability"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	generateInput    string
@@ -30,7 +31,7 @@ var (
 var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate mock configurations using AI",
-	Long: `Generate mock configurations using AI.
+	Long: i18n.T(`Generate mock configurations using AI.
 
 Environment Variables:
   MOCKD_AI_PROVIDER  Default AI provider
@@ -49,7 +50,7 @@ Examples:
   mockd generate --ai --provider openai --prompt "payment processing API"
 
   # Preview what would be generated
-  mockd generate --ai --prompt "blog API" --dry-run`,
+  mockd generate --ai --prompt "blog API" --dry-run`),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Validate input
 		if generateInput == "" && generatePrompt == "" {
@@ -288,7 +289,7 @@ var (
 var enhanceCmd = &cobra.Command{
 	Use:   "enhance",
 	Short: "Enhance existing mocks with AI-generated response data",
-	Long: `Enhance existing mocks with AI-generated response data.
+	Long: i18n.T(`Enhance existing mocks with AI-generated response data.
 
 Environment Variables:
   MOCKD_AI_PROVIDER  Default AI provider
@@ -301,7 +302,7 @@ Examples:
   mockd enhance --ai
 
   # Use specific provider
-  mockd enhance --ai --provider anthropic`,
+  mockd enhance --ai --provider anthropic`),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !enhanceAIFlag {
 			return errors.New(`--ai flag is required
@@ -378,16 +379,16 @@ Run 'mockd enhance --help' for more options`)
 
 func init() {
 	rootCmd.AddCommand(generateCmd)
-	generateCmd.Flags().StringVarP(&generateInput, "input", "i", "", "Input OpenAPI spec file")
-	generateCmd.Flags().StringVarP(&generatePrompt, "prompt", "p", "", "Natural language description for generation")
+	generateCmd.Flags().StringVarP(&generateInput, "input", "i", "", i18n.T("Input OpenAPI spec file"))
+	generateCmd.Flags().StringVarP(&generatePrompt, "prompt", "p", "", i18n.T("Natural language description for generation"))
 	generateCmd.Flags().StringVarP(&generateOutput, "output", "o", "", "Output file (default: stdout)")
-	generateCmd.Flags().BoolVar(&generateAIFlag, "ai", false, "Enable AI-powered data generation")
+	generateCmd.Flags().BoolVar(&generateAIFlag, "ai", false, i18n.T("Enable AI-powered data generation"))
 	generateCmd.Flags().StringVar(&generateProvider, "provider", "", "AI provider (openai, anthropic, ollama, openrouter)")
-	generateCmd.Flags().StringVar(&generateModel, "model", "", "AI model to use")
-	generateCmd.Flags().BoolVar(&generateDryRun, "dry-run", false, "Preview generation without saving")
+	generateCmd.Flags().StringVar(&generateModel, "model", "", i18n.T("AI model to use"))
+	generateCmd.Flags().BoolVar(&generateDryRun, "dry-run", false, i18n.T("Preview generation without saving"))
 
 	rootCmd.AddCommand(enhanceCmd)
-	enhanceCmd.Flags().BoolVar(&enhanceAIFlag, "ai", false, "Enable AI-powered enhancement")
+	enhanceCmd.Flags().BoolVar(&enhanceAIFlag, "ai", false, i18n.T("Enable AI-powered enhancement"))
 	enhanceCmd.Flags().StringVar(&enhanceProvider, "provider", "", "AI provider (openai, anthropic, ollama, openrouter)")
-	enhanceCmd.Flags().StringVar(&enhanceModel, "model", "", "AI model to use")
+	enhanceCmd.Flags().StringVar(&enhanceModel, "model", "", i18n.T("AI model to use"))
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
+	"github.com/getmockd/mockd/pkg/i18n"
 )
 
 // StatusOutput represents the JSON output format for status.
@@ -83,8 +84,8 @@ var statusCmd = &cobra.Command{
 
 func init() {
 	statusCmd.Flags().StringVar(&statusPidFile, "pid-file", "", "Path to PID file (default: ~/.mockd/mockd.pid)")
-	statusCmd.Flags().IntVarP(&statusPort, "port", "p", cliconfig.DefaultPort, "Mock engine port to probe")
-	statusCmd.Flags().IntVarP(&statusAdminPort, "admin-port", "a", cliconfig.DefaultAdminPort, "Admin API port to probe")
+	statusCmd.Flags().IntVarP(&statusPort, "port", "p", cliconfig.DefaultPort, i18n.T("Mock engine port to probe"))
+	statusCmd.Flags().IntVarP(&statusAdminPort, "admin-port", "a", cliconfig.DefaultAdminPort, i18n.T("Admin API port to probe"))
 	rootCmd.AddCommand(statusCmd)
 }
 

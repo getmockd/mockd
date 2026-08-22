@@ -13,6 +13,7 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
 	"github.com/getmockd/mockd/pkg/graphql"
 	"github.com/spf13/cobra"
+	"github.com/getmockd/mockd/pkg/i18n"
 )
 
 var graphqlCmd = &cobra.Command{
@@ -87,11 +88,11 @@ func init() {
 	rootCmd.AddCommand(graphqlCmd)
 	graphqlCmd.AddCommand(graphqlAddCmd)
 
-	graphqlAddCmd.Flags().StringVar(&addPath, "path", "", "URL path to match")
-	graphqlAddCmd.Flags().StringVar(&addOperation, "operation", "", "Operation name")
+	graphqlAddCmd.Flags().StringVar(&addPath, "path", "", i18n.T("URL path to match"))
+	graphqlAddCmd.Flags().StringVar(&addOperation, "operation", "", i18n.T("Operation name"))
 	graphqlAddCmd.Flags().StringVar(&addOpType, "op-type", "query", "GraphQL operation type (query/mutation)")
-	graphqlAddCmd.Flags().BoolVar(&addMutation, "mutation", false, "Create a Mutation resolver instead of Query")
-	graphqlAddCmd.Flags().StringVar(&addResponse, "response", "", "JSON response data")
+	graphqlAddCmd.Flags().BoolVar(&addMutation, "mutation", false, i18n.T("Create a Mutation resolver instead of Query"))
+	graphqlAddCmd.Flags().StringVar(&addResponse, "response", "", i18n.T("JSON response data"))
 
 	// Add list/get/delete generic aliases
 	graphqlCmd.AddCommand(&cobra.Command{
@@ -115,10 +116,10 @@ func init() {
 
 	graphqlCmd.AddCommand(graphqlValidateCmd)
 
-	graphqlQueryCmd.Flags().StringVarP(&graphqlVariables, "variables", "v", "", "JSON string of variables")
-	graphqlQueryCmd.Flags().StringVarP(&graphqlOperationName, "operation", "o", "", "Operation name")
+	graphqlQueryCmd.Flags().StringVarP(&graphqlVariables, "variables", "v", "", i18n.T("JSON string of variables"))
+	graphqlQueryCmd.Flags().StringVarP(&graphqlOperationName, "operation", "o", "", i18n.T("Operation name"))
 	graphqlQueryCmd.Flags().StringVarP(&graphqlHeaders, "header", "H", "", "Additional headers (key:value,key2:value2)")
-	graphqlQueryCmd.Flags().BoolVar(&graphqlPretty, "pretty", true, "Pretty print output")
+	graphqlQueryCmd.Flags().BoolVar(&graphqlPretty, "pretty", true, i18n.T("Pretty print output"))
 	graphqlCmd.AddCommand(graphqlQueryCmd)
 }
 

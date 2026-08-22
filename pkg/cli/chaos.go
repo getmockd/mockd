@@ -5,7 +5,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	chaosEnableLatency     string
@@ -18,7 +19,7 @@ var (
 var chaosCmd = &cobra.Command{
 	Use:   "chaos",
 	Short: "Manage chaos injection for fault testing",
-	Long:  `Manage chaos injection for fault testing.`,
+	Long:  i18n.T(`Manage chaos injection for fault testing.`),
 }
 
 var chaosEnableCmd = &cobra.Command{
@@ -156,7 +157,7 @@ var chaosStatusCmd = &cobra.Command{
 var chaosProfilesCmd = &cobra.Command{
 	Use:   "profiles",
 	Short: "List available chaos profiles",
-	Long:  `List all built-in chaos profiles that can be applied by name.`,
+	Long:  i18n.T(`List all built-in chaos profiles that can be applied by name.`),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := NewAdminClientWithAuth(adminURL)
 		profiles, err := client.ListChaosProfiles()
@@ -180,10 +181,10 @@ var chaosProfilesCmd = &cobra.Command{
 var chaosApplyCmd = &cobra.Command{
 	Use:   "apply <profile-name>",
 	Short: "Apply a named chaos profile",
-	Long: `Apply a built-in chaos profile by name. This sets the chaos configuration
+	Long: i18n.T(`Apply a built-in chaos profile by name. This sets the chaos configuration
 to the profile's preset values and enables chaos injection.
 
-Use "mockd chaos profiles" to see available profiles.`,
+Use "mockd chaos profiles" to see available profiles.`),
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		profileName := args[0]
@@ -256,7 +257,7 @@ func init() {
 	chaosCmd.AddCommand(chaosEnableCmd)
 	chaosEnableCmd.Flags().StringVarP(&chaosEnableLatency, "latency", "l", "", "Add random latency (e.g., \"10ms-100ms\")")
 	chaosEnableCmd.Flags().Float64VarP(&chaosEnableErrorRate, "error-rate", "e", 0, "Error rate (0.0-1.0)")
-	chaosEnableCmd.Flags().IntVar(&chaosEnableErrorCode, "error-code", 500, "HTTP error code to return")
+	chaosEnableCmd.Flags().IntVar(&chaosEnableErrorCode, "error-code", 500, i18n.T("HTTP error code to return"))
 	chaosEnableCmd.Flags().StringVarP(&chaosEnablePath, "path", "p", "", "Path pattern to apply chaos to (regex)")
 	chaosEnableCmd.Flags().Float64Var(&chaosEnableProbability, "probability", 1.0, "Probability of applying chaos (0.0-1.0)")
 

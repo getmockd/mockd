@@ -9,7 +9,8 @@ import (
 	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // streamRecordingStore is the global file store for stream recordings.
 var streamRecordingStore *recording.FileStore
@@ -263,10 +264,10 @@ var streamRecordingsExportCmd = &cobra.Command{
 var streamRecordingsConvertCmd = &cobra.Command{
 	Use:   "convert <id>",
 	Short: "Convert a stream recording to a mock configuration",
-	Long: `Convert a stream recording to a mock configuration.
+	Long: i18n.T(`Convert a stream recording to a mock configuration.
 
 For WebSocket recordings, creates a scenario config.
-For SSE recordings, creates an SSE mock config.`,
+For SSE recordings, creates an SSE mock config.`),
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		output := &srConvertOutput
@@ -442,18 +443,18 @@ func init() {
 
 	streamRecordingsCmd.AddCommand(streamRecordingsListCmd)
 	streamRecordingsListCmd.Flags().StringVar(&srListProtocol, "protocol", "", "Filter by protocol (websocket, sse)")
-	streamRecordingsListCmd.Flags().StringVar(&srListPath, "path", "", "Filter by path prefix")
+	streamRecordingsListCmd.Flags().StringVar(&srListPath, "path", "", i18n.T("Filter by path prefix"))
 	streamRecordingsListCmd.Flags().StringVar(&srListStatus, "status", "", "Filter by status (complete, incomplete, recording)")
 	streamRecordingsListCmd.Flags().IntVar(&srListLimit, "limit", 20, "Maximum number of recordings to show (default: 20)")
-	streamRecordingsListCmd.Flags().IntVar(&srListOffset, "offset", 0, "Offset for pagination")
+	streamRecordingsListCmd.Flags().IntVar(&srListOffset, "offset", 0, i18n.T("Offset for pagination"))
 	streamRecordingsListCmd.Flags().StringVar(&srListSortBy, "sort", "startTime", "Sort by field: startTime, name, size (default: startTime)")
 	streamRecordingsListCmd.Flags().StringVar(&srListSortOrder, "order", "desc", "Sort order: asc, desc (default: desc)")
-	streamRecordingsListCmd.Flags().BoolVar(&srListIncludeDeleted, "include-deleted", false, "Include soft-deleted recordings")
+	streamRecordingsListCmd.Flags().BoolVar(&srListIncludeDeleted, "include-deleted", false, i18n.T("Include soft-deleted recordings"))
 
 	streamRecordingsCmd.AddCommand(streamRecordingsShowCmd)
 
 	streamRecordingsCmd.AddCommand(streamRecordingsDeleteCmd)
-	streamRecordingsDeleteCmd.Flags().BoolVarP(&srDeleteForce, "force", "f", false, "Skip confirmation")
+	streamRecordingsDeleteCmd.Flags().BoolVarP(&srDeleteForce, "force", "f", false, i18n.T("Skip confirmation"))
 	streamRecordingsDeleteCmd.Flags().BoolVar(&srDeletePermanent, "permanent", false, "Permanently delete (not soft-delete)")
 
 	streamRecordingsCmd.AddCommand(streamRecordingsExportCmd)
@@ -461,15 +462,15 @@ func init() {
 
 	streamRecordingsCmd.AddCommand(streamRecordingsConvertCmd)
 	streamRecordingsConvertCmd.Flags().StringVarP(&srConvertOutput, "output", "o", "", "Output file path (default: stdout)")
-	streamRecordingsConvertCmd.Flags().BoolVar(&srConvertSimplifyTiming, "simplify-timing", false, "Normalize timing to reduce noise")
+	streamRecordingsConvertCmd.Flags().BoolVar(&srConvertSimplifyTiming, "simplify-timing", false, i18n.T("Normalize timing to reduce noise"))
 	streamRecordingsConvertCmd.Flags().IntVar(&srConvertMinDelay, "min-delay", 10, "Minimum delay to preserve in ms (default: 10)")
 	streamRecordingsConvertCmd.Flags().IntVar(&srConvertMaxDelay, "max-delay", 5000, "Maximum delay in ms (default: 5000)")
 	streamRecordingsConvertCmd.Flags().BoolVar(&srConvertIncludeClient, "include-client", true, "Include client messages as expect steps (default: true)")
-	streamRecordingsConvertCmd.Flags().BoolVar(&srConvertDeduplicate, "deduplicate", false, "Remove consecutive duplicate messages")
+	streamRecordingsConvertCmd.Flags().BoolVar(&srConvertDeduplicate, "deduplicate", false, i18n.T("Remove consecutive duplicate messages"))
 
 	streamRecordingsCmd.AddCommand(streamRecordingsStatsCmd)
 	streamRecordingsCmd.AddCommand(streamRecordingsVacuumCmd)
-	streamRecordingsVacuumCmd.Flags().BoolVarP(&srVacuumForce, "force", "f", false, "Skip confirmation")
+	streamRecordingsVacuumCmd.Flags().BoolVarP(&srVacuumForce, "force", "f", false, i18n.T("Skip confirmation"))
 
 	streamRecordingsCmd.AddCommand(streamRecordingsSessionsCmd)
 }

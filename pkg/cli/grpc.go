@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/huh"
 	grpcpkg "github.com/getmockd/mockd/pkg/grpc"
 	"github.com/spf13/cobra"
+	"github.com/getmockd/mockd/pkg/i18n"
 )
 
 var grpcCmd = &cobra.Command{
@@ -59,11 +60,11 @@ func init() {
 	grpcCmd.AddCommand(grpcAddCmd)
 
 	grpcAddCmd.Flags().StringVar(&addService, "service", "", "gRPC service name (e.g., greeter.Greeter)")
-	grpcAddCmd.Flags().StringVar(&addRPCMethod, "rpc-method", "", "gRPC method name")
-	grpcAddCmd.Flags().IntVar(&addGRPCPort, "grpc-port", 50051, "gRPC server port")
+	grpcAddCmd.Flags().StringVar(&addRPCMethod, "rpc-method", "", i18n.T("gRPC method name"))
+	grpcAddCmd.Flags().IntVar(&addGRPCPort, "grpc-port", 50051, i18n.T("gRPC server port"))
 	grpcAddCmd.Flags().Var(&addProtoFiles, "proto", "Path to .proto file")
-	grpcAddCmd.Flags().Var(&addProtoPaths, "proto-path", "Import path for proto dependencies (repeatable)")
-	grpcAddCmd.Flags().StringVar(&addResponse, "response", "", "JSON response data")
+	grpcAddCmd.Flags().Var(&addProtoPaths, "proto-path", i18n.T("Import path for proto dependencies (repeatable)"))
+	grpcAddCmd.Flags().StringVar(&addResponse, "response", "", i18n.T("JSON response data"))
 
 	// Add list/get/delete generic aliases
 	grpcCmd.AddCommand(&cobra.Command{
@@ -81,7 +82,7 @@ func init() {
 	})
 	// Just bind the boolean for mock listing
 	grpcCmd.Commands()[1].Flags().Bool("mocks", false, "List server gRPC mocks instead of local proto definitions")
-	grpcCmd.Commands()[1].Flags().StringVar(&grpcImportPath, "import", "", "Import path for proto includes")
+	grpcCmd.Commands()[1].Flags().StringVar(&grpcImportPath, "import", "", i18n.T("Import path for proto includes"))
 	grpcCmd.Commands()[1].Flags().StringVar(&grpcImportPath, "I", "", "Import path (shorthand)")
 
 	grpcCmd.AddCommand(&cobra.Command{
@@ -96,9 +97,9 @@ func init() {
 	})
 
 	// Bind call functionality
-	grpcCallCmd.Flags().StringVarP(&grpcMetadata, "metadata", "m", "", "gRPC metadata")
-	grpcCallCmd.Flags().BoolVar(&grpcPlaintext, "plaintext", true, "Use plaintext")
-	grpcCallCmd.Flags().BoolVar(&grpcPretty, "pretty", true, "Pretty print")
+	grpcCallCmd.Flags().StringVarP(&grpcMetadata, "metadata", "m", "", i18n.T("gRPC metadata"))
+	grpcCallCmd.Flags().BoolVar(&grpcPlaintext, "plaintext", true, i18n.T("Use plaintext"))
+	grpcCallCmd.Flags().BoolVar(&grpcPretty, "pretty", true, i18n.T("Pretty print"))
 	grpcCmd.AddCommand(grpcCallCmd)
 }
 

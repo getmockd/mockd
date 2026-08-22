@@ -5,21 +5,22 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cli/help"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // helpTopicCmd handles 'mockd help [topic]' for topic-based help.
 // This overrides Cobra's built-in help command to add topic support.
 var helpTopicCmd = &cobra.Command{
 	Use:   "help [topic]",
 	Short: "Show help for topics or commands",
-	Long: `Show detailed help for mockd topics like configuration, matching, templating, etc.
+	Long: i18n.T(`Show detailed help for mockd topics like configuration, matching, templating, etc.
 
 Available topics: config, matching, templating, formats, websocket, graphql, grpc, mqtt, soap, sse
 
 Examples:
   mockd help templating    Show help on response templating
   mockd help matching      Show help on request matching rules
-  mockd help graphql       Show help on GraphQL mocking`,
+  mockd help graphql       Show help on GraphQL mocking`),
 	ValidArgs: []string{"config", "matching", "templating", "formats", "websocket", "graphql", "grpc", "mqtt", "soap", "sse"},
 	Args:      cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

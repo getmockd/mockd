@@ -15,7 +15,8 @@ import (
 	"github.com/getmockd/mockd/pkg/logging"
 
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // engineFlags holds all flags for the engine command.
 type engineFlags struct {
@@ -35,7 +36,7 @@ var engineFlagVals engineFlags
 var engineCmd = &cobra.Command{
 	Use:   "engine",
 	Short: "Run a headless mock engine (no admin API, for CI/CD)",
-	Long: `Run a headless mock engine that serves mocks from a config file.
+	Long: i18n.T(`Run a headless mock engine that serves mocks from a config file.
 
 Unlike 'mockd serve' or 'mockd start', the engine command:
   - Does NOT start an admin API
@@ -45,7 +46,7 @@ Unlike 'mockd serve' or 'mockd start', the engine command:
   - Runs in the foreground until SIGTERM/SIGINT
 
 This is ideal for CI/CD pipelines, Docker containers, and environments
-where you need a lightweight, stateless mock server.`,
+where you need a lightweight, stateless mock server.`),
 	Example: `  # Start with a config file
   mockd engine --config mocks.yaml
 
@@ -65,12 +66,12 @@ func init() {
 
 	engineCmd.Flags().StringVarP(&f.configPath, "config", "c", "", "Path to mock config file (YAML or JSON) [required]")
 	engineCmd.Flags().IntVarP(&f.port, "port", "p", 4280, "HTTP server port (0 = OS auto-assign)")
-	engineCmd.Flags().StringVar(&f.host, "host", "0.0.0.0", "Bind address")
-	engineCmd.Flags().BoolVar(&f.printURL, "print-url", false, "Print the server URL to stdout on startup")
+	engineCmd.Flags().StringVar(&f.host, "host", "0.0.0.0", i18n.T("Bind address"))
+	engineCmd.Flags().BoolVar(&f.printURL, "print-url", false, i18n.T("Print the server URL to stdout on startup"))
 	engineCmd.Flags().StringVar(&f.logLevel, "log-level", "warn", "Log level (debug, info, warn, error)")
 	engineCmd.Flags().StringVar(&f.logFormat, "log-format", "text", "Log format (text, json)")
-	engineCmd.Flags().IntVar(&f.readTimeout, "read-timeout", 30, "HTTP read timeout in seconds")
-	engineCmd.Flags().IntVar(&f.writeTimeout, "write-timeout", 30, "HTTP write timeout in seconds")
+	engineCmd.Flags().IntVar(&f.readTimeout, "read-timeout", 30, i18n.T("HTTP read timeout in seconds"))
+	engineCmd.Flags().IntVar(&f.writeTimeout, "write-timeout", 30, i18n.T("HTTP write timeout in seconds"))
 
 	_ = engineCmd.MarkFlagRequired("config")
 

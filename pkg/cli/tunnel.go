@@ -23,7 +23,8 @@ import (
 	"github.com/getmockd/mockd/pkg/tunnel/protocol"
 	quicclient "github.com/getmockd/mockd/pkg/tunnel/quic"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	tunnelPort      int
@@ -70,8 +71,8 @@ var (
 var tunnelCmd = &cobra.Command{
 	Use:   "tunnel",
 	Short: "Expose local mocks via the cloud relay",
-	Long: `Expose local mocks via the cloud relay. Running 'mockd tunnel' without a
-subcommand starts a local mock server + tunnel in one shot.`,
+	Long: i18n.T(`Expose local mocks via the cloud relay. Running 'mockd tunnel' without a
+subcommand starts a local mock server + tunnel in one shot.`),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		port := &tunnelPort
 		adminPort := &tunnelAdminPort
@@ -763,23 +764,23 @@ func splitCSV(s string) []string {
 func init() {
 	rootCmd.AddCommand(tunnelCmd)
 
-	tunnelCmd.Flags().IntVarP(&tunnelPort, "port", "p", cliconfig.DefaultPort, "HTTP server port")
-	tunnelCmd.Flags().IntVar(&tunnelAdminPort, "admin-port", cliconfig.DefaultAdminPort, "Admin API port")
-	tunnelCmd.Flags().StringVarP(&tunnelConfig, "config", "c", "", "Path to mock configuration file")
+	tunnelCmd.Flags().IntVarP(&tunnelPort, "port", "p", cliconfig.DefaultPort, i18n.T("HTTP server port"))
+	tunnelCmd.Flags().IntVar(&tunnelAdminPort, "admin-port", cliconfig.DefaultAdminPort, i18n.T("Admin API port"))
+	tunnelCmd.Flags().StringVarP(&tunnelConfig, "config", "c", "", i18n.T("Path to mock configuration file"))
 	tunnelCmd.Flags().StringVar(&tunnelRelay, "relay", "relay.mockd.io", "Relay server address (host or host:port)")
 	tunnelCmd.Flags().StringVar(&tunnelToken, "token", "", "Authentication token (or set MOCKD_TOKEN)")
 	tunnelCmd.Flags().StringVarP(&tunnelSubdomain, "subdomain", "s", "", "Requested subdomain (auto-assigned if empty)")
 	tunnelCmd.Flags().StringVar(&tunnelDomain, "domain", "", "Custom domain (must be verified)")
-	tunnelCmd.Flags().StringVar(&tunnelAuthToken, "auth-token", "", "Require this token for incoming requests")
+	tunnelCmd.Flags().StringVar(&tunnelAuthToken, "auth-token", "", i18n.T("Require this token for incoming requests"))
 	tunnelCmd.Flags().StringVar(&tunnelAuthBasic, "auth-basic", "", "Require Basic Auth (format: user:pass)")
 	tunnelCmd.Flags().StringVar(&tunnelAllowIPs, "allow-ips", "", "Allow only these IPs (comma-separated CIDR or IP)")
 
 	tunnelCmd.AddCommand(tunnelEnableCmd)
-	tunnelEnableCmd.Flags().StringVar(&tunnelEnableEngine, "engine", "local", "Engine ID")
-	tunnelEnableCmd.Flags().StringVar(&tunnelEnableMode, "mode", "all", "Exposure mode: all, selected, none")
+	tunnelEnableCmd.Flags().StringVar(&tunnelEnableEngine, "engine", "local", i18n.T("Engine ID"))
+	tunnelEnableCmd.Flags().StringVar(&tunnelEnableMode, "mode", "all", i18n.T("Exposure mode: all, selected, none"))
 	tunnelEnableCmd.Flags().StringVar(&tunnelEnableSubdomain, "subdomain", "", "Custom subdomain (auto-assigned if empty)")
-	tunnelEnableCmd.Flags().StringVar(&tunnelEnableDomain, "domain", "", "Custom domain")
-	tunnelEnableCmd.Flags().StringVar(&tunnelEnableAuthToken, "auth-token", "", "Require token for incoming requests")
+	tunnelEnableCmd.Flags().StringVar(&tunnelEnableDomain, "domain", "", i18n.T("Custom domain"))
+	tunnelEnableCmd.Flags().StringVar(&tunnelEnableAuthToken, "auth-token", "", i18n.T("Require token for incoming requests"))
 	tunnelEnableCmd.Flags().StringVar(&tunnelEnableAuthBasic, "auth-basic", "", "Require Basic Auth (user:pass)")
 	tunnelEnableCmd.Flags().StringVar(&tunnelEnableAllowIPs, "allow-ips", "", "Restrict by IP (comma-separated CIDRs)")
 	tunnelEnableCmd.Flags().StringVar(&tunnelEnableWorkspaces, "workspaces", "", "Expose only these workspaces (comma-separated)")
@@ -791,19 +792,19 @@ func init() {
 	tunnelEnableCmd.Flags().StringVar(&tunnelEnableExcludeMocks, "exclude-mocks", "", "Exclude these mock IDs (comma-separated)")
 
 	tunnelCmd.AddCommand(tunnelDisableCmd)
-	tunnelDisableCmd.Flags().StringVar(&tunnelDisableEngine, "engine", "local", "Engine ID")
+	tunnelDisableCmd.Flags().StringVar(&tunnelDisableEngine, "engine", "local", i18n.T("Engine ID"))
 
 	tunnelCmd.AddCommand(tunnelStatusCmd)
-	tunnelStatusCmd.Flags().StringVar(&tunnelStatusEngine, "engine", "local", "Engine ID")
+	tunnelStatusCmd.Flags().StringVar(&tunnelStatusEngine, "engine", "local", i18n.T("Engine ID"))
 
 	tunnelCmd.AddCommand(tunnelStopCmd)
-	tunnelStopCmd.Flags().StringVar(&tunnelDisableEngine, "engine", "local", "Engine ID")
+	tunnelStopCmd.Flags().StringVar(&tunnelDisableEngine, "engine", "local", i18n.T("Engine ID"))
 
 	tunnelCmd.AddCommand(tunnelListCmd)
 
 	tunnelCmd.AddCommand(tunnelPreviewCmd)
-	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewEngine, "engine", "local", "Engine ID")
-	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewMode, "mode", "all", "Exposure mode: all, selected, none")
+	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewEngine, "engine", "local", i18n.T("Engine ID"))
+	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewMode, "mode", "all", i18n.T("Exposure mode: all, selected, none"))
 	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewWorkspaces, "workspaces", "", "Expose only these workspaces (comma-separated)")
 	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewFolders, "folders", "", "Expose only these folders (comma-separated)")
 	tunnelPreviewCmd.Flags().StringVar(&tunnelPreviewMocks, "mocks", "", "Expose only these mock IDs (comma-separated)")

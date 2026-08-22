@@ -16,7 +16,8 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // ─── websocket parent command ────────────────────────────────────────────────
 
@@ -46,8 +47,8 @@ var (
 var wsConnectCmd = &cobra.Command{
 	Use:   "connect <url>",
 	Short: "Interactive WebSocket client (REPL mode)",
-	Long: `Start an interactive WebSocket client session (REPL mode).
-Type messages to send, press Enter to send. Ctrl+C to exit.`,
+	Long: i18n.T(`Start an interactive WebSocket client session (REPL mode).
+Type messages to send, press Enter to send. Ctrl+C to exit.`),
 	Example: `  # Connect to a WebSocket endpoint
   mockd websocket connect ws://localhost:4280/ws
 
@@ -207,9 +208,9 @@ var (
 var wsSendCmd = &cobra.Command{
 	Use:   "send <url> <message>",
 	Short: "Send a single message and exit",
-	Long: `Send a single message to a WebSocket endpoint and exit.
+	Long: i18n.T(`Send a single message to a WebSocket endpoint and exit.
 
-If the message starts with @, the content is read from the named file.`,
+If the message starts with @, the content is read from the named file.`),
 	Example: `  # Send a simple message
   mockd websocket send ws://localhost:4280/ws "hello"
 
@@ -301,10 +302,10 @@ var (
 var wsListenCmd = &cobra.Command{
 	Use:   "listen <url>",
 	Short: "Stream incoming messages",
-	Long: `Listen for incoming WebSocket messages and print them.
+	Long: i18n.T(`Listen for incoming WebSocket messages and print them.
 
 Messages are printed to stdout (one per line). Use --json for structured output.
-Use --count to limit the number of messages received.`,
+Use --count to limit the number of messages received.`),
 	Example: `  # Listen to all messages
   mockd websocket listen ws://localhost:4280/ws
 
@@ -486,8 +487,8 @@ func init() {
 	// websocket add flags
 	wsAddCmd.Flags().StringVar(&addPath, "path", "", "WebSocket endpoint path (e.g., /ws)")
 	wsAddCmd.Flags().StringVar(&addMessage, "message", "", "Default response message (JSON)")
-	wsAddCmd.Flags().BoolVar(&addEcho, "echo", false, "Enable echo mode")
-	wsAddCmd.Flags().StringVar(&addName, "name", "", "Mock display name")
+	wsAddCmd.Flags().BoolVar(&addEcho, "echo", false, i18n.T("Enable echo mode"))
+	wsAddCmd.Flags().StringVar(&addName, "name", "", i18n.T("Mock display name"))
 	websocketCmd.AddCommand(wsAddCmd)
 
 	// list/get/delete generic aliases
@@ -512,20 +513,20 @@ func init() {
 
 	// websocket connect flags
 	wsConnectCmd.Flags().VarP(&wsConnectHeaders, "header", "H", "Custom headers (key:value), repeatable")
-	wsConnectCmd.Flags().StringVar(&wsConnectSubprotocol, "subprotocol", "", "WebSocket subprotocol")
-	wsConnectCmd.Flags().DurationVarP(&wsConnectTimeout, "timeout", "t", 30*time.Second, "Connection timeout")
+	wsConnectCmd.Flags().StringVar(&wsConnectSubprotocol, "subprotocol", "", i18n.T("WebSocket subprotocol"))
+	wsConnectCmd.Flags().DurationVarP(&wsConnectTimeout, "timeout", "t", 30*time.Second, i18n.T("Connection timeout"))
 	websocketCmd.AddCommand(wsConnectCmd)
 
 	// websocket send flags
 	wsSendCmd.Flags().VarP(&wsSendHeaders, "header", "H", "Custom headers (key:value), repeatable")
-	wsSendCmd.Flags().StringVar(&wsSendSubprotocol, "subprotocol", "", "WebSocket subprotocol")
-	wsSendCmd.Flags().DurationVarP(&wsSendTimeout, "timeout", "t", 30*time.Second, "Connection timeout")
+	wsSendCmd.Flags().StringVar(&wsSendSubprotocol, "subprotocol", "", i18n.T("WebSocket subprotocol"))
+	wsSendCmd.Flags().DurationVarP(&wsSendTimeout, "timeout", "t", 30*time.Second, i18n.T("Connection timeout"))
 	websocketCmd.AddCommand(wsSendCmd)
 
 	// websocket listen flags
 	wsListenCmd.Flags().VarP(&wsListenHeaders, "header", "H", "Custom headers (key:value), repeatable")
-	wsListenCmd.Flags().StringVar(&wsListenSubprotocol, "subprotocol", "", "WebSocket subprotocol")
-	wsListenCmd.Flags().DurationVarP(&wsListenTimeout, "timeout", "t", 30*time.Second, "Connection timeout")
+	wsListenCmd.Flags().StringVar(&wsListenSubprotocol, "subprotocol", "", i18n.T("WebSocket subprotocol"))
+	wsListenCmd.Flags().DurationVarP(&wsListenTimeout, "timeout", "t", 30*time.Second, i18n.T("Connection timeout"))
 	wsListenCmd.Flags().IntVarP(&wsListenCount, "count", "n", 0, "Number of messages to receive (0 = unlimited)")
 	websocketCmd.AddCommand(wsListenCmd)
 

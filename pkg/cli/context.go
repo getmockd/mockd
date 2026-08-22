@@ -12,6 +12,7 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
+	"github.com/getmockd/mockd/pkg/i18n"
 )
 
 // contextForJSON is a sanitized version of Context for JSON output.
@@ -282,11 +283,11 @@ var contextAddCmd = &cobra.Command{
 
 func init() {
 	contextAddCmd.Flags().StringVarP(&contextAddAdminURL, "admin-url", "u", "", "Admin API URL (e.g., http://localhost:4290)")
-	contextAddCmd.Flags().StringVarP(&contextAddWorkspace, "workspace", "w", "", "Default workspace for this context")
-	contextAddCmd.Flags().StringVarP(&contextAddDescription, "description", "d", "", "Description for this context")
-	contextAddCmd.Flags().StringVarP(&contextAddToken, "token", "t", "", "Auth token for cloud/enterprise deployments")
-	contextAddCmd.Flags().BoolVar(&contextAddTLSInsecure, "tls-insecure", false, "Skip TLS certificate verification")
-	contextAddCmd.Flags().BoolVar(&contextAddUseCurrent, "use", false, "Switch to this context after adding")
+	contextAddCmd.Flags().StringVarP(&contextAddWorkspace, "workspace", "w", "", i18n.T("Default workspace for this context"))
+	contextAddCmd.Flags().StringVarP(&contextAddDescription, "description", "d", "", i18n.T("Description for this context"))
+	contextAddCmd.Flags().StringVarP(&contextAddToken, "token", "t", "", i18n.T("Auth token for cloud/enterprise deployments"))
+	contextAddCmd.Flags().BoolVar(&contextAddTLSInsecure, "tls-insecure", false, i18n.T("Skip TLS certificate verification"))
+	contextAddCmd.Flags().BoolVar(&contextAddUseCurrent, "use", false, i18n.T("Switch to this context after adding"))
 	contextCmd.AddCommand(contextAddCmd)
 }
 
@@ -418,6 +419,6 @@ var contextRemoveCmd = &cobra.Command{
 }
 
 func init() {
-	contextRemoveCmd.Flags().BoolVarP(&contextRemoveForce, "force", "f", false, "Force removal without confirmation")
+	contextRemoveCmd.Flags().BoolVarP(&contextRemoveForce, "force", "f", false, i18n.T("Force removal without confirmation"))
 	contextCmd.AddCommand(contextRemoveCmd)
 }

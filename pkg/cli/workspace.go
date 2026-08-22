@@ -16,6 +16,7 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
+	"github.com/getmockd/mockd/pkg/i18n"
 )
 
 // WorkspaceDTO matches the API response format.
@@ -319,9 +320,9 @@ var workspaceCreateCmd = &cobra.Command{
 
 func init() {
 	workspaceCreateCmd.Flags().StringVarP(&workspaceCreateName, "name", "n", "", "Workspace name (required)")
-	workspaceCreateCmd.Flags().StringVarP(&workspaceCreateDesc, "description", "d", "", "Workspace description")
-	workspaceCreateCmd.Flags().StringVar(&workspaceCreateType, "type", "local", "Workspace type")
-	workspaceCreateCmd.Flags().BoolVar(&workspaceCreateUseCurrent, "use", false, "Switch to this workspace after creating")
+	workspaceCreateCmd.Flags().StringVarP(&workspaceCreateDesc, "description", "d", "", i18n.T("Workspace description"))
+	workspaceCreateCmd.Flags().StringVar(&workspaceCreateType, "type", "local", i18n.T("Workspace type"))
+	workspaceCreateCmd.Flags().BoolVar(&workspaceCreateUseCurrent, "use", false, i18n.T("Switch to this workspace after creating"))
 	workspaceCmd.AddCommand(workspaceCreateCmd)
 }
 
@@ -401,7 +402,7 @@ var workspaceDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	workspaceDeleteCmd.Flags().BoolVarP(&workspaceDeleteForce, "force", "f", false, "Force deletion without confirmation")
+	workspaceDeleteCmd.Flags().BoolVarP(&workspaceDeleteForce, "force", "f", false, i18n.T("Force deletion without confirmation"))
 	workspaceCmd.AddCommand(workspaceDeleteCmd)
 }
 

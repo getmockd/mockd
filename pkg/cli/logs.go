@@ -20,7 +20,8 @@ import (
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/getmockd/mockd/pkg/requestlog"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	logsFollow    bool
@@ -39,10 +40,10 @@ var (
 var logsCmd = &cobra.Command{
 	Use:   "logs [service-name]",
 	Short: "View logs from mockd services running in detached mode",
-	Long: `View logs from mockd services running in detached mode.
+	Long: i18n.T(`View logs from mockd services running in detached mode.
 
 By default, shows daemon logs from ~/.mockd/logs/. Use --requests to show
-request logs from the admin API instead.`,
+request logs from the admin API instead.`),
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serviceName := ""
@@ -79,18 +80,18 @@ request logs from the admin API instead.`,
 func init() {
 	// Daemon logs flags
 	logsCmd.Flags().BoolVarP(&logsFollow, "follow", "f", false, "Follow log output in real-time (like tail -f)")
-	logsCmd.Flags().IntVarP(&logsLines, "lines", "n", 100, "Number of lines to show")
+	logsCmd.Flags().IntVarP(&logsLines, "lines", "n", 100, i18n.T("Number of lines to show"))
 	logsCmd.Flags().StringVar(&logsLogDir, "log-dir", defaultLogsPath(), "Path to logs directory")
 
 	// Request logs flags
-	logsCmd.Flags().BoolVar(&logsRequests, "requests", false, "Show request logs from admin API instead of daemon logs")
+	logsCmd.Flags().BoolVar(&logsRequests, "requests", false, i18n.T("Show request logs from admin API instead of daemon logs"))
 	logsCmd.Flags().StringVar(&logsProtocol, "protocol", "", "Filter by protocol (http, grpc, mqtt, soap, graphql, websocket, sse) [requests mode]")
-	logsCmd.Flags().StringVarP(&logsMethod, "method", "m", "", "Filter by HTTP method [requests mode]")
+	logsCmd.Flags().StringVarP(&logsMethod, "method", "m", "", i18n.T("Filter by HTTP method [requests mode]"))
 	logsCmd.Flags().StringVarP(&logsPath, "path", "p", "", "Filter by path (substring match) [requests mode]")
-	logsCmd.Flags().BoolVar(&logsMatched, "matched", false, "Show only matched requests [requests mode]")
-	logsCmd.Flags().BoolVar(&logsUnmatched, "unmatched", false, "Show only unmatched requests [requests mode]")
-	logsCmd.Flags().BoolVar(&logsVerbose, "verbose", false, "Show headers and body [requests mode]")
-	logsCmd.Flags().BoolVar(&logsClear, "clear", false, "Clear all logs [requests mode]")
+	logsCmd.Flags().BoolVar(&logsMatched, "matched", false, i18n.T("Show only matched requests [requests mode]"))
+	logsCmd.Flags().BoolVar(&logsUnmatched, "unmatched", false, i18n.T("Show only unmatched requests [requests mode]"))
+	logsCmd.Flags().BoolVar(&logsVerbose, "verbose", false, i18n.T("Show headers and body [requests mode]"))
+	logsCmd.Flags().BoolVar(&logsClear, "clear", false, i18n.T("Clear all logs [requests mode]"))
 
 	rootCmd.AddCommand(logsCmd)
 }

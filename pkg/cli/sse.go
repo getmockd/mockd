@@ -6,7 +6,8 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // ─── SSE parent command ─────────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ var sseAddCmd = &cobra.Command{
 var sseConnectionsCmd = &cobra.Command{
 	Use:   "connections",
 	Short: "Manage active SSE connections",
-	Long:  `List, inspect, or close active SSE connections.`,
+	Long:  i18n.T(`List, inspect, or close active SSE connections.`),
 	RunE:  runSSEConnectionsList,
 }
 
@@ -149,7 +150,7 @@ func init() {
 
 	// sse add
 	sseAddCmd.Flags().StringVar(&addPath, "path", "", "SSE endpoint path (e.g., /events)")
-	sseAddCmd.Flags().StringVar(&addName, "name", "", "Mock display name")
+	sseAddCmd.Flags().StringVar(&addName, "name", "", i18n.T("Mock display name"))
 	sseCmd.AddCommand(sseAddCmd)
 
 	// list/get/delete generic aliases

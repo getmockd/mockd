@@ -19,7 +19,8 @@ import (
 	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // SessionMeta is the metadata written to meta.json for each recording session.
 type SessionMeta struct {
@@ -41,7 +42,7 @@ type SessionMeta struct {
 var proxyCmd = &cobra.Command{
 	Use:   "proxy",
 	Short: "Manage the MITM proxy for recording API traffic",
-	Long:  `Manage the MITM proxy for recording API traffic.`,
+	Long:  i18n.T(`Manage the MITM proxy for recording API traffic.`),
 }
 
 var (
@@ -59,9 +60,9 @@ var (
 var proxyStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the MITM proxy server (foreground, Ctrl+C to stop)",
-	Long: `Start the MITM proxy server for recording API traffic.
+	Long: i18n.T(`Start the MITM proxy server for recording API traffic.
 Recordings are written to disk as traffic flows through the proxy.
-Press Ctrl+C to stop. Use 'mockd recordings list' to view captured traffic.`,
+Press Ctrl+C to stop. Use 'mockd recordings list' to view captured traffic.`),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		port := &proxyStartPort
 		mode := &proxyStartMode
@@ -380,22 +381,22 @@ func init() {
 	rootCmd.AddCommand(proxyCmd)
 
 	proxyCmd.AddCommand(proxyStartCmd)
-	proxyStartCmd.Flags().IntVarP(&proxyStartPort, "port", "p", 8888, "Proxy server port")
-	proxyStartCmd.Flags().StringVarP(&proxyStartMode, "mode", "m", "record", "Proxy mode: record or passthrough")
-	proxyStartCmd.Flags().StringVarP(&proxyStartSession, "session", "s", "", "Recording session name")
-	proxyStartCmd.Flags().StringVar(&proxyStartRecordingsDir, "recordings-dir", "", "Base directory for recordings")
-	proxyStartCmd.Flags().StringVar(&proxyStartCAPath, "ca-path", "", "Path to CA certificate directory")
-	proxyStartCmd.Flags().StringVar(&proxyStartIncludePaths, "include", "", "Comma-separated path patterns to include")
-	proxyStartCmd.Flags().StringVar(&proxyStartExcludePaths, "exclude", "", "Comma-separated path patterns to exclude")
-	proxyStartCmd.Flags().StringVar(&proxyStartIncludeHosts, "include-hosts", "", "Comma-separated host patterns to include")
-	proxyStartCmd.Flags().StringVar(&proxyStartExcludeHosts, "exclude-hosts", "", "Comma-separated host patterns to exclude")
+	proxyStartCmd.Flags().IntVarP(&proxyStartPort, "port", "p", 8888, i18n.T("Proxy server port"))
+	proxyStartCmd.Flags().StringVarP(&proxyStartMode, "mode", "m", "record", i18n.T("Proxy mode: record or passthrough"))
+	proxyStartCmd.Flags().StringVarP(&proxyStartSession, "session", "s", "", i18n.T("Recording session name"))
+	proxyStartCmd.Flags().StringVar(&proxyStartRecordingsDir, "recordings-dir", "", i18n.T("Base directory for recordings"))
+	proxyStartCmd.Flags().StringVar(&proxyStartCAPath, "ca-path", "", i18n.T("Path to CA certificate directory"))
+	proxyStartCmd.Flags().StringVar(&proxyStartIncludePaths, "include", "", i18n.T("Comma-separated path patterns to include"))
+	proxyStartCmd.Flags().StringVar(&proxyStartExcludePaths, "exclude", "", i18n.T("Comma-separated path patterns to exclude"))
+	proxyStartCmd.Flags().StringVar(&proxyStartIncludeHosts, "include-hosts", "", i18n.T("Comma-separated host patterns to include"))
+	proxyStartCmd.Flags().StringVar(&proxyStartExcludeHosts, "exclude-hosts", "", i18n.T("Comma-separated host patterns to exclude"))
 
 	proxyCmd.AddCommand(proxyCACmd)
 
 	proxyCACmd.AddCommand(proxyCAExportCmd)
 	proxyCAExportCmd.Flags().StringVarP(&proxyCAExportOutput, "output", "o", "", "Output file path (default: stdout)")
-	proxyCAExportCmd.Flags().StringVar(&proxyCAExportCAPath, "ca-path", "", "Path to CA certificate directory")
+	proxyCAExportCmd.Flags().StringVar(&proxyCAExportCAPath, "ca-path", "", i18n.T("Path to CA certificate directory"))
 
 	proxyCACmd.AddCommand(proxyCAGenerateCmd)
-	proxyCAGenerateCmd.Flags().StringVar(&proxyCAGenerateCAPath, "ca-path", "", "Path to CA certificate directory")
+	proxyCAGenerateCmd.Flags().StringVar(&proxyCAGenerateCAPath, "ca-path", "", i18n.T("Path to CA certificate directory"))
 }

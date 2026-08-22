@@ -16,7 +16,8 @@ import (
 
 	"github.com/getmockd/mockd/pkg/portability"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 const (
 	defaultTemplatesBaseURL = "https://raw.githubusercontent.com/getmockd/mockd-templates/main"
@@ -57,7 +58,7 @@ var (
 var templatesCmd = &cobra.Command{
 	Use:   "templates",
 	Short: "Manage mock templates from the official template library",
-	Long: `Manage mock templates from the official template library.
+	Long: i18n.T(`Manage mock templates from the official template library.
 
 Examples:
   # List all templates
@@ -70,7 +71,7 @@ Examples:
   mockd templates add services/openai/chat-completions
 
   # Save template to file
-  mockd templates add protocols/websocket/chat -o websocket.yaml`,
+  mockd templates add protocols/websocket/chat -o websocket.yaml`),
 }
 
 var templatesListCmd = &cobra.Command{
@@ -235,12 +236,12 @@ func init() {
 
 	templatesCmd.AddCommand(templatesListCmd)
 	templatesListCmd.Flags().StringVarP(&templatesListCategory, "category", "c", "", "Filter by category (protocols, services, patterns)")
-	templatesListCmd.Flags().StringVar(&templatesListBaseURL, "base-url", defaultTemplatesBaseURL, "Templates repository base URL")
+	templatesListCmd.Flags().StringVar(&templatesListBaseURL, "base-url", defaultTemplatesBaseURL, i18n.T("Templates repository base URL"))
 
 	templatesCmd.AddCommand(templatesAddCmd)
-	templatesAddCmd.Flags().StringVarP(&templatesAddOutput, "output", "o", "", "Save to file instead of importing to server")
-	templatesAddCmd.Flags().StringVar(&templatesAddBaseURL, "base-url", defaultTemplatesBaseURL, "Templates repository base URL")
-	templatesAddCmd.Flags().BoolVar(&templatesAddDryRun, "dry-run", false, "Preview template content without importing")
+	templatesAddCmd.Flags().StringVarP(&templatesAddOutput, "output", "o", "", i18n.T("Save to file instead of importing to server"))
+	templatesAddCmd.Flags().StringVar(&templatesAddBaseURL, "base-url", defaultTemplatesBaseURL, i18n.T("Templates repository base URL"))
+	templatesAddCmd.Flags().BoolVar(&templatesAddDryRun, "dry-run", false, i18n.T("Preview template content without importing"))
 }
 
 // fetchTemplatesIndex fetches and parses the templates index.

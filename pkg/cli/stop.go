@@ -9,6 +9,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
+	"github.com/getmockd/mockd/pkg/i18n"
 )
 
 var (
@@ -135,7 +136,7 @@ var stopCmd = &cobra.Command{
 
 func init() {
 	stopCmd.Flags().StringVar(&stopPidFile, "pid-file", "", "Path to PID file (default: ~/.mockd/mockd.pid)")
-	stopCmd.Flags().BoolVarP(&stopForce, "force", "f", false, "Send SIGKILL instead of SIGTERM")
-	stopCmd.Flags().IntVar(&stopTimeout, "timeout", 10, "Timeout in seconds to wait for graceful shutdown")
+	stopCmd.Flags().BoolVarP(&stopForce, "force", "f", false, i18n.T("Send SIGKILL instead of SIGTERM"))
+	stopCmd.Flags().IntVar(&stopTimeout, "timeout", 10, i18n.T("Timeout in seconds to wait for graceful shutdown"))
 	rootCmd.AddCommand(stopCmd)
 }

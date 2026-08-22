@@ -9,7 +9,8 @@ import (
 
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	deletePath   string
@@ -20,7 +21,7 @@ var (
 var deleteCmd = &cobra.Command{
 	Use:   "delete [<mock-id>]",
 	Short: "Delete mocks by ID, ID prefix, or path",
-	Long:  `Delete mocks by ID, ID prefix, or path.`,
+	Long:  i18n.T(`Delete mocks by ID, ID prefix, or path.`),
 	Example: `  # Delete by full ID
   mockd delete http_abc123def456
 
@@ -40,9 +41,9 @@ var deleteCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(deleteCmd)
-	deleteCmd.Flags().StringVar(&deletePath, "path", "", "Delete mocks matching this URL path")
+	deleteCmd.Flags().StringVar(&deletePath, "path", "", i18n.T("Delete mocks matching this URL path"))
 	deleteCmd.Flags().StringVar(&deleteMethod, "method", "", "HTTP method to match (used with --path, default: all methods)")
-	deleteCmd.Flags().BoolVarP(&deleteYes, "yes", "y", false, "Skip confirmation prompt")
+	deleteCmd.Flags().BoolVarP(&deleteYes, "yes", "y", false, i18n.T("Skip confirmation prompt"))
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {

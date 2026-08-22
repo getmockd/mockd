@@ -23,7 +23,8 @@ import (
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/tunnel"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // upContext holds runtime state for the up command.
 type upContext struct {
@@ -63,14 +64,14 @@ var (
 var upCmd = &cobra.Command{
 	Use:   "up",
 	Short: "Start local admins and engines defined in mockd.yaml",
-	Long: `Start local admins and engines defined in mockd.yaml.
+	Long: i18n.T(`Start local admins and engines defined in mockd.yaml.
 
 This command:
   1. Loads and validates the config
   2. Starts local admin servers (those without 'url' field)
   3. Starts local engine servers  
   4. Applies workspaces and mocks to local admins
-  5. Runs in foreground (or background with -d)`,
+  5. Runs in foreground (or background with -d)`),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Load config

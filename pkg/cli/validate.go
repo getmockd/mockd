@@ -7,7 +7,8 @@ import (
 
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	validateConfigFiles  []string
@@ -18,13 +19,13 @@ var (
 var validateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate a mockd configuration file without starting any services",
-	Long: `Validate a mockd configuration file without starting any services.
+	Long: i18n.T(`Validate a mockd configuration file without starting any services.
 
 This command checks:
   - YAML syntax
   - Schema validation (required fields, valid values)
   - Reference integrity (engines reference valid admins, etc.)
-  - Port conflicts between services`,
+  - Port conflicts between services`),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		configFiles := validateConfigFiles
@@ -272,7 +273,7 @@ func printResolvedConfig(cfg *config.ProjectConfig) {
 
 func init() {
 	validateCmd.Flags().StringSliceVarP(&validateConfigFiles, "config", "f", nil, "Config file path (can be specified multiple times)")
-	validateCmd.Flags().BoolVar(&validateVerbose, "verbose", false, "Show detailed validation information")
-	validateCmd.Flags().BoolVar(&validateShowResolved, "show-resolved", false, "Show resolved config after env var expansion")
+	validateCmd.Flags().BoolVar(&validateVerbose, "verbose", false, i18n.T("Show detailed validation information"))
+	validateCmd.Flags().BoolVar(&validateShowResolved, "show-resolved", false, i18n.T("Show resolved config after env var expansion"))
 	rootCmd.AddCommand(validateCmd)
 }

@@ -6,14 +6,15 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // ─── gRPC connection management ─────────────────────────────────────────────
 
 var grpcConnectionsCmd = &cobra.Command{
 	Use:   "connections",
 	Short: "Manage active gRPC streaming connections",
-	Long:  `List, inspect, or cancel active gRPC streaming RPC connections.`,
+	Long:  i18n.T(`List, inspect, or cancel active gRPC streaming RPC connections.`),
 	RunE:  runGRPCConnectionsList,
 }
 

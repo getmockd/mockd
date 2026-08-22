@@ -6,7 +6,8 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // PortInfo represents information about a single port.
 type PortInfo struct {
@@ -42,10 +43,10 @@ var (
 var portsCmd = &cobra.Command{
 	Use:   "ports",
 	Short: "Show all ports in use by the running mockd server",
-	Long: `Show all ports in use by the running mockd server.
+	Long: i18n.T(`Show all ports in use by the running mockd server.
 
 Lists all listening ports for mock engines, admin APIs, and protocol-specific
-listeners (gRPC, MQTT, etc.).`,
+listeners (gRPC, MQTT, etc.).`),
 	Example: `  # Show all ports
   mockd ports
 
