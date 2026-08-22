@@ -12,7 +12,8 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/portability"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // ─── init command ────────────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ var (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Create a starter mockd.yaml configuration file",
-	Long: `Create a starter mockd.yaml configuration file.
+	Long: i18n.T(`Create a starter mockd.yaml configuration file.
 
 Built-in Templates:
   minimal          Just admin + engine + one health mock
@@ -41,7 +42,7 @@ Protocol Templates:
   websocket-chat   Chat room WebSocket endpoint with echo
   graphql-api      GraphQL API with User CRUD resolvers
   grpc-service     gRPC Greeter service with reflection
-  mqtt-iot         MQTT broker with IoT sensor topics`,
+  mqtt-iot         MQTT broker with IoT sensor topics`),
 	Example: `  # Interactive wizard (default)
   mockd init
 
@@ -79,7 +80,7 @@ var (
 var importCmd = &cobra.Command{
 	Use:   "import <source>",
 	Short: "Import mocks from various sources and formats",
-	Long: `Import mocks from various sources and formats.
+	Long: i18n.T(`Import mocks from various sources and formats.
 
 Supported Formats:
   mockd      Mockd native format (YAML/JSON)
@@ -89,7 +90,7 @@ Supported Formats:
   wiremock   WireMock JSON mappings
   mockoon    Mockoon environment JSON
   curl       cURL command
-  wsdl       WSDL 1.1 service definition (generates SOAP mocks)`,
+  wsdl       WSDL 1.1 service definition (generates SOAP mocks)`),
 	Example: `  # Import from OpenAPI spec (auto-detected)
   mockd import openapi.yaml
 
@@ -126,11 +127,11 @@ var (
 var exportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "Export current mock configuration to various formats",
-	Long: `Export current mock configuration to various formats.
+	Long: i18n.T(`Export current mock configuration to various formats.
 
 Formats:
   mockd    Mockd native format (YAML/JSON) - recommended for portability
-  openapi  OpenAPI 3.x specification - for API documentation`,
+  openapi  OpenAPI 3.x specification - for API documentation`),
 	Example: `  # Export to stdout as YAML
   mockd export
 
@@ -151,26 +152,26 @@ Formats:
 
 func init() {
 	// init command flags
-	initCmd.Flags().BoolVar(&initForce, "force", false, "Overwrite existing config file")
-	initCmd.Flags().StringVarP(&initOutput, "output", "o", "mockd.yaml", "Output filename")
+	initCmd.Flags().BoolVar(&initForce, "force", false, i18n.T("Overwrite existing config file"))
+	initCmd.Flags().StringVarP(&initOutput, "output", "o", "mockd.yaml", i18n.T("Output filename"))
 	initCmd.Flags().StringVar(&initFormat, "format", "", "Output format: yaml or json (default: inferred from filename)")
-	initCmd.Flags().BoolVar(&initDefaults, "defaults", false, "Generate minimal config without prompts")
-	initCmd.Flags().BoolVarP(&initInteractive, "interactive", "i", false, "Interactive mode - prompts for configuration")
-	initCmd.Flags().StringVarP(&initTemplate, "template", "t", "", "Use predefined template")
+	initCmd.Flags().BoolVar(&initDefaults, "defaults", false, i18n.T("Generate minimal config without prompts"))
+	initCmd.Flags().BoolVarP(&initInteractive, "interactive", "i", false, i18n.T("Interactive mode - prompts for configuration"))
+	initCmd.Flags().StringVarP(&initTemplate, "template", "t", "", i18n.T("Use predefined template"))
 	rootCmd.AddCommand(initCmd)
 
 	// import command flags
 	importCmd.Flags().StringVarP(&importFormat, "format", "f", "", "Force format (auto-detected if omitted)")
-	importCmd.Flags().BoolVar(&importReplace, "replace", false, "Replace all existing mocks")
-	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, "Preview import without saving")
+	importCmd.Flags().BoolVar(&importReplace, "replace", false, i18n.T("Replace all existing mocks"))
+	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, i18n.T("Preview import without saving"))
 	importCmd.Flags().BoolVar(&importIncludeStatic, "include-static", false, "Include static assets (for HAR imports)")
 	rootCmd.AddCommand(importCmd)
 
 	// export command flags
 	exportCmd.Flags().StringVarP(&exportOutput, "output", "o", "", "Output file (default: stdout)")
-	exportCmd.Flags().StringVarP(&exportName, "name", "n", "exported-config", "Collection name")
-	exportCmd.Flags().StringVarP(&exportFormat, "format", "f", "mockd", "Output format: mockd, openapi")
-	exportCmd.Flags().StringVar(&exportVersion, "version", "", "Version tag for the export")
+	exportCmd.Flags().StringVarP(&exportName, "name", "n", "exported-config", i18n.T("Collection name"))
+	exportCmd.Flags().StringVarP(&exportFormat, "format", "f", "mockd", i18n.T("Output format: mockd, openapi"))
+	exportCmd.Flags().StringVar(&exportVersion, "version", "", i18n.T("Version tag for the export"))
 	rootCmd.AddCommand(exportCmd)
 }
 

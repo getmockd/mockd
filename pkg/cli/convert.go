@@ -12,7 +12,8 @@ import (
 
 	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	convertSessionName    string
@@ -32,7 +33,7 @@ var (
 var convertCmd = &cobra.Command{
 	Use:   "convert",
 	Short: "Convert recorded API traffic to mock definitions",
-	Long: `Convert recorded API traffic to mock definitions.
+	Long: i18n.T(`Convert recorded API traffic to mock definitions.
 Reads recordings from disk (written by 'mockd proxy start') and produces
 mock configuration that can be imported with 'mockd import'.
 
@@ -50,7 +51,7 @@ Examples:
   mockd convert --file ./my-recordings/rec_abc123.json
 
   # Pipe directly to import
-  mockd convert --session my-api --smart-match | mockd import`,
+  mockd convert --session my-api --smart-match | mockd import`),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		file := &convertFile
 		sessionName := &convertSessionName
@@ -148,17 +149,17 @@ func init() {
 	rootCmd.AddCommand(convertCmd)
 
 	convertCmd.Flags().StringVarP(&convertSessionName, "session", "s", "", "Session name or directory (default: latest)")
-	convertCmd.Flags().StringVarP(&convertFile, "file", "f", "", "Path to a recording file or directory")
-	convertCmd.Flags().StringVar(&convertRecordingsDir, "recordings-dir", "", "Base recordings directory override")
-	convertCmd.Flags().StringVar(&convertIncludeHosts, "include-hosts", "", "Comma-separated host patterns to include")
+	convertCmd.Flags().StringVarP(&convertFile, "file", "f", "", i18n.T("Path to a recording file or directory"))
+	convertCmd.Flags().StringVar(&convertRecordingsDir, "recordings-dir", "", i18n.T("Base recordings directory override"))
+	convertCmd.Flags().StringVar(&convertIncludeHosts, "include-hosts", "", i18n.T("Comma-separated host patterns to include"))
 
 	convertCmd.Flags().StringVar(&convertPathFilter, "path-filter", "", "Glob pattern to filter paths (e.g., /api/*)")
 	convertCmd.Flags().StringVar(&convertMethod, "method", "", "Comma-separated HTTP methods (e.g., GET,POST)")
 	convertCmd.Flags().StringVar(&convertStatus, "status", "", "Status code filter (e.g., 2xx, 200,201)")
-	convertCmd.Flags().BoolVar(&convertSmartMatch, "smart-match", false, "Convert dynamic path segments like /users/123 to /users/{id}")
-	convertCmd.Flags().StringVar(&convertDuplicates, "duplicates", "first", "Duplicate handling strategy: first, last, all")
-	convertCmd.Flags().BoolVar(&convertIncludeHeaders, "include-headers", false, "Include request headers in mock matchers")
-	convertCmd.Flags().BoolVar(&convertCheckSensitive, "check-sensitive", true, "Check for sensitive data and show warnings")
+	convertCmd.Flags().BoolVar(&convertSmartMatch, "smart-match", false, i18n.T("Convert dynamic path segments like /users/123 to /users/{id}"))
+	convertCmd.Flags().StringVar(&convertDuplicates, "duplicates", "first", i18n.T("Duplicate handling strategy: first, last, all"))
+	convertCmd.Flags().BoolVar(&convertIncludeHeaders, "include-headers", false, i18n.T("Include request headers in mock matchers"))
+	convertCmd.Flags().BoolVar(&convertCheckSensitive, "check-sensitive", true, i18n.T("Check for sensitive data and show warnings"))
 
 	convertCmd.Flags().StringVarP(&convertOutput, "output", "o", "", "Output file path (default: stdout)")
 }

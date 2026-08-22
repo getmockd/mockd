@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
+	"github.com/getmockd/mockd/pkg/i18n"
 )
 
 var oauthCmd = &cobra.Command{
@@ -81,10 +82,10 @@ func init() {
 	oauthCmd.AddCommand(oauthAddCmd)
 
 	oauthAddCmd.Flags().StringVar(&addIssuer, "issuer", "", "OAuth issuer URL (default: http://localhost:4280)")
-	oauthAddCmd.Flags().StringVar(&addClientID, "client-id", "test-client", "OAuth client ID")
-	oauthAddCmd.Flags().StringVar(&addClientSecret, "client-secret", "test-secret", "OAuth client secret")
-	oauthAddCmd.Flags().StringVar(&addOAuthUser, "oauth-user", "testuser", "OAuth test username")
-	oauthAddCmd.Flags().StringVar(&addOAuthPassword, "oauth-password", "password", "OAuth test password")
+	oauthAddCmd.Flags().StringVar(&addClientID, "client-id", "test-client", i18n.T("OAuth client ID"))
+	oauthAddCmd.Flags().StringVar(&addClientSecret, "client-secret", "test-secret", i18n.T("OAuth client secret"))
+	oauthAddCmd.Flags().StringVar(&addOAuthUser, "oauth-user", "testuser", i18n.T("OAuth test username"))
+	oauthAddCmd.Flags().StringVar(&addOAuthPassword, "oauth-password", "password", i18n.T("OAuth test password"))
 
 	// Add list/get/delete generic aliases
 	oauthCmd.AddCommand(&cobra.Command{

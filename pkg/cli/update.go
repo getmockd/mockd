@@ -9,7 +9,8 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/cli/internal/parse"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	updateBody      string
@@ -27,7 +28,7 @@ var (
 var updateCmd = &cobra.Command{
 	Use:   "update <id>",
 	Short: "Update an existing mock endpoint",
-	Long: `Update an existing mock endpoint by ID.
+	Long: i18n.T(`Update an existing mock endpoint by ID.
 
 Only specified fields are modified — unspecified fields retain their current values.
 
@@ -36,7 +37,7 @@ Examples:
   mockd update http_abc123 --body '{"updated": true}'
   mockd update http_abc123 --table users --bind list
   mockd update http_abc123 --delay 500
-  mockd update http_abc123 --enabled false`,
+  mockd update http_abc123 --enabled false`),
 	Args: cobra.ExactArgs(1),
 	RunE: runUpdate,
 }
@@ -44,15 +45,15 @@ Examples:
 func init() {
 	rootCmd.AddCommand(updateCmd)
 
-	updateCmd.Flags().StringVarP(&updateBody, "body", "b", "", "Response body")
-	updateCmd.Flags().StringVar(&updateBodyFile, "body-file", "", "Read response body from file")
-	updateCmd.Flags().IntVarP(&updateStatus, "status", "s", 0, "Response status code")
-	updateCmd.Flags().VarP(&updateHeaders, "header", "H", "Response header (key:value), repeatable")
-	updateCmd.Flags().IntVar(&updateDelay, "delay", 0, "Response delay in milliseconds")
-	updateCmd.Flags().StringVar(&updateTable, "table", "", "Bind to a stateful resource table")
-	updateCmd.Flags().StringVar(&updateBind, "bind", "", "Stateful action: list, get, create, update, patch, delete, custom")
+	updateCmd.Flags().StringVarP(&updateBody, "body", "b", "", i18n.T("Response body"))
+	updateCmd.Flags().StringVar(&updateBodyFile, "body-file", "", i18n.T("Read response body from file"))
+	updateCmd.Flags().IntVarP(&updateStatus, "status", "s", 0, i18n.T("Response status code"))
+	updateCmd.Flags().VarP(&updateHeaders, "header", "H", i18n.T("Response header (key:value), repeatable"))
+	updateCmd.Flags().IntVar(&updateDelay, "delay", 0, i18n.T("Response delay in milliseconds"))
+	updateCmd.Flags().StringVar(&updateTable, "table", "", i18n.T("Bind to a stateful resource table"))
+	updateCmd.Flags().StringVar(&updateBind, "bind", "", i18n.T("Stateful action: list, get, create, update, patch, delete, custom"))
 	updateCmd.Flags().StringVar(&updateOperation, "operation", "", "Custom operation name (for --bind custom)")
-	updateCmd.Flags().StringVarP(&updateName, "name", "n", "", "Mock display name")
+	updateCmd.Flags().StringVarP(&updateName, "name", "n", "", i18n.T("Mock display name"))
 	updateCmd.Flags().StringVar(&updateEnabled, "enabled", "", "Enable or disable the mock (true/false)")
 }
 

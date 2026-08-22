@@ -9,7 +9,8 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/portability"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	newTemplate string
@@ -21,14 +22,14 @@ var (
 var newCmd = &cobra.Command{
 	Use:   "new",
 	Short: "Create a new mock collection from a template",
-	Long: `Create a new mock collection from a template.
+	Long: i18n.T(`Create a new mock collection from a template.
 
 Templates:
   blank       Empty mock collection
   crud        REST CRUD endpoints (GET list, GET one, POST, PUT, DELETE)
   auth        Authentication flow (login, logout, refresh, me)
   pagination  List endpoints with cursor/offset pagination
-  errors      Common HTTP error responses (400, 401, 403, 404, 500)`,
+  errors      Common HTTP error responses (400, 401, 403, 404, 500)`),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get the template
 		tmpl := portability.GetTemplate(newTemplate)
@@ -95,8 +96,8 @@ Templates:
 
 func init() {
 	rootCmd.AddCommand(newCmd)
-	newCmd.Flags().StringVarP(&newTemplate, "template", "t", "blank", "Template: blank, crud, auth, pagination, errors")
-	newCmd.Flags().StringVarP(&newName, "name", "n", "", "Collection name")
-	newCmd.Flags().StringVarP(&newOutput, "output", "o", "", "Output file")
+	newCmd.Flags().StringVarP(&newTemplate, "template", "t", "blank", i18n.T("Template: blank, crud, auth, pagination, errors"))
+	newCmd.Flags().StringVarP(&newName, "name", "n", "", i18n.T("Collection name"))
+	newCmd.Flags().StringVarP(&newOutput, "output", "o", "", i18n.T("Output file"))
 	newCmd.Flags().StringVar(&newResource, "resource", "", "Resource name (for crud/pagination templates)")
 }

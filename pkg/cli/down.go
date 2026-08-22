@@ -9,6 +9,7 @@ import (
 
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/spf13/cobra"
+	"github.com/getmockd/mockd/pkg/i18n"
 )
 
 var (
@@ -137,6 +138,6 @@ func processExists(pid int) bool {
 
 func init() {
 	downCmd.Flags().StringVar(&downPidFile, "pid-file", defaultUpPIDPath(), "Path to PID file")
-	downCmd.Flags().DurationVar(&downTimeout, "timeout", 30*time.Second, "Shutdown timeout")
+	downCmd.Flags().DurationVar(&downTimeout, "timeout", 30*time.Second, i18n.T("Shutdown timeout"))
 	rootCmd.AddCommand(downCmd)
 }

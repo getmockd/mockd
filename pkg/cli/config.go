@@ -5,14 +5,15 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cliconfig"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage and display configuration",
-	Long: `Manage and display mockd effective configuration.
+	Long: i18n.T(`Manage and display mockd effective configuration.
 
-Shows parameters loaded from flags, environment variables, or config files.`,
+Shows parameters loaded from flags, environment variables, or config files.`),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Load all configuration
 		cfg, err := cliconfig.LoadAll()

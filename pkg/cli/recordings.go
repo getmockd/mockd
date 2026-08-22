@@ -10,6 +10,7 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/getmockd/mockd/pkg/recording"
 	"github.com/spf13/cobra"
+	"github.com/getmockd/mockd/pkg/i18n"
 )
 
 var recordingsCmd = &cobra.Command{
@@ -327,27 +328,27 @@ func init() {
 	rootCmd.AddCommand(recordingsCmd)
 
 	recordingsCmd.AddCommand(recordingsSessionsCmd)
-	recordingsSessionsCmd.Flags().StringVar(&recordingsSessionsDir, "recordings-dir", "", "Base recordings directory override")
+	recordingsSessionsCmd.Flags().StringVar(&recordingsSessionsDir, "recordings-dir", "", i18n.T("Base recordings directory override"))
 
 	recordingsCmd.AddCommand(recordingsListCmd)
 	recordingsListCmd.Flags().StringVarP(&recordingsListSession, "session", "s", "", "Session name or directory (default: latest)")
-	recordingsListCmd.Flags().StringVar(&recordingsListDir, "recordings-dir", "", "Base recordings directory override")
-	recordingsListCmd.Flags().StringVar(&recordingsListMethod, "method", "", "Filter by HTTP method")
-	recordingsListCmd.Flags().StringVar(&recordingsListHost, "host", "", "Filter by request host")
-	recordingsListCmd.Flags().IntVar(&recordingsListLimit, "limit", 0, "Maximum number of recordings to show")
+	recordingsListCmd.Flags().StringVar(&recordingsListDir, "recordings-dir", "", i18n.T("Base recordings directory override"))
+	recordingsListCmd.Flags().StringVar(&recordingsListMethod, "method", "", i18n.T("Filter by HTTP method"))
+	recordingsListCmd.Flags().StringVar(&recordingsListHost, "host", "", i18n.T("Filter by request host"))
+	recordingsListCmd.Flags().IntVar(&recordingsListLimit, "limit", 0, i18n.T("Maximum number of recordings to show"))
 
 	recordingsCmd.AddCommand(recordingsExportCmd)
 	recordingsExportCmd.Flags().StringVarP(&recordingsExportSession, "session", "s", "", "Session name or directory (default: latest)")
-	recordingsExportCmd.Flags().StringVar(&recordingsExportDir, "recordings-dir", "", "Base recordings directory override")
+	recordingsExportCmd.Flags().StringVar(&recordingsExportDir, "recordings-dir", "", i18n.T("Base recordings directory override"))
 	recordingsExportCmd.Flags().StringVarP(&recordingsExportOutput, "output", "o", "", "Output file path (default: stdout)")
 
 	recordingsCmd.AddCommand(recordingsImportCmd)
 	recordingsImportCmd.Flags().StringVarP(&recordingsImportInput, "input", "i", "", "Input file path (required)")
-	recordingsImportCmd.Flags().StringVar(&recordingsImportSession, "session", "imported", "Session name for imported recordings")
-	recordingsImportCmd.Flags().StringVar(&recordingsImportDir, "recordings-dir", "", "Base recordings directory override")
+	recordingsImportCmd.Flags().StringVar(&recordingsImportSession, "session", "imported", i18n.T("Session name for imported recordings"))
+	recordingsImportCmd.Flags().StringVar(&recordingsImportDir, "recordings-dir", "", i18n.T("Base recordings directory override"))
 
 	recordingsCmd.AddCommand(recordingsClearCmd)
 	recordingsClearCmd.Flags().StringVar(&recordingsClearSession, "session", "", "Session to clear (omit for all sessions)")
-	recordingsClearCmd.Flags().StringVar(&recordingsClearDir, "recordings-dir", "", "Base recordings directory override")
-	recordingsClearCmd.Flags().BoolVarP(&recordingsClearForce, "force", "f", false, "Skip confirmation")
+	recordingsClearCmd.Flags().StringVar(&recordingsClearDir, "recordings-dir", "", i18n.T("Base recordings directory override"))
+	recordingsClearCmd.Flags().BoolVarP(&recordingsClearForce, "force", "f", false, i18n.T("Skip confirmation"))
 }

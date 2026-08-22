@@ -6,14 +6,15 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // ─── MQTT connection management ─────────────────────────────────────────────
 
 var mqttConnectionsCmd = &cobra.Command{
 	Use:   "connections",
 	Short: "Manage active MQTT client connections",
-	Long:  `List, inspect, or disconnect active MQTT client connections.`,
+	Long:  i18n.T(`List, inspect, or disconnect active MQTT client connections.`),
 	RunE:  runMQTTConnectionsList,
 }
 

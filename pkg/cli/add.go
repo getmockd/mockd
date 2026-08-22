@@ -13,7 +13,8 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	addMockType       string
@@ -77,7 +78,7 @@ var (
 var addCmd = &cobra.Command{
 	Use:   "add [type]",
 	Short: "Add a new mock endpoint",
-	Long: `Add a new mock endpoint.
+	Long: i18n.T(`Add a new mock endpoint.
 
 The mock type can be specified as a positional argument, a flag, or via
 the protocol subcommands:
@@ -86,7 +87,7 @@ the protocol subcommands:
   mockd add --type http --path /api/hello   # flag type
   mockd http add --path /api/hello          # subcommand
 
-Valid types: http, websocket, graphql, grpc, mqtt, soap, oauth`,
+Valid types: http, websocket, graphql, grpc, mqtt, soap, oauth`),
 	Args: cobra.MaximumNArgs(1),
 	RunE: runAdd,
 }
@@ -95,32 +96,32 @@ func init() {
 	rootCmd.AddCommand(addCmd)
 
 	addCmd.Flags().StringVarP(&addMockType, "type", "t", "http", "Mock type (http, websocket, graphql, grpc, mqtt, soap, oauth)")
-	addCmd.Flags().StringVarP(&addName, "name", "n", "", "Mock display name")
-	addCmd.Flags().BoolVar(&addAllowDuplicate, "allow-duplicate", false, "Create a new mock even if one already exists on the same path")
+	addCmd.Flags().StringVarP(&addName, "name", "n", "", i18n.T("Mock display name"))
+	addCmd.Flags().BoolVar(&addAllowDuplicate, "allow-duplicate", false, i18n.T("Create a new mock even if one already exists on the same path"))
 	addCmd.Flags().StringVar(&addStateful, "stateful", "", "Create a stateful CRUD resource (value is the resource name, e.g., users)")
 
-	addCmd.Flags().StringVarP(&addMethod, "method", "m", "GET", "HTTP method to match")
+	addCmd.Flags().StringVarP(&addMethod, "method", "m", "GET", i18n.T("HTTP method to match"))
 	addCmd.Flags().StringVar(&addPath, "path", "", "URL path to match (required for http, websocket, graphql, soap)")
-	addCmd.Flags().IntVarP(&addStatus, "status", "s", 200, "Response status code")
-	addCmd.Flags().StringVarP(&addBody, "body", "b", "", "Response body")
-	addCmd.Flags().StringVar(&addBodyFile, "body-file", "", "Read response body from file")
-	addCmd.Flags().VarP(&addHeaders, "header", "H", "Response header (key:value), repeatable")
-	addCmd.Flags().Var(&addMatchHeaders, "match-header", "Required request header (key:value), repeatable")
-	addCmd.Flags().Var(&addMatchQueries, "match-query", "Required query param (key=value or key:value), repeatable")
-	addCmd.Flags().StringVar(&addBodyContains, "match-body-contains", "", "Match requests whose body contains this string")
+	addCmd.Flags().IntVarP(&addStatus, "status", "s", 200, i18n.T("Response status code"))
+	addCmd.Flags().StringVarP(&addBody, "body", "b", "", i18n.T("Response body"))
+	addCmd.Flags().StringVar(&addBodyFile, "body-file", "", i18n.T("Read response body from file"))
+	addCmd.Flags().VarP(&addHeaders, "header", "H", i18n.T("Response header (key:value), repeatable"))
+	addCmd.Flags().Var(&addMatchHeaders, "match-header", i18n.T("Required request header (key:value), repeatable"))
+	addCmd.Flags().Var(&addMatchQueries, "match-query", i18n.T("Required query param (key=value or key:value), repeatable"))
+	addCmd.Flags().StringVar(&addBodyContains, "match-body-contains", "", i18n.T("Match requests whose body contains this string"))
 	addCmd.Flags().StringVar(&addPathPattern, "path-pattern", "", "Regex path pattern for matching (alternative to --path)")
 	addCmd.Flags().IntVar(&addPriority, "priority", 0, "Mock priority (higher = matched first)")
-	addCmd.Flags().IntVar(&addDelay, "delay", 0, "Response delay in milliseconds")
+	addCmd.Flags().IntVar(&addDelay, "delay", 0, i18n.T("Response delay in milliseconds"))
 
-	addCmd.Flags().BoolVar(&addSSE, "sse", false, "Enable Server-Sent Events streaming")
+	addCmd.Flags().BoolVar(&addSSE, "sse", false, i18n.T("Enable Server-Sent Events streaming"))
 	addCmd.Flags().Var(&addSSEEvents, "sse-event", "SSE event (type:data or just data), repeatable")
-	addCmd.Flags().IntVar(&addSSEDelay, "sse-delay", 100, "Delay between SSE events in milliseconds")
-	addCmd.Flags().StringVar(&addSSETemplate, "sse-template", "", "SSE template: openai, notification")
+	addCmd.Flags().IntVar(&addSSEDelay, "sse-delay", 100, i18n.T("Delay between SSE events in milliseconds"))
+	addCmd.Flags().StringVar(&addSSETemplate, "sse-template", "", i18n.T("SSE template: openai, notification"))
 	addCmd.Flags().IntVar(&addSSERepeat, "sse-repeat", 1, "Number of times to repeat SSE events (0 = infinite)")
 	addCmd.Flags().IntVar(&addSSEKeepalive, "sse-keepalive", 0, "SSE keepalive interval in seconds (0 = disabled, min 5)")
 
 	addCmd.Flags().StringVar(&addMessage, "message", "", "Default response message (JSON) for WebSocket")
-	addCmd.Flags().BoolVar(&addEcho, "echo", false, "Enable echo mode for WebSocket")
+	addCmd.Flags().BoolVar(&addEcho, "echo", false, i18n.T("Enable echo mode for WebSocket"))
 
 	addCmd.Flags().StringVar(&addOperation, "operation", "", "Operation name (required for graphql, soap)")
 	addCmd.Flags().StringVar(&addActionAlias, "action", "", "SOAP action name (alias for --operation)")
@@ -129,28 +130,28 @@ func init() {
 	addCmd.Flags().StringVar(&addResponse, "response", "", "JSON response data (for graphql, grpc)")
 
 	addCmd.Flags().StringVar(&addService, "service", "", "gRPC service name (e.g., greeter.Greeter)")
-	addCmd.Flags().StringVar(&addRPCMethod, "rpc-method", "", "gRPC method name")
-	addCmd.Flags().IntVar(&addGRPCPort, "grpc-port", 50051, "gRPC server port")
-	addCmd.Flags().Var(&addProtoFiles, "proto", "Path to .proto file (required for gRPC, repeatable)")
-	addCmd.Flags().Var(&addProtoPaths, "proto-path", "Import path for proto dependencies (repeatable)")
+	addCmd.Flags().StringVar(&addRPCMethod, "rpc-method", "", i18n.T("gRPC method name"))
+	addCmd.Flags().IntVar(&addGRPCPort, "grpc-port", 50051, i18n.T("gRPC server port"))
+	addCmd.Flags().Var(&addProtoFiles, "proto", i18n.T("Path to .proto file (required for gRPC, repeatable)"))
+	addCmd.Flags().Var(&addProtoPaths, "proto-path", i18n.T("Import path for proto dependencies (repeatable)"))
 
-	addCmd.Flags().StringVar(&addTopic, "topic", "", "MQTT topic pattern")
-	addCmd.Flags().StringVar(&addPayload, "payload", "", "MQTT response payload")
+	addCmd.Flags().StringVar(&addTopic, "topic", "", i18n.T("MQTT topic pattern"))
+	addCmd.Flags().StringVar(&addPayload, "payload", "", i18n.T("MQTT response payload"))
 	addCmd.Flags().IntVar(&addQoS, "qos", 0, "MQTT QoS level (0, 1, 2)")
-	addCmd.Flags().IntVar(&addMQTTPort, "mqtt-port", 1883, "MQTT broker port")
+	addCmd.Flags().IntVar(&addMQTTPort, "mqtt-port", 1883, i18n.T("MQTT broker port"))
 
 	addCmd.Flags().StringVar(&addStatefulOperation, "stateful-operation", "", "Wire to a custom stateful operation (e.g., TransferFunds)")
 
 	addCmd.Flags().StringVar(&addTable, "table", "", "Bind to a stateful resource table (e.g., users)")
-	addCmd.Flags().StringVar(&addBindAction, "bind", "", "Stateful action: list, get, create, update, patch, delete, custom")
+	addCmd.Flags().StringVar(&addBindAction, "bind", "", i18n.T("Stateful action: list, get, create, update, patch, delete, custom"))
 
-	addCmd.Flags().StringVar(&addSoapAction, "soap-action", "", "SOAPAction header value")
+	addCmd.Flags().StringVar(&addSoapAction, "soap-action", "", i18n.T("SOAPAction header value"))
 
 	addCmd.Flags().StringVar(&addIssuer, "issuer", "", "OAuth issuer URL (default: http://localhost:4280)")
-	addCmd.Flags().StringVar(&addClientID, "client-id", "test-client", "OAuth client ID")
-	addCmd.Flags().StringVar(&addClientSecret, "client-secret", "test-secret", "OAuth client secret")
-	addCmd.Flags().StringVar(&addOAuthUser, "oauth-user", "testuser", "OAuth test username")
-	addCmd.Flags().StringVar(&addOAuthPassword, "oauth-password", "password", "OAuth test password")
+	addCmd.Flags().StringVar(&addClientID, "client-id", "test-client", i18n.T("OAuth client ID"))
+	addCmd.Flags().StringVar(&addClientSecret, "client-secret", "test-secret", i18n.T("OAuth client secret"))
+	addCmd.Flags().StringVar(&addOAuthUser, "oauth-user", "testuser", i18n.T("OAuth test username"))
+	addCmd.Flags().StringVar(&addOAuthPassword, "oauth-password", "password", i18n.T("OAuth test password"))
 }
 
 func runAdd(cmd *cobra.Command, args []string) error { //nolint:gocyclo // CLI dispatch function

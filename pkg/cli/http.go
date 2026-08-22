@@ -6,12 +6,13 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var httpCmd = &cobra.Command{
 	Use:   "http",
 	Short: "Manage and test HTTP/REST endpoints",
-	Long:  `Manage and test HTTP/REST endpoints.`,
+	Long:  i18n.T(`Manage and test HTTP/REST endpoints.`),
 }
 
 var httpAddCmd = &cobra.Command{
@@ -82,14 +83,14 @@ func init() {
 
 	// Since we delegate to runAdd, we need to bind the exact same flags `mockd add` has
 	// so parsing context carries over cleanly. We'll reuse the global targets for HTTP specifically.
-	httpAddCmd.Flags().StringVar(&addPath, "path", "", "URL path to match")
-	httpAddCmd.Flags().StringVar(&addMethod, "method", "GET", "HTTP method to match")
-	httpAddCmd.Flags().IntVar(&addStatus, "status", 200, "Response status code")
-	httpAddCmd.Flags().StringVar(&addBody, "body", "", "Response body")
-	httpAddCmd.Flags().StringVar(&addName, "name", "", "Mock display name")
+	httpAddCmd.Flags().StringVar(&addPath, "path", "", i18n.T("URL path to match"))
+	httpAddCmd.Flags().StringVar(&addMethod, "method", "GET", i18n.T("HTTP method to match"))
+	httpAddCmd.Flags().IntVar(&addStatus, "status", 200, i18n.T("Response status code"))
+	httpAddCmd.Flags().StringVar(&addBody, "body", "", i18n.T("Response body"))
+	httpAddCmd.Flags().StringVar(&addName, "name", "", i18n.T("Mock display name"))
 	httpAddCmd.Flags().StringVar(&addStatefulOperation, "stateful-operation", "", "Wire to a custom stateful operation (e.g., TransferFunds)")
 	httpAddCmd.Flags().StringVar(&addTable, "table", "", "Bind to a stateful resource table (e.g., users)")
-	httpAddCmd.Flags().StringVar(&addBindAction, "bind", "", "Stateful action: list, get, create, update, patch, delete, custom")
+	httpAddCmd.Flags().StringVar(&addBindAction, "bind", "", i18n.T("Stateful action: list, get, create, update, patch, delete, custom"))
 
 	// Missing commands like list/get/delete fall back to root aliases exactly like before
 	httpCmd.AddCommand(&cobra.Command{

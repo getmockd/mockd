@@ -5,12 +5,13 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var getCmd = &cobra.Command{
 	Use:   "get <mock-id>",
 	Short: "Get details of a specific mock",
-	Long:  `Get details of a specific mock.`,
+	Long:  i18n.T(`Get details of a specific mock.`),
 	Example: `  # Get mock details
   mockd get abc123
 

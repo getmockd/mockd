@@ -9,7 +9,8 @@ import (
 	"github.com/getmockd/mockd/pkg/cli/internal/ports"
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	doctorConfigFile string
@@ -20,7 +21,7 @@ var (
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Diagnose common setup issues and validate configuration",
-	Long:  `Diagnose common setup issues and validate configuration.`,
+	Long:  i18n.T(`Diagnose common setup issues and validate configuration.`),
 	Example: `  # Run all checks with defaults
   mockd doctor
 
@@ -34,9 +35,9 @@ var doctorCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(doctorCmd)
-	doctorCmd.Flags().StringVar(&doctorConfigFile, "config", "", "Path to config file to validate")
-	doctorCmd.Flags().IntVarP(&doctorPort, "port", "p", 4280, "Mock server port to check")
-	doctorCmd.Flags().IntVarP(&doctorAdminPort, "admin-port", "a", 4290, "Admin API port to check")
+	doctorCmd.Flags().StringVar(&doctorConfigFile, "config", "", i18n.T("Path to config file to validate"))
+	doctorCmd.Flags().IntVarP(&doctorPort, "port", "p", 4280, i18n.T("Mock server port to check"))
+	doctorCmd.Flags().IntVarP(&doctorAdminPort, "admin-port", "a", 4290, i18n.T("Admin API port to check"))
 }
 
 // doctorCheck holds the result of a single doctor check.

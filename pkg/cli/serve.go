@@ -36,7 +36,8 @@ import (
 	"github.com/getmockd/mockd/pkg/validation"
 
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // shutdownTimeout is the maximum time to wait for graceful shutdown.
 const shutdownTimeout = 30 * time.Second
@@ -48,7 +49,7 @@ var serveFlagVals serveFlags
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the full-featured mock server (foreground)",
-	Long: `Start the mock server. Can operate in three modes:
+	Long: i18n.T(`Start the mock server. Can operate in three modes:
 
 1. Local mode (default): Serve mocks from local configuration
 2. Runtime mode (--register): Register with control plane and receive deployments
@@ -56,7 +57,7 @@ var serveCmd = &cobra.Command{
 
 The serve command is the full-featured server entrypoint with support for MCP,
 CORS, rate limiting, distributed tracing, log aggregation, and more.
-Use 'mockd start' for a simpler startup experience.`,
+Use 'mockd start' for a simpler startup experience.`),
 	Example: `  # Start with defaults
   mockd serve
 
@@ -99,66 +100,66 @@ func initServeCmd() {
 	f := &serveFlagVals
 
 	// Standard server flags
-	serveCmd.Flags().IntVarP(&f.port, "port", "p", cliconfig.DefaultPort, "HTTP server port")
-	serveCmd.Flags().IntVarP(&f.adminPort, "admin-port", "a", cliconfig.DefaultAdminPort, "Admin API port")
-	serveCmd.Flags().StringVarP(&f.configFile, "config", "c", "", "Path to mock configuration file")
+	serveCmd.Flags().IntVarP(&f.port, "port", "p", cliconfig.DefaultPort, i18n.T("HTTP server port"))
+	serveCmd.Flags().IntVarP(&f.adminPort, "admin-port", "a", cliconfig.DefaultAdminPort, i18n.T("Admin API port"))
+	serveCmd.Flags().StringVarP(&f.configFile, "config", "c", "", i18n.T("Path to mock configuration file"))
 	serveCmd.Flags().IntVar(&f.httpsPort, "https-port", cliconfig.DefaultHTTPSPort, "HTTPS server port (0 = disabled)")
-	serveCmd.Flags().IntVar(&f.readTimeout, "read-timeout", cliconfig.DefaultReadTimeout, "Read timeout in seconds")
-	serveCmd.Flags().IntVar(&f.writeTimeout, "write-timeout", cliconfig.DefaultWriteTimeout, "Write timeout in seconds")
+	serveCmd.Flags().IntVar(&f.readTimeout, "read-timeout", cliconfig.DefaultReadTimeout, i18n.T("Read timeout in seconds"))
+	serveCmd.Flags().IntVar(&f.writeTimeout, "write-timeout", cliconfig.DefaultWriteTimeout, i18n.T("Write timeout in seconds"))
 	serveCmd.Flags().IntVar(&f.requestTimeout, "request-timeout", 0, "Request timeout in seconds (sets both read and write timeout)")
-	serveCmd.Flags().IntVar(&f.maxLogEntries, "max-log-entries", cliconfig.DefaultMaxLogEntries, "Maximum request log entries")
+	serveCmd.Flags().IntVar(&f.maxLogEntries, "max-log-entries", cliconfig.DefaultMaxLogEntries, i18n.T("Maximum request log entries"))
 	serveCmd.Flags().IntVar(&f.maxConnections, "max-connections", 0, "Maximum concurrent HTTP connections (0 = unlimited)")
-	serveCmd.Flags().BoolVar(&f.autoCert, "auto-cert", cliconfig.DefaultAutoCert, "Auto-generate TLS certificate")
+	serveCmd.Flags().BoolVar(&f.autoCert, "auto-cert", cliconfig.DefaultAutoCert, i18n.T("Auto-generate TLS certificate"))
 
 	// TLS flags
-	serveCmd.Flags().StringVar(&f.tlsCert, "tls-cert", "", "Path to TLS certificate file")
-	serveCmd.Flags().StringVar(&f.tlsKey, "tls-key", "", "Path to TLS private key file")
-	serveCmd.Flags().BoolVar(&f.tlsAuto, "tls-auto", false, "Auto-generate self-signed certificate")
+	serveCmd.Flags().StringVar(&f.tlsCert, "tls-cert", "", i18n.T("Path to TLS certificate file"))
+	serveCmd.Flags().StringVar(&f.tlsKey, "tls-key", "", i18n.T("Path to TLS private key file"))
+	serveCmd.Flags().BoolVar(&f.tlsAuto, "tls-auto", false, i18n.T("Auto-generate self-signed certificate"))
 
 	// mTLS flags
-	serveCmd.Flags().BoolVar(&f.mtlsEnabled, "mtls-enabled", false, "Enable mTLS client certificate validation")
+	serveCmd.Flags().BoolVar(&f.mtlsEnabled, "mtls-enabled", false, i18n.T("Enable mTLS client certificate validation"))
 	serveCmd.Flags().StringVar(&f.mtlsClientAuth, "mtls-client-auth", "require-and-verify", "Client auth mode (none, request, require, verify-if-given, require-and-verify)")
-	serveCmd.Flags().StringVar(&f.mtlsCA, "mtls-ca", "", "Path to CA certificate for client validation")
-	serveCmd.Flags().StringVar(&f.mtlsAllowedCNs, "mtls-allowed-cns", "", "Comma-separated list of allowed Common Names")
+	serveCmd.Flags().StringVar(&f.mtlsCA, "mtls-ca", "", i18n.T("Path to CA certificate for client validation"))
+	serveCmd.Flags().StringVar(&f.mtlsAllowedCNs, "mtls-allowed-cns", "", i18n.T("Comma-separated list of allowed Common Names"))
 
 	// Audit flags
-	serveCmd.Flags().BoolVar(&f.auditEnabled, "audit-enabled", false, "Enable audit logging")
-	serveCmd.Flags().StringVar(&f.auditFile, "audit-file", "", "Path to audit log file")
+	serveCmd.Flags().BoolVar(&f.auditEnabled, "audit-enabled", false, i18n.T("Enable audit logging"))
+	serveCmd.Flags().StringVar(&f.auditFile, "audit-file", "", i18n.T("Path to audit log file"))
 	serveCmd.Flags().StringVar(&f.auditLevel, "audit-level", "info", "Audit log level (debug, info, warn, error)")
 
 	// Runtime mode flags
-	serveCmd.Flags().BoolVar(&f.register, "register", false, "Register with control plane as a runtime")
-	serveCmd.Flags().StringVar(&f.controlPlane, "control-plane", "https://api.mockd.io", "Control plane URL")
+	serveCmd.Flags().BoolVar(&f.register, "register", false, i18n.T("Register with control plane as a runtime"))
+	serveCmd.Flags().StringVar(&f.controlPlane, "control-plane", "https://api.mockd.io", i18n.T("Control plane URL"))
 	serveCmd.Flags().StringVar(&f.token, "token", "", "Runtime token (or set MOCKD_RUNTIME_TOKEN env var)")
 	serveCmd.Flags().StringVar(&f.name, "name", "", "Runtime name (required with --register)")
 	serveCmd.Flags().StringVar(&f.labels, "labels", "", "Runtime labels as key=value pairs (comma-separated)")
 
 	// Pull mode flags
-	serveCmd.Flags().StringVar(&f.pull, "pull", "", "Pull and serve mocks from mockd:// URI")
-	serveCmd.Flags().StringVar(&f.cacheDir, "cache", "", "Local cache directory for pulled mocks")
+	serveCmd.Flags().StringVar(&f.pull, "pull", "", i18n.T("Pull and serve mocks from mockd:// URI"))
+	serveCmd.Flags().StringVar(&f.cacheDir, "cache", "", i18n.T("Local cache directory for pulled mocks"))
 
 	// GraphQL flags
-	serveCmd.Flags().StringVar(&f.graphqlSchema, "graphql-schema", "", "Path to GraphQL schema file")
-	serveCmd.Flags().StringVar(&f.graphqlPath, "graphql-path", "/graphql", "GraphQL endpoint path")
+	serveCmd.Flags().StringVar(&f.graphqlSchema, "graphql-schema", "", i18n.T("Path to GraphQL schema file"))
+	serveCmd.Flags().StringVar(&f.graphqlPath, "graphql-path", "/graphql", i18n.T("GraphQL endpoint path"))
 
 	// OAuth flags
-	serveCmd.Flags().BoolVar(&f.oauthEnabled, "oauth-enabled", false, "Enable OAuth provider")
-	serveCmd.Flags().StringVar(&f.oauthIssuer, "oauth-issuer", "", "OAuth issuer URL")
-	serveCmd.Flags().IntVar(&f.oauthPort, "oauth-port", 0, "OAuth server port")
+	serveCmd.Flags().BoolVar(&f.oauthEnabled, "oauth-enabled", false, i18n.T("Enable OAuth provider"))
+	serveCmd.Flags().StringVar(&f.oauthIssuer, "oauth-issuer", "", i18n.T("OAuth issuer URL"))
+	serveCmd.Flags().IntVar(&f.oauthPort, "oauth-port", 0, i18n.T("OAuth server port"))
 
 	// Chaos flags
-	serveCmd.Flags().BoolVar(&f.chaosEnabled, "chaos-enabled", false, "Enable chaos injection")
+	serveCmd.Flags().BoolVar(&f.chaosEnabled, "chaos-enabled", false, i18n.T("Enable chaos injection"))
 	serveCmd.Flags().StringVar(&f.chaosLatency, "chaos-latency", "", "Add random latency (e.g., '10ms-100ms')")
 	serveCmd.Flags().Float64Var(&f.chaosErrorRate, "chaos-error-rate", 0, "Error rate (0.0-1.0)")
 	serveCmd.Flags().StringVar(&f.chaosProfile, "chaos-profile", "", "Apply a built-in chaos profile at startup (e.g., slow-api, flaky, offline)")
 
 	// Validation flags
-	serveCmd.Flags().StringVar(&f.validateSpec, "validate-spec", "", "Path to OpenAPI spec for request validation")
-	serveCmd.Flags().BoolVar(&f.validateFail, "validate-fail", false, "Fail on validation error")
+	serveCmd.Flags().StringVar(&f.validateSpec, "validate-spec", "", i18n.T("Path to OpenAPI spec for request validation"))
+	serveCmd.Flags().BoolVar(&f.validateFail, "validate-fail", false, i18n.T("Fail on validation error"))
 
 	// Storage flags
-	serveCmd.Flags().StringVar(&f.dataDir, "data-dir", "", "Data directory for persistent storage")
-	serveCmd.Flags().BoolVar(&f.noAuth, "no-auth", false, "Disable API key authentication on admin API")
+	serveCmd.Flags().StringVar(&f.dataDir, "data-dir", "", i18n.T("Data directory for persistent storage"))
+	serveCmd.Flags().BoolVar(&f.noAuth, "no-auth", false, i18n.T("Disable API key authentication on admin API"))
 
 	// Daemon/detach flags
 	serveCmd.Flags().BoolVarP(&f.detach, "detach", "d", false, "Run server in background (daemon mode)")
@@ -167,19 +168,19 @@ func initServeCmd() {
 	// Logging flags
 	serveCmd.Flags().StringVar(&f.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	serveCmd.Flags().StringVar(&f.logFormat, "log-format", "text", "Log format (text, json)")
-	serveCmd.Flags().StringVar(&f.lokiEndpoint, "loki-endpoint", "", "Loki endpoint for log aggregation")
+	serveCmd.Flags().StringVar(&f.lokiEndpoint, "loki-endpoint", "", i18n.T("Loki endpoint for log aggregation"))
 
 	// Tracing flags
-	serveCmd.Flags().StringVar(&f.otlpEndpoint, "otlp-endpoint", "", "OTLP HTTP endpoint for distributed tracing")
+	serveCmd.Flags().StringVar(&f.otlpEndpoint, "otlp-endpoint", "", i18n.T("OTLP HTTP endpoint for distributed tracing"))
 	serveCmd.Flags().Float64Var(&f.traceSampler, "trace-sampler", 1.0, "Trace sampling ratio (0.0-1.0)")
 
 	// MCP flags
 	serveCmd.Flags().BoolVar(&f.mcpEnabled, "mcp", false, "Enable MCP (Model Context Protocol) HTTP server")
-	serveCmd.Flags().IntVar(&f.mcpPort, "mcp-port", 9091, "MCP server port")
-	serveCmd.Flags().BoolVar(&f.mcpAllowRemote, "mcp-allow-remote", false, "Allow remote MCP connections")
+	serveCmd.Flags().IntVar(&f.mcpPort, "mcp-port", 9091, i18n.T("MCP server port"))
+	serveCmd.Flags().BoolVar(&f.mcpAllowRemote, "mcp-allow-remote", false, i18n.T("Allow remote MCP connections"))
 
 	// CORS flags
-	serveCmd.Flags().StringVar(&f.corsOrigins, "cors-origins", "", "Comma-separated CORS allowed origins")
+	serveCmd.Flags().StringVar(&f.corsOrigins, "cors-origins", "", i18n.T("Comma-separated CORS allowed origins"))
 
 	// Rate limiting flags
 	serveCmd.Flags().Float64Var(&f.rateLimit, "rate-limit", 0, "Rate limit in requests per second (0 = disabled)")

@@ -15,7 +15,8 @@ import (
 	"github.com/getmockd/mockd/pkg/stateful"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	statefulAddPath         string
@@ -49,7 +50,7 @@ var (
 var statefulCmd = &cobra.Command{
 	Use:   "stateful",
 	Short: "Manage stateful CRUD resources",
-	Long: `Manage stateful CRUD resources.
+	Long: i18n.T(`Manage stateful CRUD resources.
 
 Stateful resources provide in-memory CRUD data stores that can be shared
 across protocols. A resource created here is accessible via HTTP REST
@@ -60,13 +61,13 @@ Examples:
   mockd stateful list                          # List all stateful resources
   mockd stateful add users --path /api/users   # Create with HTTP REST endpoints
   mockd stateful add products                  # Bridge-only (no HTTP endpoints)
-  mockd stateful reset users                   # Reset resource to seed data`,
+  mockd stateful reset users                   # Reset resource to seed data`),
 }
 
 var statefulAddCmd = &cobra.Command{
 	Use:   "add <name>",
 	Short: "Create a stateful CRUD resource",
-	Long: `Create a new stateful CRUD resource.
+	Long: i18n.T(`Create a new stateful CRUD resource.
 
 By default, a resource is created as "bridge-only" — accessible only via
 protocol integrations (SOAP, GraphQL, gRPC, etc.) but without HTTP REST
@@ -82,7 +83,7 @@ Use --path to also expose HTTP REST endpoints:
 Examples:
   mockd stateful add users --path /api/users
   mockd stateful add products
-  mockd stateful add orders --path /api/orders --id-field orderId`,
+  mockd stateful add orders --path /api/orders --id-field orderId`),
 	Args: cobra.ExactArgs(1),
 	RunE: runStatefulAdd,
 }
@@ -90,25 +91,25 @@ Examples:
 var statefulListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all stateful resources",
-	Long: `List all stateful resources and their item counts.
+	Long: i18n.T(`List all stateful resources and their item counts.
 
 Examples:
   mockd stateful list
-  mockd stateful list --json`,
+  mockd stateful list --json`),
 	RunE: runStatefulList,
 }
 
 var statefulResetCmd = &cobra.Command{
 	Use:   "reset <name>",
 	Short: "Reset a stateful resource to seed data",
-	Long: `Reset a stateful resource to its initial seed data state.
+	Long: i18n.T(`Reset a stateful resource to its initial seed data state.
 
 All current items are removed and replaced with the original seed data
 (if any was configured). This is useful for test cleanup between runs.
 
 Examples:
   mockd stateful reset users
-  mockd stateful reset products --json`,
+  mockd stateful reset products --json`),
 	Args: cobra.ExactArgs(1),
 	RunE: runStatefulReset,
 }
@@ -116,14 +117,14 @@ Examples:
 var statefulDeleteCmd = &cobra.Command{
 	Use:   "delete <name>",
 	Short: "Delete a stateful resource and all its data",
-	Long: `Delete a stateful resource and all its data.
+	Long: i18n.T(`Delete a stateful resource and all its data.
 
 This permanently removes the resource from both runtime and persistent storage.
 All items in the resource are lost.
 
 Examples:
   mockd stateful delete users
-  mockd stateful delete products --json`,
+  mockd stateful delete products --json`),
 	Args: cobra.ExactArgs(1),
 	RunE: runStatefulDelete,
 }
@@ -131,13 +132,13 @@ Examples:
 var statefulItemsCmd = &cobra.Command{
 	Use:   "items <name>",
 	Short: "List items in a stateful resource",
-	Long: `List paginated items in a stateful resource.
+	Long: i18n.T(`List paginated items in a stateful resource.
 
 Examples:
   mockd stateful items users
   mockd stateful items users --limit 10 --offset 20
   mockd stateful items users --sort name --order asc
-  mockd stateful items users --json`,
+  mockd stateful items users --json`),
 	Args: cobra.ExactArgs(1),
 	RunE: runStatefulItems,
 }
@@ -147,7 +148,7 @@ Examples:
 var customCmd = &cobra.Command{
 	Use:   "custom",
 	Short: "Manage custom operations on stateful resources",
-	Long: `Manage custom multi-step operations that run against stateful resources.
+	Long: i18n.T(`Manage custom multi-step operations that run against stateful resources.
 
 Custom operations define a pipeline of steps (read, create, update, delete, set)
 with expression-based logic. They can be invoked via CLI, REST API, SOAP, GraphQL,
@@ -159,7 +160,7 @@ Examples:
   mockd stateful custom add --file transfer.yaml
   mockd stateful custom add --definition '{"name":"TransferFunds","steps":[...]}'
   mockd stateful custom run TransferFunds --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
-  mockd stateful custom delete TransferFunds`,
+  mockd stateful custom delete TransferFunds`),
 }
 
 var customListCmd = &cobra.Command{
@@ -178,7 +179,7 @@ var customGetCmd = &cobra.Command{
 var customAddCmd = &cobra.Command{
 	Use:   "add",
 	Short: "Register a new custom operation",
-	Long: `Register a new custom operation from a file or inline definition.
+	Long: i18n.T(`Register a new custom operation from a file or inline definition.
 
 The definition must include a "name" field and at least one step.
 
@@ -201,14 +202,14 @@ The definition format:
       set:
         balance: "source.balance - input.amount"
   response:
-    status: '"completed"'`,
+    status: '"completed"'`),
 	RunE: runCustomAdd,
 }
 
 var customValidateCmd = &cobra.Command{
 	Use:   "validate",
 	Short: "Validate a custom operation definition (no writes)",
-	Long: `Validate a custom operation definition locally before registering it.
+	Long: i18n.T(`Validate a custom operation definition locally before registering it.
 
 Checks include:
   - Required fields and step shape
@@ -221,19 +222,19 @@ Examples:
   mockd stateful custom validate --file transfer.yaml
   mockd stateful custom validate --file transfer.yaml --input '{"sourceId":"acc-1","destId":"acc-2","amount":100}'
   mockd stateful custom validate --file transfer.yaml --input '{"sourceId":"acc-1"}' --check-expressions-runtime --fixtures-file fixtures.json
-  mockd stateful custom validate --file transfer.yaml --check-resources`,
+  mockd stateful custom validate --file transfer.yaml --check-resources`),
 	RunE: runCustomValidate,
 }
 
 var customRunCmd = &cobra.Command{
 	Use:   "run <name>",
 	Short: "Execute a custom operation",
-	Long: `Execute a registered custom operation with the given input.
+	Long: i18n.T(`Execute a registered custom operation with the given input.
 
 Examples:
   mockd stateful custom run TransferFunds --input '{"sourceId":"acct-1","destId":"acct-2","amount":100}'
   mockd stateful custom run TransferFunds --input-file transfer-input.json
-  mockd stateful custom run TransferFunds   # no input (empty map)`,
+  mockd stateful custom run TransferFunds   # no input (empty map)`),
 	Args: cobra.ExactArgs(1),
 	RunE: runCustomRun,
 }
@@ -253,15 +254,15 @@ func init() {
 	statefulAddCmd.Flags().StringVar(&statefulAddIDField, "id-field", "", "Custom ID field name (default: id)")
 	statefulAddCmd.Flags().StringVar(&statefulAddIDStrategy, "id-strategy", "", "ID generation strategy: uuid (default), prefix, ulid, sequence, short")
 	statefulAddCmd.Flags().StringVar(&statefulAddIDPrefix, "id-prefix", "", "Prefix for generated IDs (e.g., cus_) when --id-strategy=prefix")
-	statefulAddCmd.Flags().StringVar(&statefulAddSeedData, "seed-data", "", "Initial seed data as JSON array, or @filepath to read from file")
+	statefulAddCmd.Flags().StringVar(&statefulAddSeedData, "seed-data", "", i18n.T("Initial seed data as JSON array, or @filepath to read from file"))
 	statefulAddCmd.Flags().IntVar(&statefulAddMaxItems, "max-items", 0, "Maximum number of items (0 = unlimited)")
-	statefulAddCmd.Flags().StringVar(&statefulAddParentField, "parent-field", "", "Foreign key field name for nested resources")
-	statefulAddCmd.Flags().StringVar(&statefulAddResponseFile, "response-file", "", "Path to JSON/YAML file with response transform config")
+	statefulAddCmd.Flags().StringVar(&statefulAddParentField, "parent-field", "", i18n.T("Foreign key field name for nested resources"))
+	statefulAddCmd.Flags().StringVar(&statefulAddResponseFile, "response-file", "", i18n.T("Path to JSON/YAML file with response transform config"))
 
 	statefulCmd.AddCommand(statefulListCmd)
-	statefulListCmd.Flags().IntVar(&statefulListLimit, "limit", 100, "Maximum items to show per resource")
-	statefulListCmd.Flags().IntVar(&statefulListOffset, "offset", 0, "Skip this many items")
-	statefulListCmd.Flags().StringVar(&statefulListSort, "sort", "", "Sort field")
+	statefulListCmd.Flags().IntVar(&statefulListLimit, "limit", 100, i18n.T("Maximum items to show per resource"))
+	statefulListCmd.Flags().IntVar(&statefulListOffset, "offset", 0, i18n.T("Skip this many items"))
+	statefulListCmd.Flags().StringVar(&statefulListSort, "sort", "", i18n.T("Sort field"))
 	statefulListCmd.Flags().StringVar(&statefulListOrder, "order", "", "Sort order (asc or desc)")
 
 	statefulCmd.AddCommand(statefulResetCmd)
@@ -269,9 +270,9 @@ func init() {
 	statefulCmd.AddCommand(statefulDeleteCmd)
 
 	statefulCmd.AddCommand(statefulItemsCmd)
-	statefulItemsCmd.Flags().IntVar(&statefulListLimit, "limit", 100, "Maximum items to show")
-	statefulItemsCmd.Flags().IntVar(&statefulListOffset, "offset", 0, "Skip this many items")
-	statefulItemsCmd.Flags().StringVar(&statefulListSort, "sort", "", "Sort field")
+	statefulItemsCmd.Flags().IntVar(&statefulListLimit, "limit", 100, i18n.T("Maximum items to show"))
+	statefulItemsCmd.Flags().IntVar(&statefulListOffset, "offset", 0, i18n.T("Skip this many items"))
+	statefulItemsCmd.Flags().StringVar(&statefulListSort, "sort", "", i18n.T("Sort field"))
 	statefulItemsCmd.Flags().StringVar(&statefulListOrder, "order", "", "Sort order (asc or desc)")
 
 	// Custom operation subcommands
@@ -280,22 +281,22 @@ func init() {
 	customCmd.AddCommand(customGetCmd)
 
 	customCmd.AddCommand(customAddCmd)
-	customAddCmd.Flags().StringVar(&customAddFile, "file", "", "Path to YAML/JSON file containing the operation definition")
-	customAddCmd.Flags().StringVar(&customAddDefinition, "definition", "", "Inline JSON operation definition")
+	customAddCmd.Flags().StringVar(&customAddFile, "file", "", i18n.T("Path to YAML/JSON file containing the operation definition"))
+	customAddCmd.Flags().StringVar(&customAddDefinition, "definition", "", i18n.T("Inline JSON operation definition"))
 
 	customCmd.AddCommand(customValidateCmd)
-	customValidateCmd.Flags().StringVar(&customValidateFile, "file", "", "Path to YAML/JSON file containing the operation definition")
-	customValidateCmd.Flags().StringVar(&customValidateDefinition, "definition", "", "Inline JSON operation definition")
-	customValidateCmd.Flags().StringVar(&customValidateInput, "input", "", "Inline JSON input example for expression compile checks")
-	customValidateCmd.Flags().StringVar(&customValidateInputFile, "input-file", "", "Path to JSON file containing input example")
-	customValidateCmd.Flags().StringVar(&customValidateFixturesFile, "fixtures-file", "", "Path to JSON/YAML fixtures file used by runtime expression checks")
-	customValidateCmd.Flags().BoolVar(&customValidateCheckResources, "check-resources", false, "Verify referenced stateful resources exist on the running admin/engine")
+	customValidateCmd.Flags().StringVar(&customValidateFile, "file", "", i18n.T("Path to YAML/JSON file containing the operation definition"))
+	customValidateCmd.Flags().StringVar(&customValidateDefinition, "definition", "", i18n.T("Inline JSON operation definition"))
+	customValidateCmd.Flags().StringVar(&customValidateInput, "input", "", i18n.T("Inline JSON input example for expression compile checks"))
+	customValidateCmd.Flags().StringVar(&customValidateInputFile, "input-file", "", i18n.T("Path to JSON file containing input example"))
+	customValidateCmd.Flags().StringVar(&customValidateFixturesFile, "fixtures-file", "", i18n.T("Path to JSON/YAML fixtures file used by runtime expression checks"))
+	customValidateCmd.Flags().BoolVar(&customValidateCheckResources, "check-resources", false, i18n.T("Verify referenced stateful resources exist on the running admin/engine"))
 	customValidateCmd.Flags().BoolVar(&customValidateRuntimeCheck, "check-expressions-runtime", false, "Evaluate expressions with sample input/fixtures (no writes)")
-	customValidateCmd.Flags().BoolVar(&customValidateStrict, "strict", false, "Treat validation warnings as errors")
+	customValidateCmd.Flags().BoolVar(&customValidateStrict, "strict", false, i18n.T("Treat validation warnings as errors"))
 
 	customCmd.AddCommand(customRunCmd)
-	customRunCmd.Flags().StringVar(&customRunInput, "input", "", "Inline JSON input for the operation")
-	customRunCmd.Flags().StringVar(&customRunInputFile, "input-file", "", "Path to JSON file containing operation input")
+	customRunCmd.Flags().StringVar(&customRunInput, "input", "", i18n.T("Inline JSON input for the operation"))
+	customRunCmd.Flags().StringVar(&customRunInputFile, "input-file", "", i18n.T("Path to JSON file containing operation input"))
 
 	customCmd.AddCommand(customDeleteCmd)
 }

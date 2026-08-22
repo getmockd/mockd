@@ -17,7 +17,8 @@ import (
 	"github.com/getmockd/mockd/pkg/portability"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var soapCmd = &cobra.Command{
 	Use:   "soap",
@@ -90,7 +91,7 @@ var (
 var soapImportCmd = &cobra.Command{
 	Use:   "import <wsdl-file>",
 	Short: "Import a WSDL file and generate SOAP mock configuration",
-	Long: `Parse a WSDL 1.1 file and generate mockd SOAP mock definitions.
+	Long: i18n.T(`Parse a WSDL 1.1 file and generate mockd SOAP mock definitions.
 
 By default, operations get canned XML responses generated from XSD types.
 Use --stateful to map CRUD-like operations (GetUser, CreateOrder, etc.)
@@ -100,7 +101,7 @@ Examples:
   mockd soap import service.wsdl
   mockd soap import service.wsdl --stateful
   mockd soap import service.wsdl --stateful -o mocks.yaml
-  mockd soap import service.wsdl --format json`,
+  mockd soap import service.wsdl --format json`),
 	Args: cobra.ExactArgs(1),
 	RunE: runSOAPImport,
 }
@@ -109,11 +110,11 @@ func init() {
 	rootCmd.AddCommand(soapCmd)
 	soapCmd.AddCommand(soapAddCmd)
 
-	soapAddCmd.Flags().StringVar(&addPath, "path", "", "URL path to match")
-	soapAddCmd.Flags().StringVar(&addOperation, "action", "", "SOAP action")
-	soapAddCmd.Flags().StringVar(&addResponse, "response", "", "XML response body")
+	soapAddCmd.Flags().StringVar(&addPath, "path", "", i18n.T("URL path to match"))
+	soapAddCmd.Flags().StringVar(&addOperation, "action", "", i18n.T("SOAP action"))
+	soapAddCmd.Flags().StringVar(&addResponse, "response", "", i18n.T("XML response body"))
 	soapAddCmd.Flags().StringVar(&soapAddTable, "table", "", "Bind to a stateful resource table (e.g., users)")
-	soapAddCmd.Flags().StringVar(&soapAddBindAction, "bind", "", "Stateful action: list, get, create, update, patch, delete, custom")
+	soapAddCmd.Flags().StringVar(&soapAddBindAction, "bind", "", i18n.T("Stateful action: list, get, create, update, patch, delete, custom"))
 
 	// Add list/get/delete generic aliases
 	soapCmd.AddCommand(&cobra.Command{
@@ -137,16 +138,16 @@ func init() {
 
 	soapCmd.AddCommand(soapValidateCmd)
 
-	soapImportCmd.Flags().BoolVar(&soapImportStateful, "stateful", false, "Map CRUD operations to stateful resources")
-	soapImportCmd.Flags().StringVarP(&soapImportOutput, "output", "o", "", "Write output to file instead of stdout")
+	soapImportCmd.Flags().BoolVar(&soapImportStateful, "stateful", false, i18n.T("Map CRUD operations to stateful resources"))
+	soapImportCmd.Flags().StringVarP(&soapImportOutput, "output", "o", "", i18n.T("Write output to file instead of stdout"))
 	soapImportCmd.Flags().StringVar(&soapImportFormat, "format", "yaml", "Output format (yaml or json)")
 	soapCmd.AddCommand(soapImportCmd)
 
 	soapCallCmd.Flags().StringVarP(&soapHeaders, "header", "H", "", "Additional headers (key:value,key2:value2)")
-	soapCallCmd.Flags().BoolVar(&soapPretty, "pretty", true, "Pretty print output")
-	soapCallCmd.Flags().StringVar(&soapCallAction, "action", "", "SOAPAction header value")
-	soapCallCmd.Flags().BoolVar(&soapCallSOAP12, "soap12", false, "Use SOAP 1.2 envelope format")
-	soapCallCmd.Flags().IntVar(&soapCallTimeout, "timeout", 30, "Request timeout in seconds")
+	soapCallCmd.Flags().BoolVar(&soapPretty, "pretty", true, i18n.T("Pretty print output"))
+	soapCallCmd.Flags().StringVar(&soapCallAction, "action", "", i18n.T("SOAPAction header value"))
+	soapCallCmd.Flags().BoolVar(&soapCallSOAP12, "soap12", false, i18n.T("Use SOAP 1.2 envelope format"))
+	soapCallCmd.Flags().IntVar(&soapCallTimeout, "timeout", 30, i18n.T("Request timeout in seconds"))
 	soapCallCmd.Flags().StringVarP(&soapCallBodyFile, "body-file", "f", "", "Read SOAP body XML from file (use - for stdin)")
 	soapCmd.AddCommand(soapCallCmd)
 }

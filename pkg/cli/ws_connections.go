@@ -7,14 +7,15 @@ import (
 
 	"github.com/getmockd/mockd/pkg/cli/internal/output"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // ─── websocket connection management ────────────────────────────────────────
 
 var wsConnectionsCmd = &cobra.Command{
 	Use:   "connections",
 	Short: "Manage active WebSocket connections",
-	Long:  `List, inspect, close, or send messages to active WebSocket connections.`,
+	Long:  i18n.T(`List, inspect, close, or send messages to active WebSocket connections.`),
 	RunE:  runWSConnectionsList,
 }
 
@@ -98,8 +99,8 @@ var wsConnectionsSendBinary bool
 var wsConnectionsSendCmd = &cobra.Command{
 	Use:   "send <id> <message>",
 	Short: "Send a message to a WebSocket connection",
-	Long: `Send a text or binary message to an active WebSocket connection.
-Use --binary to send base64-encoded binary data.`,
+	Long: i18n.T(`Send a text or binary message to an active WebSocket connection.
+Use --binary to send base64-encoded binary data.`),
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
@@ -162,7 +163,7 @@ func init() {
 	wsConnectionsCmd.AddCommand(wsConnectionsGetCmd)
 	wsConnectionsCmd.AddCommand(wsConnectionsCloseCmd)
 
-	wsConnectionsSendCmd.Flags().BoolVar(&wsConnectionsSendBinary, "binary", false, "Send base64-encoded binary message")
+	wsConnectionsSendCmd.Flags().BoolVar(&wsConnectionsSendBinary, "binary", false, i18n.T("Send base64-encoded binary message"))
 	wsConnectionsCmd.AddCommand(wsConnectionsSendCmd)
 
 	websocketCmd.AddCommand(wsConnectionsCmd)

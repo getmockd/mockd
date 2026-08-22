@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	verifyExactly int
@@ -19,10 +20,10 @@ var (
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
 	Short: "Verify mock call counts and inspect invocations",
-	Long: `Verify that your mocks were called the expected number of times
+	Long: i18n.T(`Verify that your mocks were called the expected number of times
 and inspect the request details of each invocation. Useful for
 integration testing where you need to prove your code makes the
-correct API calls.`,
+correct API calls.`),
 }
 
 var verifyStatusCmd = &cobra.Command{
@@ -62,10 +63,10 @@ var verifyStatusCmd = &cobra.Command{
 var verifyCheckCmd = &cobra.Command{
 	Use:   "check <mock-id>",
 	Short: "Assert that a mock was called the expected number of times",
-	Long: `Assert call count expectations for a mock. Returns exit code 0
+	Long: i18n.T(`Assert call count expectations for a mock. Returns exit code 0
 on pass and exit code 1 on failure — suitable for CI scripts.
 
-At least one assertion flag is required.`,
+At least one assertion flag is required.`),
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		mockID := args[0]
@@ -176,8 +177,8 @@ var verifyInvocationsCmd = &cobra.Command{
 var verifyResetCmd = &cobra.Command{
 	Use:   "reset [mock-id]",
 	Short: "Clear verification data (call counts and invocation history)",
-	Long: `Clear verification data for a specific mock, or for all mocks
-with the --all flag. Use between test runs for isolation.`,
+	Long: i18n.T(`Clear verification data for a specific mock, or for all mocks
+with the --all flag. Use between test runs for isolation.`),
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := NewAdminClientWithAuth(adminURL)
@@ -209,13 +210,13 @@ func init() {
 	verifyCmd.AddCommand(verifyStatusCmd)
 
 	verifyCmd.AddCommand(verifyCheckCmd)
-	verifyCheckCmd.Flags().IntVar(&verifyExactly, "exactly", 0, "Assert mock was called exactly N times")
-	verifyCheckCmd.Flags().IntVar(&verifyAtLeast, "at-least", 0, "Assert mock was called at least N times")
-	verifyCheckCmd.Flags().IntVar(&verifyAtMost, "at-most", 0, "Assert mock was called at most N times")
-	verifyCheckCmd.Flags().BoolVar(&verifyNever, "never", false, "Assert mock was never called")
+	verifyCheckCmd.Flags().IntVar(&verifyExactly, "exactly", 0, i18n.T("Assert mock was called exactly N times"))
+	verifyCheckCmd.Flags().IntVar(&verifyAtLeast, "at-least", 0, i18n.T("Assert mock was called at least N times"))
+	verifyCheckCmd.Flags().IntVar(&verifyAtMost, "at-most", 0, i18n.T("Assert mock was called at most N times"))
+	verifyCheckCmd.Flags().BoolVar(&verifyNever, "never", false, i18n.T("Assert mock was never called"))
 
 	verifyCmd.AddCommand(verifyInvocationsCmd)
 
 	verifyCmd.AddCommand(verifyResetCmd)
-	verifyResetCmd.Flags().BoolVar(&verifyAll, "all", false, "Reset verification data for all mocks")
+	verifyResetCmd.Flags().BoolVar(&verifyAll, "all", false, i18n.T("Reset verification data for all mocks"))
 }

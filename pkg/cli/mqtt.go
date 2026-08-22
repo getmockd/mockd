@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
+	"github.com/getmockd/mockd/pkg/i18n"
 )
 
 var mqttCmd = &cobra.Command{
@@ -70,10 +71,10 @@ func init() {
 	rootCmd.AddCommand(mqttCmd)
 	mqttCmd.AddCommand(mqttAddCmd)
 
-	mqttAddCmd.Flags().StringVar(&addTopic, "topic", "", "MQTT topic pattern")
-	mqttAddCmd.Flags().StringVar(&addPayload, "payload", "", "MQTT response payload")
+	mqttAddCmd.Flags().StringVar(&addTopic, "topic", "", i18n.T("MQTT topic pattern"))
+	mqttAddCmd.Flags().StringVar(&addPayload, "payload", "", i18n.T("MQTT response payload"))
 	mqttAddCmd.Flags().IntVar(&addQoS, "qos", 0, "MQTT QoS level (0, 1, 2)")
-	mqttAddCmd.Flags().IntVar(&addMQTTPort, "mqtt-port", 1883, "MQTT broker port")
+	mqttAddCmd.Flags().IntVar(&addMQTTPort, "mqtt-port", 1883, i18n.T("MQTT broker port"))
 
 	// Add list/get/delete generic aliases
 	mqttCmd.AddCommand(&cobra.Command{
@@ -96,18 +97,18 @@ func init() {
 	})
 
 	// Add existing subcommands to mqttCmd
-	mqttPubCmd.Flags().StringVarP(&mqttMessage, "message", "m", "", "Message to publish")
+	mqttPubCmd.Flags().StringVarP(&mqttMessage, "message", "m", "", i18n.T("Message to publish"))
 	mqttPubCmd.Flags().IntVarP(&mqttQos, "qos", "q", 0, "QoS level (0, 1, 2)")
-	mqttPubCmd.Flags().BoolVarP(&mqttRetain, "retain", "r", false, "Retain message")
-	mqttPubCmd.Flags().StringVarP(&mqttUsername, "username", "u", "", "Username")
-	mqttPubCmd.Flags().StringVarP(&mqttPassword, "password", "P", "", "Password")
+	mqttPubCmd.Flags().BoolVarP(&mqttRetain, "retain", "r", false, i18n.T("Retain message"))
+	mqttPubCmd.Flags().StringVarP(&mqttUsername, "username", "u", "", i18n.T("Username"))
+	mqttPubCmd.Flags().StringVarP(&mqttPassword, "password", "P", "", i18n.T("Password"))
 	mqttCmd.AddCommand(mqttPubCmd)
 
 	mqttSubCmd.Flags().IntVarP(&mqttQos, "qos", "q", 0, "QoS level (0, 1, 2)")
-	mqttSubCmd.Flags().IntVarP(&mqttCount, "count", "c", 0, "Stop after receiving this many messages")
-	mqttSubCmd.Flags().DurationVarP(&mqttTimeout, "timeout", "t", 0, "Stop after this duration")
-	mqttSubCmd.Flags().StringVarP(&mqttUsername, "username", "u", "", "Username")
-	mqttSubCmd.Flags().StringVarP(&mqttPassword, "password", "P", "", "Password")
+	mqttSubCmd.Flags().IntVarP(&mqttCount, "count", "c", 0, i18n.T("Stop after receiving this many messages"))
+	mqttSubCmd.Flags().DurationVarP(&mqttTimeout, "timeout", "t", 0, i18n.T("Stop after this duration"))
+	mqttSubCmd.Flags().StringVarP(&mqttUsername, "username", "u", "", i18n.T("Username"))
+	mqttSubCmd.Flags().StringVarP(&mqttPassword, "password", "P", "", i18n.T("Password"))
 	mqttCmd.AddCommand(mqttSubCmd)
 
 	mqttCmd.AddCommand(mqttStatusCmd)

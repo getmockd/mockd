@@ -9,7 +9,8 @@ import (
 	"github.com/getmockd/mockd/pkg/config"
 	"github.com/getmockd/mockd/pkg/mock"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	listConfigFile string
@@ -20,7 +21,7 @@ var (
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all configured mocks",
-	Long:  `List all configured mocks.`,
+	Long:  i18n.T(`List all configured mocks.`),
 	Example: `  # List all mocks from running server
   mockd list
 
@@ -44,8 +45,8 @@ var listCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(listCmd)
 	listCmd.Flags().StringVarP(&listConfigFile, "config", "c", "", "List mocks from config file (no server needed)")
-	listCmd.Flags().StringVarP(&listMockType, "type", "t", "", "Filter by type: http, websocket, graphql, grpc, mqtt, soap")
-	listCmd.Flags().BoolVarP(&listNoTruncate, "no-truncate", "w", false, "Show full IDs and paths without truncation")
+	listCmd.Flags().StringVarP(&listMockType, "type", "t", "", i18n.T("Filter by type: http, websocket, graphql, grpc, mqtt, soap"))
+	listCmd.Flags().BoolVarP(&listNoTruncate, "no-truncate", "w", false, i18n.T("Show full IDs and paths without truncation"))
 }
 
 func runList(cmd *cobra.Command, args []string) error {

@@ -18,7 +18,8 @@ import (
 	"github.com/getmockd/mockd/pkg/store"
 	"github.com/getmockd/mockd/pkg/store/file"
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 var (
 	startLoadDir     string
@@ -37,10 +38,10 @@ var (
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the mock server",
-	Long: `Start the mock server.
+	Long: i18n.T(`Start the mock server.
 
 By default, the server starts on port 4280 and the admin API on port 4290.
-You can configure the server using flags, environment variables, or a config file.`,
+You can configure the server using flags, environment variables, or a config file.`),
 	Example: `  # Start with defaults
   mockd start
 
@@ -79,59 +80,59 @@ func init() {
 	// Since RegisterServerFlags takes a flag.FlagSet, we'll manually bind them for now,
 	// or create a helper for Cobra flags. For speed, mapping directly here:
 	// Server Flags
-	startCmd.Flags().IntVarP(&startServerFlags.Port, "port", "p", 4280, "HTTP server port")
-	startCmd.Flags().IntVarP(&startServerFlags.AdminPort, "admin-port", "a", 4290, "Admin API port")
-	startCmd.Flags().StringVarP(&startServerFlags.ConfigFile, "config", "c", "", "Path to mock configuration file")
+	startCmd.Flags().IntVarP(&startServerFlags.Port, "port", "p", 4280, i18n.T("HTTP server port"))
+	startCmd.Flags().IntVarP(&startServerFlags.AdminPort, "admin-port", "a", 4290, i18n.T("Admin API port"))
+	startCmd.Flags().StringVarP(&startServerFlags.ConfigFile, "config", "c", "", i18n.T("Path to mock configuration file"))
 	startCmd.Flags().IntVar(&startServerFlags.HTTPSPort, "https-port", 0, "HTTPS server port (0 = disabled)")
-	startCmd.Flags().IntVar(&startServerFlags.ReadTimeout, "read-timeout", 30, "Read timeout in seconds")
-	startCmd.Flags().IntVar(&startServerFlags.WriteTimeout, "write-timeout", 30, "Write timeout in seconds")
-	startCmd.Flags().IntVar(&startServerFlags.MaxLogEntries, "max-log-entries", 1000, "Maximum request log entries")
-	startCmd.Flags().BoolVar(&startServerFlags.AutoCert, "auto-cert", true, "Auto-generate TLS certificate")
+	startCmd.Flags().IntVar(&startServerFlags.ReadTimeout, "read-timeout", 30, i18n.T("Read timeout in seconds"))
+	startCmd.Flags().IntVar(&startServerFlags.WriteTimeout, "write-timeout", 30, i18n.T("Write timeout in seconds"))
+	startCmd.Flags().IntVar(&startServerFlags.MaxLogEntries, "max-log-entries", 1000, i18n.T("Maximum request log entries"))
+	startCmd.Flags().BoolVar(&startServerFlags.AutoCert, "auto-cert", true, i18n.T("Auto-generate TLS certificate"))
 
 	// TLS flags
-	startCmd.Flags().StringVar(&startServerFlags.TLSCert, "tls-cert", "", "Path to TLS certificate file")
-	startCmd.Flags().StringVar(&startServerFlags.TLSKey, "tls-key", "", "Path to TLS private key file")
-	startCmd.Flags().BoolVar(&startServerFlags.TLSAuto, "tls-auto", false, "Auto-generate self-signed certificate")
+	startCmd.Flags().StringVar(&startServerFlags.TLSCert, "tls-cert", "", i18n.T("Path to TLS certificate file"))
+	startCmd.Flags().StringVar(&startServerFlags.TLSKey, "tls-key", "", i18n.T("Path to TLS private key file"))
+	startCmd.Flags().BoolVar(&startServerFlags.TLSAuto, "tls-auto", false, i18n.T("Auto-generate self-signed certificate"))
 
 	// mTLS flags
-	startCmd.Flags().BoolVar(&startServerFlags.MTLSEnabled, "mtls-enabled", false, "Enable mTLS client certificate validation")
+	startCmd.Flags().BoolVar(&startServerFlags.MTLSEnabled, "mtls-enabled", false, i18n.T("Enable mTLS client certificate validation"))
 	startCmd.Flags().StringVar(&startServerFlags.MTLSClientAuth, "mtls-client-auth", "require-and-verify", "Client auth mode (none, request, require, verify-if-given, require-and-verify)")
-	startCmd.Flags().StringVar(&startServerFlags.MTLSCA, "mtls-ca", "", "Path to CA certificate for client validation")
+	startCmd.Flags().StringVar(&startServerFlags.MTLSCA, "mtls-ca", "", i18n.T("Path to CA certificate for client validation"))
 	// (Note: custom StringSlice variable for allowed CNs is string typed in the struct, so use string directly)
-	startCmd.Flags().StringVar(&startServerFlags.MTLSAllowedCNs, "mtls-allowed-cns", "", "Comma-separated list of allowed Common Names")
+	startCmd.Flags().StringVar(&startServerFlags.MTLSAllowedCNs, "mtls-allowed-cns", "", i18n.T("Comma-separated list of allowed Common Names"))
 
 	// Audit flags
-	startCmd.Flags().BoolVar(&startServerFlags.AuditEnabled, "audit-enabled", false, "Enable audit logging")
-	startCmd.Flags().StringVar(&startServerFlags.AuditFile, "audit-file", "", "Path to audit log file")
-	startCmd.Flags().StringVar(&startServerFlags.AuditLevel, "audit-level", "info", "Audit log level")
+	startCmd.Flags().BoolVar(&startServerFlags.AuditEnabled, "audit-enabled", false, i18n.T("Enable audit logging"))
+	startCmd.Flags().StringVar(&startServerFlags.AuditFile, "audit-file", "", i18n.T("Path to audit log file"))
+	startCmd.Flags().StringVar(&startServerFlags.AuditLevel, "audit-level", "info", i18n.T("Audit log level"))
 
 	// GraphQL flags
-	startCmd.Flags().StringVar(&startServerFlags.GraphQLSchema, "graphql-schema", "", "Path to GraphQL schema file")
-	startCmd.Flags().StringVar(&startServerFlags.GraphQLPath, "graphql-path", "/graphql", "GraphQL endpoint path")
+	startCmd.Flags().StringVar(&startServerFlags.GraphQLSchema, "graphql-schema", "", i18n.T("Path to GraphQL schema file"))
+	startCmd.Flags().StringVar(&startServerFlags.GraphQLPath, "graphql-path", "/graphql", i18n.T("GraphQL endpoint path"))
 
 	// OAuth flags
-	startCmd.Flags().BoolVar(&startServerFlags.OAuthEnabled, "oauth-enabled", false, "Enable OAuth provider")
-	startCmd.Flags().StringVar(&startServerFlags.OAuthIssuer, "oauth-issuer", "", "OAuth issuer URL")
-	startCmd.Flags().IntVar(&startServerFlags.OAuthPort, "oauth-port", 0, "OAuth server port")
+	startCmd.Flags().BoolVar(&startServerFlags.OAuthEnabled, "oauth-enabled", false, i18n.T("Enable OAuth provider"))
+	startCmd.Flags().StringVar(&startServerFlags.OAuthIssuer, "oauth-issuer", "", i18n.T("OAuth issuer URL"))
+	startCmd.Flags().IntVar(&startServerFlags.OAuthPort, "oauth-port", 0, i18n.T("OAuth server port"))
 
 	// Chaos flags
-	startCmd.Flags().BoolVar(&startServerFlags.ChaosEnabled, "chaos-enabled", false, "Enable chaos injection")
+	startCmd.Flags().BoolVar(&startServerFlags.ChaosEnabled, "chaos-enabled", false, i18n.T("Enable chaos injection"))
 	startCmd.Flags().StringVar(&startServerFlags.ChaosLatency, "chaos-latency", "", "Add random latency (e.g., '10ms-100ms')")
 	startCmd.Flags().Float64Var(&startServerFlags.ChaosErrorRate, "chaos-error-rate", 0, "Error rate (0.0-1.0)")
 
 	// Validation flags
-	startCmd.Flags().StringVar(&startServerFlags.ValidateSpec, "validate-spec", "", "Path to OpenAPI spec for request validation")
-	startCmd.Flags().BoolVar(&startServerFlags.ValidateFail, "validate-fail", false, "Fail on validation error")
+	startCmd.Flags().StringVar(&startServerFlags.ValidateSpec, "validate-spec", "", i18n.T("Path to OpenAPI spec for request validation"))
+	startCmd.Flags().BoolVar(&startServerFlags.ValidateFail, "validate-fail", false, i18n.T("Fail on validation error"))
 
 	// Storage flags
 	startCmd.Flags().StringVar(&startServerFlags.DataDir, "data-dir", "", "Data directory for persistent storage (default: ~/.local/share/mockd)")
-	startCmd.Flags().BoolVar(&startServerFlags.NoAuth, "no-auth", false, "Disable API key authentication on admin API")
+	startCmd.Flags().BoolVar(&startServerFlags.NoAuth, "no-auth", false, i18n.T("Disable API key authentication on admin API"))
 
 	// Start-specific flags
-	startCmd.Flags().StringVar(&startLoadDir, "load", "", "Load mocks from directory")
+	startCmd.Flags().StringVar(&startLoadDir, "load", "", i18n.T("Load mocks from directory"))
 	startCmd.Flags().BoolVar(&startWatch, "watch", false, "Watch for file changes (with --load)")
 	startCmd.Flags().BoolVar(&startValidate, "validate", false, "Validate files before serving (with --load)")
-	startCmd.Flags().StringVar(&startEngineName, "engine-name", "", "Name for this engine when registering with admin")
+	startCmd.Flags().StringVar(&startEngineName, "engine-name", "", i18n.T("Name for this engine when registering with admin"))
 	startCmd.Flags().StringVar(&startRegisterURL, "register-url", "", "Admin server URL to register with (enables engine mode)")
 	startCmd.Flags().StringVar(&startLogLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	startCmd.Flags().StringVar(&startLogFormat, "log-format", "text", "Log format (text, json)")

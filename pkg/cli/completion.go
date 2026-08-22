@@ -5,13 +5,14 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-)
+	"github.com/getmockd/mockd/pkg/i18n"
+	)
 
 // completionCmd generates shell completion scripts.
 var completionCmd = &cobra.Command{
 	Use:   "completion [bash|zsh|fish]",
 	Short: "Generate shell completion scripts",
-	Long: `Generate shell completion scripts for mockd.
+	Long: i18n.T(`Generate shell completion scripts for mockd.
 
 To load completions:
 
@@ -30,7 +31,7 @@ Zsh:
 
 Fish:
   mockd completion fish > ~/.config/fish/completions/mockd.fish
-`,
+`),
 	ValidArgs:             []string{"bash", "zsh", "fish"},
 	Args:                  cobra.ExactArgs(1),
 	DisableFlagsInUseLine: true,
