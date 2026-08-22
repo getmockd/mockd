@@ -1,0 +1,131 @@
+name: Release Multi-Arch
+
+# 汉化版多架构发布：直接使用仓库内已入库的汉化 dashboard dist，
+# 不依赖上游私有仓库 (mockd-desktop) 的 DASHBOARD_PAT secret。
+# 触发：推送 v* tag（如 v0.7.1）或手动触发。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            goos: linux
+            goarch: amd64
+            ext: ""
+          - target: linux-arm64
+            goos: linux
+            goarch: arm64
+            ext: ""
+          - target: darwin-amd64
+            goos: darwin
+            goarch: amd64
+            ext: ""
+          - target: darwin-arm64
+            goos: darwin
+            goarch: arm64
+            ext: ""
+          - target: windows-amd64
+            goos: windows
+            goarch: amd64
+            ext: ".exe"
+          - target: windows-arm64
+            goos: windows
+            goarch: arm64
+            ext: ".exe"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT="${{ github.sha }}"
+          BUILDDATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          go build -tags dashboard -trimpath \
+            -ldflags="-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT:0:8} -X main.BuildDate=${BUILDDATE}" \
+            -o "dist/mockd-${{ matrix.target }}${{ matrix.ext }}" ./cmd/mockd
+
+      - name: Package
+        run: |
+          # 复制文档进 dist 后打包，避免遗漏根目录文件
+          cp LICENSE README.md NOTICE dist/
+          cd dist
+          BIN="mockd-${{ matrix.target }}${{ matrix.ext }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "mockd_${{ matrix.target }}.zip" "$BIN" LICENSE README.md NOTICE
+          else
+            tar -czf "mockd_${{ matrix.target }}.tar.gz" "$BIN" LICENSE README.md NOTICE
+          fi
+          shasum -a 256 "$BIN" > "$BIN.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mockd-${{ matrix.target }}
+          path: dist/
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          # 汇总所有裸二进制 sha256 到 checksums.txt（兼容 setup-mockd 的 .sha256 sidecar 已逐文件生成）
+          cat *.sha256 | sort -k2 > checksums.txt
+          ls -la
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "mockd ${{ github.ref_name }} (汉化版 / i18n)"
+          body: |
+            ## mockd ${{ github.ref_name }} 汉化版 / i18n Localization Release
+
+            ### 变更内容 / What's new
+            - CLI 多语言支持：`--lang zh-CN` / `--lang en`（554 条翻译 key）
+            - 内置 Web Dashboard 汉化（370 条 UI 文案）
+            - 详见 [I18N-GUIDE.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/I18N-GUIDE.md)
+
+            ### 资产说明 / Assets
+            - `mockd_linux-amd64.tar.gz` / `mockd_linux-arm64.tar.gz` — Linux x86_64 / ARM64
+            - `mockd_darwin-amd64.tar.gz` / `mockd_darwin-arm64.tar.gz` — macOS Intel / Apple Silicon
+            - `mockd_windows-amd64.zip` / `mockd_windows-arm64.zip` — Windows x86_64 / ARM64
+            - 各裸二进制附 `.sha256` sidecar；`checksums.txt` 汇总校验和
+          files: |
+            dist/*
+          draft: false
+          prerelease: false
